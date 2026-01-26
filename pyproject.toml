@@ -1,0 +1,63 @@
+[project]
+name = "bbva-bugresolutionradar"
+version = "0.1.0"
+description = "BBVA BugResolutionRadar - assets ingestion, consolidation and KPI dashboard backend"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+  "fastapi>=0.110",
+  "uvicorn>=0.27",
+  "pydantic>=2.7",
+  "pydantic-settings>=2.2",
+]
+
+[project.scripts]
+brr = "bbva_bugresolutionradar.cli.main:app"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+src = ["src"]
+fix = true
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "N", "SIM", "RUF"]
+ignore = [
+  "E501",
+  "UP006",
+  "UP035",
+  "UP045",
+  "N812",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101"]
+
+[tool.mypy]
+python_version = "3.9"
+strict = true
+warn_unreachable = true
+disallow_any_generics = true
+disallow_subclassing_any = true
+no_implicit_optional = true
+check_untyped_defs = true
+warn_return_any = true
+exclude = "data/"
+
+# Pyright config (used by pycheck if you add it in CI)
+[tool.pyright]
+typeCheckingMode = "strict"
+pythonVersion = "3.9"
+include = ["src"]
+exclude = ["data", "**/__pycache__"]
+reportMissingTypeStubs = "none"
