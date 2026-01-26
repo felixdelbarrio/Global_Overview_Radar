@@ -2,135 +2,162 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-
-const API_LABEL =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
-
-function cx(...s: Array<string | false | null | undefined>) {
-  return s.filter(Boolean).join(" ");
-}
+import {
+  LayoutDashboard,
+  ListChecks,
+  ShieldAlert,
+  Database,
+  Activity,
+} from "lucide-react";
 
 export function Shell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
-  const navItem = (href: string, label: string) => {
-    const active = pathname === href;
-
-    return (
-      <Link
-        href={href}
-        className={cx(
-          "flex items-center gap-2 px-3 py-2 text-sm font-semibold transition",
-          active ? "text-white" : "text-[color:var(--bbva-text)]"
-        )}
-        style={
-          active
-            ? {
-                borderRadius: 14,
-                background:
-                  "linear-gradient(135deg, rgba(0,68,129,1) 0%, rgba(7,33,70,1) 100%)",
-                border: "1px solid rgba(255,255,255,0.12)",
-                boxShadow: "0 10px 24px rgba(7,33,70,0.20)",
-              }
-            : {
-                borderRadius: 14,
-                border: "1px solid transparent",
-              }
-        }
-      >
-        {label}
-      </Link>
-    );
-  };
+  const nav = [
+    { href: "/", label: "Dashboard", icon: LayoutDashboard },
+    { href: "/incidencias", label: "Incidencias", icon: ListChecks },
+    { href: "/ops", label: "Ops Executive", icon: ShieldAlert },
+  ];
 
   return (
     <div className="min-h-screen">
-      {/* Topbar */}
-      <header className="sticky top-0 z-50">
+      {/* Top bar */}
+      <header className="sticky top-0 z-40">
         <div
-          className="h-16 px-6 flex items-center gap-4"
+          className="h-16 px-6 flex items-center gap-4 text-white shadow-[0_10px_30px_rgba(7,33,70,0.18)]"
           style={{
             background:
-              "linear-gradient(135deg, rgba(7,33,70,1) 0%, rgba(0,68,129,1) 55%, rgba(7,33,70,1) 100%)",
-            borderBottom: "1px solid rgba(255,255,255,0.10)",
+              "linear-gradient(90deg, var(--bbva-navy), var(--bbva-blue) 55%, rgba(45,204,205,0.55))",
           }}
         >
+          {/* Logo */}
           <div className="flex items-center gap-3">
-            <div
-              style={{
-                width: 42,
-                height: 42,
-                borderRadius: 16,
-                background: "rgba(255,255,255,0.10)",
-                border: "1px solid rgba(255,255,255,0.14)",
-                boxShadow: "0 10px 22px rgba(0,0,0,0.25)",
-                display: "grid",
-                placeItems: "center",
-                color: "white",
-                fontWeight: 800,
-                letterSpacing: 0.5,
-              }}
-            >
-              BRR
+            <div className="h-9 w-9 rounded-full bg-white/12 border border-white/18 grid place-items-center">
+              <Activity className="h-5 w-5 text-white" />
             </div>
             <div className="leading-tight">
-              <div className="text-white font-semibold">
+              <div className="font-semibold tracking-tight">
                 BBVA BugResolutionRadar
               </div>
-              <div className="text-white/70 text-xs">
+              <div className="text-[11px] text-white/75 -mt-0.5">
                 Enterprise Incident Intelligence
               </div>
             </div>
           </div>
 
-          <div className="ml-auto">
-            <span
-              className="brr-pill"
-              style={{
-                background: "rgba(255,255,255,0.10)",
-                borderColor: "rgba(255,255,255,0.14)",
-              }}
-            >
-              API · {API_LABEL}
+          <div className="ml-auto flex items-center gap-3 text-xs text-white/80">
+            <span className="hidden sm:inline-flex items-center gap-2 rounded-full bg-white/10 border border-white/15 px-3 py-1">
+              <Database className="h-4 w-4" />
+              API proxied en <span className="text-white">/api</span>
             </span>
           </div>
         </div>
       </header>
 
-      {/* Layout */}
-      <div className="mx-auto max-w-7xl px-4 py-6 grid grid-cols-1 md:grid-cols-[260px_1fr] gap-6">
+      {/* Main layout */}
+      <div className="mx-auto max-w-7xl px-4 py-6 grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-6">
         {/* Sidebar */}
-        <aside className="brr-card p-3 h-fit">
-          <div className="px-2 pb-2 text-xs font-semibold tracking-wide text-[color:var(--bbva-muted)]">
-            NAVEGACIÓN
-          </div>
-
-          <nav className="flex flex-col gap-1">
-            {navItem("/", "Dashboard")}
-            {navItem("/incidencias", "Incidencias")}
-            {navItem("/ops", "Ops Executive")}
-          </nav>
-
-          <div
-            className="mt-4"
-            style={{
-              borderRadius: 18,
-              border: "1px solid var(--bbva-border)",
-              background: "rgba(255,255,255,0.65)",
-              padding: 12,
-            }}
-          >
-            <div className="text-xs font-semibold text-[color:var(--bbva-text)]">
-              Tip rápido
+        <aside
+          className="h-fit rounded-[var(--radius)] border backdrop-blur-xl"
+          style={{
+            background: "var(--panel)",
+            borderColor: "var(--border)",
+            boxShadow: "var(--shadow)",
+          }}
+        >
+          <div className="p-4">
+            <div className="text-xs font-semibold tracking-wide text-[color:var(--bbva-blue)]">
+              NAVEGACIÓN
             </div>
-            <div className="mt-1 text-xs text-[color:var(--bbva-muted)]">
-              Prioriza incidencias <span className="font-semibold">CRITICAL/HIGH</span>{" "}
-              en el daily.
-            </div>
+
+            <nav className="mt-3 flex flex-col gap-2">
+              {nav.map((item) => {
+                const active = pathname === item.href;
+                const Icon = item.icon;
+
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={
+                      "group flex items-center gap-3 px-3 py-2 transition " +
+                      (active
+                        ? "text-white"
+                        : "text-[color:var(--bbva-navy)] hover:bg-black/5")
+                    }
+                    style={
+                      active
+                        ? {
+                            borderRadius: 18,
+                            background:
+                              "linear-gradient(90deg, rgba(0,68,129,0.95), rgba(7,33,70,0.92))",
+                            boxShadow:
+                              "0 12px 22px rgba(0, 68, 129, 0.22)",
+                          }
+                        : {
+                            borderRadius: 18,
+                          }
+                    }
+                  >
+                    <div
+                      className={
+                        "h-9 w-9 grid place-items-center border transition " +
+                        (active
+                          ? "border-white/20 bg-white/10"
+                          : "border-[color:var(--border)] bg-white/60")
+                      }
+                      style={{ borderRadius: 16 }}
+                    >
+                      <Icon
+                        className={
+                          active
+                            ? "h-5 w-5 text-white"
+                            : "h-5 w-5 text-[color:var(--bbva-blue)]"
+                        }
+                      />
+                    </div>
+
+                    <div className="flex-1">
+                      <div
+                        className={
+                          active
+                            ? "text-sm font-semibold"
+                            : "text-sm font-medium"
+                        }
+                      >
+                        {item.label}
+                      </div>
+                      <div
+                        className={
+                          active
+                            ? "text-[11px] text-white/70"
+                            : "text-[11px] text-black/50"
+                        }
+                      >
+                        {item.href === "/"
+                          ? "KPIs y tendencias"
+                          : item.href === "/incidencias"
+                          ? "Listado y filtros"
+                          : "Vista operativa"}
+                      </div>
+                    </div>
+
+                    <div
+                      className={
+                        "h-2 w-2 rounded-full transition " +
+                        (active
+                          ? "bg-[color:var(--bbva-aqua)]"
+                          : "bg-transparent group-hover:bg-black/20")
+                      }
+                    />
+                  </Link>
+                );
+              })}
+            </nav>
           </div>
         </aside>
 
-        {/* Main */}
+        {/* Content */}
         <main className="min-w-0">{children}</main>
       </div>
     </div>

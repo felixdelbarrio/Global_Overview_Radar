@@ -1,97 +1,46 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
-/* ====== Tokens BBVA ====== */
 :root {
   --bbva-navy: #072146;
   --bbva-blue: #004481;
   --bbva-aqua: #2dcccd;
 
-  --bbva-bg: #f5f7fa;
-  --bbva-card: rgba(255, 255, 255, 0.82);
+  --bg: #f5f7fa;
+  --panel: rgba(255, 255, 255, 0.78);
+  --panel-strong: rgba(255, 255, 255, 0.92);
 
-  --bbva-text: #072146;
-  --bbva-muted: rgba(7, 33, 70, 0.65);
+  --border: rgba(7, 33, 70, 0.08);
+  --shadow: 0 10px 30px rgba(7, 33, 70, 0.10);
 
-  --bbva-border: rgba(7, 33, 70, 0.12);
-  --bbva-shadow: 0 14px 34px rgba(7, 33, 70, 0.12);
+  --radius: 22px;
 }
 
-/* Fondo “wow” */
 html,
 body {
   height: 100%;
 }
 
 body {
-  background:
-    radial-gradient(1200px 650px at 20% -10%, rgba(45, 204, 205, 0.22), transparent 55%),
-    radial-gradient(1200px 750px at 85% 0%, rgba(0, 68, 129, 0.18), transparent 60%),
-    var(--bbva-bg);
-  color: var(--bbva-text);
+  background: radial-gradient(1200px 600px at 20% -10%, rgba(45, 204, 205, 0.18), transparent 60%),
+    radial-gradient(900px 500px at 80% 0%, rgba(0, 68, 129, 0.14), transparent 55%),
+    linear-gradient(180deg, var(--bg), #ffffff 60%);
+  color: var(--bbva-navy);
 }
 
-/* Smoothing */
-* {
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+/* Selección “premium” */
+::selection {
+  background: rgba(45, 204, 205, 0.28);
 }
 
-/* Focus */
-:focus-visible {
-  outline: 2px solid rgba(45, 204, 205, 0.55);
-  outline-offset: 2px;
+/* Scrollbar suave (Webkit) */
+*::-webkit-scrollbar {
+  height: 10px;
+  width: 10px;
 }
-
-/* ====== Componentes BBVA (sin @apply “problemático”) ====== */
-.brr-card {
-  background: var(--bbva-card);
-  border: 1px solid var(--bbva-border);
-  border-radius: 18px;
-  box-shadow: var(--bbva-shadow);
-  backdrop-filter: blur(10px);
-}
-
-.brr-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
+*::-webkit-scrollbar-thumb {
+  background: rgba(7, 33, 70, 0.18);
   border-radius: 999px;
-  font-size: 12px;
-  font-weight: 600;
-  border: 1px solid var(--bbva-border);
-  background: rgba(255, 255, 255, 0.55);
-  color: rgba(255, 255, 255, 0.92);
 }
-
-.brr-title {
-  font-size: 26px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  color: var(--bbva-text);
-}
-
-.brr-subtitle {
-  font-size: 14px;
-  color: var(--bbva-muted);
-}
-
-.brr-input {
-  width: 100%;
-  border-radius: 14px;
-  border: 1px solid var(--bbva-border);
-  background: rgba(255, 255, 255, 0.82);
-  padding: 10px 12px;
-  font-size: 14px;
-}
-
-.brr-chip {
-  display: inline-flex;
-  align-items: center;
-  border-radius: 999px;
-  padding: 6px 10px;
-  font-size: 12px;
-  font-weight: 700;
+*::-webkit-scrollbar-track {
+  background: transparent;
 }
