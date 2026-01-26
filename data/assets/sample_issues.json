@@ -1,0 +1,24 @@
+[
+  {
+    "source_key": "PAY-1001",
+    "title": "Error al confirmar transferencia",
+    "status": "OPEN",
+    "severity": "CRITICAL",
+    "opened_at": "2026-01-10",
+    "updated_at": "2026-01-26",
+    "clients_affected": 7,
+    "product": "Pagos",
+    "feature": "Transferencias"
+  },
+  {
+    "source_key": "PAY-1002",
+    "title": "Timeout intermitente en consulta de saldo",
+    "status": "IN_PROGRESS",
+    "severity": "HIGH",
+    "opened_at": "2026-01-18",
+    "updated_at": "2026-01-25",
+    "clients_affected": 2,
+    "product": "Cuentas",
+    "feature": "Saldo"
+  }
+]

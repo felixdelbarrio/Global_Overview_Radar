@@ -1,0 +1,3 @@
+source_key,title,status,severity,opened_at,closed_at,updated_at,clients_affected,product,feature,resolution_type
+PAY-1003,Error en exportación de extractos,CLOSED,MEDIUM,2026-01-05,2026-01-20,2026-01-20,1,Cuentas,Extractos,Fix
+PAY-1004,UI descuadrada en móvil,OPEN,LOW,2026-01-22,,2026-01-26,0,Portal,Front,
