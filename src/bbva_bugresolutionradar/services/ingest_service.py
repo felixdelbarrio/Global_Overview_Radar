@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from bbva_bugresolutionradar.adapters import FilesystemCSVAdapter, FilesystemJSONAdapter
+from bbva_bugresolutionradar.adapters import FilesystemCSVAdapter, FilesystemJSONAdapter, XlsxAdapter
 from bbva_bugresolutionradar.adapters.base import Adapter
 from bbva_bugresolutionradar.config import Settings
 from bbva_bugresolutionradar.domain.models import ObservedIncident
@@ -18,6 +18,8 @@ class IngestService:
             adapters.append(FilesystemJSONAdapter("filesystem_json", self._settings.assets_dir))
         if "filesystem_csv" in enabled:
             adapters.append(FilesystemCSVAdapter("filesystem_csv", self._settings.assets_dir))
+        if "filesystem_xlsx" in enabled:
+            adapters.append(XlsxAdapter("filesystem_xlsx", self._settings.assets_dir))
 
         return adapters
 
