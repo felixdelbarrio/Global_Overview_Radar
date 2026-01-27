@@ -17,7 +17,7 @@ FRONT_PORT ?= 3000
 
 .DEFAULT_GOAL := help
 
-.PHONY: help venv install install-backend install-front env ingest serve serve-back dev-back dev-front build-front start-front lint lint-back lint-front typecheck typecheck-back typecheck-front format format-back format-front check test clean
+.PHONY: help venv install install-backend install-front env ingest serve serve-back dev-back dev-front build-front start-front lint lint-back lint-front typecheck typecheck-back typecheck-front format format-back format-front check test test-back test-front test-coverage test-coverage-back test-coverage-front clean
 
 help:
 	@echo "Make targets disponibles:"
@@ -38,6 +38,9 @@ help:
 	@echo "  make format          - Formatear código (backend + frontend)"
 	@echo "  make check           - format-check + lint + typecheck"
 	@echo "  make test            - Ejecutar tests (si existen)"
+	@echo "  make test-back       - Ejecutar tests backend (pytest + cobertura)"
+	@echo "  make test-front      - Ejecutar tests frontend (vitest)"
+	@echo "  make test-coverage   - Ejecutar cobertura backend + frontend (>=70%)"
 	@echo "  make clean           - Eliminar venv, caches, node_modules (frontend)"
 	@echo ""
 	@echo "Notas:"
@@ -144,8 +147,29 @@ check: format lint typecheck
 # Tests
 # -------------------------
 test:
-	@echo "==> Ejecutando tests (si hay)..."
-	$(PY) -m pytest -q || true
+	@echo "==> Ejecutando tests backend + frontend..."
+	@$(MAKE) test-back
+	@$(MAKE) test-front
+
+test-back:
+	@echo "==> Tests backend (pytest + cobertura)..."
+	$(PY) -m pytest
+
+test-front:
+	@echo "==> Tests frontend (vitest)..."
+	@test -x $(FRONTDIR)/node_modules/.bin/vitest || (echo "==> Instalando deps frontend..." && cd $(FRONTDIR) && $(NPM) install --include=dev)
+	cd $(FRONTDIR) && $(NPM) run test
+
+test-coverage: test-coverage-back test-coverage-front
+
+test-coverage-back:
+	@echo "==> Cobertura backend (pytest-cov >=70%)..."
+	$(PY) -m pytest
+
+test-coverage-front:
+	@echo "==> Cobertura frontend (vitest >=70%)..."
+	@test -x $(FRONTDIR)/node_modules/.bin/vitest || (echo "==> Instalando deps frontend..." && cd $(FRONTDIR) && $(NPM) install --include=dev)
+	cd $(FRONTDIR) && $(NPM) run test:coverage
 
 # -------------------------
 # Limpieza

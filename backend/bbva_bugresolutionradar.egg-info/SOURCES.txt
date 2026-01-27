@@ -34,3 +34,12 @@ backend/bbva_bugresolutionradar/services/__init__.py
 backend/bbva_bugresolutionradar/services/consolidate_service.py
 backend/bbva_bugresolutionradar/services/ingest_service.py
 backend/bbva_bugresolutionradar/services/reporting_service.py
+tests/test_adapters_csv_json.py
+tests/test_adapters_utils.py
+tests/test_adapters_xlsx.py
+tests/test_api.py
+tests/test_cache_repo.py
+tests/test_consolidate_service.py
+tests/test_ingest_service.py
+tests/test_merge.py
+tests/test_reporting_kpis.py
