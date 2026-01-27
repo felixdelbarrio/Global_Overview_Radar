@@ -19,7 +19,7 @@ def create_app() -> FastAPI:
     # CORS: permite llamadas desde frontend local y por IP (LAN)
     # - localhost / 127.0.0.1 para uso local
     # - 192.168.x.x para cuando abras el front por IP en la red
-    app.add_middleware(
+    app.add_middleware(  # pyright: ignore[reportUnknownMemberType]
         CORSMiddleware,
         allow_origins=[
             "http://localhost:3000",

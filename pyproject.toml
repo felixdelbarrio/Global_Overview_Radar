@@ -52,12 +52,18 @@ disallow_subclassing_any = true
 no_implicit_optional = true
 check_untyped_defs = true
 warn_return_any = true
-exclude = "data/"
+exclude = "data/|tests/"
+
+[[tool.mypy.overrides]]
+module = ["openpyxl", "openpyxl.*"]
+ignore_missing_imports = true
 
 # Pyright config (used by pycheck if you add it in CI)
 [tool.pyright]
 typeCheckingMode = "strict"
 pythonVersion = "3.9"
+venvPath = "."
+venv = ".venv"
 include = ["backend"]
 exclude = ["data", "**/__pycache__"]
 reportMissingTypeStubs = "none"

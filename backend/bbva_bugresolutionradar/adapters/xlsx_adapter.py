@@ -1,8 +1,11 @@
 from __future__ import annotations
 
-from datetime import datetime
+import hashlib
+import re
+import zipfile
+from datetime import date, datetime
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, List, Optional
 
 import openpyxl
 
@@ -11,82 +14,205 @@ from bbva_bugresolutionradar.adapters.utils import to_date, to_str
 from bbva_bugresolutionradar.domain.enums import Severity, Status
 from bbva_bugresolutionradar.domain.models import ObservedIncident
 
+if TYPE_CHECKING:
+    # Import only for type checking to avoid runtime overhead
+    from openpyxl.worksheet.worksheet import Worksheet
+
+
+def _s(v: object) -> str:
+    """String safe: convierte a str y nunca devuelve None."""
+    return (to_str(v) or "").strip()
+
+
+def _as_date(v: object) -> Optional[date]:
+    """Normaliza a date usando to_date (devuelve date|None)."""
+    return to_date(v)
+
+
+def _clean_status_text(v: object) -> str:
+    """
+    Normaliza el texto de estatus:
+    - convierte a str
+    - quita emojis y caracteres raros
+    - colapsa espacios
+    """
+    s = _s(v)
+    # elimina símbolos tipo ✅ etc. (dejamos letras/números/espacios)
+    s = re.sub(r"[^\w\sáéíóúüñÁÉÍÓÚÜÑ-]", " ", s)
+    s = re.sub(r"\s+", " ", s).strip()
+    return s
+
 
 class XlsxAdapter(FilesystemAdapter):
     """
     XLSX adapter de filesystem.
-    Patrón idéntico a FilesystemCSVAdapter / FilesystemJSONAdapter:
-      - recibe (source_id, assets_root)
-      - assets_root apunta a ASSETS_DIR
+
+    Versión robusta y genérica:
+      - Recorre TODOS los .xlsx de ASSETS_DIR (sin depender del nombre del fichero).
+      - Recorre TODAS las hojas de cada libro.
+      - Detecta columnas por cabeceras (contains) en cada hoja.
+      - Si falta id, genera source_key determinista.
+      - Si falta fecha de incidente, usa columnas de fecha alternativas
+        y, en último término, cualquier cabecera que contenga 'fecha'.
+      - Usa columna 'estatus' cuando esté informada (con limpieza de texto).
+      - Si el estado queda UNKNOWN, por defecto se considera OPEN.
+      - No aborta si una hoja o un fichero no cumplen los mínimos → se ignoran.
     """
 
     def __init__(self, source_id: str, assets_root: str) -> None:
         super().__init__(source_id, assets_root)
 
-    def read(self) -> list[ObservedIncident]:
-        out: list[ObservedIncident] = []
-
-        # ✅ Sin env_optional(): valores por defecto seguros
-        ignore: set[str] = set()
-        preferred_sheet = "Reportes"
+    def read(self) -> List[ObservedIncident]:
+        out: List[ObservedIncident] = []
 
         for path in sorted(self.assets_dir().glob("*.xlsx")):
-            if path.name in ignore:
+            try:
+                wb = openpyxl.load_workbook(path, data_only=True)
+            except zipfile.BadZipFile:
+                # fichero corrupto o no-xlsx renombrado
+                print(
+                    f"[XlsxAdapter] WARN: '{path.name}' no es un XLSX válido (BadZipFile). Se ignora."
+                )
                 continue
 
-            # Caso específico: Canales Digitales Enterprise.xlsx
-            if "Canales Digitales Enterprise" in path.name:
-                out.extend(self._read_canales_enterprise(path, preferred_sheet))
+            for ws in wb.worksheets:
+                out.extend(self._read_sheet(path, ws))
 
         return out
 
-    def _read_canales_enterprise(self, path: Path, preferred_sheet: str) -> list[ObservedIncident]:
-        wb = openpyxl.load_workbook(path, data_only=True)
-
-        ws = wb[preferred_sheet] if preferred_sheet in wb.sheetnames else wb[wb.sheetnames[0]]
+    def _read_sheet(self, path: Path, ws: "Worksheet") -> List[ObservedIncident]:
+        """
+        Lee una hoja cualquiera de un libro Excel, intentando mapearla al modelo ObservedIncident
+        usando nombres de columna aproximados.
+        """
         rows = list(ws.iter_rows(values_only=True))
         if not rows:
             return []
 
-        headers = [to_str(h) for h in rows[0]]
+        headers: List[str] = [_s(h) for h in rows[0]]
 
-        def idx(contains: str) -> Optional[int]:
-            needle = contains.lower()
+        def idx_contains(*needles: str) -> Optional[int]:
+            needles_l = [n.lower() for n in needles if n]
             for i, h in enumerate(headers):
-                if h and needle in h.lower():
+                if not h:
+                    continue
+                hl = h.lower()
+                if any(n in hl for n in needles_l):
                     return i
             return None
 
-        col_id = idx("id de reporte")
-        col_opened = idx("fecha de incidente")
-        col_status = idx("estatus")
-        col_sev = idx("criticidad")
-        col_title = idx("descripción")
-        col_feature = idx("funcionalidad")
-        col_product = idx("tema") or idx("canal")
+        # Campos clave
+        col_id = idx_contains("id de reporte", "id reporte", "reporte id", "id", "ticket")
 
-        if col_id is None or col_opened is None:
+        col_opened = idx_contains(
+            "fecha de incidente",
+            "fecha incidente",
+            "incidente",
+            "fecha apertura",
+        )
+        col_opened_fallback = idx_contains(
+            "fecha de reporte",
+            "fecha reporte",
+            "reporte a",
+            "fecha alta",
+            "fecha creación",
+            "fecha creacion",
+            "fecha de actualización",
+            "fecha actualizacion",
+            "updated",
+            "update",
+        )
+
+        # Fallback muy genérico: cualquier cabecera que contenga 'fecha'
+        if col_opened is None and col_opened_fallback is None:
+            col_any_fecha = idx_contains("fecha")
+            if col_any_fecha is not None:
+                col_opened = col_any_fecha
+
+        # Si AÚN así no hemos encontrado ninguna columna de fecha, esta hoja no sirve
+        if col_opened is None and col_opened_fallback is None:
             return []
 
+        col_status = idx_contains("estatus", "estado", "status")
+        col_sev = idx_contains("criticidad", "severidad", "severity", "prioridad", "priority")
+        col_title = idx_contains(
+            "descripción",
+            "descripcion",
+            "detalle",
+            "summary",
+            "titulo",
+            "título",
+            "asunto",
+            "mejora",  # para hojas de NPS / mejoras
+        )
+        col_feature = idx_contains("funcionalidad", "feature", "módulo", "modulo", "funcion")
+        col_product = idx_contains(
+            "tema", "canal", "producto", "product", "aplicacion", "aplicación"
+        )
+
         observed_at = datetime.now().astimezone()
-        out: list[ObservedIncident] = []
+        out: List[ObservedIncident] = []
 
-        for r in rows[1:]:
-            source_key = to_str(r[col_id])
-            opened_at = to_date(r[col_opened])
+        def stable_auto_key(row_idx_1based: int, opened_at: Optional[date], title: str) -> str:
+            basis = (
+                f"{path.name}|{ws.title}|{row_idx_1based}|"
+                f"{opened_at.isoformat() if opened_at else ''}|{title}"
+            ).strip()
+            h = hashlib.md5(basis.encode("utf-8")).hexdigest()[:12]
+            return f"AUTO-{h}"
 
-            if not source_key or opened_at is None:
+        for row_idx, r in enumerate(rows[1:], start=2):  # fila real Excel
+            # Título
+            title = _s(r[col_title]) if (col_title is not None and r[col_title] is not None) else ""
+
+            # Fecha de apertura / incidente
+            opened_at = (
+                _as_date(r[col_opened])
+                if (col_opened is not None and r[col_opened] is not None)
+                else None
+            )
+            if (
+                opened_at is None
+                and col_opened_fallback is not None
+                and r[col_opened_fallback] is not None
+            ):
+                opened_at = _as_date(r[col_opened_fallback])
+
+            if opened_at is None:
+                # sin fecha no tenemos forma de situar la incidencia en el tiempo
                 continue
 
-            status_raw = to_str(r[col_status]) if col_status is not None else None
-            sev_raw = to_str(r[col_sev]) if col_sev is not None else None
+            # ID / clave de origen
+            source_key = _s(r[col_id]) if (col_id is not None and r[col_id] is not None) else ""
+            if not source_key:
+                source_key = stable_auto_key(row_idx, opened_at, title)
+
+            # Estatus: si está informado, manda; si no, OPEN por defecto
+            status_raw: Optional[str] = None
+            if col_status is not None and r[col_status] is not None:
+                status_raw = _clean_status_text(r[col_status])
 
             status = _map_status(status_raw)
+
+            # cualquier UNKNOWN pasa a OPEN (default de negocio)
+            if status == Status.UNKNOWN:
+                status = Status.OPEN
+
+            # Severidad
+            sev_raw = _s(r[col_sev]) if (col_sev is not None and r[col_sev] is not None) else None
             severity = _map_severity(sev_raw)
 
-            title = to_str(r[col_title]) if col_title is not None else None
-            feature = to_str(r[col_feature]) if col_feature is not None else None
-            product = to_str(r[col_product]) if col_product is not None else None
+            # Producto / funcionalidad
+            feature = (
+                _s(r[col_feature])
+                if (col_feature is not None and r[col_feature] is not None)
+                else None
+            )
+            product = (
+                _s(r[col_product])
+                if (col_product is not None and r[col_product] is not None)
+                else None
+            )
 
             out.append(
                 ObservedIncident(
@@ -100,8 +226,8 @@ class XlsxAdapter(FilesystemAdapter):
                     closed_at=None,
                     updated_at=None,
                     clients_affected=None,
-                    product=product,
-                    feature=feature,
+                    product=product or None,
+                    feature=feature or None,
                     resolution_type=None,
                 )
             )
@@ -109,10 +235,15 @@ class XlsxAdapter(FilesystemAdapter):
         return out
 
 
-def _map_status(raw: str | None) -> Status:
+def _map_status(raw: Optional[str]) -> Status:
     if not raw:
         return Status.UNKNOWN
     s = raw.strip().lower()
+
+    # "resuelto", "resuelta", "solucionado", etc. -> CLOSED
+    if "resuelto" in s or "resuelta" in s or "solucion" in s or "solucionad" in s:
+        return Status.CLOSED
+
     if "abiert" in s or "open" in s:
         return Status.OPEN
     if "cerr" in s or "close" in s:
@@ -124,7 +255,7 @@ def _map_status(raw: str | None) -> Status:
     return Status.UNKNOWN
 
 
-def _map_severity(raw: str | None) -> Severity:
+def _map_severity(raw: Optional[str]) -> Severity:
     if not raw:
         return Severity.UNKNOWN
     s = raw.strip().lower()

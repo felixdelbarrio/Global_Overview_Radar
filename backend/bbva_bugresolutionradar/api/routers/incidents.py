@@ -30,7 +30,9 @@ def list_incidents(
     opened_from: Optional[date] = None,
     opened_to: Optional[date] = None,
     only_open: bool = False,
-    sort: str = Query("updated_desc", pattern=r"^(updated_desc|updated_asc|opened_desc|opened_asc|severity_desc)$"),
+    sort: str = Query(
+        "updated_desc", pattern=r"^(updated_desc|updated_asc|opened_desc|opened_asc|severity_desc)$"
+    ),
     limit: int = Query(200, ge=1, le=5000),
 ) -> Dict[str, Any]:
     repo = request.app.state.cache_repo

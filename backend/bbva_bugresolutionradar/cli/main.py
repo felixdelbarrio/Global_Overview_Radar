@@ -27,7 +27,10 @@ def main() -> None:
         print(f">> Observations read: {len(observations)}")
 
         asset = str(Path(settings.assets_dir).resolve())
-        sources = [RunSource(source_id=a.source_id(), asset=asset, fingerprint=None) for a in ingest_service.build_adapters()]
+        sources = [
+            RunSource(source_id=a.source_id(), asset=asset, fingerprint=None)
+            for a in ingest_service.build_adapters()
+        ]
 
         cache_doc = consolidate_service.consolidate(observations, sources)
 

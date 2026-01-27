@@ -27,7 +27,9 @@ class ConsolidateService:
     def __init__(self) -> None:
         pass
 
-    def consolidate(self, observations: List[ObservedIncident], sources: List[RunSource]) -> CacheDocument:
+    def consolidate(
+        self, observations: List[ObservedIncident], sources: List[RunSource]
+    ) -> CacheDocument:
         now = datetime.now(timezone.utc).astimezone()
         run_id = now.strftime("%Y%m%dT%H%M%S%z")
 
