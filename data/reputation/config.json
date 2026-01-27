@@ -1,0 +1,158 @@
+{
+  "geografias": ["España", "México", "Perú", "Colombia", "Argentina", "Turquía"],
+
+  "global_competitors": [
+    "Revolut",
+    "Wise",
+    "Qonto"
+  ],
+
+  "competidores_por_geografia": {
+    "España": [
+      "BBVA Empresas",
+      "Santander",
+      "Caixabank",
+      "Sabadell",
+      "Bankinter"
+    ],
+    "México": [
+      "BBVA Empresas",
+      "Santander",
+      "Banorte",
+      "Citibamex",
+      "Scotiabank",
+      "Hey"
+    ],
+    "Perú": [
+      "BCP",
+      "Interbank",
+      "Scotiabank"
+    ],
+    "Colombia": [
+      "Bancolombia",
+      "Banco de Bogota",
+      "Davivienda"
+    ],
+    "Argentina": [
+      "Santander",
+      "Banco de Galicia"
+    ],
+    "Turquía": [
+      "TÜRKIYE CANKASI",
+      "AKBANK",
+      "ING"
+    ]
+  },
+
+  "periodo": "últimos 12 meses",
+
+  "idiomas": ["es", "en"],
+
+  "plataformas_prioritarias": ["Reddit"],
+
+  "muestra_max": 500,
+  "umbral_suficiencia": 30,
+  "max_muestras_anonimas_por_geo": 10,
+
+  "quality": {
+    "duplicate_threshold": 0.85
+  },
+
+  "output": {
+    "format": "json",
+    "path": "./output",
+    "cache_enabled": true,
+    "cache_ttl_hours": 24
+  },
+
+  "reddit": {
+    "enabled": true,
+    "client_id_env": "REDDIT_CLIENT_ID",
+    "client_secret_env": "REDDIT_CLIENT_SECRET",
+    "user_agent_env": "REDDIT_USER_AGENT",
+
+    "subreddits": [
+      "spain",
+      "mexico",
+      "fintech",
+      "banking",
+      "personalfinance",
+      "europe"
+    ],
+
+    "query_templates": [
+      "\"{competidor}\" (empresa OR empresas OR business OR corporate) (app OR web)",
+      "\"{competidor}\" (empresas OR business) (login OR error OR bug OR comisión OR soporte)",
+      "\"{competidor}\" banca empresas app"
+    ],
+
+    "limit_per_query": 150
+  },
+
+  "twitter": {
+    "enabled": false,
+    "api_key_env": "TWITTER_API_KEY",
+    "api_secret_env": "TWITTER_API_SECRET",
+    "bearer_token_env": "TWITTER_BEARER_TOKEN",
+    "max_results_env": "TWITTER_MAX_RESULTS"
+  },
+
+  "linkedin": {
+    "enabled": false,
+    "email_env": "LINKEDIN_EMAIL",
+    "password_env": "LINKEDIN_PASSWORD",
+    "company_search_env": "LINKEDIN_COMPANY_SEARCH",
+    "max_posts_env": "LINKEDIN_MAX_POSTS"
+  },
+
+  "news": {
+    "enabled": false,
+    "api_key_env": "NEWS_API_KEY",
+    "lang_env": "NEWS_LANG",
+    "max_articles_env": "NEWS_MAX_ARTICLES",
+    "sources_env": "NEWS_SOURCES"
+  },
+
+  "forums": {
+    "enabled": false,
+    "scraping_env": "FORUMS_SCRAPING",
+    "max_threads_env": "FORUMS_MAX_THREADS",
+    "timeout_seconds_env": "FORUMS_TIMEOUT_SECONDS"
+  },
+
+  "blogs": {
+    "enabled": false,
+    "rss_only_env": "BLOGS_RSS_ONLY",
+    "max_items_env": "BLOGS_MAX_ITEMS"
+  },
+
+  "appstore": {
+    "enabled": false,
+    "country_env": "APPSTORE_COUNTRY",
+    "app_id_env": "APPSTORE_APP_ID",
+    "max_reviews_env": "APPSTORE_MAX_REVIEWS"
+  },
+
+  "playstore": {
+    "enabled": false,
+    "country_env": "PLAYSTORE_COUNTRY",
+    "app_id_env": "PLAYSTORE_APP_ID",
+    "max_reviews_env": "PLAYSTORE_MAX_REVIEWS"
+  },
+
+  "models": {
+    "sentiment_mode_env": "SENTIMENT_MODEL",
+    "aspect_mode_env": "ASPECT_MODEL"
+  },
+
+  "llm": {
+    "enabled_env": "LLM_ENABLED",
+    "openai_api_key_env": "OPENAI_API_KEY"
+  },
+
+  "limits": {
+    "max_total_samples_env": "MAX_TOTAL_SAMPLES",
+    "min_samples_per_competitor_env": "MIN_SAMPLES_PER_COMPETITOR",
+    "max_anon_samples_per_geo_env": "MAX_ANON_SAMPLES_PER_GEO"
+  }
+}
