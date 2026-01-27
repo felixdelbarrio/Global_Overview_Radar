@@ -3,7 +3,14 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Déjalo vacío por ahora: Next 16.1.4 te avisa pero funciona igualmente.
+  async rewrites() {
+    return [
+      {
+        source: "/api/:path*",
+        destination: "http://127.0.0.1:8000/:path*",
+      },
+    ];
+  },
 };
 
 export default nextConfig;
