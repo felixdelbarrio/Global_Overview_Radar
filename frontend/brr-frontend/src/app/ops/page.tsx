@@ -1,5 +1,9 @@
 "use client";
 
+/**
+ * Panel operativo (Ops Executive) con filtros, orden y paginacion.
+ */
+
 import { useEffect, useMemo, useState } from "react";
 import { Shell } from "@/components/Shell";
 import { apiGet } from "@/lib/api";
@@ -32,11 +36,14 @@ type SortBy = "opened_at" | "severity";
 type SortDir = "asc" | "desc";
 
 export default function OpsPage() {
+  /** Incidencias cargadas desde la API. */
   const [items, setItems] = useState<Incident[]>([]);
+  /** KPIs para resumen ejecutivo. */
   const [kpis, setKpis] = useState<Kpis | null>(null);
+  /** Error de carga de API. */
   const [error, setError] = useState<string | null>(null);
 
-  // Filters / UI state
+  // Filtros / estado UI
   const [q, setQ] = useState("");
   const [sevFilter, setSevFilter] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
@@ -44,19 +51,22 @@ export default function OpsPage() {
   const [sortBy, setSortBy] = useState<SortBy>("opened_at");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
-  // Helpers: reset page ONLY in response to user actions (no setState in effects)
+  // Helpers: resetear pagina solo en acciones del usuario (sin setState en effects)
   const resetPage = () => setPage(1);
 
+  /** Actualiza la query y reinicia paginacion. */
   const onQueryChange = (next: string) => {
     setQ(next);
     resetPage();
   };
 
+  /** Activa/desactiva un filtro de severidad. */
   const toggleSev = (sev: string) => {
     setSevFilter((cur) => (cur === sev ? null : sev));
     resetPage();
   };
 
+  /** Resetea todos los filtros. */
   const onResetFilters = () => {
     setSevFilter(null);
     setStatusFilter(null);
@@ -64,11 +74,13 @@ export default function OpsPage() {
     resetPage();
   };
 
+  /** Cambia el criterio de ordenacion. */
   const onSortByChange = (next: SortBy) => {
     setSortBy(next);
     resetPage();
   };
 
+  /** Alterna direccion de orden (asc/desc). */
   const toggleSortDir = () => {
     setSortDir((s) => (s === "asc" ? "desc" : "asc"));
     resetPage();
@@ -90,7 +102,7 @@ export default function OpsPage() {
     };
   }, []);
 
-  // Derived: filtered + sorted
+  // Derivado: filtrado + ordenado
   const filtered = useMemo(() => {
     const qq = q.trim().toLowerCase();
     let arr = items.slice();
@@ -117,7 +129,7 @@ export default function OpsPage() {
         const db = b.opened_at ?? "";
         return sortDir === "asc" ? da.localeCompare(db) : db.localeCompare(da);
       }
-      // severity ordering: CRITICAL > HIGH > MEDIUM > LOW > UNKNOWN
+      // Orden de severidad: CRITICAL > HIGH > MEDIUM > LOW > UNKNOWN
       const order = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "UNKNOWN"] as const;
       const ia = order.indexOf(a.severity ?? "UNKNOWN");
       const ib = order.indexOf(b.severity ?? "UNKNOWN");
@@ -132,13 +144,13 @@ export default function OpsPage() {
   const safePage = Math.min(Math.max(1, page), pageCount);
   const pageItems = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
-  // Top stale (open > threshold) from KPIs open_over_threshold_list (global_id strings)
+  // Top stale (open > threshold) desde KPIs open_over_threshold_list
   const staleList = useMemo(() => {
     if (!kpis) return [];
     return kpis.open_over_threshold_list ?? [];
   }, [kpis]);
 
-  // Small executive summary based on KPIs
+  // Resumen ejecutivo basado en KPIs
   const executiveSummary = useMemo(() => {
     if (!kpis) return null;
     const critical = kpis.open_by_severity?.CRITICAL ?? 0;
@@ -182,9 +194,9 @@ export default function OpsPage() {
         </div>
 
         <div className="mt-4 grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4">
-          {/* Left: Filters + table */}
+          {/* Izquierda: filtros + tabla */}
           <div>
-            {/* Filters */}
+            {/* Filtros */}
             <div className="flex flex-col sm:flex-row sm:items-center gap-3">
               <div
                 className="flex items-center gap-2 rounded-[var(--radius)] border px-3 py-2"
@@ -251,7 +263,7 @@ export default function OpsPage() {
               </div>
             </div>
 
-            {/* Table */}
+            {/* Tabla */}
             <div
               className="mt-4 rounded-[var(--radius)] border overflow-x-auto"
               style={{
@@ -296,7 +308,7 @@ export default function OpsPage() {
                 </tbody>
               </table>
 
-              {/* Pagination */}
+              {/* Paginacion */}
               <div className="p-3 flex items-center justify-between text-sm">
                 <div className="text-black/60">{filtered.length} resultados</div>
                 <div className="flex items-center gap-2">
@@ -322,9 +334,9 @@ export default function OpsPage() {
             </div>
           </div>
 
-          {/* Right column: panels */}
+          {/* Columna derecha: paneles */}
           <div className="space-y-4">
-            {/* Executive summary */}
+            {/* Resumen ejecutivo */}
             <div
               className="rounded-[var(--radius)] border p-4"
               style={{ background: "var(--panel-strong)", borderColor: "var(--border)" }}
@@ -381,7 +393,7 @@ export default function OpsPage() {
               </div>
             </div>
 
-            {/* Quick actions */}
+            {/* Acciones rapidas */}
             <div
               className="rounded-[var(--radius)] border p-4"
               style={{ background: "var(--panel-strong)", borderColor: "var(--border)" }}
@@ -415,8 +427,9 @@ export default function OpsPage() {
   );
 }
 
-/* ----------------------------- Small UI pieces ---------------------------- */
+/* --------------------------- Piezas UI pequenas --------------------------- */
 
+/** Boton de filtro con estado activo. */
 function FilterChip({
   label,
   active,
@@ -442,6 +455,7 @@ function FilterChip({
   );
 }
 
+/** Pildora visual para el estado de la incidencia. */
 function StatusPill({ status }: { status: string }) {
   const map: Record<string, { label: string; cls: string }> = {
     OPEN: { label: "OPEN", cls: "text-white bg-amber-600 px-2 py-0.5 rounded-full text-xs" },
@@ -454,6 +468,7 @@ function StatusPill({ status }: { status: string }) {
   return <div className={info.cls}>{info.label}</div>;
 }
 
+/** Pildora visual para la severidad de la incidencia. */
 function SeverityPill({ sev }: { sev: string }) {
   const map: Record<string, { label: string; color: string }> = {
     CRITICAL: { label: "CRITICAL", color: "bg-red-600 text-white" },
@@ -470,6 +485,7 @@ function SeverityPill({ sev }: { sev: string }) {
   );
 }
 
+/** Boton de accion rapida en el panel Ops. */
 function ActionBtn({
   icon,
   label,

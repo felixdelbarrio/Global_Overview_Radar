@@ -1,3 +1,5 @@
+"""Tests de calculo de KPIs."""
+
 from __future__ import annotations
 
 from datetime import date

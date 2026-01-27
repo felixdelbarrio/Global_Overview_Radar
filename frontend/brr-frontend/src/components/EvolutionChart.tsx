@@ -1,5 +1,11 @@
 "use client";
 
+/**
+ * Chart de evolucion temporal basado en Recharts.
+ *
+ * Se renderiza solo en cliente para evitar issues en SSR.
+ */
+
 import type { EvolutionPoint } from "@/lib/types";
 import {
   Area,
@@ -13,6 +19,7 @@ import {
 } from "recharts";
 
 export function EvolutionChart({ data }: { data: EvolutionPoint[] }) {
+  /** Renderiza el grafico con los datos recibidos. */
   return (
     <ResponsiveContainer width="100%" height="100%">
       <AreaChart data={data}>

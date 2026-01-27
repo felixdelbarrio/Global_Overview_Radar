@@ -1,5 +1,9 @@
 "use client";
 
+/**
+ * Vista de incidencias con filtros en cliente.
+ */
+
 import { useEffect, useMemo, useState } from "react";
 import { Shell } from "@/components/Shell";
 import { apiGet } from "@/lib/api";
@@ -17,6 +21,7 @@ type Incident = {
 };
 
 function chipSeverity(sev: string) {
+  /** Devuelve clases CSS segun severidad. */
   const s = (sev ?? "UNKNOWN").toUpperCase();
   if (s === "CRITICAL") return "bg-red-100 text-red-800";
   if (s === "HIGH") return "bg-orange-100 text-orange-800";
@@ -26,6 +31,7 @@ function chipSeverity(sev: string) {
 }
 
 function chipStatus(st: string) {
+  /** Devuelve clases CSS segun estado. */
   const s = (st ?? "").toUpperCase();
   if (s === "OPEN") return "bg-blue-100 text-blue-800";
   if (s === "IN_PROGRESS") return "bg-purple-100 text-purple-800";
@@ -34,9 +40,12 @@ function chipStatus(st: string) {
 }
 
 export default function IncidenciasPage() {
+  /** Lista completa de incidencias. */
   const [items, setItems] = useState<Incident[]>([]);
+  /** Mensaje de error si falla la API. */
   const [error, setError] = useState<string | null>(null);
 
+  /** Filtros de busqueda. */
   const [q, setQ] = useState("");
   const [sev, setSev] = useState<string>("ALL");
   const [st, setSt] = useState<string>("ALL");
@@ -85,7 +94,7 @@ export default function IncidenciasPage() {
         </div>
       )}
 
-      {/* Filters */}
+      {/* Filtros */}
       <div className="mt-6 brr-card p-4">
         <div className="grid grid-cols-1 md:grid-cols-[1fr_180px_180px] gap-3">
           <div>
@@ -128,7 +137,7 @@ export default function IncidenciasPage() {
         </div>
       </div>
 
-      {/* Table */}
+      {/* Tabla */}
       <div className="mt-6 brr-card overflow-hidden">
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm">

@@ -1,5 +1,9 @@
+/** Tipos compartidos del dominio para el frontend. */
+
+/** Severidad estandarizada de incidencias. */
 export type Severity = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "UNKNOWN";
 
+/** Resumen de KPIs agregados expuesto por la API. */
 export type Kpis = {
   open_total: number;
   open_by_severity: Record<Severity, number>;
@@ -18,9 +22,14 @@ export type Kpis = {
   open_over_threshold_list: string[];
 };
 
+/** Punto de la serie temporal (evolucion diaria). */
 export type EvolutionPoint = {
-  date: string; // YYYY-MM-DD
+  /** Fecha en formato YYYY-MM-DD. */
+  date: string;
+  /** Incidencias abiertas en la fecha. */
   open: number;
+  /** Incidencias nuevas en la fecha. */
   new: number;
+  /** Incidencias cerradas en la fecha. */
   closed: number;
 };

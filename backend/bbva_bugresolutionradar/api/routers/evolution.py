@@ -1,3 +1,5 @@
+"""Endpoint de evolucion temporal de incidencias."""
+
 from __future__ import annotations
 
 from datetime import date, timedelta
@@ -10,7 +12,8 @@ router = APIRouter()
 
 @router.get("")
 def evolution(request: Request, days: int = 90) -> Dict[str, Any]:
-    """
+    """Devuelve una serie diaria de abiertos, nuevos y cerrados.
+
     Serie temporal diaria:
     - abiertas
     - nuevas

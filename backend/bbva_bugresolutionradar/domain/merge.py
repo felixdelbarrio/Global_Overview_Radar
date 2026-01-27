@@ -1,3 +1,5 @@
+"""Merge de observaciones en incidencias consolidadas."""
+
 from __future__ import annotations
 
 import hashlib
@@ -13,11 +15,13 @@ from bbva_bugresolutionradar.domain.models import (
 
 
 def compute_global_id(source_id: str, source_key: str) -> str:
+    """Calcula un global_id determinista a partir de source_id y source_key."""
     raw = f"{source_id}:{source_key}".encode()
     return hashlib.sha256(raw).hexdigest()[:24]
 
 
 def _diff_current(old: IncidentCurrent, new: IncidentCurrent) -> dict[str, Any]:
+    """Genera un diff simple entre el estado actual anterior y el nuevo."""
     diff: dict[str, Any] = {}
 
     # Compare a curated set of fields (safe and stable for KPIs)
@@ -47,6 +51,10 @@ def merge_observation(
     global_id: str,
     run_id: str,
 ) -> IncidentRecord:
+    """Fusiona una observacion con un IncidentRecord existente.
+
+    Si no existe, crea uno nuevo con evento de creacion.
+    """
     current = IncidentCurrent(
         title=obs.title,
         status=obs.status,

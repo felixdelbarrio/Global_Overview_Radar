@@ -1,9 +1,13 @@
+"""Enums de dominio para severidad y estado de incidencias."""
+
 from __future__ import annotations
 
 from enum import Enum
 
 
 class Severity(str, Enum):
+    """Niveles de severidad estandarizados."""
+
     CRITICAL = "CRITICAL"
     HIGH = "HIGH"
     MEDIUM = "MEDIUM"
@@ -12,6 +16,8 @@ class Severity(str, Enum):
 
 
 class Status(str, Enum):
+    """Estados de vida de una incidencia."""
+
     OPEN = "OPEN"
     IN_PROGRESS = "IN_PROGRESS"
     BLOCKED = "BLOCKED"

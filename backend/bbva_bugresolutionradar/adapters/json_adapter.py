@@ -1,3 +1,5 @@
+"""Adapter JSON: lee ficheros JSON y genera ObservedIncident."""
+
 from __future__ import annotations
 
 import json
@@ -13,6 +15,7 @@ from bbva_bugresolutionradar.domain.models import ObservedIncident
 
 
 def _parse_status(raw: Optional[str]) -> Status:
+    """Normaliza el campo de estado desde texto."""
     if raw is None:
         return Status.UNKNOWN
     try:
@@ -22,6 +25,7 @@ def _parse_status(raw: Optional[str]) -> Status:
 
 
 def _parse_severity(raw: Optional[str]) -> Severity:
+    """Normaliza el campo de severidad desde texto."""
     if raw is None:
         return Severity.UNKNOWN
     try:
@@ -31,23 +35,27 @@ def _parse_severity(raw: Optional[str]) -> Severity:
 
 
 class FilesystemJSONAdapter(FilesystemAdapter):
-    """
-    Reads all *.json files under assets_dir.
-    Expected format: list of objects with at least:
-      - source_key
-      - title
-      - status
-      - severity
-    Optional: opened_at, closed_at, updated_at (YYYY-MM-DD), clients_affected, product, feature, resolution_type
+    """Lee todos los JSON dentro de assets_dir.
+
+    Formato esperado: lista de objetos con al menos:
+    - source_key
+    - title
+    - status
+    - severity
+
+    Opcionales: opened_at, closed_at, updated_at (YYYY-MM-DD), clients_affected,
+    product, feature, resolution_type.
     """
 
     def read(self) -> List[ObservedIncident]:
+        """Lee todos los JSON y devuelve observaciones."""
         incidents: List[ObservedIncident] = []
         for path in sorted(self.assets_dir().glob("*.json")):
             incidents.extend(self._read_file(path))
         return incidents
 
     def _read_file(self, path: Path) -> List[ObservedIncident]:
+        """Parsea un JSON y devuelve observaciones."""
         observed_at = datetime.now().astimezone()
         raw = path.read_text(encoding="utf-8")
         loaded: Any = json.loads(raw)

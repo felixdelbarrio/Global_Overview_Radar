@@ -1,3 +1,4 @@
+# Configuracion principal del proyecto Python y herramientas de calidad.
 [project]
 name = "bbva-bugresolutionradar"
 version = "0.1.0"

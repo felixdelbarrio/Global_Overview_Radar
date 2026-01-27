@@ -1,5 +1,11 @@
 "use client";
 
+/**
+ * Layout principal del frontend.
+ *
+ * Incluye topbar, sidebar y contenedor de contenido.
+ */
+
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -11,8 +17,10 @@ import {
 } from "lucide-react";
 
 export function Shell({ children }: { children: React.ReactNode }) {
+  /** Ruta actual para resaltar la navegacion. */
   const pathname = usePathname();
 
+  /** Definicion de items de navegacion. */
   const nav = [
     { href: "/", label: "Dashboard", icon: LayoutDashboard },
     { href: "/incidencias", label: "Incidencias", icon: ListChecks },
@@ -21,7 +29,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen">
-      {/* Top bar */}
+      {/* Barra superior */}
       <header className="sticky top-0 z-40">
         <div
           className="h-16 px-6 flex items-center gap-4 text-white shadow-[0_10px_30px_rgba(7,33,70,0.18)]"
@@ -54,9 +62,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
         </div>
       </header>
 
-      {/* Main layout */}
+      {/* Layout principal */}
       <div className="mx-auto max-w-7xl px-4 py-6 grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-6">
-        {/* Sidebar */}
+        {/* Barra lateral */}
         <aside
           className="h-fit rounded-[var(--radius)] border backdrop-blur-xl"
           style={{
@@ -157,7 +165,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
           </div>
         </aside>
 
-        {/* Content */}
+        {/* Contenido */}
         <main className="min-w-0">{children}</main>
       </div>
     </div>

@@ -1,3 +1,8 @@
+"""Configuracion central del backend.
+
+Lee variables de entorno y expone parametros usados por ingest, reporting y API.
+"""
+
 from __future__ import annotations
 
 from typing import List
@@ -7,9 +12,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """
-    App settings loaded from environment (.env) using pydantic-settings.
-    We keep extra="forbid" to catch typos early.
+    """Parametros de configuracion de la aplicacion.
+
+    Se cargan desde entorno/.env con pydantic-settings. extra="forbid" evita
+    variables desconocidas por error de escritura.
     """
 
     model_config = SettingsConfigDict(
@@ -51,9 +57,11 @@ class Settings(BaseSettings):
     period_days_default: int = Field(default=15, validation_alias="PERIOD_DAYS_DEFAULT")
 
     def enabled_sources(self) -> List[str]:
+        """Devuelve la lista de fuentes habilitadas en SOURCES."""
         return [s.strip() for s in self.sources.split(",") if s.strip()]
 
     def xlsx_ignore_list(self) -> List[str]:
+        """Devuelve la lista de ficheros XLSX a ignorar."""
         return [s.strip() for s in self.xlsx_ignore_files.split(",") if s.strip()]
 
 

@@ -1,5 +1,9 @@
 "use client";
 
+/**
+ * Dashboard ejecutivo: KPIs y evolucion temporal.
+ */
+
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { Shell } from "@/components/Shell";
@@ -18,11 +22,15 @@ const EvolutionChart = dynamic(
 );
 
 export default function DashboardPage() {
+  /** KPIs actuales. */
   const [kpis, setKpis] = useState<Kpis | null>(null);
+  /** Serie temporal de evolucion. */
   const [evolution, setEvolution] = useState<EvolutionPoint[]>([]);
+  /** Error de carga (si aplica). */
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    /** Control simple para evitar setState tras un unmount. */
     let alive = true;
 
     apiGet<Kpis>("/kpis")
@@ -90,6 +98,7 @@ export default function DashboardPage() {
   );
 }
 
+/** Tarjeta KPI individual. */
 function Kpi({
   label,
   value,

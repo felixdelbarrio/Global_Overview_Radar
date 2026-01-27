@@ -1,3 +1,5 @@
+"""Fixtures compartidas para tests del backend."""
+
 from __future__ import annotations
 
 import importlib

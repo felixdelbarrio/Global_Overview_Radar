@@ -1,3 +1,5 @@
+"""Tests del servicio de ingest y construccion de adapters."""
+
 from __future__ import annotations
 
 import json

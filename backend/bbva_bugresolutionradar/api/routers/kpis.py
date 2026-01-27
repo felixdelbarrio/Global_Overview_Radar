@@ -1,3 +1,5 @@
+"""Endpoints de KPIs ejecutivos."""
+
 from __future__ import annotations
 
 from datetime import date
@@ -10,6 +12,7 @@ router = APIRouter()
 
 @router.get("")
 def get_kpis(request: Request, period_days: Optional[int] = None) -> Dict[str, Any]:
+    """Devuelve KPIs agregados a partir del cache consolidado."""
     cache_repo = request.app.state.cache_repo
     reporting = request.app.state.reporting
 

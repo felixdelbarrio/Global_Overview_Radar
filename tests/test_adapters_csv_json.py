@@ -1,3 +1,5 @@
+"""Tests de adapters CSV y JSON."""
+
 from __future__ import annotations
 
 import json

@@ -1,3 +1,5 @@
+"""Utilidades de parsing para valores provenientes de fuentes externas."""
+
 from __future__ import annotations
 
 from datetime import date, datetime
@@ -5,9 +7,9 @@ from typing import Optional
 
 
 def to_str(v: object) -> Optional[str]:
-    """
-    Convert any scalar value to a stripped string or None.
-    Safe for Excel cells, numbers, dates, etc.
+    """Convierte un valor escalar a string limpio o None.
+
+    Es seguro para celdas Excel, numeros, fechas, etc.
     """
     if v is None:
         return None
@@ -16,9 +18,9 @@ def to_str(v: object) -> Optional[str]:
 
 
 def to_int(v: object) -> Optional[int]:
-    """
-    Safely convert a value to int.
-    Handles Excel numbers, numeric strings, floats, etc.
+    """Convierte un valor a int de forma segura.
+
+    Soporta numeros Excel, strings numericos, floats, etc.
     """
     if v is None or v == "":
         return None
@@ -40,12 +42,12 @@ def to_int(v: object) -> Optional[int]:
 
 
 def to_date(v: object) -> Optional[date]:
-    """
-    Convert Excel / string values to date.
-    Supports:
-      - date
-      - datetime
-      - strings: YYYY-MM-DD, DD/MM/YYYY, YYYY/MM/DD
+    """Convierte valores Excel/string a date.
+
+    Soporta:
+    - date
+    - datetime
+    - strings: YYYY-MM-DD, DD/MM/YYYY, YYYY/MM/DD
     """
     if v is None or v == "":
         return None

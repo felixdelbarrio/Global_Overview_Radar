@@ -1,3 +1,5 @@
+"""Servicio de reporting: calculo de KPIs sobre el cache consolidado."""
+
 from __future__ import annotations
 
 from datetime import date
@@ -9,10 +11,13 @@ from bbva_bugresolutionradar.domain.models import CacheDocument
 
 
 class ReportingService:
+    """Capa de servicio para exponer KPIs con defaults de configuracion."""
+
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
 
     def kpis(self, doc: CacheDocument, today: date, period_days: Optional[int] = None) -> KPIResult:
+        """Calcula KPIs usando el periodo por defecto si no se provee."""
         pd = period_days if period_days is not None else self._settings.period_days_default
         incidents = list(doc.incidents.values())
         return compute_kpis(
