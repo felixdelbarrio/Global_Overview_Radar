@@ -1,19 +1,21 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import { Shell } from "@/components/Shell";
 import { apiGet } from "@/lib/api";
 import type { EvolutionPoint, Kpis } from "@/lib/types";
-import {
-  Area,
-  AreaChart,
-  CartesianGrid,
-  Legend,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
+
+const EvolutionChart = dynamic(
+  () =>
+    import("@/components/EvolutionChart").then((m) => m.EvolutionChart),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-full w-full rounded-xl bg-black/5 animate-pulse" />
+    ),
+  },
+);
 
 export default function DashboardPage() {
   const [kpis, setKpis] = useState<Kpis | null>(null);
@@ -81,43 +83,7 @@ export default function DashboardPage() {
         </h2>
 
         <div className="mt-4 h-72 min-h-[288px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={evolution}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis
-                dataKey="date"
-                tickFormatter={(d: string) => d.slice(5)}
-                fontSize={11}
-              />
-              <YAxis fontSize={11} />
-              <Tooltip />
-              <Legend />
-              <Area
-                type="monotone"
-                dataKey="open"
-                name="Abiertas"
-                fill="#004481"
-                stroke="#004481"
-                fillOpacity={0.15}
-              />
-              <Area
-                type="monotone"
-                dataKey="new"
-                name="Nuevas"
-                fill="#2dcccd"
-                stroke="#2dcccd"
-                fillOpacity={0.2}
-              />
-              <Area
-                type="monotone"
-                dataKey="closed"
-                name="Cerradas"
-                fill="#99a4b3"
-                stroke="#99a4b3"
-                fillOpacity={0.15}
-              />
-            </AreaChart>
-          </ResponsiveContainer>
+          <EvolutionChart data={evolution} />
         </div>
       </div>
     </Shell>

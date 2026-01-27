@@ -19,12 +19,12 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["backend"]
 
 [tool.ruff]
 line-length = 100
 target-version = "py39"
-src = ["src"]
+src = ["backend"]
 fix = true
 
 [tool.ruff.format]
@@ -58,6 +58,6 @@ exclude = "data/"
 [tool.pyright]
 typeCheckingMode = "strict"
 pythonVersion = "3.9"
-include = ["src"]
+include = ["backend"]
 exclude = ["data", "**/__pycache__"]
 reportMissingTypeStubs = "none"
