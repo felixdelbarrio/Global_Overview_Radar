@@ -1,3 +1,5 @@
+"""Servicio de ingest: orquesta adaptadores y genera observaciones."""
+
 from __future__ import annotations
 
 from bbva_bugresolutionradar.adapters import (
@@ -11,10 +13,13 @@ from bbva_bugresolutionradar.domain.models import ObservedIncident
 
 
 class IngestService:
+    """Orquestador de lectura de fuentes configuradas."""
+
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
 
     def build_adapters(self) -> list[Adapter]:
+        """Construye la lista de adaptadores segun Settings.sources."""
         adapters: list[Adapter] = []
         enabled = set(self._settings.enabled_sources())
 
@@ -28,6 +33,7 @@ class IngestService:
         return adapters
 
     def ingest(self) -> list[ObservedIncident]:
+        """Ejecuta la lectura de todas las fuentes y concatena resultados."""
         observations: list[ObservedIncident] = []
         for adapter in self.build_adapters():
             observations.extend(adapter.read())

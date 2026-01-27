@@ -1,3 +1,5 @@
+/** Configuracion de Vitest para pruebas del frontend. */
+
 import { defineConfig } from "vitest/config";
 import path from "path";
 

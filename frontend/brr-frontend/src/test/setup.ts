@@ -1,6 +1,9 @@
+/** Setup global de pruebas (JSDOM y mocks basicos). */
+
 import "@testing-library/jest-dom/vitest";
 import { vi } from "vitest";
 
+// Mock de matchMedia para componentes que dependen de media queries.
 if (!window.matchMedia) {
   window.matchMedia = (query: string) => ({
     matches: false,
@@ -14,6 +17,7 @@ if (!window.matchMedia) {
   });
 }
 
+// Mock de ResizeObserver usado por librerias de charts/layout.
 if (!window.ResizeObserver) {
   window.ResizeObserver = class {
     observe() {}
@@ -22,6 +26,7 @@ if (!window.ResizeObserver) {
   };
 }
 
+// Mock de alert para acciones demo.
 if (!window.alert) {
   window.alert = vi.fn();
 }

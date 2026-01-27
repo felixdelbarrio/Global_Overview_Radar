@@ -1,3 +1,5 @@
+"""Calculo de KPIs y agregados de incidencias."""
+
 from __future__ import annotations
 
 from collections import Counter
@@ -11,6 +13,8 @@ from bbva_bugresolutionradar.domain.models import IncidentRecord
 
 @dataclass(frozen=True)
 class KPIResult:
+    """Resultado agregado de KPIs calculados."""
+
     open_total: int
     open_by_severity: Dict[Severity, int]
 
@@ -29,6 +33,7 @@ class KPIResult:
 
 
 def _severity_counter_to_dict(counter: Counter[Severity]) -> Dict[Severity, int]:
+    """Convierte un Counter de severidades a dict con claves completas."""
     return {sev: int(counter.get(sev, 0)) for sev in Severity}
 
 
@@ -39,6 +44,7 @@ def compute_kpis(
     master_threshold_clients: int,
     stale_days_threshold: int,
 ) -> KPIResult:
+    """Calcula KPIs sobre la lista de incidencias consolidada."""
     period_start = today - timedelta(days=period_days)
 
     open_items = [i for i in incidents if i.current.is_open]

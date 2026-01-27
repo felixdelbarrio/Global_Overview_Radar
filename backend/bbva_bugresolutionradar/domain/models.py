@@ -1,3 +1,5 @@
+"""Modelos canonicos del dominio (Pydantic)."""
+
 from __future__ import annotations
 
 from datetime import date, datetime
@@ -9,6 +11,8 @@ from bbva_bugresolutionradar.domain.enums import Severity, Status
 
 
 class SourceRef(BaseModel):
+    """Referencia de procedencia de una incidencia."""
+
     source_id: str
     source_key: str
     first_seen_at: datetime
@@ -16,6 +20,8 @@ class SourceRef(BaseModel):
 
 
 class IncidentCurrent(BaseModel):
+    """Estado actual de una incidencia."""
+
     title: str
     status: Status
     severity: Severity
@@ -31,15 +37,19 @@ class IncidentCurrent(BaseModel):
 
     @property
     def is_open(self) -> bool:
+        """Indica si la incidencia sigue abierta."""
         return self.status in {Status.OPEN, Status.IN_PROGRESS, Status.BLOCKED}
 
     def is_master(self, threshold: int) -> bool:
+        """Indica si la incidencia supera el umbral de clientes afectados."""
         if self.clients_affected is None:
             return False
         return self.clients_affected > threshold
 
 
 class IncidentHistoryEvent(BaseModel):
+    """Evento historico con cambios relevantes detectados."""
+
     observed_at: datetime
     run_id: str
     source_id: str
@@ -47,6 +57,8 @@ class IncidentHistoryEvent(BaseModel):
 
 
 class IncidentRecord(BaseModel):
+    """Incidencia consolidada con estado actual, procedencia e historial."""
+
     global_id: str
     current: IncidentCurrent
     provenance: List[SourceRef] = Field(default_factory=lambda: cast(List[SourceRef], []))
@@ -56,18 +68,24 @@ class IncidentRecord(BaseModel):
 
 
 class RunSource(BaseModel):
+    """Metadata de una fuente usada en una ejecucion de ingest."""
+
     source_id: str
     asset: str
     fingerprint: Optional[str] = None
 
 
 class RunInfo(BaseModel):
+    """Metadata global de una ejecucion de ingest/consolidacion."""
+
     run_id: str
     started_at: datetime
     sources: List[RunSource]
 
 
 class CacheDocument(BaseModel):
+    """Documento consolidado listo para consulta por la API."""
+
     schema_version: str = "1.0"
     generated_at: datetime
     runs: List[RunInfo] = Field(default_factory=lambda: cast(List[RunInfo], []))
@@ -75,9 +93,10 @@ class CacheDocument(BaseModel):
 
 
 class ObservedIncident(BaseModel):
-    """
-    Canonical observation from an adapter: one record from one source.
-    global_id is computed by services, but adapters must provide source_id/source_key.
+    """Observacion canonica de un adapter (una fila/registro de una fuente).
+
+    El global_id se calcula en servicios, pero los adapters deben aportar
+    source_id y source_key.
     """
 
     source_id: str

@@ -1,3 +1,5 @@
+"""Adapter CSV: lee ficheros CSV y genera ObservedIncident."""
+
 from __future__ import annotations
 
 import csv
@@ -12,6 +14,7 @@ from bbva_bugresolutionradar.domain.models import ObservedIncident
 
 
 def _parse_status(raw: str | None) -> Status:
+    """Normaliza el campo de estado desde texto libre."""
     if raw is None:
         return Status.UNKNOWN
     v = raw.strip().upper()
@@ -27,6 +30,7 @@ def _parse_status(raw: str | None) -> Status:
 
 
 def _parse_severity(raw: str | None) -> Severity:
+    """Normaliza el campo de severidad desde texto libre."""
     if raw is None:
         return Severity.UNKNOWN
     v = raw.strip().upper()
@@ -45,18 +49,21 @@ def _parse_severity(raw: str | None) -> Severity:
 
 
 class FilesystemCSVAdapter(FilesystemAdapter):
-    """
-    Reads all *.csv files under assets_dir.
-    Expected header fields (flexible): source_key/id, title, status, severity, opened_at, closed_at, updated_at, etc.
+    """Lee todos los CSV dentro de assets_dir.
+
+    Se espera cabecera flexible: source_key/id, title, status, severity,
+    opened_at, closed_at, updated_at, etc.
     """
 
     def read(self) -> list[ObservedIncident]:
+        """Lee todos los CSV y devuelve una lista de observaciones."""
         incidents: list[ObservedIncident] = []
         for path in sorted(self.assets_dir().glob("*.csv")):
             incidents.extend(self._read_file(path))
         return incidents
 
     def _read_file(self, path: Path) -> list[ObservedIncident]:
+        """Parsea un fichero CSV concreto y genera ObservedIncident."""
         observed_at = datetime.now().astimezone()
         out: list[ObservedIncident] = []
 

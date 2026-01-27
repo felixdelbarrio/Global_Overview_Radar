@@ -1,3 +1,5 @@
+/** Tests del helper apiGet del frontend. */
+
 import { expect, it, vi } from "vitest";
 import { apiGet } from "@/lib/api";
 

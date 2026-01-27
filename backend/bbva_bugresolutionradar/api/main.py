@@ -1,3 +1,5 @@
+"""Factory de la aplicacion FastAPI y wiring de dependencias."""
+
 from __future__ import annotations
 
 from datetime import date
@@ -14,6 +16,7 @@ from bbva_bugresolutionradar.services import ReportingService
 
 
 def create_app() -> FastAPI:
+    """Crea y configura la instancia de FastAPI."""
     app = FastAPI(title=settings.app_name)
 
     # CORS: permite llamadas desde frontend local y por IP (LAN)
@@ -43,6 +46,7 @@ def create_app() -> FastAPI:
 
     @app.get("/health", include_in_schema=False, status_code=200)
     def health() -> dict[str, str]:  # pyright: ignore[reportUnusedFunction]
+        """Healthcheck simple para monitorizacion."""
         return {"status": "ok", "date": date.today().isoformat()}
 
     return app

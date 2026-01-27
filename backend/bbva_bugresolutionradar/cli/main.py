@@ -1,3 +1,5 @@
+"""CLI para ejecutar ingest y consolidacion desde terminal."""
+
 from __future__ import annotations
 
 import sys
@@ -10,6 +12,7 @@ from bbva_bugresolutionradar.services import ConsolidateService, IngestService
 
 
 def main() -> None:
+    """Punto de entrada CLI (soporta comando 'ingest')."""
     if len(sys.argv) < 2:
         print("Usage: brr ingest")
         sys.exit(1)

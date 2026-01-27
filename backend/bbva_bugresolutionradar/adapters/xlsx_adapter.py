@@ -1,3 +1,5 @@
+"""Adapter XLSX: lectura robusta de hojas Excel con mapeo flexible de columnas."""
+
 from __future__ import annotations
 
 import hashlib
@@ -154,6 +156,7 @@ class XlsxAdapter(FilesystemAdapter):
         out: List[ObservedIncident] = []
 
         def stable_auto_key(row_idx_1based: int, opened_at: Optional[date], title: str) -> str:
+            """Genera un source_key estable cuando no hay ID en la fila."""
             basis = (
                 f"{path.name}|{ws.title}|{row_idx_1based}|"
                 f"{opened_at.isoformat() if opened_at else ''}|{title}"
@@ -236,6 +239,7 @@ class XlsxAdapter(FilesystemAdapter):
 
 
 def _map_status(raw: Optional[str]) -> Status:
+    """Mapea texto libre a Status usando heuristicas simples."""
     if not raw:
         return Status.UNKNOWN
     s = raw.strip().lower()
@@ -256,6 +260,7 @@ def _map_status(raw: Optional[str]) -> Status:
 
 
 def _map_severity(raw: Optional[str]) -> Severity:
+    """Mapea texto libre a Severity usando heuristicas simples."""
     if not raw:
         return Severity.UNKNOWN
     s = raw.strip().lower()

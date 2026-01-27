@@ -1,3 +1,5 @@
+"""Servicio de consolidacion: unifica observaciones en un cache unico."""
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -16,12 +18,13 @@ from bbva_bugresolutionradar.domain.models import (
 
 
 class ConsolidateService:
-    """
-    Consolidación simple:
-    - global_id = f"{source_id}:{source_key}" (por ahora)
-    - si existe, actualiza current y añade evento de history si cambia algo relevante
-    - provenance por source_id/source_key con first_seen_at/last_seen_at
-    - añade RunInfo con run_id y sources
+    """Consolida observaciones en un CacheDocument.
+
+    Reglas:
+    - global_id = f"{source_id}:{source_key}" (actualmente)
+    - actualiza current y crea history si hay cambios relevantes
+    - mantiene provenance por source_id/source_key con first_seen_at/last_seen_at
+    - registra RunInfo con run_id y sources
     """
 
     def __init__(self) -> None:
@@ -30,6 +33,7 @@ class ConsolidateService:
     def consolidate(
         self, observations: List[ObservedIncident], sources: List[RunSource]
     ) -> CacheDocument:
+        """Consolida observaciones y genera un CacheDocument completo."""
         now = datetime.now(timezone.utc).astimezone()
         run_id = now.strftime("%Y%m%dT%H%M%S%z")
 
@@ -120,6 +124,7 @@ class ConsolidateService:
 
 
 def _touch_provenance(rec: IncidentRecord, obs: ObservedIncident) -> None:
+    """Actualiza la procedencia (provenance) del registro consolidado."""
     for p in rec.provenance:
         if p.source_id == obs.source_id and p.source_key == obs.source_key:
             p.last_seen_at = obs.observed_at

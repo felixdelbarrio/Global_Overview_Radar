@@ -1,3 +1,5 @@
+"""Endpoints de consulta de incidencias."""
+
 from __future__ import annotations
 
 from datetime import date
@@ -11,6 +13,7 @@ router = APIRouter()
 
 
 def _matches_q(incident: Dict[str, Any], q: str) -> bool:
+    """Aplica filtro de texto libre sobre campos principales."""
     qn = q.strip().lower()
     if not qn:
         return True
@@ -35,6 +38,7 @@ def list_incidents(
     ),
     limit: int = Query(200, ge=1, le=5000),
 ) -> Dict[str, Any]:
+    """Lista incidencias con filtros, orden y limite."""
     repo = request.app.state.cache_repo
     doc = repo.load()
 
@@ -75,6 +79,7 @@ def list_incidents(
         items.append(row)
 
     def sev_rank(s: str) -> int:
+        """Devuelve el indice de severidad para ordenar."""
         order = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "UNKNOWN"]
         try:
             return order.index(s)
@@ -100,6 +105,7 @@ def list_incidents(
 
 @router.get("/{global_id}")
 def get_incident(request: Request, global_id: str) -> Dict[str, Any]:
+    """Devuelve detalle completo de una incidencia por global_id."""
     repo = request.app.state.cache_repo
     doc = repo.load()
     rec = doc.incidents.get(global_id)
