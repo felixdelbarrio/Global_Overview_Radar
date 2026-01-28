@@ -37,6 +37,9 @@ backend/bbva_bugresolutionradar/services/reporting_service.py
 backend/reputation/__init__.py
 backend/reputation/config.py
 backend/reputation/models.py
+backend/reputation/collectors/__init__.py
+backend/reputation/collectors/base.py
+backend/reputation/collectors/reddit.py
 backend/reputation/repositories/__init__.py
 backend/reputation/repositories/cache_repo.py
 backend/reputation/services/__init__.py
