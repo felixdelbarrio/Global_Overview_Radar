@@ -46,6 +46,7 @@ class ReputationSettings(BaseSettings):
     source_google_reviews: bool = Field(default=False, alias="REPUTATION_SOURCE_GOOGLE_REVIEWS")
     source_youtube: bool = Field(default=False, alias="REPUTATION_SOURCE_YOUTUBE")
     source_downdetector: bool = Field(default=False, alias="REPUTATION_SOURCE_DOWNDETECTOR")
+    sources_allowlist: str = Field(default="", alias="REPUTATION_SOURCES_ALLOWLIST")
 
     def enabled_sources(self) -> List[str]:
         """Devuelve la lista de fuentes activas según los toggles."""
@@ -72,6 +73,9 @@ class ReputationSettings(BaseSettings):
             result.append("youtube")
         if self.source_downdetector:
             result.append("downdetector")
+        allowlist = {s.strip().lower() for s in self.sources_allowlist.split(",") if s.strip()}
+        if allowlist:
+            return [source for source in result if source in allowlist]
         return result
 
 

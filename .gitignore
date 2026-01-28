@@ -12,9 +12,9 @@ __pycache__/
 .ruff_cache/
 .pytest_cache/
 .pyright/
+coverage/
 .coverage
 htmlcov/
-coverage/
 
 ########################################
 # Environment / secrets
@@ -22,6 +22,7 @@ coverage/
 .env
 .env.*
 !.env.example
+!.env.reputation.example
 
 ########################################
 # Data / cache
