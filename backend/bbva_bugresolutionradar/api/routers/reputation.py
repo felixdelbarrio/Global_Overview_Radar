@@ -79,6 +79,8 @@ def _filter_items(
     sentiment_lc = sentiment.lower() if sentiment else None
     text_query = q.lower() if q else None
 
+    from_dt: datetime | None
+    to_dt: datetime | None
     if period_days is not None:
         today = date.today()
         from_dt = datetime.combine(
