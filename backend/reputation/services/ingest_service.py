@@ -146,8 +146,11 @@ class ReputationIngestService:
             return items
 
         for item in items:
-            text = f"{item.title or ''} {item.text or ''}"
-            content_geo = cls._detect_geo_in_text(text, geos, geo_aliases)
+            title_only = item.title or ""
+            content_geo = cls._detect_geo_in_text(title_only, geos, geo_aliases)
+            if not content_geo:
+                text = f"{item.title or ''} {item.text or ''}"
+                content_geo = cls._detect_geo_in_text(text, geos, geo_aliases)
             if content_geo:
                 if item.geo != content_geo:
                     item.geo = content_geo
@@ -589,6 +592,7 @@ class ReputationIngestService:
                             "news", cfg, rss_geo_map, segment_terms, segment_mode
                         )
                     )
+                rss_sources = self._limit_rss_sources(rss_sources, "NEWS_MAX_RSS_URLS", notes)
 
                 if not api_key and not rss_sources:
                     notes.append(f"news: missing {api_key_env} and rss_urls")
@@ -630,6 +634,7 @@ class ReputationIngestService:
                             "forums", cfg, news_geo_map, segment_terms, segment_mode
                         )
                     )
+                rss_sources = self._limit_rss_sources(rss_sources, "FORUMS_MAX_RSS_URLS", notes)
 
                 if not rss_sources:
                     notes.append("forums: missing rss_urls in config.json")
@@ -666,6 +671,7 @@ class ReputationIngestService:
                             "blogs", cfg, news_geo_map, segment_terms, segment_mode
                         )
                     )
+                rss_sources = self._limit_rss_sources(rss_sources, "BLOGS_MAX_RSS_URLS", notes)
 
                 if not rss_only:
                     notes.append("blogs: rss_only=false not supported")
@@ -703,6 +709,9 @@ class ReputationIngestService:
                             "trustpilot", cfg, news_geo_map, segment_terms, segment_mode
                         )
                     )
+                rss_sources = self._limit_rss_sources(
+                    rss_sources, "TRUSTPILOT_MAX_RSS_URLS", notes
+                )
 
                 if not rss_sources:
                     notes.append("trustpilot: missing rss_urls in config.json")
@@ -804,6 +813,9 @@ class ReputationIngestService:
                             "downdetector", cfg, news_geo_map, segment_terms, segment_mode
                         )
                     )
+                rss_sources = self._limit_rss_sources(
+                    rss_sources, "DOWNDETECTOR_MAX_RSS_URLS", notes
+                )
 
                 if not rss_sources:
                     notes.append("downdetector: missing rss_urls in config.json")
@@ -878,6 +890,27 @@ class ReputationIngestService:
             for template in templates:
                 queries.append(template.replace("{actor}", keyword))
         return list(dict.fromkeys([q for q in queries if q]))
+
+    @staticmethod
+    def _limit_rss_sources(
+        rss_sources: list[dict[str, str] | str],
+        env_key: str,
+        notes: list[str],
+    ) -> list[dict[str, str] | str]:
+        raw = os.getenv(env_key, "").strip()
+        if not raw:
+            return rss_sources
+        try:
+            limit = int(raw)
+        except ValueError:
+            notes.append(f"{env_key}: invalid value '{raw}'")
+            return rss_sources
+        if limit <= 0:
+            return rss_sources
+        if len(rss_sources) > limit:
+            notes.append(f"{env_key}: capped rss_urls {len(rss_sources)} -> {limit}")
+            return rss_sources[:limit]
+        return rss_sources
 
     @staticmethod
     def _default_keyword_queries(keywords: list[str], include_unquoted: bool = False) -> list[str]:
@@ -998,6 +1031,7 @@ class ReputationIngestService:
         if not text or not geos:
             return None
         normalized = normalize_text(text)
+        tokens = set(normalized.split())
         for geo in geos:
             geo_norm = normalize_text(geo)
             if geo_norm and geo_norm in normalized:
@@ -1005,7 +1039,13 @@ class ReputationIngestService:
             aliases = geo_aliases.get(geo, [])
             for alias in aliases:
                 alias_norm = normalize_text(alias)
-                if alias_norm and alias_norm in normalized:
+                if not alias_norm:
+                    continue
+                if len(alias_norm) <= 3:
+                    if alias_norm in tokens:
+                        return geo
+                    continue
+                if alias_norm in normalized:
                     return geo
         return None
 
