@@ -1560,23 +1560,6 @@ def _get_list_str_or_dict(cfg: dict[str, object], key: str) -> list[dict[str, st
     return result
 
 
-def _get_dict_str_list_str(cfg: dict[str, object], key: str) -> dict[str, list[str]]:
-    value = cfg.get(key)
-    if not isinstance(value, dict):
-        return {}
-    value_dict = cast(dict[str, object], value)
-    result: dict[str, list[str]] = {}
-    for k, v in value_dict.items():
-        if isinstance(v, list):
-            items = cast(list[object], v)
-            values = [item.strip() for item in items if isinstance(item, str) and item.strip()]
-        else:
-            values = []
-        if values:
-            result[k] = values
-    return result
-
-
 def _get_dict_str_dict_str(cfg: dict[str, object], key: str) -> dict[str, dict[str, str]]:
     value = cfg.get(key)
     if not isinstance(value, dict):
