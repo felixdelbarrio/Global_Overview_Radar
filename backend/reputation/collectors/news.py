@@ -7,9 +7,12 @@ from reputation.collectors.utils import (
     build_url,
     http_get_json,
     http_get_text,
+    match_keywords,
     parse_datetime,
     parse_rss,
     rss_debug_enabled,
+    rss_is_query_feed,
+    rss_source,
 )
 from reputation.models import ReputationItem
 
@@ -27,9 +30,11 @@ class NewsCollector(ReputationCollector):
         endpoint: str | None = None,
         rss_urls: list[dict[str, str] | str] | None = None,
         rss_only: bool = False,
+        filter_terms: list[str] | None = None,
     ) -> None:
         self._api_key = api_key
         self._queries = queries
+        self._filter_terms = filter_terms or queries
         self._language = language
         self._max_articles = max(0, max_articles)
         self._sources = sources
@@ -58,15 +63,17 @@ class NewsCollector(ReputationCollector):
         items: list[ReputationItem] = []
         for rss_url in self._rss_urls:
             try:
-                url_value, geo_value = _rss_source(rss_url)
+                url_value, meta = rss_source(rss_url)
                 raw = http_get_text(url_value)
-            except Exception:
+            except Exception as exc:
+                if rss_debug_enabled():
+                    print(f"[news] error {rss_url}: {exc}")
                 continue
             entries = parse_rss(raw)
             kept = 0
             for entry in entries:
-                if self._is_relevant(entry):
-                    items.append(self._map_entry(entry, url_value, geo_value))
+                if self._is_relevant(entry, url_value, meta):
+                    items.append(self._map_entry(entry, url_value, meta))
                     kept += 1
                 if len(items) >= self._max_articles:
                     return items
@@ -119,13 +126,26 @@ class NewsCollector(ReputationCollector):
 
         return collected
 
-    def _is_relevant(self, entry: dict[str, Any]) -> bool:
-        if not self._queries:
+    def _is_relevant(
+        self,
+        entry: dict[str, Any],
+        rss_url: str | None = None,
+        meta: dict[str, str] | None = None,
+    ) -> bool:
+        if not self._filter_terms:
             return True
-        text = f"{entry.get('title', '')} {entry.get('summary', '')}".lower()
-        return any(q.strip('"').lower() in text for q in self._queries if q)
+        if rss_url and rss_is_query_feed(rss_url):
+            return True
+        if meta and (meta.get("query") or meta.get("entity")):
+            return True
+        text = f"{entry.get('title', '')} {entry.get('summary', '')}"
+        return match_keywords(text, self._filter_terms)
 
-    def _map_entry(self, entry: dict[str, Any], rss_url: str, geo: str | None) -> ReputationItem:
+    def _map_entry(
+        self, entry: dict[str, Any], rss_url: str, meta: dict[str, str]
+    ) -> ReputationItem:
+        meta_local = dict(meta) if meta else {}
+        geo = meta_local.pop("geo", None)
         return ReputationItem(
             id=entry.get("link") or entry.get("title", ""),
             source=self.source_name,
@@ -135,11 +155,5 @@ class NewsCollector(ReputationCollector):
             url=entry.get("link"),
             title=entry.get("title"),
             text=entry.get("summary"),
-            signals={"feed": rss_url},
+            signals={"feed": rss_url, **meta_local},
         )
-
-
-def _rss_source(value: dict[str, str] | str) -> tuple[str, str | None]:
-    if isinstance(value, dict):
-        return value.get("url", ""), value.get("geo")
-    return value, None

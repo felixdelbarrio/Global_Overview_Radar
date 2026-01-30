@@ -62,7 +62,7 @@ it("renders KPIs, supports filtering and pagination", async () => {
   render(<OpsPage />);
 
   expect(await screen.findByText("INC-1")).toBeInTheDocument();
-  expect(screen.getByText("9")).toBeInTheDocument();
+  expect(screen.getAllByText(/Open:\s*9/i).length).toBeGreaterThan(0);
 
   const pageIndicator = await screen.findByText("1 / 2");
   const pager = pageIndicator.parentElement?.parentElement;
