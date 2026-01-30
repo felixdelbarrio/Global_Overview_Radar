@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     ########################################
     # App
     ########################################
-    app_name: str = Field(default="BBVA BugResolutionRadar", validation_alias="APP_NAME")
+    app_name: str = Field(default="BBVA Empresas – Global Overview Radar", validation_alias="APP_NAME")
     tz: str = Field(default="Europe/Madrid", validation_alias="TZ")
 
     ########################################

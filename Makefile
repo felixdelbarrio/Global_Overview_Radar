@@ -1,4 +1,4 @@
-# Makefile - Fullstack: BBVA BugResolutionRadar
+# Makefile - Fullstack: BBVA Empresas – Global Overview Radar
 # Uso: make <target>
 SHELL := /bin/bash
 
@@ -50,6 +50,7 @@ help:
 	@echo ""
 	@echo "Notas:"
 	@echo " - Levanta backend: make venv && make install-backend && make env && make dev-back"
+	@echo " - Para ingestas: prepara el backend una vez (make ensure-backend) y luego ejecuta bugs-ingest / reputation-ingest"
 	@echo " - Levanta frontend: cd $(FRONTDIR) && npm run dev"
 	@echo " - Para desarrollo fullstack usa dos terminales (backend + frontend)."
 
@@ -67,12 +68,12 @@ venv:
 install: install-backend install-front
 	@echo "==> Instalación completa (backend + frontend)."
 
-install-backend: venv env
+install-backend: venv
 	@echo "==> Instalando dependencias Python (requirements / pyproject editable)..."
 	$(PIP) install -r requirements.txt || true
 	$(PIP) install -e .
 
-install-front: env
+install-front:
 	@echo "==> Instalando dependencias frontend (cd $(FRONTDIR))..."
 	cd $(FRONTDIR) && $(NPM) install
 	@echo "==> Instalación frontend completada."
@@ -94,37 +95,37 @@ ensure-front: install-front
 ingest: bugs-ingest reputation-ingest
 	@echo "==> Ingesta completa finalizada."
 
-bugs-ingest: venv env
+bugs-ingest:
 	@echo "==> Ejecutando ingestion/consolidación (backend)..."
 	$(PY) -m bbva_bugresolutionradar.cli.main ingest
 
-reputation-ingest: venv env
+reputation-ingest:
 	@echo "==> Ejecutando ingesta de reputación..."
 	$(PY) -m bbva_bugresolutionradar.cli.main reputation-ingest
 
-serve: env serve-back
+serve: serve-back
 	@true
 
-serve-back: ensure-backend
+serve-back:
 	@echo "==> Iniciando API (uvicorn) en http://$(HOST):$(API_PORT)..."
 	$(PY) -m uvicorn bbva_bugresolutionradar.api.main:app --reload --host $(HOST) --port $(API_PORT)
 
-dev-back: ensure-backend
+dev-back:
 	@echo "==> Desarrollo backend (uvicorn --reload). Usa otra terminal para frontend."
 	$(PY) -m uvicorn bbva_bugresolutionradar.api.main:app --reload --host $(HOST) --port $(API_PORT)
 
 # -------------------------
 # Frontend runtime
 # -------------------------
-dev-front: ensure-front
+dev-front:
 	@echo "==> Iniciando frontend (Next dev) en http://localhost:$(FRONT_PORT)..."
 	cd $(FRONTDIR) && $(NPM) run dev
 
-build-front: ensure-front
+build-front:
 	@echo "==> Build de frontend (production)..."
 	cd $(FRONTDIR) && $(NPM) run build
 
-start-front: ensure-front
+start-front:
 	@echo "==> Iniciando frontend en modo producción (next start)..."
 	cd $(FRONTDIR) && $(NPM) run start
 
@@ -133,7 +134,7 @@ start-front: ensure-front
 # -------------------------
 format: format-back format-front
 
-format-back: ensure-backend
+format-back:
 	@echo "==> Format backend (ruff format)..."
 	$(PY) -m ruff format .
 
@@ -143,7 +144,7 @@ format-front:
 
 lint: lint-back lint-front
 
-lint-back: ensure-backend
+lint-back:
 	@echo "==> Lint backend (ruff check)..."
 	$(PY) -m ruff check .
 
@@ -153,7 +154,7 @@ lint-front:
 
 typecheck: typecheck-back typecheck-front
 
-typecheck-back: ensure-backend
+typecheck-back:
 	@echo "==> Typecheck backend (mypy + pyright)..."
 	$(PY) -m mypy .
 	$(PY) -m pyright
@@ -173,24 +174,22 @@ test:
 	@$(MAKE) test-back
 	@$(MAKE) test-front
 
-test-back: ensure-backend
+test-back:
 	@echo "==> Tests backend (pytest + cobertura)..."
 	$(PY) -m pytest
 
 test-front:
 	@echo "==> Tests frontend (vitest)..."
-	@test -x $(FRONTDIR)/node_modules/.bin/vitest || (echo "==> Instalando deps frontend..." && cd $(FRONTDIR) && $(NPM) install --include=dev)
 	cd $(FRONTDIR) && $(NPM) run test
 
 test-coverage: test-coverage-back test-coverage-front
 
-test-coverage-back: ensure-backend
+test-coverage-back:
 	@echo "==> Cobertura backend (pytest-cov >=70%)..."
 	$(PY) -m pytest
 
 test-coverage-front:
 	@echo "==> Cobertura frontend (vitest >=70%)..."
-	@test -x $(FRONTDIR)/node_modules/.bin/vitest || (echo "==> Instalando deps frontend..." && cd $(FRONTDIR) && $(NPM) install --include=dev)
 	cd $(FRONTDIR) && $(NPM) run test:coverage
 
 # -------------------------

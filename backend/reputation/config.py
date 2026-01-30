@@ -84,7 +84,7 @@ settings = ReputationSettings()
 
 
 def load_business_config(path: Path | None = None) -> Dict[str, Any]:
-    """Carga el JSON de negocio (geografías, competidores, templates, etc.)."""
+    """Carga el JSON de negocio (geografías, otros actores del mercado, templates, etc.)."""
     cfg_path = path or settings.config_path
     if not cfg_path.exists():
         raise FileNotFoundError(f"Reputation config.json not found at {cfg_path}")
