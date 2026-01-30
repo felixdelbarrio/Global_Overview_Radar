@@ -472,6 +472,7 @@
 
   "models": {
     "sentiment_mode_env": "SENTIMENT_MODEL",
+    "sentiment_llm_model_env": "OPENAI_SENTIMENT_MODEL",
     "aspect_mode_env": "ASPECT_MODEL"
   },
 

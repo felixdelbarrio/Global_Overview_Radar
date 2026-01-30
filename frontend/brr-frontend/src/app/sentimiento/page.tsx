@@ -10,6 +10,7 @@ import {
   Legend,
   Line,
   LineChart,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -48,8 +49,7 @@ export default function SentimientoPage() {
 
   const [items, setItems] = useState<ReputationItem[]>([]);
   const [chartItems, setChartItems] = useState<ReputationItem[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [chartLoading, setChartLoading] = useState(false);
+  const [chartLoading, setChartLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [chartError, setChartError] = useState<string | null>(null);
 
@@ -61,20 +61,14 @@ export default function SentimientoPage() {
   const [actor, setActor] = useState("all");
   const [sources, setSources] = useState<string[]>([]);
 
-  useEffect(() => {
-    if (entity === "otros_actores" && isBbvaName(actor)) {
-      setActor("all");
-    }
-    if (entity === "all" && isBbvaName(actor)) {
-      setActor("all");
-    }
-  }, [entity, actor]);
+  const touchFilters = () => {
+    setError(null);
+    setChartError(null);
+    setChartLoading(true);
+  };
 
   useEffect(() => {
     let alive = true;
-    setLoading(true);
-    setError(null);
-
     const params = new URLSearchParams();
     if (fromDate) params.set("from_date", fromDate);
     if (toDate) params.set("to_date", toDate);
@@ -90,13 +84,12 @@ export default function SentimientoPage() {
       .then((doc) => {
         if (!alive) return;
         setItems(doc.items ?? []);
+        setError(null);
       })
       .catch((e) => {
         if (alive) setError(String(e));
       })
-      .finally(() => {
-        if (alive) setLoading(false);
-      });
+      .finally(() => undefined);
 
     return () => {
       alive = false;
@@ -105,9 +98,6 @@ export default function SentimientoPage() {
 
   useEffect(() => {
     let alive = true;
-    setChartLoading(true);
-    setChartError(null);
-
     const params = new URLSearchParams();
     if (fromDate) params.set("from_date", fromDate);
     if (toDate) params.set("to_date", toDate);
@@ -119,6 +109,7 @@ export default function SentimientoPage() {
       .then((doc) => {
         if (!alive) return;
         setChartItems(doc.items ?? []);
+        setChartError(null);
       })
       .catch((e) => {
         if (alive) setChartError(String(e));
@@ -157,10 +148,10 @@ export default function SentimientoPage() {
     [items],
   );
   const sentimentSeries = useMemo(
-    () => buildComparativeSeries(chartItems, actor),
-    [chartItems, actor],
+    () => buildComparativeSeries(chartItems, actor, fromDate, toDate),
+    [chartItems, actor, fromDate, toDate],
   );
-  const groupedItems = useMemo(() => groupMentions(items), [items]);
+  const groupedMentions = useMemo(() => groupMentions(chartItems), [chartItems]);
   const rangeLabel = useMemo(
     () => buildRangeLabel(fromDate, toDate),
     [fromDate, toDate],
@@ -184,6 +175,32 @@ export default function SentimientoPage() {
       ),
     [actor, geo],
   );
+  const selectedActor = useMemo(
+    () => (actor !== "all" && !isBbvaName(actor) ? actor : null),
+    [actor],
+  );
+  const selectedActorKey = useMemo(
+    () => (selectedActor ? normalizeKey(selectedActor) : null),
+    [selectedActor],
+  );
+  const bbvaMentions = useMemo(
+    () => groupedMentions.filter((item) => isBbvaGroup(item)),
+    [groupedMentions],
+  );
+  const actorMentions = useMemo(
+    () =>
+      groupedMentions.filter((item) => {
+        if (isBbvaGroup(item)) return false;
+        if (!selectedActorKey) return true;
+        return normalizeKey(item.actor || "") === selectedActorKey;
+      }),
+    [groupedMentions, selectedActorKey],
+  );
+  const [mentionsTab, setMentionsTab] = useState<"bbva" | "actor">("bbva");
+
+  const mentionsToShow =
+    mentionsTab === "bbva" ? bbvaMentions : actorMentions;
+  const mentionsLabel = mentionsTab === "bbva" ? bbvaLabel : actorLabel;
 
   return (
     <Shell>
@@ -240,7 +257,10 @@ export default function SentimientoPage() {
               <input
                 type="date"
                 value={fromDate}
-                onChange={(e) => setFromDate(e.target.value)}
+                onChange={(e) => {
+                  touchFilters();
+                  setFromDate(e.target.value);
+                }}
                 className="w-full rounded-2xl border border-white/60 bg-white/80 px-3 py-2 text-sm text-[color:var(--bbva-ink)] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] outline-none focus:border-[color:var(--bbva-aqua)]/60 focus:ring-2 focus:ring-[color:var(--bbva-aqua)]/30"
               />
             </FilterField>
@@ -248,14 +268,20 @@ export default function SentimientoPage() {
               <input
                 type="date"
                 value={toDate}
-                onChange={(e) => setToDate(e.target.value)}
+                onChange={(e) => {
+                  touchFilters();
+                  setToDate(e.target.value);
+                }}
                 className="w-full rounded-2xl border border-white/60 bg-white/80 px-3 py-2 text-sm text-[color:var(--bbva-ink)] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] outline-none focus:border-[color:var(--bbva-aqua)]/60 focus:ring-2 focus:ring-[color:var(--bbva-aqua)]/30"
               />
             </FilterField>
             <FilterField label="Sentimiento">
               <select
                 value={sentiment}
-                onChange={(e) => setSentiment(e.target.value as SentimentFilter)}
+                onChange={(e) => {
+                  touchFilters();
+                  setSentiment(e.target.value as SentimentFilter);
+                }}
                 className="w-full rounded-2xl border border-white/60 bg-white/80 px-3 py-2 text-sm text-[color:var(--bbva-ink)] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] outline-none focus:border-[color:var(--bbva-aqua)]/60 focus:ring-2 focus:ring-[color:var(--bbva-aqua)]/30"
               >
                 {SENTIMENTS.map((opt) => (
@@ -268,7 +294,22 @@ export default function SentimientoPage() {
             <FilterField label="Entidad">
               <select
                 value={entity}
-                onChange={(e) => setEntity(e.target.value)}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  touchFilters();
+                  setEntity(next);
+                  if (next === "otros_actores" && isBbvaName(actor)) {
+                    setActor("all");
+                  }
+                  if (next === "all" && isBbvaName(actor)) {
+                    setActor("all");
+                  }
+                  if (next === "otros_actores") {
+                    setMentionsTab("actor");
+                  } else if (next === "bbva") {
+                    setMentionsTab("bbva");
+                  }
+                }}
                 className="w-full rounded-2xl border border-white/60 bg-white/80 px-3 py-2 text-sm text-[color:var(--bbva-ink)] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] outline-none focus:border-[color:var(--bbva-aqua)]/60 focus:ring-2 focus:ring-[color:var(--bbva-aqua)]/30"
               >
                 <option value="bbva">BBVA</option>
@@ -279,7 +320,10 @@ export default function SentimientoPage() {
             <FilterField label="País">
               <select
                 value={geo}
-                onChange={(e) => setGeo(e.target.value)}
+                onChange={(e) => {
+                  touchFilters();
+                  setGeo(e.target.value);
+                }}
                 className="w-full rounded-2xl border border-white/60 bg-white/80 px-3 py-2 text-sm text-[color:var(--bbva-ink)] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] outline-none focus:border-[color:var(--bbva-aqua)]/60 focus:ring-2 focus:ring-[color:var(--bbva-aqua)]/30"
               >
                 <option value="all">Todos</option>
@@ -293,7 +337,10 @@ export default function SentimientoPage() {
             <FilterField label="Otros actores del mercado">
               <select
                 value={actor}
-                onChange={(e) => setActor(e.target.value)}
+                onChange={(e) => {
+                  touchFilters();
+                  setActor(e.target.value);
+                }}
                 className="w-full rounded-2xl border border-white/60 bg-white/80 px-3 py-2 text-sm text-[color:var(--bbva-ink)] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] outline-none focus:border-[color:var(--bbva-aqua)]/60 focus:ring-2 focus:ring-[color:var(--bbva-aqua)]/30 disabled:opacity-60"
               >
                 <option value="all">Todos</option>
@@ -316,7 +363,10 @@ export default function SentimientoPage() {
                 return (
                   <button
                     key={src}
-                    onClick={() => toggleSource(src, sources, setSources)}
+                    onClick={() => {
+                      touchFilters();
+                      toggleSource(src, sources, setSources);
+                    }}
                     className={
                       "rounded-full px-3 py-1.5 text-xs border transition shadow-sm " +
                       (active
@@ -420,7 +470,7 @@ export default function SentimientoPage() {
       <section className="mt-6 rounded-[26px] border border-white/60 bg-[color:var(--panel)] p-5 shadow-[0_20px_50px_rgba(7,33,70,0.08)] backdrop-blur-xl animate-rise" style={{ animationDelay: "300ms" }}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--bbva-blue)]">
-            EVOLUCIÓN DE REPUTACIÓN
+            ÍNDICE REPUTACIONAL ACUMULADO
           </div>
           <div className="text-xs text-black/55">
             Comparativa {bbvaLabel} vs {actorLabel} · {rangeLabel}
@@ -445,22 +495,54 @@ export default function SentimientoPage() {
           ÚLTIMAS MENCIONES
           </div>
           <div className="text-xs text-black/50">
-            Mostrando las 20 más recientes
+            Mostrando 20 recientes · {mentionsLabel}
           </div>
         </div>
+        <div className="mt-3 flex flex-wrap items-center gap-2 rounded-full border border-white/70 bg-white/70 p-1 shadow-[0_10px_30px_rgba(7,33,70,0.08)]">
+          <button
+            onClick={() => setMentionsTab("bbva")}
+            className={
+              "flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold transition " +
+              (mentionsTab === "bbva"
+                ? "bg-white text-[color:var(--bbva-ink)] shadow-[0_8px_18px_rgba(7,33,70,0.12)]"
+                : "text-black/50 hover:text-[color:var(--bbva-ink)]")
+            }
+          >
+            <span className="inline-block h-1.5 w-7 rounded-full bg-[#004481]" />
+            {bbvaLabel}
+            <span className="text-[10px] text-black/40">
+              {Math.min(20, bbvaMentions.length)} recientes
+            </span>
+          </button>
+          <button
+            onClick={() => setMentionsTab("actor")}
+            className={
+              "flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold transition " +
+              (mentionsTab === "actor"
+                ? "bg-white text-[color:var(--bbva-ink)] shadow-[0_8px_18px_rgba(7,33,70,0.12)]"
+                : "text-black/50 hover:text-[color:var(--bbva-ink)]")
+            }
+          >
+            <span className="inline-block h-[3px] w-7 rounded-full border-t-2 border-dashed border-[#2dcccd]" />
+            {actorLabel}
+            <span className="text-[10px] text-black/40">
+              {Math.min(20, actorMentions.length)} recientes
+            </span>
+          </button>
+        </div>
         <div className="mt-4 space-y-3">
-          {loading && (
+          {chartLoading && (
             <div className="text-sm text-black/50">Cargando sentimiento…</div>
           )}
-          {!loading &&
-            groupedItems.slice(0, 20).map((item, index) => (
+          {!chartLoading &&
+            mentionsToShow.slice(0, 20).map((item, index) => (
               <MentionCard
                 key={item.key}
                 item={item}
                 index={index}
               />
             ))}
-          {!loading && !groupedItems.length && (
+          {!chartLoading && !mentionsToShow.length && (
             <div className="text-sm text-black/45">
               No hay menciones para mostrar.
             </div>
@@ -729,6 +811,12 @@ function isBbvaItem(item: ReputationItem) {
   return haystack.includes("bbva");
 }
 
+function isBbvaGroup(item: MentionGroup) {
+  if (item.actor) return isBbvaName(item.actor);
+  const haystack = `${item.title ?? ""} ${item.text ?? ""}`.toLowerCase();
+  return haystack.includes("bbva");
+}
+
 function buildEntityLabel(base: string, geo: string) {
   return geo === "all" ? `${base} (global)` : `${base} ${geo}`;
 }
@@ -870,6 +958,8 @@ function topCounts(items: ReputationItem[], getKey: (item: ReputationItem) => st
 function buildComparativeSeries(
   items: ReputationItem[],
   selectedActor: string,
+  fromDate?: string,
+  toDate?: string,
 ) {
   const restrictActor =
     selectedActor !== "all" && !isBbvaName(selectedActor);
@@ -919,15 +1009,47 @@ function buildComparativeSeries(
     }
   }
 
-  return Array.from(map.entries())
+  const daily = Array.from(map.entries())
     .map(([date, entry]) => ({
       date,
       bbva: entry.bbvaCount ? entry.bbvaScore / entry.bbvaCount : null,
-      actor: entry.actorCount
-        ? entry.actorScore / entry.actorCount
-        : null,
+      actor: entry.actorCount ? entry.actorScore / entry.actorCount : null,
     }))
     .sort((a, b) => a.date.localeCompare(b.date));
+
+  if (!daily.length) return [];
+
+  const start = fromDate || daily[0].date;
+  const end = toDate || daily[daily.length - 1].date;
+  const dailyMap = new Map(daily.map((row) => [row.date, row]));
+
+  let bbvaAcc = 0;
+  let actorAcc = 0;
+  const result: { date: string; bbva: number; actor: number }[] = [];
+
+  const cursor = new Date(`${start}T00:00:00`);
+  const endDate = new Date(`${end}T00:00:00`);
+
+  while (cursor <= endDate) {
+    const key = toDateInput(cursor);
+    const row = dailyMap.get(key);
+    if (row) {
+      if (typeof row.bbva === "number") {
+        bbvaAcc += row.bbva;
+      }
+      if (typeof row.actor === "number") {
+        actorAcc += row.actor;
+      }
+    }
+    result.push({
+      date: key,
+      bbva: bbvaAcc,
+      actor: actorAcc,
+    });
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  return result;
 }
 
 function SentimentChart({
@@ -939,10 +1061,7 @@ function SentimentChart({
   bbvaLabel: string;
   actorLabel: string;
 }) {
-  const tooltipFormatter: Formatter<ValueType, string | number> = (
-    value,
-    name,
-  ) => {
+  const tooltipFormatter: Formatter<ValueType, string | number> = (value) => {
     if (typeof value === "number") {
       return value.toFixed(2);
     }
@@ -966,7 +1085,12 @@ function SentimentChart({
           tickFormatter={(d: string) => d.slice(5)}
           fontSize={11}
         />
-        <YAxis domain={[-1, 1]} fontSize={11} />
+        <YAxis
+          domain={["auto", "auto"]}
+          fontSize={11}
+          tickFormatter={(v: number) => v.toFixed(2)}
+        />
+        <ReferenceLine y={0} stroke="rgba(7,33,70,0.2)" strokeDasharray="3 3" />
         <Tooltip
           formatter={tooltipFormatter}
           labelFormatter={(label) => `Fecha ${String(label ?? "")}`}

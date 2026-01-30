@@ -76,7 +76,18 @@ class ReputationSettings(BaseSettings):
         return result
 
 
+def _ensure_env_file() -> None:
+    env_path = REPO_ROOT / ".env.reputation"
+    example_path = REPO_ROOT / ".env.reputation.example"
+    if env_path.exists():
+        return
+    if not example_path.exists():
+        return
+    env_path.write_text(example_path.read_text(encoding="utf-8"), encoding="utf-8")
+
+
 # Carga .env.reputation en variables de entorno para collectors que leen os.getenv
+_ensure_env_file()
 load_dotenv(".env.reputation", override=False)
 
 # Singleton de settings

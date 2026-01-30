@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from datetime import datetime, timezone, timedelta
 import os
-from typing import Iterable
-from urllib.parse import quote_plus
+import re
+from typing import Any, Iterable
+from urllib.parse import quote_plus, urlparse
 
 from reputation.config import (
     compute_config_hash,
@@ -65,28 +66,31 @@ class ReputationIngestService:
             and self._repo.is_fresh(ttl_hours)
             and not collectors
         ):
-            note = "; ".join(notes) if notes else "cache hit"
+            cache_note = "; ".join(notes) if notes else "cache hit"
             return ReputationCacheDocument(
                 generated_at=datetime.now(timezone.utc),
                 config_hash=cfg_hash,
                 sources_enabled=sources_enabled,
                 items=existing.items,
-                stats=ReputationCacheStats(count=len(existing.items), note=note),
+                stats=ReputationCacheStats(count=len(existing.items), note=cache_note),
             )
 
         items = self._collect_items(collectors, notes)
         items = self._normalize_items(items, lookback_days)
+        items = self._apply_geo_hints(cfg, items)
         items = self._apply_sentiment(cfg, items)
-        items = self._balance_items(cfg, items, existing.items if existing else [], lookback_days, notes)
+        items = self._balance_items(
+            cfg, items, existing.items if existing else [], lookback_days, notes
+        )
         merged_items = self._merge_items(existing.items if existing else [], items)
-        note = "; ".join(notes) if notes else None
+        final_note: str | None = "; ".join(notes) if notes else None
 
         doc = ReputationCacheDocument(
             generated_at=datetime.now(timezone.utc),
             config_hash=cfg_hash,
             sources_enabled=sources_enabled,
             items=merged_items,
-            stats=ReputationCacheStats(count=len(merged_items), note=note),
+            stats=ReputationCacheStats(count=len(merged_items), note=final_note),
         )
 
         self._repo.save(doc)
@@ -121,8 +125,46 @@ class ReputationIngestService:
 
         return filtered
 
+    @classmethod
+    def _apply_geo_hints(
+        cls, cfg: dict[str, Any], items: list[ReputationItem]
+    ) -> list[ReputationItem]:
+        geos = [g.strip() for g in cfg.get("geografias", []) if isinstance(g, str) and g.strip()]
+        geo_aliases_raw = cfg.get("geografias_aliases") or {}
+        geo_aliases: dict[str, list[str]] = {}
+        if isinstance(geo_aliases_raw, dict):
+            for geo, aliases in geo_aliases_raw.items():
+                if not isinstance(geo, str):
+                    continue
+                if not isinstance(aliases, list):
+                    continue
+                cleaned = [a.strip() for a in aliases if isinstance(a, str) and a.strip()]
+                if cleaned:
+                    geo_aliases[geo] = cleaned
+        source_geo_map = cls._build_source_geo_map(cfg, geos)
+        if not geos and not source_geo_map:
+            return items
+
+        for item in items:
+            text = f"{item.title or ''} {item.text or ''}"
+            content_geo = cls._detect_geo_in_text(text, geos, geo_aliases)
+            if content_geo:
+                if item.geo != content_geo:
+                    item.geo = content_geo
+                    item.signals["geo_source"] = "content"
+                continue
+
+            source_geo = cls._infer_geo_from_source(item, source_geo_map)
+            if source_geo and item.geo != source_geo:
+                item.geo = source_geo
+                item.signals["geo_source"] = "source"
+
+        return items
+
     @staticmethod
-    def _merge_items(existing: list[ReputationItem], incoming: list[ReputationItem]) -> list[ReputationItem]:
+    def _merge_items(
+        existing: list[ReputationItem], incoming: list[ReputationItem]
+    ) -> list[ReputationItem]:
         merged: dict[tuple[str, str], ReputationItem] = {
             (item.source, item.id): item for item in existing
         }
@@ -134,7 +176,14 @@ class ReputationIngestService:
             current = merged[key]
             if not current.actor and item.actor:
                 current.actor = item.actor
-            if not current.geo and item.geo:
+            if item.geo and (
+                not current.geo
+                or (
+                    current.geo != item.geo
+                    and item.signals
+                    and item.signals.get("geo_source") in {"source", "content"}
+                )
+            ):
                 current.geo = item.geo
             if not current.language and item.language:
                 current.language = item.language
@@ -156,9 +205,10 @@ class ReputationIngestService:
                 current.signals = merged_signals
         return list(merged.values())
 
-    def _apply_sentiment(self, cfg: dict, items: list[ReputationItem]) -> list[ReputationItem]:
+    def _apply_sentiment(
+        self, cfg: dict[str, Any], items: list[ReputationItem]
+    ) -> list[ReputationItem]:
         keywords = self._load_keywords(cfg)
-        entity_terms = self._load_entity_terms(cfg, keywords)
         cfg_local = dict(cfg)
         cfg_local["keywords"] = keywords
         service = ReputationSentimentService(cfg_local)
@@ -173,7 +223,7 @@ class ReputationIngestService:
         return name.strip()
 
     @classmethod
-    def _all_actors(cls, cfg: dict) -> list[str]:
+    def _all_actors(cls, cfg: dict[str, Any]) -> list[str]:
         seen: set[str] = set()
         ordered: list[str] = []
 
@@ -223,7 +273,7 @@ class ReputationIngestService:
 
     def _balance_items(
         self,
-        cfg: dict,
+        cfg: dict[str, Any],
         items: list[ReputationItem],
         existing_items: list[ReputationItem],
         lookback_days: int,
@@ -250,12 +300,16 @@ class ReputationIngestService:
         geos = [g for g in cfg.get("geografias", []) if isinstance(g, str) and g.strip()]
         actors = self._all_actors(cfg)
 
-        existing_recent = self._normalize_items(list(existing_items), lookback_days) if existing_items else []
+        existing_recent = (
+            self._normalize_items(list(existing_items), lookback_days) if existing_items else []
+        )
         combined = self._merge_items(existing_recent, items)
 
         for pass_idx in range(max_passes):
             geo_counts, comp_counts = self._count_distribution(combined, geos, actors)
-            missing_geos = [g for g in geos if min_per_geo > 0 and geo_counts.get(g, 0) < min_per_geo]
+            missing_geos = [
+                g for g in geos if min_per_geo > 0 and geo_counts.get(g, 0) < min_per_geo
+            ]
             missing_actors = [
                 c for c in actors if min_per_actor > 0 and comp_counts.get(c, 0) < min_per_actor
             ]
@@ -287,7 +341,9 @@ class ReputationIngestService:
                     segment_mode = self._segment_query_mode(cfg)
                     balance_segment_terms = balance_cfg.get("segment_terms")
                     if isinstance(balance_segment_terms, list):
-                        segment_terms = [t for t in balance_segment_terms if isinstance(t, str) and t.strip()]
+                        segment_terms = [
+                            t for t in balance_segment_terms if isinstance(t, str) and t.strip()
+                        ]
                     balance_segment_mode = balance_cfg.get("segment_query_mode")
                     if isinstance(balance_segment_mode, str) and balance_segment_mode.strip():
                         segment_mode = balance_segment_mode.strip().lower()
@@ -381,7 +437,7 @@ class ReputationIngestService:
 
     def _build_collectors(
         self,
-        cfg: dict,
+        cfg: dict[str, Any],
         sources_enabled: list[str],
     ) -> tuple[list[ReputationCollector], list[str]]:
         collectors: list[ReputationCollector] = []
@@ -408,7 +464,9 @@ class ReputationIngestService:
                 app_ids = _split_csv(os.getenv(app_ids_env, ""))
                 cfg_app_ids = appstore_cfg.get("app_ids") or []
                 if isinstance(cfg_app_ids, list):
-                    app_ids.extend([str(value).strip() for value in cfg_app_ids if str(value).strip()])
+                    app_ids.extend(
+                        [str(value).strip() for value in cfg_app_ids if str(value).strip()]
+                    )
                 if app_id:
                     app_ids.append(app_id)
 
@@ -527,7 +585,9 @@ class ReputationIngestService:
                 rss_sources = list(rss_urls)
                 if rss_query_enabled:
                     rss_sources.extend(
-                        self._build_rss_queries("news", cfg, rss_geo_map, segment_terms, segment_mode)
+                        self._build_rss_queries(
+                            "news", cfg, rss_geo_map, segment_terms, segment_mode
+                        )
                     )
 
                 if not api_key and not rss_sources:
@@ -566,7 +626,9 @@ class ReputationIngestService:
                 rss_sources = list(rss_urls)
                 if rss_query_enabled:
                     rss_sources.extend(
-                        self._build_rss_queries("forums", cfg, news_geo_map, segment_terms, segment_mode)
+                        self._build_rss_queries(
+                            "forums", cfg, news_geo_map, segment_terms, segment_mode
+                        )
                     )
 
                 if not rss_sources:
@@ -600,7 +662,9 @@ class ReputationIngestService:
                 rss_sources = list(rss_urls)
                 if rss_query_enabled:
                     rss_sources.extend(
-                        self._build_rss_queries("blogs", cfg, news_geo_map, segment_terms, segment_mode)
+                        self._build_rss_queries(
+                            "blogs", cfg, news_geo_map, segment_terms, segment_mode
+                        )
                     )
 
                 if not rss_only:
@@ -635,7 +699,9 @@ class ReputationIngestService:
                 rss_sources = list(rss_urls)
                 if rss_query_enabled:
                     rss_sources.extend(
-                        self._build_rss_queries("trustpilot", cfg, news_geo_map, segment_terms, segment_mode)
+                        self._build_rss_queries(
+                            "trustpilot", cfg, news_geo_map, segment_terms, segment_mode
+                        )
                     )
 
                 if not rss_sources:
@@ -666,7 +732,9 @@ class ReputationIngestService:
                 place_ids = _split_csv(os.getenv(place_ids_env, ""))
                 cfg_place_ids = google_cfg.get("place_ids") or []
                 if isinstance(cfg_place_ids, list):
-                    place_ids.extend([str(value).strip() for value in cfg_place_ids if str(value).strip()])
+                    place_ids.extend(
+                        [str(value).strip() for value in cfg_place_ids if str(value).strip()]
+                    )
                 if place_id:
                     place_ids.append(place_id)
                 max_reviews = _env_int(max_reviews_env, 200)
@@ -732,7 +800,9 @@ class ReputationIngestService:
                 rss_sources = list(rss_urls)
                 if rss_query_enabled:
                     rss_sources.extend(
-                        self._build_rss_queries("downdetector", cfg, news_geo_map, segment_terms, segment_mode)
+                        self._build_rss_queries(
+                            "downdetector", cfg, news_geo_map, segment_terms, segment_mode
+                        )
                     )
 
                 if not rss_sources:
@@ -753,7 +823,9 @@ class ReputationIngestService:
 
         return collectors, notes
 
-    def _auto_enable_rss_sources(self, cfg: dict, sources_enabled: list[str]) -> list[str]:
+    def _auto_enable_rss_sources(
+        self, cfg: dict[str, Any], sources_enabled: list[str]
+    ) -> list[str]:
         notes: list[str] = []
         rss_sources = ["news", "forums", "blogs", "trustpilot", "downdetector"]
 
@@ -786,24 +858,15 @@ class ReputationIngestService:
         return notes
 
     @staticmethod
-    def _load_keywords(cfg: dict) -> list[str]:
-        env_keywords = os.getenv("REPUTATION_KEYWORDS", "").strip()
-        if env_keywords:
-            return [k.strip() for k in env_keywords.split(",") if k.strip()]
+    def _load_keywords(cfg: dict[str, Any]) -> list[str]:
         return [k.strip() for k in cfg.get("keywords", []) if isinstance(k, str) and k.strip()]
 
     @staticmethod
-    def _load_segment_terms(cfg: dict) -> list[str]:
-        env_terms = os.getenv("REPUTATION_SEGMENT_TERMS", "").strip()
-        if env_terms:
-            return [t.strip() for t in env_terms.split(",") if t.strip()]
+    def _load_segment_terms(cfg: dict[str, Any]) -> list[str]:
         return [t.strip() for t in cfg.get("segment_terms", []) if isinstance(t, str) and t.strip()]
 
     @staticmethod
-    def _segment_query_mode(cfg: dict) -> str:
-        env_mode = os.getenv("REPUTATION_SEGMENT_QUERY_MODE", "").strip().lower()
-        if env_mode:
-            return env_mode
+    def _segment_query_mode(cfg: dict[str, Any]) -> str:
         return str(cfg.get("segment_query_mode", "broad")).strip().lower()
 
     @staticmethod
@@ -820,7 +883,7 @@ class ReputationIngestService:
     def _default_keyword_queries(keywords: list[str], include_unquoted: bool = False) -> list[str]:
         if not keywords:
             return []
-        queries = [f"\"{keyword}\"" for keyword in keywords if keyword]
+        queries = [f'"{keyword}"' for keyword in keywords if keyword]
         if include_unquoted:
             queries.extend([keyword for keyword in keywords if keyword])
         return list(dict.fromkeys([q for q in queries if q]))
@@ -832,7 +895,7 @@ class ReputationIngestService:
             if not term:
                 continue
             if " " in term:
-                terms.append(f"\"{term}\"")
+                terms.append(f'"{term}"')
             else:
                 terms.append(term)
         return " OR ".join(list(dict.fromkeys([t for t in terms if t])))
@@ -863,17 +926,17 @@ class ReputationIngestService:
                 mode = "broad"
 
             if mode == "broad" or has_hint or not segment_expr:
-                queries.append(f"\"{cleaned}\"")
+                queries.append(f'"{cleaned}"')
                 if include_unquoted:
                     queries.append(cleaned)
             if segment_expr:
-                queries.append(f"\"{cleaned}\" ({segment_expr})")
+                queries.append(f'"{cleaned}" ({segment_expr})')
                 if include_unquoted and (mode == "broad" or has_hint):
                     queries.append(f"{cleaned} ({segment_expr})")
         return list(dict.fromkeys([q for q in queries if q]))
 
     @staticmethod
-    def _load_entity_terms(cfg: dict, keywords: list[str]) -> list[str]:
+    def _load_entity_terms(cfg: dict[str, Any], keywords: list[str]) -> list[str]:
         terms = list(keywords)
         global_actors = cfg.get("otros_actores_globales") or []
         actors_by_geo = cfg.get("otros_actores_por_geografia") or {}
@@ -902,12 +965,116 @@ class ReputationIngestService:
 
     @staticmethod
     def _normalize_site_domain(domain: str) -> str:
-        cleaned = domain.strip()
+        cleaned = domain.strip().lower()
         for prefix in ("https://", "http://"):
             if cleaned.startswith(prefix):
                 cleaned = cleaned[len(prefix) :]
                 break
+        if cleaned.startswith("www."):
+            cleaned = cleaned[4:]
         return cleaned.strip("/")
+
+    @classmethod
+    def _build_source_geo_map(cls, cfg: dict[str, Any], geos: list[str]) -> dict[str, str]:
+        news_cfg = cfg.get("news") or {}
+        site_sources = news_cfg.get("site_sources_by_geo") or {}
+        if not site_sources or not geos:
+            return {}
+        mapping: dict[str, str] = {}
+        for geo in geos:
+            entries = cls._flatten_site_sources(site_sources, geo)
+            for entry in entries:
+                domain = cls._normalize_site_domain(entry.get("domain", ""))
+                geo_value = entry.get("geo") or geo
+                if not domain or not geo_value:
+                    continue
+                mapping.setdefault(domain, geo_value)
+        return mapping
+
+    @staticmethod
+    def _detect_geo_in_text(
+        text: str, geos: list[str], geo_aliases: dict[str, list[str]]
+    ) -> str | None:
+        if not text or not geos:
+            return None
+        normalized = normalize_text(text)
+        for geo in geos:
+            geo_norm = normalize_text(geo)
+            if geo_norm and geo_norm in normalized:
+                return geo
+            aliases = geo_aliases.get(geo, [])
+            for alias in aliases:
+                alias_norm = normalize_text(alias)
+                if alias_norm and alias_norm in normalized:
+                    return geo
+        return None
+
+    @classmethod
+    def _infer_geo_from_source(
+        cls, item: ReputationItem, source_geo_map: dict[str, str]
+    ) -> str | None:
+        if not source_geo_map:
+            return None
+        signals = item.signals or {}
+        candidates: list[str] = []
+
+        site_value = signals.get("site")
+        if isinstance(site_value, str) and site_value:
+            candidates.append(site_value)
+
+        source_value = signals.get("source")
+        if isinstance(source_value, str) and "." in source_value:
+            candidates.append(source_value)
+
+        if item.url:
+            candidates.append(item.url)
+
+        for field in (item.title, item.text):
+            if field:
+                candidates.extend(cls._extract_domains(field, source_geo_map))
+
+        for candidate in candidates:
+            domain = cls._normalize_site_domain(cls._extract_domain(candidate))
+            if not domain:
+                domain = cls._normalize_site_domain(candidate)
+            if not domain:
+                continue
+            geo = source_geo_map.get(domain)
+            if geo:
+                return geo
+        return None
+
+    @staticmethod
+    def _extract_domain(value: str) -> str:
+        if not value:
+            return ""
+        try:
+            parsed = urlparse(value)
+            if parsed.netloc:
+                return parsed.netloc
+        except Exception:
+            pass
+        try:
+            parsed = urlparse(f"http://{value}")
+            return parsed.netloc
+        except Exception:
+            return ""
+
+    @staticmethod
+    def _extract_domains(text: str, source_geo_map: dict[str, str]) -> list[str]:
+        if not text or not source_geo_map:
+            return []
+        matches = re.findall(r"\b(?:[a-z0-9-]+\.)+[a-z]{2,}\b", text.lower())
+        if not matches:
+            return []
+        results: list[str] = []
+        for match in matches:
+            cleaned = match.strip(".:,;")
+            if cleaned in source_geo_map:
+                results.append(cleaned)
+            elif cleaned.startswith("www.") and cleaned[4:] in source_geo_map:
+                results.append(cleaned[4:])
+        return results
 
     @classmethod
     def _flatten_site_sources(cls, site_sources: object, geo: str) -> list[dict[str, str]]:
@@ -1006,8 +1173,8 @@ class ReputationIngestService:
     def _build_rss_queries(
         self,
         source_key: str,
-        cfg: dict,
-        geo_map: dict | None,
+        cfg: dict[str, Any],
+        geo_map: dict[str, dict[str, str]] | None,
         segment_terms: list[str],
         segment_mode: str,
         only_geos: set[str] | None = None,
@@ -1021,14 +1188,21 @@ class ReputationIngestService:
         if geo_mode not in {"required", "optional", "none"}:
             geo_mode = "optional"
         query_order = str(src_cfg.get("rss_query_order", "as_is")).strip().lower()
-        if query_order not in {"as_is", "round_robin_geo", "round_robin_entity", "round_robin_geo_entity"}:
+        if query_order not in {
+            "as_is",
+            "round_robin_geo",
+            "round_robin_entity",
+            "round_robin_geo_entity",
+        }:
             query_order = "as_is"
         rss_query_max_total = _config_int(src_cfg.get("rss_query_max_total"), 0)
         rss_query_max_per_geo = _config_int(src_cfg.get("rss_query_max_per_geo"), 0)
         rss_query_max_per_entity = _config_int(src_cfg.get("rss_query_max_per_entity"), 0)
 
         geo_params_map = src_cfg.get("rss_geo_map") or geo_map or {}
-        source_terms = [t for t in src_cfg.get("query_terms", []) if isinstance(t, str) and t.strip()]
+        source_terms = [
+            t for t in src_cfg.get("query_terms", []) if isinstance(t, str) and t.strip()
+        ]
         segment_terms_local = list(dict.fromkeys([*segment_terms, *source_terms]))
         actors_by_geo = cfg.get("otros_actores_por_geografia") or {}
         global_actors = cfg.get("otros_actores_globales") or []
@@ -1045,8 +1219,6 @@ class ReputationIngestService:
             expanded: set[str] = set()
             include_bbva = False
             for name in only_entities:
-                if not isinstance(name, str):
-                    continue
                 cleaned = name.strip()
                 if not cleaned:
                     continue
@@ -1080,10 +1252,10 @@ class ReputationIngestService:
                             if isinstance(alias, str) and alias.strip():
                                 alias_names.append(alias.strip())
                     names.extend(alias_names)
-                cleaned = [n.strip() for n in names if isinstance(n, str) and n.strip()]
+                cleaned_names = [n.strip() for n in names if isinstance(n, str) and n.strip()]
                 if only_entities_expanded is not None:
-                    cleaned = [n for n in cleaned if n in only_entities_expanded]
-                geo_entities[geo] = list(dict.fromkeys(cleaned))
+                    cleaned_names = [n for n in cleaned_names if n in only_entities_expanded]
+                geo_entities[geo] = list(dict.fromkeys(cleaned_names))
 
         sources: list[dict[str, str]] = []
         for geo, names in geo_entities.items():
@@ -1102,7 +1274,7 @@ class ReputationIngestService:
                 for base_query in base_queries:
                     query_variants: list[tuple[str, str | None]] = []
                     if geo_mode in {"required", "optional"}:
-                        query_variants.append((f"{base_query} \"{geo}\"", geo))
+                        query_variants.append((f'{base_query} "{geo}"', geo))
                     if geo_mode in {"none", "optional"}:
                         query_variants.append((base_query, None))
                     for query, geo_value in query_variants:
@@ -1131,7 +1303,9 @@ class ReputationIngestService:
             site_geo_mode = str(src_cfg.get("site_query_geo_mode", "none")).strip().lower()
             if site_geo_mode not in {"required", "optional", "none"}:
                 site_geo_mode = "none"
-            site_query_mode = str(src_cfg.get("site_query_mode", segment_mode or "broad")).strip().lower()
+            site_query_mode = (
+                str(src_cfg.get("site_query_mode", segment_mode or "broad")).strip().lower()
+            )
             if site_query_mode not in {"broad", "strict"}:
                 site_query_mode = "broad"
             site_include_unquoted = bool(src_cfg.get("site_query_include_unquoted", False))
@@ -1183,12 +1357,12 @@ class ReputationIngestService:
                             include_unquoted=site_include_unquoted,
                         )
                         for base_query in base_queries:
-                            query_variants: list[str] = []
+                            site_query_variants: list[str] = []
                             if site_geo_mode in {"required", "optional"}:
-                                query_variants.append(f'{base_query} "{geo}" site:{domain}')
+                                site_query_variants.append(f'{base_query} "{geo}" site:{domain}')
                             if site_geo_mode in {"none", "optional"}:
-                                query_variants.append(f"{base_query} site:{domain}")
-                            for query in query_variants:
+                                site_query_variants.append(f"{base_query} site:{domain}")
+                            for query in site_query_variants:
                                 encoded_query = quote_plus(query)
                                 for template in templates:
                                     url = (
@@ -1238,7 +1412,11 @@ class ReputationIngestService:
                 geo_order.append("")
             ordered = self._round_robin_geo_entity(ordered, geo_order)
 
-        if rss_query_max_total <= 0 and rss_query_max_per_geo <= 0 and rss_query_max_per_entity <= 0:
+        if (
+            rss_query_max_total <= 0
+            and rss_query_max_per_geo <= 0
+            and rss_query_max_per_entity <= 0
+        ):
             return ordered
 
         limited: list[dict[str, str]] = []

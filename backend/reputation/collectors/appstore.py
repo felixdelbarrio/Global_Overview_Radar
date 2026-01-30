@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 import json
-from typing import Iterable
+from typing import Any, Iterable
 from urllib.request import Request, urlopen
 
 from reputation.collectors.base import ReputationCollector
@@ -40,7 +40,7 @@ class AppStoreCollector(ReputationCollector):
 
         return items
 
-    def _fetch_page(self, page: int) -> list[dict]:
+    def _fetch_page(self, page: int) -> list[dict[str, Any]]:
         url = (
             f"https://itunes.apple.com/{self._country}/rss/"
             f"customerreviews/id={self._app_id}/page={page}/sortby=mostrecent/json"
@@ -57,15 +57,13 @@ class AppStoreCollector(ReputationCollector):
             return []
         return entries
 
-    def _map_entry(self, entry: dict) -> ReputationItem | None:
+    def _map_entry(self, entry: dict[str, Any]) -> ReputationItem | None:
         rating = self._get_label(entry, "im:rating")
         if not rating:
             return None
 
         review_id = (
-            entry.get("id", {})
-            .get("attributes", {})
-            .get("im:id")
+            entry.get("id", {}).get("attributes", {}).get("im:id")
             or entry.get("id", {}).get("label")
             or entry.get("link", {}).get("attributes", {}).get("href")
         )
@@ -92,7 +90,7 @@ class AppStoreCollector(ReputationCollector):
         )
 
     @staticmethod
-    def _get_label(entry: dict, key: str) -> str | None:
+    def _get_label(entry: dict[str, Any], key: str) -> str | None:
         raw = entry.get(key)
         if isinstance(raw, dict):
             return raw.get("label")
