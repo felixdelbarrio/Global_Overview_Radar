@@ -20,7 +20,10 @@ def http_get_text(url: str, headers: dict[str, str] | None = None, timeout: int 
     req = Request(url, headers=req_headers)
     context = _ssl_context()
     with urlopen(req, timeout=timeout, context=context) as response:
-        return response.read().decode("utf-8")
+        raw = response.read()
+    if isinstance(raw, bytes):
+        return raw.decode("utf-8", errors="replace")
+    return str(raw)
 
 
 def http_get_json(url: str, headers: dict[str, str] | None = None, timeout: int = 15) -> Any:

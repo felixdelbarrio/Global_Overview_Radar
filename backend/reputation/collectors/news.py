@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Iterable
+from typing import Any, Iterable
 
 from reputation.collectors.base import ReputationCollector
 from reputation.collectors.utils import (
@@ -128,7 +128,7 @@ class NewsCollector(ReputationCollector):
 
     def _is_relevant(
         self,
-        entry: dict,
+        entry: dict[str, Any],
         rss_url: str | None = None,
         meta: dict[str, str] | None = None,
     ) -> bool:
@@ -141,7 +141,9 @@ class NewsCollector(ReputationCollector):
         text = f"{entry.get('title', '')} {entry.get('summary', '')}"
         return match_keywords(text, self._filter_terms)
 
-    def _map_entry(self, entry: dict, rss_url: str, meta: dict[str, str]) -> ReputationItem:
+    def _map_entry(
+        self, entry: dict[str, Any], rss_url: str, meta: dict[str, str]
+    ) -> ReputationItem:
         meta_local = dict(meta) if meta else {}
         geo = meta_local.pop("geo", None)
         return ReputationItem(
