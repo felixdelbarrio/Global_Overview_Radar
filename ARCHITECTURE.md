@@ -1,12 +1,12 @@
-# Arquitectura de BBVA BugResolutionRadar
+# Arquitectura de BBVA Empresas – Global Overview Radar
 
-Este documento describe la arquitectura técnica y funcional de BugResolutionRadar, incluyendo módulos, flujos de datos, puntos de integración y consideraciones de operación.
+Este documento describe la arquitectura técnica y funcional de BBVA Empresas – Global Overview Radar, incluyendo módulos, flujos de datos, puntos de integración y consideraciones de operación.
 
 ---
 
 ## 1) Visión general
 
-BugResolutionRadar es una plataforma full‑stack con dos grandes subsistemas:
+BBVA Empresas – Global Overview Radar es una plataforma full‑stack con dos grandes subsistemas:
 
 - **Backend (Python/FastAPI)**: ingestión de fuentes, consolidación y API.
 - **Frontend (Next.js)**: paneles ejecutivos y operativos.

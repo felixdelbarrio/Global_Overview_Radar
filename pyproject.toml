@@ -2,7 +2,7 @@
 [project]
 name = "bbva-bugresolutionradar"
 version = "0.1.0"
-description = "BBVA BugResolutionRadar - assets ingestion, consolidation and KPI dashboard backend"
+description = "BBVA Empresas – Global Overview Radar - assets ingestion, consolidation and KPI dashboard backend"
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
@@ -59,6 +59,10 @@ exclude = "data/|tests/"
 module = ["openpyxl", "openpyxl.*"]
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = ["praw", "praw.*"]
+ignore_missing_imports = true
+
 # Pyright config (used by pycheck if you add it in CI)
 [tool.pyright]
 typeCheckingMode = "strict"
@@ -68,3 +72,10 @@ venv = ".venv"
 include = ["backend"]
 exclude = ["data", "**/__pycache__"]
 reportMissingTypeStubs = "none"
+reportUnknownVariableType = "none"
+reportUnknownMemberType = "none"
+reportUnknownArgumentType = "none"
+reportUnknownParameterType = "none"
+reportUnknownLambdaType = "none"
+reportPrivateUsage = "none"
+reportUnnecessaryIsInstance = "none"

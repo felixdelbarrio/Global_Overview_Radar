@@ -70,9 +70,7 @@ class AppStoreCollector(ReputationCollector):
             return None
 
         review_id = (
-            entry.get("id", {})
-            .get("attributes", {})
-            .get("im:id")
+            entry.get("id", {}).get("attributes", {}).get("im:id")
             or entry.get("id", {}).get("label")
             or entry.get("link", {}).get("attributes", {}).get("href")
         )
