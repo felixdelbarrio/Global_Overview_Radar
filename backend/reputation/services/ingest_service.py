@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone, timedelta
 import os
 from typing import Iterable
+from urllib.parse import quote_plus
 
 from reputation.config import (
     compute_config_hash,
@@ -23,6 +24,7 @@ from reputation.collectors.reddit import RedditCollector
 from reputation.collectors.trustpilot import TrustpilotCollector
 from reputation.collectors.twitter import TwitterCollector
 from reputation.collectors.youtube import YouTubeCollector
+from reputation.collectors.utils import normalize_text
 from reputation.services.sentiment_service import ReputationSentimentService
 
 
@@ -38,7 +40,8 @@ class ReputationIngestService:
         cfg_hash = compute_config_hash(cfg)
         ttl_hours = effective_ttl_hours(cfg)
         sources_enabled = list(self._settings.enabled_sources())
-        lookback_days = _env_int("REPUTATION_LOOKBACK_DAYS", 30)
+        lookback_default = _config_int(cfg.get("lookback_days"), 30)
+        lookback_days = _env_int("REPUTATION_LOOKBACK_DAYS", lookback_default)
 
         # Feature apagada: devolvemos doc vacío, no escribimos
         if not self._settings.reputation_enabled:
@@ -74,6 +77,7 @@ class ReputationIngestService:
         items = self._collect_items(collectors, notes)
         items = self._normalize_items(items, lookback_days)
         items = self._apply_sentiment(cfg, items)
+        items = self._balance_items(cfg, items, existing.items if existing else [], lookback_days, notes)
         merged_items = self._merge_items(existing.items if existing else [], items)
         note = "; ".join(notes) if notes else None
 
@@ -126,6 +130,30 @@ class ReputationIngestService:
             key = (item.source, item.id)
             if key not in merged:
                 merged[key] = item
+                continue
+            current = merged[key]
+            if not current.actor and item.actor:
+                current.actor = item.actor
+            if not current.geo and item.geo:
+                current.geo = item.geo
+            if not current.language and item.language:
+                current.language = item.language
+            if not current.title and item.title:
+                current.title = item.title
+            if item.text and (not current.text or len(item.text) > len(current.text)):
+                current.text = item.text
+            if not current.sentiment and item.sentiment:
+                current.sentiment = item.sentiment
+            if item.signals:
+                merged_signals = dict(current.signals)
+                merged_signals.update(item.signals)
+                actors = set()
+                for value in (current.signals.get("actors"), item.signals.get("actors")):
+                    if isinstance(value, list):
+                        actors.update([str(v) for v in value if v])
+                if actors:
+                    merged_signals["actors"] = list(sorted(actors))
+                current.signals = merged_signals
         return list(merged.values())
 
     def _apply_sentiment(self, cfg: dict, items: list[ReputationItem]) -> list[ReputationItem]:
@@ -135,6 +163,207 @@ class ReputationIngestService:
         cfg_local["keywords"] = keywords
         service = ReputationSentimentService(cfg_local)
         return service.analyze_items(items)
+
+    @staticmethod
+    def _normalize_actor(name: str) -> str:
+        if not name:
+            return ""
+        if "bbva" in normalize_text(name):
+            return "BBVA"
+        return name.strip()
+
+    @classmethod
+    def _all_actors(cls, cfg: dict) -> list[str]:
+        seen: set[str] = set()
+        ordered: list[str] = []
+
+        def add(name: str) -> None:
+            normalized = cls._normalize_actor(name)
+            if not normalized or normalized in seen:
+                return
+            seen.add(normalized)
+            ordered.append(normalized)
+
+        actors_by_geo = cfg.get("otros_actores_por_geografia") or {}
+        if isinstance(actors_by_geo, dict):
+            for _, names in actors_by_geo.items():
+                if isinstance(names, list):
+                    for name in names:
+                        if isinstance(name, str) and name.strip():
+                            add(name)
+        for name in cfg.get("otros_actores_globales") or []:
+            if isinstance(name, str) and name.strip():
+                add(name)
+        add("BBVA")
+        return ordered
+
+    def _count_distribution(
+        self,
+        items: list[ReputationItem],
+        geos: list[str],
+        actors: list[str],
+    ) -> tuple[dict[str, int], dict[str, int]]:
+        geo_counts = {geo: 0 for geo in geos}
+        comp_counts = {comp: 0 for comp in actors}
+        for item in items:
+            if item.geo and item.geo in geo_counts:
+                geo_counts[item.geo] += 1
+            comps: set[str] = set()
+            if item.actor:
+                comps.add(self._normalize_actor(item.actor))
+            signals = item.signals or {}
+            if isinstance(signals.get("actors"), list):
+                for comp in signals["actors"]:
+                    if isinstance(comp, str) and comp.strip():
+                        comps.add(self._normalize_actor(comp))
+            for comp in comps:
+                if comp in comp_counts:
+                    comp_counts[comp] += 1
+        return geo_counts, comp_counts
+
+    def _balance_items(
+        self,
+        cfg: dict,
+        items: list[ReputationItem],
+        existing_items: list[ReputationItem],
+        lookback_days: int,
+        notes: list[str],
+    ) -> list[ReputationItem]:
+        balance_cfg = cfg.get("balance") or {}
+        if not balance_cfg.get("enabled", False):
+            return items
+
+        min_per_geo = _config_int(balance_cfg.get("min_per_geo"), 0)
+        min_per_actor = _config_int(balance_cfg.get("min_per_actor"), 0)
+        max_passes = _config_int(balance_cfg.get("max_passes"), 0)
+        if max_passes <= 0 or (min_per_geo <= 0 and min_per_actor <= 0):
+            return items
+
+        max_items_per_pass = _config_int(balance_cfg.get("max_items_per_pass"), 0)
+        if max_items_per_pass <= 0:
+            max_items_per_pass = _config_int(cfg.get("muestra_max"), 200)
+        max_queries_per_pass = _config_int(balance_cfg.get("max_queries_per_pass"), 0)
+        max_geos = _config_int(balance_cfg.get("max_geos"), 0)
+        max_actores = _config_int(balance_cfg.get("max_actores"), 0)
+        sources = balance_cfg.get("sources") or ["news"]
+
+        geos = [g for g in cfg.get("geografias", []) if isinstance(g, str) and g.strip()]
+        actors = self._all_actors(cfg)
+
+        existing_recent = self._normalize_items(list(existing_items), lookback_days) if existing_items else []
+        combined = self._merge_items(existing_recent, items)
+
+        for pass_idx in range(max_passes):
+            geo_counts, comp_counts = self._count_distribution(combined, geos, actors)
+            missing_geos = [g for g in geos if min_per_geo > 0 and geo_counts.get(g, 0) < min_per_geo]
+            missing_actors = [
+                c for c in actors if min_per_actor > 0 and comp_counts.get(c, 0) < min_per_actor
+            ]
+            if not missing_geos and not missing_actors:
+                break
+            if max_geos > 0:
+                missing_geos = missing_geos[:max_geos]
+            if max_actores > 0:
+                missing_actors = missing_actors[:max_actores]
+
+            new_items: list[ReputationItem] = []
+            if "news" in sources:
+                news_cfg = cfg.get("news") or {}
+                if news_cfg.get("enabled", False):
+                    focus_cfg = dict(cfg)
+                    focus_news = dict(news_cfg)
+                    for key in (
+                        "rss_query_geo_mode",
+                        "rss_query_order",
+                        "rss_query_max_total",
+                        "rss_query_max_per_geo",
+                        "rss_query_max_per_entity",
+                    ):
+                        if key in balance_cfg and balance_cfg[key] is not None:
+                            focus_news[key] = balance_cfg[key]
+                    focus_cfg["news"] = focus_news
+
+                    segment_terms = self._load_segment_terms(cfg)
+                    segment_mode = self._segment_query_mode(cfg)
+                    balance_segment_terms = balance_cfg.get("segment_terms")
+                    if isinstance(balance_segment_terms, list):
+                        segment_terms = [t for t in balance_segment_terms if isinstance(t, str) and t.strip()]
+                    balance_segment_mode = balance_cfg.get("segment_query_mode")
+                    if isinstance(balance_segment_mode, str) and balance_segment_mode.strip():
+                        segment_mode = balance_segment_mode.strip().lower()
+
+                    rss_geo_map = focus_news.get("rss_geo_map") or {}
+                    only_geos = set(missing_geos) if missing_geos else None
+                    only_entities = set(missing_actors) if missing_actors else None
+
+                    rss_sources: list[dict[str, str] | str] = []
+                    rss_urls = focus_news.get("rss_urls") or []
+                    if only_geos:
+                        for entry in rss_urls:
+                            if isinstance(entry, dict):
+                                if entry.get("geo") in only_geos:
+                                    rss_sources.append(entry)
+                            else:
+                                rss_sources.append(entry)
+                    else:
+                        rss_sources.extend(rss_urls)
+
+                    if focus_news.get("rss_query_enabled", True):
+                        rss_sources.extend(
+                            self._build_rss_queries(
+                                "news",
+                                focus_cfg,
+                                rss_geo_map,
+                                segment_terms,
+                                segment_mode,
+                                only_geos=only_geos,
+                                only_entities=only_entities,
+                            )
+                        )
+                    if max_queries_per_pass > 0 and len(rss_sources) > max_queries_per_pass:
+                        rss_sources = rss_sources[:max_queries_per_pass]
+
+                    if rss_sources:
+                        api_key_env = focus_news.get("api_key_env", "NEWS_API_KEY")
+                        lang_env = focus_news.get("lang_env", "NEWS_LANG")
+                        sources_env = focus_news.get("sources_env", "NEWS_SOURCES")
+                        endpoint_env = focus_news.get("endpoint_env", "NEWS_API_ENDPOINT")
+                        api_key = os.getenv(api_key_env, "").strip()
+                        language = os.getenv(lang_env, "es").strip()
+                        news_sources = os.getenv(sources_env, "").strip() or None
+                        endpoint = os.getenv(endpoint_env, "").strip() or None
+
+                        keywords = self._load_keywords(cfg)
+                        entity_terms = self._load_entity_terms(cfg, keywords)
+
+                        collector = NewsCollector(
+                            api_key=api_key,
+                            queries=[],
+                            language=language,
+                            max_articles=max_items_per_pass,
+                            sources=news_sources,
+                            endpoint=endpoint,
+                            rss_urls=rss_sources,
+                            rss_only=True,
+                            filter_terms=entity_terms,
+                        )
+                        new_items.extend(list(collector.collect()))
+
+            if not new_items:
+                notes.append(
+                    f"balance: pass {pass_idx + 1} no new items (missing geos={len(missing_geos)}, actors={len(missing_actors)})"
+                )
+                break
+
+            new_items = self._normalize_items(new_items, lookback_days)
+            new_items = self._apply_sentiment(cfg, new_items)
+            items = self._merge_items(items, new_items)
+            combined = self._merge_items(existing_recent, items)
+            notes.append(
+                f"balance: pass {pass_idx + 1} added {len(new_items)} items (missing geos={len(missing_geos)}, actors={len(missing_actors)})"
+            )
+
+        return items
 
     @staticmethod
     def _build_empty_doc(
@@ -160,6 +389,9 @@ class ReputationIngestService:
         handled_sources: set[str] = set()
         keywords = self._load_keywords(cfg)
         entity_terms = self._load_entity_terms(cfg, keywords)
+        segment_terms = self._load_segment_terms(cfg)
+        segment_mode = self._segment_query_mode(cfg)
+        news_geo_map = (cfg.get("news") or {}).get("rss_geo_map") or {}
 
         if "appstore" in sources_enabled:
             handled_sources.add("appstore")
@@ -168,10 +400,18 @@ class ReputationIngestService:
                 notes.append("appstore: disabled in config.json")
             else:
                 app_id_env = appstore_cfg.get("app_id_env", "APPSTORE_APP_ID")
+                app_ids_env = appstore_cfg.get("app_ids_env", "APPSTORE_APP_IDS")
                 country_env = appstore_cfg.get("country_env", "APPSTORE_COUNTRY")
                 max_reviews_env = appstore_cfg.get("max_reviews_env", "APPSTORE_MAX_REVIEWS")
 
                 app_id = os.getenv(app_id_env, "").strip()
+                app_ids = _split_csv(os.getenv(app_ids_env, ""))
+                cfg_app_ids = appstore_cfg.get("app_ids") or []
+                if isinstance(cfg_app_ids, list):
+                    app_ids.extend([str(value).strip() for value in cfg_app_ids if str(value).strip()])
+                if app_id:
+                    app_ids.append(app_id)
+
                 country = os.getenv(country_env, "es").strip().lower() or "es"
                 max_reviews_raw = os.getenv(max_reviews_env, "200").strip()
 
@@ -181,16 +421,18 @@ class ReputationIngestService:
                     max_reviews = 200
                     notes.append("appstore: invalid max_reviews env, using 200")
 
-                if not app_id:
-                    notes.append(f"appstore: missing {app_id_env}")
+                app_ids = list(dict.fromkeys([value for value in app_ids if value]))
+                if not app_ids:
+                    notes.append(f"appstore: missing {app_id_env} / {app_ids_env}")
                 else:
-                    collectors.append(
-                        AppStoreCollector(
-                            country=country,
-                            app_id=app_id,
-                            max_reviews=max_reviews,
+                    for app_id_value in app_ids:
+                        collectors.append(
+                            AppStoreCollector(
+                                country=country,
+                                app_id=app_id_value,
+                                max_reviews=max_reviews,
+                            )
                         )
-                    )
 
         if "reddit" in sources_enabled:
             handled_sources.add("reddit")
@@ -210,7 +452,7 @@ class ReputationIngestService:
                 query_templates = reddit_cfg.get("query_templates") or []
                 limit_per_query = int(reddit_cfg.get("limit_per_query", 100))
 
-                queries = self._expand_queries(query_templates, keywords)
+                queries = self._expand_queries(query_templates, entity_terms)
 
                 if not client_id or not client_secret or not user_agent:
                     notes.append("reddit: missing credentials envs")
@@ -238,7 +480,12 @@ class ReputationIngestService:
                 bearer = os.getenv(bearer_env, "").strip()
                 max_results = _env_int(max_results_env, 100)
 
-                queries = self._default_keyword_queries(keywords)
+                queries = self._build_search_queries(
+                    entity_terms,
+                    segment_terms,
+                    segment_mode,
+                    include_unquoted=True,
+                )
                 if not bearer:
                     notes.append(f"twitter: missing {bearer_env}")
                 else:
@@ -265,15 +512,23 @@ class ReputationIngestService:
 
                 api_key = os.getenv(api_key_env, "").strip()
                 language = os.getenv(lang_env, "es").strip()
-                max_articles = _env_int(max_articles_env, 200)
+                max_articles_default = _config_int(cfg.get("muestra_max"), 200)
+                max_articles = _env_int(max_articles_env, max_articles_default)
                 sources = os.getenv(sources_env, "").strip() or None
                 endpoint = os.getenv(endpoint_env, "").strip() or None
                 rss_only = _env_bool(os.getenv(rss_only_env, "false"))
 
-                queries = self._default_keyword_queries(entity_terms)
+                queries = self._build_search_queries(
+                    entity_terms,
+                    segment_terms,
+                    segment_mode,
+                    include_unquoted=True,
+                )
                 rss_sources = list(rss_urls)
                 if rss_query_enabled:
-                    rss_sources.extend(self._build_news_rss_queries(cfg, rss_geo_map))
+                    rss_sources.extend(
+                        self._build_rss_queries("news", cfg, rss_geo_map, segment_terms, segment_mode)
+                    )
 
                 if not api_key and not rss_sources:
                     notes.append(f"news: missing {api_key_env} and rss_urls")
@@ -288,6 +543,7 @@ class ReputationIngestService:
                             endpoint=endpoint,
                             rss_urls=rss_sources,
                             rss_only=rss_only,
+                            filter_terms=entity_terms,
                         )
                     )
 
@@ -300,16 +556,25 @@ class ReputationIngestService:
                 scraping_env = forums_cfg.get("scraping_env", "FORUMS_SCRAPING")
                 max_threads_env = forums_cfg.get("max_threads_env", "FORUMS_MAX_THREADS")
                 rss_urls = forums_cfg.get("rss_urls") or []
+                rss_query_env = os.getenv("FORUMS_RSS_QUERY_ENABLED", "").strip().lower()
+                rss_query_enabled = bool(forums_cfg.get("rss_query_enabled", False))
+                if rss_query_env:
+                    rss_query_enabled = rss_query_env in {"1", "true", "yes", "y", "on"}
 
                 scraping_enabled = _env_bool(os.getenv(scraping_env, "false"))
                 max_items = _env_int(max_threads_env, 200)
+                rss_sources = list(rss_urls)
+                if rss_query_enabled:
+                    rss_sources.extend(
+                        self._build_rss_queries("forums", cfg, news_geo_map, segment_terms, segment_mode)
+                    )
 
-                if not rss_urls:
+                if not rss_sources:
                     notes.append("forums: missing rss_urls in config.json")
                 else:
                     collectors.append(
                         ForumsCollector(
-                            rss_urls=rss_urls,
+                            rss_urls=rss_sources,
                             keywords=entity_terms,
                             scraping_enabled=scraping_enabled,
                             max_items=max_items,
@@ -325,18 +590,27 @@ class ReputationIngestService:
                 rss_only_env = blogs_cfg.get("rss_only_env", "BLOGS_RSS_ONLY")
                 max_items_env = blogs_cfg.get("max_items_env", "BLOGS_MAX_ITEMS")
                 rss_urls = blogs_cfg.get("rss_urls") or []
+                rss_query_env = os.getenv("BLOGS_RSS_QUERY_ENABLED", "").strip().lower()
+                rss_query_enabled = bool(blogs_cfg.get("rss_query_enabled", False))
+                if rss_query_env:
+                    rss_query_enabled = rss_query_env in {"1", "true", "yes", "y", "on"}
 
                 rss_only = _env_bool(os.getenv(rss_only_env, "true"))
                 max_items = _env_int(max_items_env, 200)
+                rss_sources = list(rss_urls)
+                if rss_query_enabled:
+                    rss_sources.extend(
+                        self._build_rss_queries("blogs", cfg, news_geo_map, segment_terms, segment_mode)
+                    )
 
                 if not rss_only:
                     notes.append("blogs: rss_only=false not supported")
-                elif not rss_urls:
+                elif not rss_sources:
                     notes.append("blogs: missing rss_urls in config.json")
                 else:
                     collectors.append(
                         BlogsCollector(
-                            rss_urls=rss_urls,
+                            rss_urls=rss_sources,
                             keywords=entity_terms,
                             max_items=max_items,
                         )
@@ -351,16 +625,25 @@ class ReputationIngestService:
                 scraping_env = trust_cfg.get("scraping_env", "TRUSTPILOT_SCRAPING")
                 max_items_env = trust_cfg.get("max_items_env", "TRUSTPILOT_MAX_ITEMS")
                 rss_urls = trust_cfg.get("rss_urls") or []
+                rss_query_env = os.getenv("TRUSTPILOT_RSS_QUERY_ENABLED", "").strip().lower()
+                rss_query_enabled = bool(trust_cfg.get("rss_query_enabled", False))
+                if rss_query_env:
+                    rss_query_enabled = rss_query_env in {"1", "true", "yes", "y", "on"}
 
                 scraping_enabled = _env_bool(os.getenv(scraping_env, "false"))
                 max_items = _env_int(max_items_env, 200)
+                rss_sources = list(rss_urls)
+                if rss_query_enabled:
+                    rss_sources.extend(
+                        self._build_rss_queries("trustpilot", cfg, news_geo_map, segment_terms, segment_mode)
+                    )
 
-                if not rss_urls:
+                if not rss_sources:
                     notes.append("trustpilot: missing rss_urls in config.json")
                 else:
                     collectors.append(
                         TrustpilotCollector(
-                            rss_urls=rss_urls,
+                            rss_urls=rss_sources,
                             keywords=entity_terms,
                             scraping_enabled=scraping_enabled,
                             max_items=max_items,
@@ -375,22 +658,31 @@ class ReputationIngestService:
             else:
                 api_key_env = google_cfg.get("api_key_env", "GOOGLE_PLACES_API_KEY")
                 place_id_env = google_cfg.get("place_id_env", "GOOGLE_PLACE_ID")
+                place_ids_env = google_cfg.get("place_ids_env", "GOOGLE_PLACE_IDS")
                 max_reviews_env = google_cfg.get("max_reviews_env", "GOOGLE_MAX_REVIEWS")
 
                 api_key = os.getenv(api_key_env, "").strip()
                 place_id = os.getenv(place_id_env, "").strip()
+                place_ids = _split_csv(os.getenv(place_ids_env, ""))
+                cfg_place_ids = google_cfg.get("place_ids") or []
+                if isinstance(cfg_place_ids, list):
+                    place_ids.extend([str(value).strip() for value in cfg_place_ids if str(value).strip()])
+                if place_id:
+                    place_ids.append(place_id)
                 max_reviews = _env_int(max_reviews_env, 200)
 
-                if not api_key or not place_id:
-                    notes.append("google_reviews: missing API key or place id")
+                place_ids = list(dict.fromkeys([value for value in place_ids if value]))
+                if not api_key or not place_ids:
+                    notes.append("google_reviews: missing API key or place ids")
                 else:
-                    collectors.append(
-                        GoogleReviewsCollector(
-                            api_key=api_key,
-                            place_id=place_id,
-                            max_reviews=max_reviews,
+                    for place_id_value in place_ids:
+                        collectors.append(
+                            GoogleReviewsCollector(
+                                api_key=api_key,
+                                place_id=place_id_value,
+                                max_reviews=max_reviews,
+                            )
                         )
-                    )
 
         if "youtube" in sources_enabled:
             handled_sources.add("youtube")
@@ -404,7 +696,12 @@ class ReputationIngestService:
                 api_key = os.getenv(api_key_env, "").strip()
                 max_results = _env_int(max_results_env, 50)
 
-                queries = self._default_keyword_queries(keywords)
+                queries = self._build_search_queries(
+                    entity_terms,
+                    segment_terms,
+                    segment_mode,
+                    include_unquoted=True,
+                )
                 if not api_key:
                     notes.append(f"youtube: missing {api_key_env}")
                 else:
@@ -425,16 +722,25 @@ class ReputationIngestService:
                 scraping_env = down_cfg.get("scraping_env", "DOWNDETECTOR_SCRAPING")
                 max_items_env = down_cfg.get("max_items_env", "DOWNDETECTOR_MAX_ITEMS")
                 rss_urls = down_cfg.get("rss_urls") or []
+                rss_query_env = os.getenv("DOWNDETECTOR_RSS_QUERY_ENABLED", "").strip().lower()
+                rss_query_enabled = bool(down_cfg.get("rss_query_enabled", False))
+                if rss_query_env:
+                    rss_query_enabled = rss_query_env in {"1", "true", "yes", "y", "on"}
 
                 scraping_enabled = _env_bool(os.getenv(scraping_env, "false"))
                 max_items = _env_int(max_items_env, 200)
+                rss_sources = list(rss_urls)
+                if rss_query_enabled:
+                    rss_sources.extend(
+                        self._build_rss_queries("downdetector", cfg, news_geo_map, segment_terms, segment_mode)
+                    )
 
-                if not rss_urls:
+                if not rss_sources:
                     notes.append("downdetector: missing rss_urls in config.json")
                 else:
                     collectors.append(
                         DowndetectorCollector(
-                            rss_urls=rss_urls,
+                            rss_urls=rss_sources,
                             keywords=entity_terms,
                             scraping_enabled=scraping_enabled,
                             max_items=max_items,
@@ -487,76 +793,430 @@ class ReputationIngestService:
         return [k.strip() for k in cfg.get("keywords", []) if isinstance(k, str) and k.strip()]
 
     @staticmethod
+    def _load_segment_terms(cfg: dict) -> list[str]:
+        env_terms = os.getenv("REPUTATION_SEGMENT_TERMS", "").strip()
+        if env_terms:
+            return [t.strip() for t in env_terms.split(",") if t.strip()]
+        return [t.strip() for t in cfg.get("segment_terms", []) if isinstance(t, str) and t.strip()]
+
+    @staticmethod
+    def _segment_query_mode(cfg: dict) -> str:
+        env_mode = os.getenv("REPUTATION_SEGMENT_QUERY_MODE", "").strip().lower()
+        if env_mode:
+            return env_mode
+        return str(cfg.get("segment_query_mode", "broad")).strip().lower()
+
+    @staticmethod
     def _expand_queries(templates: list[str], keywords: list[str]) -> list[str]:
         if not templates:
             return keywords
         queries: list[str] = []
         for keyword in keywords:
             for template in templates:
-                queries.append(template.replace("{competidor}", keyword))
+                queries.append(template.replace("{actor}", keyword))
         return list(dict.fromkeys([q for q in queries if q]))
 
     @staticmethod
-    def _default_keyword_queries(keywords: list[str]) -> list[str]:
+    def _default_keyword_queries(keywords: list[str], include_unquoted: bool = False) -> list[str]:
         if not keywords:
             return []
-        return [f"\"{keyword}\"" for keyword in keywords]
+        queries = [f"\"{keyword}\"" for keyword in keywords if keyword]
+        if include_unquoted:
+            queries.extend([keyword for keyword in keywords if keyword])
+        return list(dict.fromkeys([q for q in queries if q]))
+
+    @staticmethod
+    def _segment_expression(segment_terms: list[str]) -> str:
+        terms: list[str] = []
+        for term in segment_terms:
+            if not term:
+                continue
+            if " " in term:
+                terms.append(f"\"{term}\"")
+            else:
+                terms.append(term)
+        return " OR ".join(list(dict.fromkeys([t for t in terms if t])))
+
+    @staticmethod
+    def _term_has_business_hint(term: str) -> bool:
+        normalized = normalize_text(term)
+        return any(hint in normalized for hint in _BUSINESS_HINTS)
+
+    def _build_search_queries(
+        self,
+        terms: list[str],
+        segment_terms: list[str],
+        segment_mode: str,
+        include_unquoted: bool = False,
+    ) -> list[str]:
+        if not terms:
+            return []
+        segment_expr = self._segment_expression(segment_terms)
+        queries: list[str] = []
+        for term in terms:
+            cleaned = term.strip()
+            if not cleaned:
+                continue
+            has_hint = self._term_has_business_hint(cleaned)
+            mode = segment_mode or "broad"
+            if mode not in {"broad", "strict"}:
+                mode = "broad"
+
+            if mode == "broad" or has_hint or not segment_expr:
+                queries.append(f"\"{cleaned}\"")
+                if include_unquoted:
+                    queries.append(cleaned)
+            if segment_expr:
+                queries.append(f"\"{cleaned}\" ({segment_expr})")
+                if include_unquoted and (mode == "broad" or has_hint):
+                    queries.append(f"{cleaned} ({segment_expr})")
+        return list(dict.fromkeys([q for q in queries if q]))
 
     @staticmethod
     def _load_entity_terms(cfg: dict, keywords: list[str]) -> list[str]:
         terms = list(keywords)
-        global_competitors = cfg.get("global_competitors") or []
-        competitors_by_geo = cfg.get("competidores_por_geografia") or {}
-        for name in global_competitors:
+        global_actors = cfg.get("otros_actores_globales") or []
+        actors_by_geo = cfg.get("otros_actores_por_geografia") or {}
+        actors_aliases = cfg.get("otros_actores_aliases") or {}
+        for name in global_actors:
             if isinstance(name, str):
                 terms.append(name.strip())
-        if isinstance(competitors_by_geo, dict):
-            for _, names in competitors_by_geo.items():
+        if isinstance(actors_by_geo, dict):
+            for _, names in actors_by_geo.items():
                 if not isinstance(names, list):
                     continue
                 for name in names:
                     if isinstance(name, str):
                         terms.append(name.strip())
+        if isinstance(actors_aliases, dict):
+            for canonical, aliases in actors_aliases.items():
+                if isinstance(canonical, str):
+                    terms.append(canonical.strip())
+                if isinstance(aliases, list):
+                    for alias in aliases:
+                        if isinstance(alias, str):
+                            terms.append(alias.strip())
         # Garantiza BBVA como término base
         terms.append("BBVA")
         return list(dict.fromkeys([t for t in terms if t]))
 
-    def _build_news_rss_queries(self, cfg: dict, geo_map: dict) -> list[dict[str, str]]:
-        news_cfg = cfg.get("news") or {}
-        templates = news_cfg.get("rss_query_templates") or []
+    @staticmethod
+    def _normalize_site_domain(domain: str) -> str:
+        cleaned = domain.strip()
+        for prefix in ("https://", "http://"):
+            if cleaned.startswith(prefix):
+                cleaned = cleaned[len(prefix) :]
+                break
+        return cleaned.strip("/")
+
+    @classmethod
+    def _flatten_site_sources(cls, site_sources: object, geo: str) -> list[dict[str, str]]:
+        entries: list[dict[str, str]] = []
+
+        def add_domain(domain: object, category: str | None, geo_value: str | None) -> None:
+            if not isinstance(domain, str):
+                return
+            normalized = cls._normalize_site_domain(domain)
+            if not normalized:
+                return
+            entries.append(
+                {
+                    "domain": normalized,
+                    "category": category or "",
+                    "geo": geo_value or "",
+                }
+            )
+
+        def consume(value: object, geo_value: str | None) -> None:
+            if isinstance(value, dict):
+                for category, domains in value.items():
+                    if isinstance(domains, list):
+                        for domain in domains:
+                            add_domain(domain, str(category) if category else "", geo_value)
+            elif isinstance(value, list):
+                for domain in value:
+                    add_domain(domain, "", geo_value)
+
+        if isinstance(site_sources, dict):
+            consume(site_sources.get(geo), geo)
+            consume(site_sources.get("global"), "")
+            consume(site_sources.get("all"), "")
+        else:
+            consume(site_sources, geo)
+
+        seen: set[tuple[str, str, str]] = set()
+        unique: list[dict[str, str]] = []
+        for entry in entries:
+            key = (entry.get("domain", ""), entry.get("category", ""), entry.get("geo", ""))
+            if key in seen:
+                continue
+            seen.add(key)
+            unique.append(entry)
+        return unique
+
+    @staticmethod
+    def _round_robin(items: list[dict[str, str]], key: str) -> list[dict[str, str]]:
+        buckets: dict[str, list[dict[str, str]]] = {}
+        order: list[str] = []
+        for item in items:
+            bucket_key = item.get(key, "") if key else ""
+            if bucket_key not in buckets:
+                buckets[bucket_key] = []
+                order.append(bucket_key)
+            buckets[bucket_key].append(item)
+        result: list[dict[str, str]] = []
+        remaining = True
+        while remaining:
+            remaining = False
+            for bucket_key in order:
+                bucket = buckets.get(bucket_key) or []
+                if not bucket:
+                    continue
+                result.append(bucket.pop(0))
+                remaining = True
+        return result
+
+    @classmethod
+    def _round_robin_geo_entity(
+        cls,
+        items: list[dict[str, str]],
+        geo_order: list[str] | None = None,
+    ) -> list[dict[str, str]]:
+        if not items:
+            return items
+        buckets: dict[str, list[dict[str, str]]] = {}
+        seen_geo: list[str] = []
+        for item in items:
+            geo_value = item.get("geo", "") if item else ""
+            if geo_value not in buckets:
+                buckets[geo_value] = []
+                seen_geo.append(geo_value)
+            buckets[geo_value].append(item)
+
+        ordered_geos = geo_order or seen_geo
+        interleaved: list[dict[str, str]] = []
+        for geo_value in ordered_geos:
+            bucket = buckets.get(geo_value)
+            if not bucket:
+                continue
+            interleaved.extend(cls._round_robin(bucket, "entity"))
+
+        return cls._round_robin(interleaved, "geo")
+
+    def _build_rss_queries(
+        self,
+        source_key: str,
+        cfg: dict,
+        geo_map: dict | None,
+        segment_terms: list[str],
+        segment_mode: str,
+        only_geos: set[str] | None = None,
+        only_entities: set[str] | None = None,
+    ) -> list[dict[str, str]]:
+        src_cfg = cfg.get(source_key) or {}
+        templates = src_cfg.get("rss_query_templates") or []
         if not templates:
             return []
+        geo_mode = str(src_cfg.get("rss_query_geo_mode", "optional")).strip().lower()
+        if geo_mode not in {"required", "optional", "none"}:
+            geo_mode = "optional"
+        query_order = str(src_cfg.get("rss_query_order", "as_is")).strip().lower()
+        if query_order not in {"as_is", "round_robin_geo", "round_robin_entity", "round_robin_geo_entity"}:
+            query_order = "as_is"
+        rss_query_max_total = _config_int(src_cfg.get("rss_query_max_total"), 0)
+        rss_query_max_per_geo = _config_int(src_cfg.get("rss_query_max_per_geo"), 0)
+        rss_query_max_per_entity = _config_int(src_cfg.get("rss_query_max_per_entity"), 0)
 
-        competitors_by_geo = cfg.get("competidores_por_geografia") or {}
-        global_competitors = cfg.get("global_competitors") or []
+        geo_params_map = src_cfg.get("rss_geo_map") or geo_map or {}
+        source_terms = [t for t in src_cfg.get("query_terms", []) if isinstance(t, str) and t.strip()]
+        segment_terms_local = list(dict.fromkeys([*segment_terms, *source_terms]))
+        actors_by_geo = cfg.get("otros_actores_por_geografia") or {}
+        global_actors = cfg.get("otros_actores_globales") or []
         keywords = self._load_keywords(cfg)
         bbva_terms = [k for k in keywords if "bbva" in k.lower()] or [
             "BBVA Empresas",
             "BBVA Business",
         ]
 
+        aliases_map = cfg.get("otros_actores_aliases") or {}
+        only_entities_expanded: set[str] | None = None
+        include_bbva_terms = True
+        if only_entities:
+            expanded: set[str] = set()
+            include_bbva = False
+            for name in only_entities:
+                if not isinstance(name, str):
+                    continue
+                cleaned = name.strip()
+                if not cleaned:
+                    continue
+                expanded.add(cleaned)
+                if "bbva" in normalize_text(cleaned):
+                    include_bbva = True
+                if isinstance(aliases_map, dict):
+                    for alias in aliases_map.get(cleaned, []) or []:
+                        if isinstance(alias, str) and alias.strip():
+                            expanded.add(alias.strip())
+            if include_bbva:
+                expanded.update(bbva_terms)
+            include_bbva_terms = include_bbva
+            only_entities_expanded = expanded
+        geo_entities: dict[str, list[str]] = {}
+        if isinstance(actors_by_geo, dict):
+            for geo, actors in actors_by_geo.items():
+                if only_geos and geo not in only_geos:
+                    continue
+                names = list(actors) if isinstance(actors, list) else []
+                if isinstance(global_actors, list):
+                    names.extend(global_actors)
+                if not only_entities_expanded or include_bbva_terms:
+                    names.extend(bbva_terms)
+                if isinstance(aliases_map, dict):
+                    alias_names: list[str] = []
+                    for name in names:
+                        if not isinstance(name, str):
+                            continue
+                        for alias in aliases_map.get(name, []) or []:
+                            if isinstance(alias, str) and alias.strip():
+                                alias_names.append(alias.strip())
+                    names.extend(alias_names)
+                cleaned = [n.strip() for n in names if isinstance(n, str) and n.strip()]
+                if only_entities_expanded is not None:
+                    cleaned = [n for n in cleaned if n in only_entities_expanded]
+                geo_entities[geo] = list(dict.fromkeys(cleaned))
+
         sources: list[dict[str, str]] = []
-        for geo, competitors in competitors_by_geo.items():
-            geo_params = geo_map.get(geo, {})
-            if not geo_params:
+        for geo, names in geo_entities.items():
+            geo_params = geo_params_map.get(geo, {}) if isinstance(geo_params_map, dict) else {}
+            if geo_mode == "required" and not geo_params:
                 continue
-            names = list(competitors) if isinstance(competitors, list) else []
-            if isinstance(global_competitors, list):
-                names.extend(global_competitors)
-            names.extend(bbva_terms)
             for name in names:
                 if not isinstance(name, str) or not name.strip():
                     continue
-                query = f"\"{name}\" \"{geo}\""
-                for template in templates:
-                    url = (
-                        template.replace("{query}", query)
-                        .replace("{hl}", str(geo_params.get("hl", "")))
-                        .replace("{gl}", str(geo_params.get("gl", "")))
-                        .replace("{ceid}", str(geo_params.get("ceid", "")))
-                    )
-                    if url:
-                        sources.append({"url": url, "geo": geo})
+                base_queries = self._build_search_queries(
+                    [name],
+                    segment_terms_local,
+                    segment_mode,
+                    include_unquoted=True,
+                )
+                for base_query in base_queries:
+                    query_variants: list[tuple[str, str | None]] = []
+                    if geo_mode in {"required", "optional"}:
+                        query_variants.append((f"{base_query} \"{geo}\"", geo))
+                    if geo_mode in {"none", "optional"}:
+                        query_variants.append((base_query, None))
+                    for query, geo_value in query_variants:
+                        encoded_query = quote_plus(query)
+                        for template in templates:
+                            url = (
+                                template.replace("{query_raw}", query)
+                                .replace("{query}", encoded_query)
+                                .replace("{hl}", str(geo_params.get("hl", "")))
+                                .replace("{gl}", str(geo_params.get("gl", "")))
+                                .replace("{ceid}", str(geo_params.get("ceid", "")))
+                            )
+                            if url:
+                                sources.append(
+                                    {
+                                        "url": url,
+                                        "geo": geo_value or "",
+                                        "entity": name,
+                                        "query": query,
+                                    }
+                                )
+
+        site_sources = src_cfg.get("site_sources_by_geo") or {}
+        site_query_enabled = bool(src_cfg.get("site_query_enabled", False))
+        if site_query_enabled and site_sources:
+            site_geo_mode = str(src_cfg.get("site_query_geo_mode", "none")).strip().lower()
+            if site_geo_mode not in {"required", "optional", "none"}:
+                site_geo_mode = "none"
+            site_query_mode = str(src_cfg.get("site_query_mode", segment_mode or "broad")).strip().lower()
+            if site_query_mode not in {"broad", "strict"}:
+                site_query_mode = "broad"
+            site_include_unquoted = bool(src_cfg.get("site_query_include_unquoted", False))
+            site_max_per_geo = _config_int(src_cfg.get("site_query_max_per_geo"), 0)
+            site_max_total = _config_int(src_cfg.get("site_query_max_total"), 0)
+            site_per_site = _config_int(src_cfg.get("site_query_per_site"), 0)
+            category_terms_map = src_cfg.get("site_query_terms_by_category") or {}
+
+            total_added = 0
+            stop_all = False
+            for geo, names in geo_entities.items():
+                if stop_all:
+                    break
+                geo_params = geo_params_map.get(geo, {}) if isinstance(geo_params_map, dict) else {}
+                if site_geo_mode == "required" and not geo_params:
+                    continue
+                site_entries = self._flatten_site_sources(site_sources, geo)
+                if not site_entries:
+                    continue
+                if site_max_per_geo > 0:
+                    site_entries = site_entries[:site_max_per_geo]
+                for site_entry in site_entries:
+                    if stop_all:
+                        break
+                    domain = site_entry.get("domain", "")
+                    if not domain:
+                        continue
+                    category = site_entry.get("category", "")
+                    site_geo = site_entry.get("geo") or ""
+                    extra_terms: list[str] = []
+                    if isinstance(category_terms_map, dict) and category:
+                        extra_terms = [
+                            t.strip()
+                            for t in category_terms_map.get(category, [])
+                            if isinstance(t, str) and t.strip()
+                        ]
+                    segment_terms_site = list(dict.fromkeys([*segment_terms_local, *extra_terms]))
+                    per_site_count = 0
+                    for name in names:
+                        if site_per_site > 0 and per_site_count >= site_per_site:
+                            break
+                        if not isinstance(name, str) or not name.strip():
+                            continue
+                        per_site_count += 1
+                        base_queries = self._build_search_queries(
+                            [name],
+                            segment_terms_site,
+                            site_query_mode,
+                            include_unquoted=site_include_unquoted,
+                        )
+                        for base_query in base_queries:
+                            query_variants: list[str] = []
+                            if site_geo_mode in {"required", "optional"}:
+                                query_variants.append(f'{base_query} "{geo}" site:{domain}')
+                            if site_geo_mode in {"none", "optional"}:
+                                query_variants.append(f"{base_query} site:{domain}")
+                            for query in query_variants:
+                                encoded_query = quote_plus(query)
+                                for template in templates:
+                                    url = (
+                                        template.replace("{query_raw}", query)
+                                        .replace("{query}", encoded_query)
+                                        .replace("{hl}", str(geo_params.get("hl", "")))
+                                        .replace("{gl}", str(geo_params.get("gl", "")))
+                                        .replace("{ceid}", str(geo_params.get("ceid", "")))
+                                    )
+                                    if url:
+                                        sources.append(
+                                            {
+                                                "url": url,
+                                                "geo": site_geo or geo,
+                                                "entity": name,
+                                                "query": query,
+                                                "category": category,
+                                                "site": domain,
+                                            }
+                                        )
+                                        total_added += 1
+                                        if site_max_total > 0 and total_added >= site_max_total:
+                                            stop_all = True
+                                            break
+                                if stop_all:
+                                    break
+                            if stop_all:
+                                break
 
         seen: set[str] = set()
         unique: list[dict[str, str]] = []
@@ -566,7 +1226,62 @@ class ReputationIngestService:
                 continue
             seen.add(url)
             unique.append(source)
-        return unique
+
+        ordered = unique
+        if query_order == "round_robin_geo":
+            ordered = self._round_robin(ordered, "geo")
+        elif query_order == "round_robin_entity":
+            ordered = self._round_robin(ordered, "entity")
+        elif query_order == "round_robin_geo_entity":
+            geo_order = list(geo_entities.keys())
+            if "" in {item.get("geo", "") for item in ordered} and "" not in geo_order:
+                geo_order.append("")
+            ordered = self._round_robin_geo_entity(ordered, geo_order)
+
+        if rss_query_max_total <= 0 and rss_query_max_per_geo <= 0 and rss_query_max_per_entity <= 0:
+            return ordered
+
+        limited: list[dict[str, str]] = []
+        geo_counts: dict[str, int] = {}
+        entity_counts: dict[str, int] = {}
+        for source in ordered:
+            geo_value = source.get("geo", "")
+            entity_value = source.get("entity", "")
+            if rss_query_max_per_geo > 0 and geo_value:
+                if geo_counts.get(geo_value, 0) >= rss_query_max_per_geo:
+                    continue
+            if rss_query_max_per_entity > 0 and entity_value:
+                if entity_counts.get(entity_value, 0) >= rss_query_max_per_entity:
+                    continue
+            limited.append(source)
+            if geo_value:
+                geo_counts[geo_value] = geo_counts.get(geo_value, 0) + 1
+            if entity_value:
+                entity_counts[entity_value] = entity_counts.get(entity_value, 0) + 1
+            if rss_query_max_total > 0 and len(limited) >= rss_query_max_total:
+                break
+        return limited
+
+
+_BUSINESS_HINTS = {
+    "b2b",
+    "business",
+    "cash",
+    "cash management",
+    "corporate",
+    "corporativa",
+    "empresa",
+    "empresas",
+    "empresarial",
+    "negocio",
+    "negocios",
+    "net cash",
+    "netcash",
+    "pyme",
+    "pymes",
+    "smb",
+    "sme",
+}
 
 
 def _env_bool(value: str | None) -> bool:
@@ -583,3 +1298,20 @@ def _env_int(env_name: str, default: int) -> int:
         return int(raw)
     except ValueError:
         return default
+
+
+def _config_int(value: object, default: int) -> int:
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        try:
+            return int(value.strip())
+        except ValueError:
+            return default
+    return default
+
+
+def _split_csv(value: str) -> list[str]:
+    if not value:
+        return []
+    return [item.strip() for item in value.split(",") if item.strip()]
