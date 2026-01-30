@@ -46,8 +46,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
               <Activity className="h-5 w-5 text-white" />
             </div>
             <div className="leading-tight">
-              <div className="font-semibold tracking-tight">
-                BBVA BugResolutionRadar
+              <div className="font-display font-semibold tracking-tight">
+                BBVA Empresas – Global Overview Radar
               </div>
               <div className="text-[11px] text-white/75 -mt-0.5">
                 Enterprise Incident Intelligence
