@@ -591,16 +591,22 @@ class ReputationSentimentService:
             if mapped:
                 return mapped
         normalized = normalize_text(text)
+        tokens = set(normalized.split())
         for geo in self._geos:
             geo_norm = normalize_text(geo)
             if geo_norm and geo_norm in normalized:
                 return geo
             aliases = self._geo_aliases.get(geo, [])
             for alias in aliases:
-                if isinstance(alias, str):
-                    alias_norm = normalize_text(alias)
-                    if alias_norm and alias_norm in normalized:
+                alias_norm = normalize_text(alias)
+                if not alias_norm:
+                    continue
+                if len(alias_norm) <= 3:
+                    if alias_norm in tokens:
                         return geo
+                    continue
+                if alias_norm in normalized:
+                    return geo
         return None
 
     def _detect_actors(
