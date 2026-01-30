@@ -17,9 +17,9 @@ router = APIRouter()
 @router.get("/items")
 def reputation_items(
     sources: str | None = Query(default=None, description="Lista CSV de fuentes"),
-    entity: str | None = Query(default=None, description="bbva|competencia|all"),
+    entity: str | None = Query(default=None, description="bbva|otros_actores|all"),
     geo: str | None = Query(default=None),
-    competitor: str | None = Query(default=None),
+    actor: str | None = Query(default=None),
     sentiment: str | None = Query(default=None),
     from_date: str | None = Query(default=None, description="YYYY-MM-DD"),
     to_date: str | None = Query(default=None, description="YYYY-MM-DD"),
@@ -43,7 +43,7 @@ def reputation_items(
             sources,
             entity,
             geo,
-            competitor,
+            actor,
             sentiment,
             from_date,
             to_date,
@@ -65,7 +65,7 @@ def _filter_items(
     sources: str | None,
     entity: str | None,
     geo: str | None,
-    competitor: str | None,
+    actor: str | None,
     sentiment: str | None,
     from_date: str | None,
     to_date: str | None,
@@ -75,18 +75,20 @@ def _filter_items(
     sources_set = _split_csv(sources)
     entity_lc = entity.lower() if entity else None
     geo_lc = geo.lower() if geo else None
-    competitor_lc = competitor.lower() if competitor else None
+    actor_lc = actor.lower() if actor else None
     sentiment_lc = sentiment.lower() if sentiment else None
     text_query = q.lower() if q else None
 
+    from_dt: datetime | None
+    to_dt: datetime | None
     if period_days is not None:
         today = date.today()
-        from_dt: datetime | None = datetime.combine(
+        from_dt = datetime.combine(
             today - timedelta(days=period_days),
             datetime.min.time(),
             tzinfo=timezone.utc,
         )
-        to_dt: datetime | None = datetime.combine(
+        to_dt = datetime.combine(
             today,
             datetime.max.time(),
             tzinfo=timezone.utc,
@@ -99,16 +101,16 @@ def _filter_items(
         if sources_set and item.source.lower() not in sources_set:
             continue
         if entity_lc and entity_lc != "all":
-            item_competitor = (item.competitor or "").lower()
-            if entity_lc == "bbva" and item_competitor != "bbva":
+            item_actor = (item.actor or "").lower()
+            if entity_lc == "bbva" and item_actor != "bbva":
                 haystack = f"{item.title or ''} {item.text or ''}".lower()
                 if "bbva" not in haystack:
                     continue
-            if entity_lc == "competencia" and (not item_competitor or item_competitor == "bbva"):
+            if entity_lc == "otros_actores" and (not item_actor or item_actor == "bbva"):
                 continue
         if geo_lc and (item.geo or "").lower() != geo_lc:
             continue
-        if competitor_lc and (item.competitor or "").lower() != competitor_lc:
+        if actor_lc and (item.actor or "").lower() != actor_lc:
             continue
         if sentiment_lc and (item.sentiment or "").lower() != sentiment_lc:
             continue

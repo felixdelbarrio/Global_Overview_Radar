@@ -38,7 +38,7 @@ export type ReputationItem = {
   id: string;
   source: string;
   geo?: string | null;
-  competitor?: string | null;
+  actor?: string | null;
   language?: string | null;
   published_at?: string | null;
   collected_at?: string | null;
