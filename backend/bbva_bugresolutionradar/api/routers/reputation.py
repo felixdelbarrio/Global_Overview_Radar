@@ -81,8 +81,16 @@ def _filter_items(
 
     if period_days is not None:
         today = date.today()
-        from_dt = datetime.combine(today - timedelta(days=period_days), datetime.min.time(), tzinfo=timezone.utc)
-        to_dt = datetime.combine(today, datetime.max.time(), tzinfo=timezone.utc)
+        from_dt: datetime | None = datetime.combine(
+            today - timedelta(days=period_days),
+            datetime.min.time(),
+            tzinfo=timezone.utc,
+        )
+        to_dt: datetime | None = datetime.combine(
+            today,
+            datetime.max.time(),
+            tzinfo=timezone.utc,
+        )
     else:
         from_dt = _parse_date(from_date, start=True)
         to_dt = _parse_date(to_date, start=False)

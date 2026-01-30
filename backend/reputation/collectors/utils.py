@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from email.utils import parsedate_to_datetime
 import json
-from typing import Any
+from typing import Any, cast
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 import ssl
@@ -18,7 +18,8 @@ def http_get_text(url: str, headers: dict[str, str] | None = None, timeout: int 
     req = Request(url, headers=req_headers)
     context = _ssl_context()
     with urlopen(req, timeout=timeout, context=context) as response:
-        return response.read().decode("utf-8")
+        data = cast(bytes, response.read())
+        return data.decode("utf-8")
 
 
 def http_get_json(url: str, headers: dict[str, str] | None = None, timeout: int = 15) -> Any:
@@ -104,7 +105,10 @@ def _ssl_context() -> ssl.SSLContext | None:
         "on",
     }
     if not verify:
-        return ssl._create_unverified_context()
+        context = ssl.create_default_context()
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE
+        return context
     try:
         import certifi
 

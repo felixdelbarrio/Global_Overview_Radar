@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Iterable
+from typing import Any, Iterable
 
 from reputation.collectors.base import ReputationCollector
 from reputation.collectors.utils import http_get_text, parse_datetime, parse_rss, rss_debug_enabled
@@ -42,13 +42,13 @@ class BlogsCollector(ReputationCollector):
                 print(f"[blogs] {rss_url} items={len(entries)} kept={kept}")
         return items
 
-    def _is_relevant(self, entry: dict) -> bool:
+    def _is_relevant(self, entry: dict[str, Any]) -> bool:
         if not self._keywords:
             return True
         text = f"{entry.get('title', '')} {entry.get('summary', '')}".lower()
         return any(keyword in text for keyword in self._keywords)
 
-    def _map_entry(self, entry: dict, rss_url: str) -> ReputationItem:
+    def _map_entry(self, entry: dict[str, Any], rss_url: str) -> ReputationItem:
         return ReputationItem(
             id=entry.get("link") or entry.get("title", ""),
             source=self.source_name,
