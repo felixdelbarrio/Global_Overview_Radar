@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable
+from typing import Iterable, cast
 
 from reputation.models import ReputationItem
 
@@ -128,14 +128,33 @@ class SentimentResult:
     competitors: list[str]
 
 
+def _coerce_str_list(value: object) -> list[str]:
+    if isinstance(value, list):
+        items = cast(list[object], value)
+        return [v.strip() for v in items if isinstance(v, str) and v.strip()]
+    return []
+
+
+def _coerce_str_list_map(value: object) -> dict[str, list[str]]:
+    if not isinstance(value, dict):
+        return {}
+    mapping = cast(dict[str, object], value)
+    result: dict[str, list[str]] = {}
+    for key, items in mapping.items():
+        values = _coerce_str_list(items)
+        if values:
+            result[key] = values
+    return result
+
+
 class ReputationSentimentService:
-    def __init__(self, cfg: dict) -> None:
+    def __init__(self, cfg: dict[str, object]) -> None:
         self._cfg = cfg
-        self._keywords = [k.strip() for k in cfg.get("keywords", []) if isinstance(k, str) and k.strip()]
-        self._global_competitors = [c.strip() for c in cfg.get("global_competitors", []) if c.strip()]
-        self._competitors_by_geo = cfg.get("competidores_por_geografia", {}) or {}
-        self._geos = [g.strip() for g in cfg.get("geografias", []) if g.strip()]
-        self._geo_aliases = cfg.get("geografias_aliases", {}) or {}
+        self._keywords = _coerce_str_list(cfg.get("keywords"))
+        self._global_competitors = _coerce_str_list(cfg.get("global_competitors"))
+        self._competitors_by_geo = _coerce_str_list_map(cfg.get("competidores_por_geografia"))
+        self._geos = _coerce_str_list(cfg.get("geografias"))
+        self._geo_aliases = _coerce_str_list_map(cfg.get("geografias_aliases"))
 
     def analyze_items(self, items: Iterable[ReputationItem]) -> list[ReputationItem]:
         result: list[ReputationItem] = []
@@ -189,7 +208,7 @@ class ReputationSentimentService:
                 return geo
             aliases = self._geo_aliases.get(geo, [])
             for alias in aliases:
-                if isinstance(alias, str) and alias.lower() in text:
+                if alias.lower() in text:
                     return geo
         return None
 
@@ -203,14 +222,12 @@ class ReputationSentimentService:
                     competitors.append("BBVA")
                     break
 
-        scoped = []
+        scoped: list[str] = []
         if geo and geo in self._competitors_by_geo:
             scoped.extend(self._competitors_by_geo.get(geo, []))
         scoped.extend(self._global_competitors)
 
         for name in scoped:
-            if not isinstance(name, str):
-                continue
             if name.lower() in text:
                 competitors.append(name)
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone, timedelta
 import os
-from typing import Iterable
+from typing import Iterable, cast
 
 from reputation.config import (
     compute_config_hash,
@@ -34,7 +34,7 @@ class ReputationIngestService:
         self._repo = ReputationCacheRepo(self._settings.cache_path)
 
     def run(self, force: bool = False) -> ReputationCacheDocument:
-        cfg = load_business_config()
+        cfg = _as_dict(load_business_config())
         cfg_hash = compute_config_hash(cfg)
         ttl_hours = effective_ttl_hours(cfg)
         sources_enabled = list(self._settings.enabled_sources())
@@ -62,20 +62,20 @@ class ReputationIngestService:
             and self._repo.is_fresh(ttl_hours)
             and not collectors
         ):
-            note = "; ".join(notes) if notes else "cache hit"
+            cache_note = "; ".join(notes) if notes else "cache hit"
             return ReputationCacheDocument(
                 generated_at=datetime.now(timezone.utc),
                 config_hash=cfg_hash,
                 sources_enabled=sources_enabled,
                 items=existing.items,
-                stats=ReputationCacheStats(count=len(existing.items), note=note),
+                stats=ReputationCacheStats(count=len(existing.items), note=cache_note),
             )
 
         items = self._collect_items(collectors, notes)
         items = self._normalize_items(items, lookback_days)
         items = self._apply_sentiment(cfg, items)
         merged_items = self._merge_items(existing.items if existing else [], items)
-        note = "; ".join(notes) if notes else None
+        note: str | None = "; ".join(notes) if notes else None
 
         doc = ReputationCacheDocument(
             generated_at=datetime.now(timezone.utc),
@@ -128,9 +128,8 @@ class ReputationIngestService:
                 merged[key] = item
         return list(merged.values())
 
-    def _apply_sentiment(self, cfg: dict, items: list[ReputationItem]) -> list[ReputationItem]:
+    def _apply_sentiment(self, cfg: dict[str, object], items: list[ReputationItem]) -> list[ReputationItem]:
         keywords = self._load_keywords(cfg)
-        entity_terms = self._load_entity_terms(cfg, keywords)
         cfg_local = dict(cfg)
         cfg_local["keywords"] = keywords
         service = ReputationSentimentService(cfg_local)
@@ -152,7 +151,7 @@ class ReputationIngestService:
 
     def _build_collectors(
         self,
-        cfg: dict,
+        cfg: dict[str, object],
         sources_enabled: list[str],
     ) -> tuple[list[ReputationCollector], list[str]]:
         collectors: list[ReputationCollector] = []
@@ -163,13 +162,13 @@ class ReputationIngestService:
 
         if "appstore" in sources_enabled:
             handled_sources.add("appstore")
-            appstore_cfg = cfg.get("appstore") or {}
-            if not appstore_cfg.get("enabled", False):
+            appstore_cfg = _as_dict(cfg.get("appstore"))
+            if not _get_bool(appstore_cfg, "enabled", False):
                 notes.append("appstore: disabled in config.json")
             else:
-                app_id_env = appstore_cfg.get("app_id_env", "APPSTORE_APP_ID")
-                country_env = appstore_cfg.get("country_env", "APPSTORE_COUNTRY")
-                max_reviews_env = appstore_cfg.get("max_reviews_env", "APPSTORE_MAX_REVIEWS")
+                app_id_env = _get_str(appstore_cfg, "app_id_env", "APPSTORE_APP_ID")
+                country_env = _get_str(appstore_cfg, "country_env", "APPSTORE_COUNTRY")
+                max_reviews_env = _get_str(appstore_cfg, "max_reviews_env", "APPSTORE_MAX_REVIEWS")
 
                 app_id = os.getenv(app_id_env, "").strip()
                 country = os.getenv(country_env, "es").strip().lower() or "es"
@@ -194,21 +193,21 @@ class ReputationIngestService:
 
         if "reddit" in sources_enabled:
             handled_sources.add("reddit")
-            reddit_cfg = cfg.get("reddit") or {}
-            if not reddit_cfg.get("enabled", False):
+            reddit_cfg = _as_dict(cfg.get("reddit"))
+            if not _get_bool(reddit_cfg, "enabled", False):
                 notes.append("reddit: disabled in config.json")
             else:
-                client_id_env = reddit_cfg.get("client_id_env", "REDDIT_CLIENT_ID")
-                client_secret_env = reddit_cfg.get("client_secret_env", "REDDIT_CLIENT_SECRET")
-                user_agent_env = reddit_cfg.get("user_agent_env", "REDDIT_USER_AGENT")
+                client_id_env = _get_str(reddit_cfg, "client_id_env", "REDDIT_CLIENT_ID")
+                client_secret_env = _get_str(reddit_cfg, "client_secret_env", "REDDIT_CLIENT_SECRET")
+                user_agent_env = _get_str(reddit_cfg, "user_agent_env", "REDDIT_USER_AGENT")
 
                 client_id = os.getenv(client_id_env, "").strip()
                 client_secret = os.getenv(client_secret_env, "").strip()
                 user_agent = os.getenv(user_agent_env, "").strip()
 
-                subreddits = reddit_cfg.get("subreddits") or []
-                query_templates = reddit_cfg.get("query_templates") or []
-                limit_per_query = int(reddit_cfg.get("limit_per_query", 100))
+                subreddits = _get_list_str(reddit_cfg, "subreddits")
+                query_templates = _get_list_str(reddit_cfg, "query_templates")
+                limit_per_query = _get_int(reddit_cfg, "limit_per_query", 100)
 
                 queries = self._expand_queries(query_templates, keywords)
 
@@ -228,12 +227,12 @@ class ReputationIngestService:
 
         if "twitter" in sources_enabled:
             handled_sources.add("twitter")
-            twitter_cfg = cfg.get("twitter") or {}
-            if not twitter_cfg.get("enabled", False):
+            twitter_cfg = _as_dict(cfg.get("twitter"))
+            if not _get_bool(twitter_cfg, "enabled", False):
                 notes.append("twitter: disabled in config.json")
             else:
-                bearer_env = twitter_cfg.get("bearer_token_env", "TWITTER_BEARER_TOKEN")
-                max_results_env = twitter_cfg.get("max_results_env", "TWITTER_MAX_RESULTS")
+                bearer_env = _get_str(twitter_cfg, "bearer_token_env", "TWITTER_BEARER_TOKEN")
+                max_results_env = _get_str(twitter_cfg, "max_results_env", "TWITTER_MAX_RESULTS")
 
                 bearer = os.getenv(bearer_env, "").strip()
                 max_results = _env_int(max_results_env, 100)
@@ -246,22 +245,22 @@ class ReputationIngestService:
 
         if "news" in sources_enabled:
             handled_sources.add("news")
-            news_cfg = cfg.get("news") or {}
-            if not news_cfg.get("enabled", False):
+            news_cfg = _as_dict(cfg.get("news"))
+            if not _get_bool(news_cfg, "enabled", False):
                 notes.append("news: disabled in config.json")
             else:
-                api_key_env = news_cfg.get("api_key_env", "NEWS_API_KEY")
-                lang_env = news_cfg.get("lang_env", "NEWS_LANG")
-                max_articles_env = news_cfg.get("max_articles_env", "NEWS_MAX_ARTICLES")
-                sources_env = news_cfg.get("sources_env", "NEWS_SOURCES")
-                endpoint_env = news_cfg.get("endpoint_env", "NEWS_API_ENDPOINT")
-                rss_only_env = news_cfg.get("rss_only_env", "NEWS_RSS_ONLY")
-                rss_urls = news_cfg.get("rss_urls") or []
+                api_key_env = _get_str(news_cfg, "api_key_env", "NEWS_API_KEY")
+                lang_env = _get_str(news_cfg, "lang_env", "NEWS_LANG")
+                max_articles_env = _get_str(news_cfg, "max_articles_env", "NEWS_MAX_ARTICLES")
+                sources_env = _get_str(news_cfg, "sources_env", "NEWS_SOURCES")
+                endpoint_env = _get_str(news_cfg, "endpoint_env", "NEWS_API_ENDPOINT")
+                rss_only_env = _get_str(news_cfg, "rss_only_env", "NEWS_RSS_ONLY")
+                news_rss_urls = _get_list_str_or_dict(news_cfg, "rss_urls")
                 rss_query_env = os.getenv("NEWS_RSS_QUERY_ENABLED", "").strip().lower()
-                rss_query_enabled = bool(news_cfg.get("rss_query_enabled", True))
+                rss_query_enabled = _get_bool(news_cfg, "rss_query_enabled", True)
                 if rss_query_env:
                     rss_query_enabled = rss_query_env in {"1", "true", "yes", "y", "on"}
-                rss_geo_map = news_cfg.get("rss_geo_map") or {}
+                rss_geo_map = _get_dict_str_dict_str(news_cfg, "rss_geo_map")
 
                 api_key = os.getenv(api_key_env, "").strip()
                 language = os.getenv(lang_env, "es").strip()
@@ -271,7 +270,7 @@ class ReputationIngestService:
                 rss_only = _env_bool(os.getenv(rss_only_env, "false"))
 
                 queries = self._default_keyword_queries(entity_terms)
-                rss_sources = list(rss_urls)
+                rss_sources = list(news_rss_urls)
                 if rss_query_enabled:
                     rss_sources.extend(self._build_news_rss_queries(cfg, rss_geo_map))
 
@@ -293,23 +292,23 @@ class ReputationIngestService:
 
         if "forums" in sources_enabled:
             handled_sources.add("forums")
-            forums_cfg = cfg.get("forums") or {}
-            if not forums_cfg.get("enabled", False):
+            forums_cfg = _as_dict(cfg.get("forums"))
+            if not _get_bool(forums_cfg, "enabled", False):
                 notes.append("forums: disabled in config.json")
             else:
-                scraping_env = forums_cfg.get("scraping_env", "FORUMS_SCRAPING")
-                max_threads_env = forums_cfg.get("max_threads_env", "FORUMS_MAX_THREADS")
-                rss_urls = forums_cfg.get("rss_urls") or []
+                scraping_env = _get_str(forums_cfg, "scraping_env", "FORUMS_SCRAPING")
+                max_threads_env = _get_str(forums_cfg, "max_threads_env", "FORUMS_MAX_THREADS")
+                forum_rss_urls = _get_list_str(forums_cfg, "rss_urls")
 
                 scraping_enabled = _env_bool(os.getenv(scraping_env, "false"))
                 max_items = _env_int(max_threads_env, 200)
 
-                if not rss_urls:
+                if not forum_rss_urls:
                     notes.append("forums: missing rss_urls in config.json")
                 else:
                     collectors.append(
                         ForumsCollector(
-                            rss_urls=rss_urls,
+                            rss_urls=forum_rss_urls,
                             keywords=entity_terms,
                             scraping_enabled=scraping_enabled,
                             max_items=max_items,
@@ -318,25 +317,25 @@ class ReputationIngestService:
 
         if "blogs" in sources_enabled:
             handled_sources.add("blogs")
-            blogs_cfg = cfg.get("blogs") or {}
-            if not blogs_cfg.get("enabled", False):
+            blogs_cfg = _as_dict(cfg.get("blogs"))
+            if not _get_bool(blogs_cfg, "enabled", False):
                 notes.append("blogs: disabled in config.json")
             else:
-                rss_only_env = blogs_cfg.get("rss_only_env", "BLOGS_RSS_ONLY")
-                max_items_env = blogs_cfg.get("max_items_env", "BLOGS_MAX_ITEMS")
-                rss_urls = blogs_cfg.get("rss_urls") or []
+                rss_only_env = _get_str(blogs_cfg, "rss_only_env", "BLOGS_RSS_ONLY")
+                max_items_env = _get_str(blogs_cfg, "max_items_env", "BLOGS_MAX_ITEMS")
+                blog_rss_urls = _get_list_str(blogs_cfg, "rss_urls")
 
                 rss_only = _env_bool(os.getenv(rss_only_env, "true"))
                 max_items = _env_int(max_items_env, 200)
 
                 if not rss_only:
                     notes.append("blogs: rss_only=false not supported")
-                elif not rss_urls:
+                elif not blog_rss_urls:
                     notes.append("blogs: missing rss_urls in config.json")
                 else:
                     collectors.append(
                         BlogsCollector(
-                            rss_urls=rss_urls,
+                            rss_urls=blog_rss_urls,
                             keywords=entity_terms,
                             max_items=max_items,
                         )
@@ -344,23 +343,23 @@ class ReputationIngestService:
 
         if "trustpilot" in sources_enabled:
             handled_sources.add("trustpilot")
-            trust_cfg = cfg.get("trustpilot") or {}
-            if not trust_cfg.get("enabled", False):
+            trust_cfg = _as_dict(cfg.get("trustpilot"))
+            if not _get_bool(trust_cfg, "enabled", False):
                 notes.append("trustpilot: disabled in config.json")
             else:
-                scraping_env = trust_cfg.get("scraping_env", "TRUSTPILOT_SCRAPING")
-                max_items_env = trust_cfg.get("max_items_env", "TRUSTPILOT_MAX_ITEMS")
-                rss_urls = trust_cfg.get("rss_urls") or []
+                scraping_env = _get_str(trust_cfg, "scraping_env", "TRUSTPILOT_SCRAPING")
+                max_items_env = _get_str(trust_cfg, "max_items_env", "TRUSTPILOT_MAX_ITEMS")
+                trust_rss_urls = _get_list_str(trust_cfg, "rss_urls")
 
                 scraping_enabled = _env_bool(os.getenv(scraping_env, "false"))
                 max_items = _env_int(max_items_env, 200)
 
-                if not rss_urls:
+                if not trust_rss_urls:
                     notes.append("trustpilot: missing rss_urls in config.json")
                 else:
                     collectors.append(
                         TrustpilotCollector(
-                            rss_urls=rss_urls,
+                            rss_urls=trust_rss_urls,
                             keywords=entity_terms,
                             scraping_enabled=scraping_enabled,
                             max_items=max_items,
@@ -369,13 +368,13 @@ class ReputationIngestService:
 
         if "google_reviews" in sources_enabled:
             handled_sources.add("google_reviews")
-            google_cfg = cfg.get("google_reviews") or {}
-            if not google_cfg.get("enabled", False):
+            google_cfg = _as_dict(cfg.get("google_reviews"))
+            if not _get_bool(google_cfg, "enabled", False):
                 notes.append("google_reviews: disabled in config.json")
             else:
-                api_key_env = google_cfg.get("api_key_env", "GOOGLE_PLACES_API_KEY")
-                place_id_env = google_cfg.get("place_id_env", "GOOGLE_PLACE_ID")
-                max_reviews_env = google_cfg.get("max_reviews_env", "GOOGLE_MAX_REVIEWS")
+                api_key_env = _get_str(google_cfg, "api_key_env", "GOOGLE_PLACES_API_KEY")
+                place_id_env = _get_str(google_cfg, "place_id_env", "GOOGLE_PLACE_ID")
+                max_reviews_env = _get_str(google_cfg, "max_reviews_env", "GOOGLE_MAX_REVIEWS")
 
                 api_key = os.getenv(api_key_env, "").strip()
                 place_id = os.getenv(place_id_env, "").strip()
@@ -394,12 +393,12 @@ class ReputationIngestService:
 
         if "youtube" in sources_enabled:
             handled_sources.add("youtube")
-            youtube_cfg = cfg.get("youtube") or {}
-            if not youtube_cfg.get("enabled", False):
+            youtube_cfg = _as_dict(cfg.get("youtube"))
+            if not _get_bool(youtube_cfg, "enabled", False):
                 notes.append("youtube: disabled in config.json")
             else:
-                api_key_env = youtube_cfg.get("api_key_env", "YOUTUBE_API_KEY")
-                max_results_env = youtube_cfg.get("max_results_env", "YOUTUBE_MAX_RESULTS")
+                api_key_env = _get_str(youtube_cfg, "api_key_env", "YOUTUBE_API_KEY")
+                max_results_env = _get_str(youtube_cfg, "max_results_env", "YOUTUBE_MAX_RESULTS")
 
                 api_key = os.getenv(api_key_env, "").strip()
                 max_results = _env_int(max_results_env, 50)
@@ -418,23 +417,23 @@ class ReputationIngestService:
 
         if "downdetector" in sources_enabled:
             handled_sources.add("downdetector")
-            down_cfg = cfg.get("downdetector") or {}
-            if not down_cfg.get("enabled", False):
+            down_cfg = _as_dict(cfg.get("downdetector"))
+            if not _get_bool(down_cfg, "enabled", False):
                 notes.append("downdetector: disabled in config.json")
             else:
-                scraping_env = down_cfg.get("scraping_env", "DOWNDETECTOR_SCRAPING")
-                max_items_env = down_cfg.get("max_items_env", "DOWNDETECTOR_MAX_ITEMS")
-                rss_urls = down_cfg.get("rss_urls") or []
+                scraping_env = _get_str(down_cfg, "scraping_env", "DOWNDETECTOR_SCRAPING")
+                max_items_env = _get_str(down_cfg, "max_items_env", "DOWNDETECTOR_MAX_ITEMS")
+                down_rss_urls = _get_list_str(down_cfg, "rss_urls")
 
                 scraping_enabled = _env_bool(os.getenv(scraping_env, "false"))
                 max_items = _env_int(max_items_env, 200)
 
-                if not rss_urls:
+                if not down_rss_urls:
                     notes.append("downdetector: missing rss_urls in config.json")
                 else:
                     collectors.append(
                         DowndetectorCollector(
-                            rss_urls=rss_urls,
+                            rss_urls=down_rss_urls,
                             keywords=entity_terms,
                             scraping_enabled=scraping_enabled,
                             max_items=max_items,
@@ -447,30 +446,30 @@ class ReputationIngestService:
 
         return collectors, notes
 
-    def _auto_enable_rss_sources(self, cfg: dict, sources_enabled: list[str]) -> list[str]:
+    def _auto_enable_rss_sources(self, cfg: dict[str, object], sources_enabled: list[str]) -> list[str]:
         notes: list[str] = []
         rss_sources = ["news", "forums", "blogs", "trustpilot", "downdetector"]
 
         for source in rss_sources:
             if source in sources_enabled:
                 continue
-            src_cfg = cfg.get(source) or {}
-            if not src_cfg.get("enabled", False):
+            src_cfg = _as_dict(cfg.get(source))
+            if not _get_bool(src_cfg, "enabled", False):
                 continue
-            rss_urls = src_cfg.get("rss_urls") or []
+            rss_urls = _get_list_str_or_dict(src_cfg, "rss_urls")
             if not rss_urls:
                 continue
 
             if source == "news":
-                rss_only_env = src_cfg.get("rss_only_env", "NEWS_RSS_ONLY")
+                rss_only_env = _get_str(src_cfg, "rss_only_env", "NEWS_RSS_ONLY")
                 if not _env_bool(os.getenv(rss_only_env, "false")):
                     continue
             elif source == "blogs":
-                rss_only_env = src_cfg.get("rss_only_env", "BLOGS_RSS_ONLY")
+                rss_only_env = _get_str(src_cfg, "rss_only_env", "BLOGS_RSS_ONLY")
                 if not _env_bool(os.getenv(rss_only_env, "true")):
                     continue
             else:
-                scraping_env = src_cfg.get("scraping_env", f"{source.upper()}_SCRAPING")
+                scraping_env = _get_str(src_cfg, "scraping_env", f"{source.upper()}_SCRAPING")
                 if not _env_bool(os.getenv(scraping_env, "false")):
                     continue
 
@@ -480,11 +479,11 @@ class ReputationIngestService:
         return notes
 
     @staticmethod
-    def _load_keywords(cfg: dict) -> list[str]:
+    def _load_keywords(cfg: dict[str, object]) -> list[str]:
         env_keywords = os.getenv("REPUTATION_KEYWORDS", "").strip()
         if env_keywords:
             return [k.strip() for k in env_keywords.split(",") if k.strip()]
-        return [k.strip() for k in cfg.get("keywords", []) if isinstance(k, str) and k.strip()]
+        return _get_list_str(cfg, "keywords")
 
     @staticmethod
     def _expand_queries(templates: list[str], keywords: list[str]) -> list[str]:
@@ -503,32 +502,31 @@ class ReputationIngestService:
         return [f"\"{keyword}\"" for keyword in keywords]
 
     @staticmethod
-    def _load_entity_terms(cfg: dict, keywords: list[str]) -> list[str]:
+    def _load_entity_terms(cfg: dict[str, object], keywords: list[str]) -> list[str]:
         terms = list(keywords)
-        global_competitors = cfg.get("global_competitors") or []
-        competitors_by_geo = cfg.get("competidores_por_geografia") or {}
+        global_competitors = _get_list_str(cfg, "global_competitors")
+        competitors_by_geo = _get_dict_str_list_str(cfg, "competidores_por_geografia")
         for name in global_competitors:
-            if isinstance(name, str):
+            terms.append(name.strip())
+        for _, names in competitors_by_geo.items():
+            for name in names:
                 terms.append(name.strip())
-        if isinstance(competitors_by_geo, dict):
-            for _, names in competitors_by_geo.items():
-                if not isinstance(names, list):
-                    continue
-                for name in names:
-                    if isinstance(name, str):
-                        terms.append(name.strip())
         # Garantiza BBVA como término base
         terms.append("BBVA")
         return list(dict.fromkeys([t for t in terms if t]))
 
-    def _build_news_rss_queries(self, cfg: dict, geo_map: dict) -> list[dict[str, str]]:
-        news_cfg = cfg.get("news") or {}
-        templates = news_cfg.get("rss_query_templates") or []
+    def _build_news_rss_queries(
+        self,
+        cfg: dict[str, object],
+        geo_map: dict[str, dict[str, str]],
+    ) -> list[dict[str, str]]:
+        news_cfg = _as_dict(cfg.get("news"))
+        templates = _get_list_str(news_cfg, "rss_query_templates")
         if not templates:
             return []
 
-        competitors_by_geo = cfg.get("competidores_por_geografia") or {}
-        global_competitors = cfg.get("global_competitors") or []
+        competitors_by_geo = _get_dict_str_list_str(cfg, "competidores_por_geografia")
+        global_competitors = _get_list_str(cfg, "global_competitors")
         keywords = self._load_keywords(cfg)
         bbva_terms = [k for k in keywords if "bbva" in k.lower()] or [
             "BBVA Empresas",
@@ -540,12 +538,11 @@ class ReputationIngestService:
             geo_params = geo_map.get(geo, {})
             if not geo_params:
                 continue
-            names = list(competitors) if isinstance(competitors, list) else []
-            if isinstance(global_competitors, list):
-                names.extend(global_competitors)
+            names = list(competitors)
+            names.extend(global_competitors)
             names.extend(bbva_terms)
             for name in names:
-                if not isinstance(name, str) or not name.strip():
+                if not name.strip():
                     continue
                 query = f"\"{name}\" \"{geo}\""
                 for template in templates:
@@ -561,12 +558,100 @@ class ReputationIngestService:
         seen: set[str] = set()
         unique: list[dict[str, str]] = []
         for source in sources:
-            url = source.get("url")
+            url = source.get("url", "")
             if not url or url in seen:
                 continue
             seen.add(url)
             unique.append(source)
         return unique
+
+
+def _as_dict(value: object | None) -> dict[str, object]:
+    if isinstance(value, dict):
+        return cast(dict[str, object], value)
+    return {}
+
+
+def _get_bool(cfg: dict[str, object], key: str, default: bool) -> bool:
+    value = cfg.get(key)
+    return value if isinstance(value, bool) else default
+
+
+def _get_str(cfg: dict[str, object], key: str, default: str) -> str:
+    value = cfg.get(key)
+    if isinstance(value, str) and value.strip():
+        return value
+    return default
+
+
+def _get_int(cfg: dict[str, object], key: str, default: int) -> int:
+    value = cfg.get(key)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return default
+    return default
+
+
+def _get_list_str(cfg: dict[str, object], key: str) -> list[str]:
+    value = cfg.get(key)
+    if isinstance(value, list):
+        items = cast(list[object], value)
+        return [v.strip() for v in items if isinstance(v, str) and v.strip()]
+    return []
+
+
+def _get_list_str_or_dict(cfg: dict[str, object], key: str) -> list[dict[str, str] | str]:
+    value = cfg.get(key)
+    if not isinstance(value, list):
+        return []
+    items = cast(list[object], value)
+    result: list[dict[str, str] | str] = []
+    for item in items:
+        if isinstance(item, str) and item.strip():
+            result.append(item.strip())
+        elif isinstance(item, dict):
+            item_dict = cast(dict[str, object], item)
+            filtered = {k: v for k, v in item_dict.items() if isinstance(v, str)}
+            if filtered:
+                result.append(filtered)
+    return result
+
+
+def _get_dict_str_list_str(cfg: dict[str, object], key: str) -> dict[str, list[str]]:
+    value = cfg.get(key)
+    if not isinstance(value, dict):
+        return {}
+    value_dict = cast(dict[str, object], value)
+    result: dict[str, list[str]] = {}
+    for k, v in value_dict.items():
+        if isinstance(v, list):
+            items = cast(list[object], v)
+            values = [item.strip() for item in items if isinstance(item, str) and item.strip()]
+        else:
+            values = []
+        if values:
+            result[k] = values
+    return result
+
+
+def _get_dict_str_dict_str(cfg: dict[str, object], key: str) -> dict[str, dict[str, str]]:
+    value = cfg.get(key)
+    if not isinstance(value, dict):
+        return {}
+    value_dict = cast(dict[str, object], value)
+    result: dict[str, dict[str, str]] = {}
+    for k, v in value_dict.items():
+        if not isinstance(v, dict):
+            continue
+        inner = cast(dict[str, object], v)
+        mapped = {ik: iv for ik, iv in inner.items() if isinstance(iv, str)}
+        if mapped:
+            result[k] = mapped
+    return result
 
 
 def _env_bool(value: str | None) -> bool:
