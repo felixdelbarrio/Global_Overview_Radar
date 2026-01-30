@@ -13,7 +13,7 @@ class ReputationItem(BaseModel):
     id: str
     source: str
     geo: str | None = None
-    competitor: str | None = None
+    actor: str | None = None
     language: str | None = None
     published_at: datetime | None = None
     collected_at: datetime | None = None

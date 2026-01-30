@@ -3,11 +3,13 @@ from __future__ import annotations
 from datetime import datetime
 from email.utils import parsedate_to_datetime
 import json
-from typing import Any, cast
-from urllib.parse import urlencode
+import re
+from typing import Any, Iterable
+from urllib.parse import parse_qs, unquote_plus, urlparse, urlencode
 from urllib.request import Request, urlopen
 import ssl
 import os
+import unicodedata
 from xml.etree import ElementTree
 
 
@@ -18,8 +20,10 @@ def http_get_text(url: str, headers: dict[str, str] | None = None, timeout: int 
     req = Request(url, headers=req_headers)
     context = _ssl_context()
     with urlopen(req, timeout=timeout, context=context) as response:
-        data = cast(bytes, response.read())
-        return data.decode("utf-8")
+        raw = response.read()
+    if isinstance(raw, bytes):
+        return raw.decode("utf-8", errors="replace")
+    return str(raw)
 
 
 def http_get_json(url: str, headers: dict[str, str] | None = None, timeout: int = 15) -> Any:
@@ -125,3 +129,97 @@ def rss_debug_enabled() -> bool:
         "y",
         "on",
     }
+
+
+_STOPWORDS = {
+    "a",
+    "al",
+    "and",
+    "con",
+    "de",
+    "del",
+    "el",
+    "en",
+    "for",
+    "in",
+    "la",
+    "las",
+    "los",
+    "o",
+    "of",
+    "on",
+    "or",
+    "para",
+    "por",
+    "the",
+    "to",
+    "un",
+    "una",
+    "with",
+    "y",
+}
+
+
+def normalize_text(text: str) -> str:
+    if not text:
+        return ""
+    lowered = text.lower()
+    normalized = unicodedata.normalize("NFKD", lowered)
+    without_accents = "".join(ch for ch in normalized if not unicodedata.combining(ch))
+    cleaned = re.sub(r"[^a-z0-9]+", " ", without_accents)
+    return " ".join(cleaned.split())
+
+
+def tokenize(text: str) -> list[str]:
+    return normalize_text(text).split()
+
+
+def match_keywords(text: str | None, keywords: Iterable[str]) -> bool:
+    if not keywords:
+        return True
+    if not text:
+        return False
+    tokens = set(tokenize(text))
+    if not tokens:
+        return False
+    for keyword in keywords:
+        if not keyword:
+            continue
+        ktokens = [t for t in tokenize(keyword) if t not in _STOPWORDS and len(t) > 1]
+        if not ktokens:
+            continue
+        if all(token in tokens for token in ktokens):
+            return True
+    return False
+
+
+def rss_source(value: dict[str, str] | str) -> tuple[str, dict[str, str]]:
+    if isinstance(value, dict):
+        url = value.get("url", "")
+        meta = {k: v for k, v in value.items() if k != "url" and v}
+    else:
+        url = value
+        meta = {}
+    try:
+        parsed = urlparse(url)
+        qs = parse_qs(parsed.query)
+        raw_query = ""
+        if "q" in qs and qs["q"]:
+            raw_query = qs["q"][0]
+        if raw_query and "query" not in meta:
+            decoded = unquote_plus(raw_query)
+            meta["query"] = decoded
+            if "entity_hint" not in meta:
+                quoted = re.findall(r'"([^"]+)"', decoded)
+                if quoted:
+                    meta["entity_hint"] = quoted[0]
+    except Exception:
+        pass
+    return url, meta
+
+
+def rss_is_query_feed(url: str) -> bool:
+    if not url:
+        return False
+    url_lc = url.lower()
+    return "news.google.com/rss/search" in url_lc or "google.com/alerts/feeds" in url_lc

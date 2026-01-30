@@ -23,38 +23,58 @@ export function EvolutionChart({ data }: { data: EvolutionPoint[] }) {
   return (
     <ResponsiveContainer width="100%" height="100%">
       <AreaChart data={data}>
-        <CartesianGrid strokeDasharray="3 3" />
+        <defs>
+          <linearGradient id="evolutionOpen" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stopColor="#004481" stopOpacity={0.28} />
+            <stop offset="100%" stopColor="#004481" stopOpacity={0.02} />
+          </linearGradient>
+          <linearGradient id="evolutionNew" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stopColor="#2dcccd" stopOpacity={0.35} />
+            <stop offset="100%" stopColor="#2dcccd" stopOpacity={0.03} />
+          </linearGradient>
+          <linearGradient id="evolutionClosed" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stopColor="#99a4b3" stopOpacity={0.25} />
+            <stop offset="100%" stopColor="#99a4b3" stopOpacity={0.02} />
+          </linearGradient>
+        </defs>
+        <CartesianGrid stroke="rgba(7,33,70,0.08)" vertical={false} />
         <XAxis
           dataKey="date"
           tickFormatter={(d: string) => d.slice(5)}
           fontSize={11}
         />
         <YAxis fontSize={11} />
-        <Tooltip />
-        <Legend />
+        <Tooltip
+          contentStyle={{
+            borderRadius: 16,
+            border: "1px solid rgba(7,33,70,0.08)",
+            boxShadow: "0 10px 30px rgba(7,33,70,0.12)",
+          }}
+        />
+        <Legend wrapperStyle={{ fontSize: 12 }} />
         <Area
           type="monotone"
           dataKey="open"
           name="Abiertas"
-          fill="#004481"
+          fill="url(#evolutionOpen)"
           stroke="#004481"
-          fillOpacity={0.15}
+          strokeWidth={2}
         />
         <Area
           type="monotone"
           dataKey="new"
           name="Nuevas"
-          fill="#2dcccd"
+          fill="url(#evolutionNew)"
           stroke="#2dcccd"
-          fillOpacity={0.2}
+          strokeWidth={2}
         />
         <Area
           type="monotone"
           dataKey="closed"
           name="Cerradas"
-          fill="#99a4b3"
+          fill="url(#evolutionClosed)"
           stroke="#99a4b3"
-          fillOpacity={0.15}
+          strokeWidth={2}
         />
       </AreaChart>
     </ResponsiveContainer>
