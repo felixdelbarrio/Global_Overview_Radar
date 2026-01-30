@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 import json
-from typing import Iterable
+from typing import Any, Iterable, cast
 from urllib.request import Request, urlopen
 
 from reputation.collectors.base import ReputationCollector
@@ -40,7 +40,7 @@ class AppStoreCollector(ReputationCollector):
 
         return items
 
-    def _fetch_page(self, page: int) -> list[dict]:
+    def _fetch_page(self, page: int) -> list[dict[str, Any]]:
         url = (
             f"https://itunes.apple.com/{self._country}/rss/"
             f"customerreviews/id={self._app_id}/page={page}/sortby=mostrecent/json"
@@ -49,15 +49,22 @@ class AppStoreCollector(ReputationCollector):
         with urlopen(req, timeout=15) as response:
             raw = response.read().decode("utf-8")
         data = json.loads(raw)
-        feed = data.get("feed", {})
-        entries = feed.get("entry", [])
-        if isinstance(entries, dict):
-            entries = [entries]
-        if not isinstance(entries, list):
+        if not isinstance(data, dict):
             return []
-        return entries
+        data_dict = cast(dict[str, object], data)
+        feed = data_dict.get("feed")
+        if not isinstance(feed, dict):
+            return []
+        feed_dict = cast(dict[str, object], feed)
+        entries_raw = feed_dict.get("entry", [])
+        if isinstance(entries_raw, dict):
+            return [cast(dict[str, Any], entries_raw)]
+        if not isinstance(entries_raw, list):
+            return []
+        items = cast(list[object], entries_raw)
+        return [cast(dict[str, Any], entry) for entry in items if isinstance(entry, dict)]
 
-    def _map_entry(self, entry: dict) -> ReputationItem | None:
+    def _map_entry(self, entry: dict[str, Any]) -> ReputationItem | None:
         rating = self._get_label(entry, "im:rating")
         if not rating:
             return None
@@ -92,10 +99,12 @@ class AppStoreCollector(ReputationCollector):
         )
 
     @staticmethod
-    def _get_label(entry: dict, key: str) -> str | None:
+    def _get_label(entry: dict[str, Any], key: str) -> str | None:
         raw = entry.get(key)
         if isinstance(raw, dict):
-            return raw.get("label")
+            raw_dict = cast(dict[str, object], raw)
+            label = raw_dict.get("label")
+            return label if isinstance(label, str) else None
         if isinstance(raw, str):
             return raw
         return None

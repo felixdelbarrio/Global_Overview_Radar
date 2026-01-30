@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Iterable
 
-import praw
+import praw  # type: ignore[import-untyped]
 
 from reputation.collectors.base import ReputationCollector
 from reputation.models import ReputationItem
