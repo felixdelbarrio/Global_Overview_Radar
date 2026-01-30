@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Mapping, cast
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from dotenv import load_dotenv
 
 # backend/reputation/config.py -> repo_root = parents[2]
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -28,7 +29,6 @@ class ReputationSettings(BaseSettings):
 
     # Rutas
     config_path: Path = Field(default=DEFAULT_CONFIG_PATH, alias="REPUTATION_CONFIG_PATH")
-    cache_enabled: bool = Field(default=False, alias="REPUTATION_CACHE_ENABLED")
     cache_path: Path = Field(default=DEFAULT_CACHE_PATH, alias="REPUTATION_CACHE_PATH")
 
     # TTL por defecto (horas) si el config.json no define output.cache_ttl_hours
@@ -41,7 +41,6 @@ class ReputationSettings(BaseSettings):
     source_forums: bool = Field(default=False, alias="REPUTATION_SOURCE_FORUMS")
     source_blogs: bool = Field(default=False, alias="REPUTATION_SOURCE_BLOGS_RSS")
     source_appstore: bool = Field(default=False, alias="REPUTATION_SOURCE_APPSTORE")
-    source_playstore: bool = Field(default=False, alias="REPUTATION_SOURCE_PLAYSTORE")
     source_trustpilot: bool = Field(default=False, alias="REPUTATION_SOURCE_TRUSTPILOT")
     source_google_reviews: bool = Field(default=False, alias="REPUTATION_SOURCE_GOOGLE_REVIEWS")
     source_youtube: bool = Field(default=False, alias="REPUTATION_SOURCE_YOUTUBE")
@@ -63,8 +62,6 @@ class ReputationSettings(BaseSettings):
             result.append("blogs")
         if self.source_appstore:
             result.append("appstore")
-        if self.source_playstore:
-            result.append("playstore")
         if self.source_trustpilot:
             result.append("trustpilot")
         if self.source_google_reviews:
@@ -78,6 +75,9 @@ class ReputationSettings(BaseSettings):
             return [source for source in result if source in allowlist]
         return result
 
+
+# Carga .env.reputation en variables de entorno para collectors que leen os.getenv
+load_dotenv(".env.reputation", override=False)
 
 # Singleton de settings
 settings = ReputationSettings()

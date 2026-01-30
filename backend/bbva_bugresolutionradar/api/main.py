@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from bbva_bugresolutionradar.api.routers.evolution import router as evolution_router
 from bbva_bugresolutionradar.api.routers.incidents import router as incidents_router
 from bbva_bugresolutionradar.api.routers.kpis import router as kpis_router
+from bbva_bugresolutionradar.api.routers.reputation import router as reputation_router
 from bbva_bugresolutionradar.config import settings
 from bbva_bugresolutionradar.repositories import CacheRepo
 from bbva_bugresolutionradar.services import ReportingService
@@ -43,6 +44,7 @@ def create_app() -> FastAPI:
     app.include_router(kpis_router, prefix="/kpis", tags=["kpis"])
     app.include_router(incidents_router, prefix="/incidents", tags=["incidents"])
     app.include_router(evolution_router, prefix="/evolution", tags=["evolution"])
+    app.include_router(reputation_router, prefix="/reputation", tags=["reputation"])
 
     @app.get("/health", include_in_schema=False, status_code=200)
     def health() -> dict[str, str]:  # pyright: ignore[reportUnusedFunction]
