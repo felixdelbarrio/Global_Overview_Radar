@@ -16,6 +16,7 @@ class ReputationItem(BaseModel):
     competitor: str | None = None
     language: str | None = None
     published_at: datetime | None = None
+    collected_at: datetime | None = None
 
     author: str | None = None
     url: str | None = None
