@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Iterable
+from typing import Any, Iterable
 
 from reputation.collectors.base import ReputationCollector
 from reputation.collectors.utils import (
@@ -119,13 +119,13 @@ class NewsCollector(ReputationCollector):
 
         return collected
 
-    def _is_relevant(self, entry: dict) -> bool:
+    def _is_relevant(self, entry: dict[str, Any]) -> bool:
         if not self._queries:
             return True
         text = f"{entry.get('title', '')} {entry.get('summary', '')}".lower()
         return any(q.strip('"').lower() in text for q in self._queries if q)
 
-    def _map_entry(self, entry: dict, rss_url: str, geo: str | None) -> ReputationItem:
+    def _map_entry(self, entry: dict[str, Any], rss_url: str, geo: str | None) -> ReputationItem:
         return ReputationItem(
             id=entry.get("link") or entry.get("title", ""),
             source=self.source_name,
