@@ -14,6 +14,7 @@ import {
   ShieldAlert,
   Database,
   Activity,
+  HeartPulse,
 } from "lucide-react";
 
 export function Shell({ children }: { children: React.ReactNode }) {
@@ -25,6 +26,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
     { href: "/", label: "Dashboard", icon: LayoutDashboard },
     { href: "/incidencias", label: "Incidencias", icon: ListChecks },
     { href: "/ops", label: "Ops Executive", icon: ShieldAlert },
+    { href: "/sentimiento", label: "Sentimiento", icon: HeartPulse },
   ];
 
   return (
@@ -146,7 +148,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
                           ? "KPIs y tendencias"
                           : item.href === "/incidencias"
                           ? "Listado y filtros"
-                          : "Vista operativa"}
+                          : item.href === "/ops"
+                          ? "Vista operativa"
+                          : "Histórico y análisis"}
                       </div>
                     </div>
 

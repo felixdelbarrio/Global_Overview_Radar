@@ -33,3 +33,31 @@ export type EvolutionPoint = {
   /** Incidencias cerradas en la fecha. */
   closed: number;
 };
+
+export type ReputationItem = {
+  id: string;
+  source: string;
+  geo?: string | null;
+  competitor?: string | null;
+  language?: string | null;
+  published_at?: string | null;
+  collected_at?: string | null;
+  author?: string | null;
+  url?: string | null;
+  title?: string | null;
+  text?: string | null;
+  signals?: Record<string, unknown>;
+  sentiment?: "positive" | "neutral" | "negative" | null;
+  aspects?: string[];
+};
+
+export type ReputationCacheDocument = {
+  generated_at: string;
+  config_hash: string;
+  sources_enabled: string[];
+  items: ReputationItem[];
+  stats: {
+    count: number;
+    note?: string | null;
+  };
+};
