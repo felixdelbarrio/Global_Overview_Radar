@@ -1,0 +1,240 @@
+{
+  "geografias": ["España", "México", "Perú", "Colombia", "Argentina", "Turquía"],
+  "geografias_aliases": {
+    "España": ["Espana", "España", "Spain", "ES"],
+    "México": ["Mexico", "México", "MX", "CDMX", "Ciudad de Mexico", "Ciudad de México"],
+    "Perú": ["Peru", "Perú", "PE", "Lima"],
+    "Colombia": ["Colombia", "CO", "Bogota", "Bogotá", "Medellin", "Medellín"],
+    "Argentina": ["Argentina", "AR", "Buenos Aires"],
+    "Turquía": ["Turquia", "Turquía", "Turkey", "TR", "Istanbul", "İstanbul"]
+  },
+
+  "global_competitors": [
+    "Revolut",
+    "Wise",
+    "Qonto"
+  ],
+
+  "competidores_por_geografia": {
+    "España": [
+      "BBVA Empresas",
+      "Santander",
+      "Caixabank",
+      "Sabadell",
+      "Bankinter"
+    ],
+    "México": [
+      "BBVA Empresas",
+      "Santander",
+      "Banorte",
+      "Citibamex",
+      "Scotiabank",
+      "Hey"
+    ],
+    "Perú": [
+      "BCP",
+      "Interbank",
+      "Scotiabank"
+    ],
+    "Colombia": [
+      "Bancolombia",
+      "Banco de Bogota",
+      "Davivienda"
+    ],
+    "Argentina": [
+      "Santander",
+      "Banco de Galicia"
+    ],
+    "Turquía": [
+      "TÜRKIYE CANKASI",
+      "AKBANK",
+      "ING"
+    ]
+  },
+
+  "periodo": "últimos 12 meses",
+
+  "idiomas": ["es", "en"],
+
+  "keywords": [
+    "BBVA Empresas",
+    "BBVA Business",
+    "BBVA Empresas app",
+    "BBVA Empresas web",
+    "BBVA banca empresas",
+    "BBVA Business app",
+    "BBVA Business web",
+    "BBVA Empresas Online",
+    "BBVA Net Cash"
+  ],
+
+  "plataformas_prioritarias": ["Reddit", "App Store", "News", "YouTube"],
+
+  "muestra_max": 500,
+  "umbral_suficiencia": 30,
+  "max_muestras_anonimas_por_geo": 10,
+
+  "quality": {
+    "duplicate_threshold": 0.85
+  },
+
+  "output": {
+    "format": "json",
+    "path": "./output",
+    "cache_enabled": true,
+    "cache_ttl_hours": 24
+  },
+
+  "reddit": {
+    "enabled": true,
+    "client_id_env": "REDDIT_CLIENT_ID",
+    "client_secret_env": "REDDIT_CLIENT_SECRET",
+    "user_agent_env": "REDDIT_USER_AGENT",
+
+    "subreddits": [
+      "spain",
+      "mexico",
+      "fintech",
+      "banking",
+      "personalfinance",
+      "europe"
+    ],
+
+    "query_templates": [
+      "\"{competidor}\" (empresa OR empresas OR business OR corporate) (app OR web)",
+      "\"{competidor}\" (empresas OR business) (login OR error OR bug OR comisión OR soporte)",
+      "\"{competidor}\" banca empresas app"
+    ],
+
+    "limit_per_query": 150
+  },
+
+  "twitter": {
+    "enabled": false,
+    "api_key_env": "TWITTER_API_KEY",
+    "api_secret_env": "TWITTER_API_SECRET",
+    "bearer_token_env": "TWITTER_BEARER_TOKEN",
+    "max_results_env": "TWITTER_MAX_RESULTS"
+  },
+
+  "linkedin": {
+    "enabled": false,
+    "email_env": "LINKEDIN_EMAIL",
+    "password_env": "LINKEDIN_PASSWORD",
+    "company_search_env": "LINKEDIN_COMPANY_SEARCH",
+    "max_posts_env": "LINKEDIN_MAX_POSTS"
+  },
+
+  "news": {
+    "enabled": true,
+    "api_key_env": "NEWS_API_KEY",
+    "lang_env": "NEWS_LANG",
+    "max_articles_env": "NEWS_MAX_ARTICLES",
+    "sources_env": "NEWS_SOURCES",
+    "endpoint_env": "NEWS_API_ENDPOINT",
+    "rss_only_env": "NEWS_RSS_ONLY",
+    "rss_query_enabled": true,
+    "rss_query_templates": [
+      "https://news.google.com/rss/search?q={query}&hl={hl}&gl={gl}&ceid={ceid}"
+    ],
+    "rss_geo_map": {
+      "España": { "hl": "es", "gl": "ES", "ceid": "ES:es" },
+      "México": { "hl": "es-419", "gl": "MX", "ceid": "MX:es-419" },
+      "Colombia": { "hl": "es-419", "gl": "CO", "ceid": "CO:es-419" },
+      "Perú": { "hl": "es-419", "gl": "PE", "ceid": "PE:es-419" },
+      "Argentina": { "hl": "es-419", "gl": "AR", "ceid": "AR:es-419" },
+      "Turquía": { "hl": "tr", "gl": "TR", "ceid": "TR:tr" }
+    },
+    "rss_urls": [
+      "https://feeds.elpais.com/mrss-s/pages/ep/site/cincodias.elpais.com/section/ultimas-noticias/portada",
+      "https://feeds.elpais.com/mrss-s/list/ep/site/cincodias.elpais.com/section/economia",
+      "https://feeds.elpais.com/mrss-s/list/ep/site/cincodias.elpais.com/section/companias",
+      "https://www.eleconomista.com.mx/rss/ultimas-noticias",
+      "https://gestion.pe/arc/outboundfeeds/rss/category/economia/?outputType=xml",
+      "http://portafolio.co/rss/economia.xml",
+      "http://portafolio.co/rss/negocios.xml",
+      "http://portafolio.co/rss/negocios/empresas.xml",
+      "http://portafolio.co/rss/economia/finanzas.xml",
+      "http://portafolio.co/rss/economia/empleo.xml",
+      "http://portafolio.co/rss/economia/impuestos.xml",
+      "https://eleconomista.com.ar/economia/feed/",
+      "https://eleconomista.com.ar/negocios/feed/",
+      "https://www.anews.com.tr/rss/economy.xml"
+    ]
+  },
+
+  "forums": {
+    "enabled": true,
+    "scraping_env": "FORUMS_SCRAPING",
+    "max_threads_env": "FORUMS_MAX_THREADS",
+    "timeout_seconds_env": "FORUMS_TIMEOUT_SECONDS",
+    "rss_urls": [
+      "https://news.google.com/rss/search?q=BBVA+Empresas+foro",
+      "https://news.google.com/rss/search?q=BBVA+Business+forum",
+      "https://news.google.com/rss/search?q=banca+empresas+foro"
+    ]
+  },
+
+  "blogs": {
+    "enabled": true,
+    "rss_only_env": "BLOGS_RSS_ONLY",
+    "max_items_env": "BLOGS_MAX_ITEMS",
+    "rss_urls": [
+      "https://news.google.com/rss/search?q=BBVA+Empresas+blog",
+      "https://news.google.com/rss/search?q=BBVA+Business+blog",
+      "https://news.google.com/rss/search?q=banca+empresas+blog"
+    ]
+  },
+
+  "appstore": {
+    "enabled": false,
+    "country_env": "APPSTORE_COUNTRY",
+    "app_id_env": "APPSTORE_APP_ID",
+    "max_reviews_env": "APPSTORE_MAX_REVIEWS"
+  },
+  "trustpilot": {
+    "enabled": true,
+    "scraping_env": "TRUSTPILOT_SCRAPING",
+    "max_items_env": "TRUSTPILOT_MAX_ITEMS",
+    "rss_urls": [
+      "https://news.google.com/rss/search?q=Trustpilot+BBVA+Empresas",
+      "https://news.google.com/rss/search?q=Trustpilot+BBVA+Business"
+    ]
+  },
+  "google_reviews": {
+    "enabled": false,
+    "api_key_env": "GOOGLE_PLACES_API_KEY",
+    "place_id_env": "GOOGLE_PLACE_ID",
+    "max_reviews_env": "GOOGLE_MAX_REVIEWS"
+  },
+  "youtube": {
+    "enabled": false,
+    "api_key_env": "YOUTUBE_API_KEY",
+    "max_results_env": "YOUTUBE_MAX_RESULTS"
+  },
+  "downdetector": {
+    "enabled": true,
+    "scraping_env": "DOWNDETECTOR_SCRAPING",
+    "max_items_env": "DOWNDETECTOR_MAX_ITEMS",
+    "rss_urls": [
+      "https://news.google.com/rss/search?q=Downdetector+BBVA+Empresas",
+      "https://news.google.com/rss/search?q=Downdetector+BBVA+Business"
+    ]
+  },
+
+  "models": {
+    "sentiment_mode_env": "SENTIMENT_MODEL",
+    "aspect_mode_env": "ASPECT_MODEL"
+  },
+
+  "llm": {
+    "enabled_env": "LLM_ENABLED",
+    "openai_api_key_env": "OPENAI_API_KEY"
+  },
+
+  "limits": {
+    "max_total_samples_env": "MAX_TOTAL_SAMPLES",
+    "min_samples_per_competitor_env": "MIN_SAMPLES_PER_COMPETITOR",
+    "max_anon_samples_per_geo_env": "MAX_ANON_SAMPLES_PER_GEO"
+  }
+}

@@ -5,7 +5,7 @@ SHELL := /bin/bash
 # --- Configuración general ---
 VENV := .venv
 PY := $(VENV)/bin/python
-PIP := $(VENV)/bin/pip
+PIP := $(PY) -m pip
 
 FRONTDIR := frontend/brr-frontend
 NPM := npm
@@ -17,7 +17,7 @@ FRONT_PORT ?= 3000
 
 .DEFAULT_GOAL := help
 
-.PHONY: help venv install install-backend install-front env ingest serve serve-back dev-back dev-front build-front start-front lint lint-back lint-front typecheck typecheck-back typecheck-front format format-back format-front check test test-back test-front test-coverage test-coverage-back test-coverage-front clean
+.PHONY: help venv install install-backend install-front env ensure-backend ensure-front ingest bugs-ingest reputation-ingest serve serve-back dev-back dev-front build-front start-front lint lint-back lint-front typecheck typecheck-back typecheck-front format format-back format-front check test test-back test-front test-coverage test-coverage-back test-coverage-front clean reset
 
 help:
 	@echo "Make targets disponibles:"
@@ -26,7 +26,12 @@ help:
 	@echo "  make install-backend - Instalar dependencias Python y paquete editable"
 	@echo "  make install-front   - Instalar dependencias Node (frontend)"
 	@echo "  make env             - Crear .env desde .env.example si falta"
-	@echo "  make ingest          - Ejecutar ingestion/consolidación (backend)"
+	@echo "  make ensure-backend  - Preparar entorno backend (venv + deps)"
+	@echo "  make ensure-front    - Preparar entorno frontend (deps)"
+	@echo "  make reset           - Limpieza total + instalación completa"
+	@echo "  make ingest          - Ejecutar ingesta completa (bugs + reputación)"
+	@echo "  make bugs-ingest     - Ejecutar ingestion/consolidación (backend)"
+	@echo "  make reputation-ingest - Ejecutar ingesta de reputación (backend)"
 	@echo "  make serve-back      - Iniciar API (uvicorn) en $(HOST):$(API_PORT)"
 	@echo "  make dev-back        - Atender solo backend (uvicorn --reload)"
 	@echo "  make dev-front       - Atender solo frontend (next dev en $(FRONT_PORT))"
@@ -53,56 +58,73 @@ help:
 # -------------------------
 venv:
 	@echo "==> Creando virtualenv en $(VENV) (si no existe)..."
-	@test -d $(VENV) || python3 -m venv $(VENV)
+	@if [ ! -x $(VENV)/bin/python ] || [ ! -x $(VENV)/bin/pip ]; then \
+		rm -rf $(VENV); \
+		python3 -m venv $(VENV); \
+	fi
 	$(PIP) install --upgrade pip setuptools wheel
 
 install: install-backend install-front
 	@echo "==> Instalación completa (backend + frontend)."
 
-install-backend: venv
+install-backend: venv env
 	@echo "==> Instalando dependencias Python (requirements / pyproject editable)..."
 	$(PIP) install -r requirements.txt || true
 	$(PIP) install -e .
 
-install-front:
+install-front: env
 	@echo "==> Instalando dependencias frontend (cd $(FRONTDIR))..."
 	cd $(FRONTDIR) && $(NPM) install
 	@echo "==> Instalación frontend completada."
 
 env:
 	@test -f .env || cp .env.example .env
+	@test -f .env.reputation || cp .env.reputation.example .env.reputation
 	@echo "==> .env preparado (no olvides editarlo si procede)."
+
+ensure-backend: install-backend
+	@true
+
+ensure-front: install-front
+	@true
 
 # -------------------------
 # Backend runtime
 # -------------------------
-ingest: env
+ingest: bugs-ingest reputation-ingest
+	@echo "==> Ingesta completa finalizada."
+
+bugs-ingest: venv env
 	@echo "==> Ejecutando ingestion/consolidación (backend)..."
 	$(PY) -m bbva_bugresolutionradar.cli.main ingest
+
+reputation-ingest: venv env
+	@echo "==> Ejecutando ingesta de reputación..."
+	$(PY) -m bbva_bugresolutionradar.cli.main reputation-ingest
 
 serve: env serve-back
 	@true
 
-serve-back: env
+serve-back: ensure-backend
 	@echo "==> Iniciando API (uvicorn) en http://$(HOST):$(API_PORT)..."
 	$(PY) -m uvicorn bbva_bugresolutionradar.api.main:app --reload --host $(HOST) --port $(API_PORT)
 
-dev-back: env
+dev-back: ensure-backend
 	@echo "==> Desarrollo backend (uvicorn --reload). Usa otra terminal para frontend."
 	$(PY) -m uvicorn bbva_bugresolutionradar.api.main:app --reload --host $(HOST) --port $(API_PORT)
 
 # -------------------------
 # Frontend runtime
 # -------------------------
-dev-front:
+dev-front: ensure-front
 	@echo "==> Iniciando frontend (Next dev) en http://localhost:$(FRONT_PORT)..."
 	cd $(FRONTDIR) && $(NPM) run dev
 
-build-front:
+build-front: ensure-front
 	@echo "==> Build de frontend (production)..."
 	cd $(FRONTDIR) && $(NPM) run build
 
-start-front:
+start-front: ensure-front
 	@echo "==> Iniciando frontend en modo producción (next start)..."
 	cd $(FRONTDIR) && $(NPM) run start
 
@@ -111,7 +133,7 @@ start-front:
 # -------------------------
 format: format-back format-front
 
-format-back:
+format-back: ensure-backend
 	@echo "==> Format backend (ruff format)..."
 	$(PY) -m ruff format .
 
@@ -121,7 +143,7 @@ format-front:
 
 lint: lint-back lint-front
 
-lint-back:
+lint-back: ensure-backend
 	@echo "==> Lint backend (ruff check)..."
 	$(PY) -m ruff check .
 
@@ -131,7 +153,7 @@ lint-front:
 
 typecheck: typecheck-back typecheck-front
 
-typecheck-back:
+typecheck-back: ensure-backend
 	@echo "==> Typecheck backend (mypy + pyright)..."
 	$(PY) -m mypy .
 	$(PY) -m pyright
@@ -151,7 +173,7 @@ test:
 	@$(MAKE) test-back
 	@$(MAKE) test-front
 
-test-back:
+test-back: ensure-backend
 	@echo "==> Tests backend (pytest + cobertura)..."
 	$(PY) -m pytest
 
@@ -162,7 +184,7 @@ test-front:
 
 test-coverage: test-coverage-back test-coverage-front
 
-test-coverage-back:
+test-coverage-back: ensure-backend
 	@echo "==> Cobertura backend (pytest-cov >=70%)..."
 	$(PY) -m pytest
 
@@ -182,6 +204,12 @@ clean:
 	# frontend
 	cd $(FRONTDIR) && rm -rf node_modules .next dist out || true
 	@echo "==> Limpieza completada."
+
+# -------------------------
+# Reset (clean + install)
+# -------------------------
+reset: clean install
+	@echo "==> Reset completo finalizado."
 
 # -------------------------
 # Utilidades / helpers
