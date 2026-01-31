@@ -37,7 +37,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
           className="h-16 px-6 flex items-center gap-4 text-white shadow-[0_10px_30px_rgba(7,33,70,0.18)]"
           style={{
             background:
-              "linear-gradient(90deg, var(--bbva-navy), var(--bbva-blue) 55%, rgba(45,204,205,0.55))",
+              "linear-gradient(90deg, var(--navy), var(--blue) 55%, rgba(45,204,205,0.55))",
           }}
         >
           {/* Logo */}
@@ -76,7 +76,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
           }}
         >
           <div className="p-4">
-            <div className="text-xs font-semibold tracking-wide text-[color:var(--bbva-blue)]">
+            <div className="text-xs font-semibold tracking-wide text-[color:var(--blue)]">
               NAVEGACIÓN
             </div>
 
@@ -93,7 +93,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
                       "group flex items-center gap-3 px-3 py-2 transition " +
                       (active
                         ? "text-white"
-                        : "text-[color:var(--bbva-navy)] hover:bg-black/5")
+                        : "text-[color:var(--navy)] hover:bg-black/5")
                     }
                     style={
                       active
@@ -122,7 +122,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
                         className={
                           active
                             ? "h-5 w-5 text-white"
-                            : "h-5 w-5 text-[color:var(--bbva-blue)]"
+                            : "h-5 w-5 text-[color:var(--blue)]"
                         }
                       />
                     </div>
@@ -158,7 +158,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
                       className={
                         "h-2 w-2 rounded-full transition " +
                         (active
-                          ? "bg-[color:var(--bbva-aqua)]"
+                          ? "bg-[color:var(--aqua)]"
                           : "bg-transparent group-hover:bg-black/20")
                       }
                     />
