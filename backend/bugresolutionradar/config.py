@@ -6,9 +6,29 @@ Lee variables de entorno y expone parametros usados por ingest, reporting y API.
 from __future__ import annotations
 
 from typing import List
+from pathlib import Path
+import os
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Repo / env paths
+REPO_ROOT = Path(__file__).resolve().parents[2]
+BUG_ENV_PATH = REPO_ROOT / "backend" / "bugresolutionradar" / ".env"
+BUG_ENV_EXAMPLE = REPO_ROOT / "backend" / "bugresolutionradar" / ".env.example"
+
+
+def _ensure_env_file() -> None:
+    """Crear `backend/bugresolutionradar/.env` desde su `.env.example` si falta."""
+    if BUG_ENV_PATH.exists():
+        return
+    if not BUG_ENV_EXAMPLE.exists():
+        return
+    BUG_ENV_PATH.write_text(BUG_ENV_EXAMPLE.read_text(encoding="utf-8"), encoding="utf-8")
+
+
+# Ensure backend env exists before pydantic reads it
+_ensure_env_file()
 
 
 class Settings(BaseSettings):
@@ -19,7 +39,7 @@ class Settings(BaseSettings):
     """
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=str(BUG_ENV_PATH),
         env_file_encoding="utf-8",
         extra="forbid",
     )
@@ -36,7 +56,7 @@ class Settings(BaseSettings):
     # Paths
     ########################################
     assets_dir: str = Field(default="./data/assets", validation_alias="ASSETS_DIR")
-    cache_path: str = Field(default="./data/cache/cache.json", validation_alias="CACHE_PATH")
+    cache_path: str = Field(default="./data/cache/bugresolutionradar_cache.json", validation_alias="CACHE_PATH")
 
     ########################################
     # Ingest sources
