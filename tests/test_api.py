@@ -8,7 +8,11 @@ from fastapi.testclient import TestClient
 
 from bugresolutionradar.api.main import create_app
 from bugresolutionradar.domain.enums import Severity, Status
-from bugresolutionradar.domain.models import CacheDocument, IncidentCurrent, IncidentRecord
+from bugresolutionradar.domain.models import (
+    CacheDocument,
+    IncidentCurrent,
+    IncidentRecord,
+)
 
 
 class DummyRepo:
@@ -46,7 +50,9 @@ def _build_app_with_data() -> TestClient:
     doc = CacheDocument(
         generated_at=datetime.now(timezone.utc),
         incidents={
-            "src:1": _record("src:1", Status.OPEN, Severity.HIGH, today - timedelta(days=1)),
+            "src:1": _record(
+                "src:1", Status.OPEN, Severity.HIGH, today - timedelta(days=1)
+            ),
             "src:2": _record(
                 "src:2",
                 Status.CLOSED,

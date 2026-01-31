@@ -5,9 +5,8 @@ Lee variables de entorno y expone parametros usados por ingest, reporting y API.
 
 from __future__ import annotations
 
-from typing import List
 from pathlib import Path
-import os
+from typing import List
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -41,22 +40,22 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=str(BUG_ENV_PATH),
         env_file_encoding="utf-8",
-        extra="forbid",
+        extra="allow",
     )
 
     ########################################
     # App
     ########################################
-    app_name: str = Field(
-        default="Empresas – Global Overview Radar", validation_alias="APP_NAME"
-    )
+    app_name: str = Field(default="Empresas - Global Overview Radar", validation_alias="APP_NAME")
     tz: str = Field(default="Europe/Madrid", validation_alias="TZ")
 
     ########################################
     # Paths
     ########################################
     assets_dir: str = Field(default="./data/assets", validation_alias="ASSETS_DIR")
-    cache_path: str = Field(default="./data/cache/bugresolutionradar_cache.json", validation_alias="CACHE_PATH")
+    cache_path: str = Field(
+        default="./data/cache/bugresolutionradar_cache.json", validation_alias="CACHE_PATH"
+    )
 
     ########################################
     # Ingest sources

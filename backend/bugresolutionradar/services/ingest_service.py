@@ -21,14 +21,26 @@ class IngestService:
     def build_adapters(self) -> list[Adapter]:
         """Construye la lista de adaptadores segun Settings.sources."""
         adapters: list[Adapter] = []
-        enabled = set(self._settings.enabled_sources())
+        # Use `model_dump()` to prefer explicit constructor overrides from pydantic-settings
+        cfg = {}
+        try:
+            cfg = self._settings.model_dump()
+        except Exception:
+            cfg = {}
+
+        sources_val = cfg.get("sources", getattr(self._settings, "sources", ""))
+        assets_dir_val = cfg.get(
+            "assets_dir", getattr(self._settings, "assets_dir", "./data/assets")
+        )
+
+        enabled = set([s.strip() for s in sources_val.split(",") if s.strip()])
 
         if "filesystem_json" in enabled:
-            adapters.append(FilesystemJSONAdapter("filesystem_json", self._settings.assets_dir))
+            adapters.append(FilesystemJSONAdapter("filesystem_json", assets_dir_val))
         if "filesystem_csv" in enabled:
-            adapters.append(FilesystemCSVAdapter("filesystem_csv", self._settings.assets_dir))
+            adapters.append(FilesystemCSVAdapter("filesystem_csv", assets_dir_val))
         if "filesystem_xlsx" in enabled:
-            adapters.append(XlsxAdapter("filesystem_xlsx", self._settings.assets_dir))
+            adapters.append(XlsxAdapter("filesystem_xlsx", assets_dir_val))
 
         return adapters
 

@@ -1,17 +1,16 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import html
 import json
 import os
 import re
+from dataclasses import dataclass
 from typing import Any, Iterable
 
 import httpx
 
 from reputation.collectors.utils import match_keywords, normalize_text
 from reputation.models import ReputationItem
-
 
 _ES_POSITIVE = {
     "bueno",
@@ -360,7 +359,7 @@ _POS_IMPROVEMENT_PHRASES = _norm_list(
 _GEN_POSITIVE_TOKENS = _tokenize_keywords(_ES_POSITIVE | _EN_POSITIVE)
 _GEN_NEGATIVE_TOKENS = _tokenize_keywords(_ES_NEGATIVE | _EN_NEGATIVE)
 
-_LLM_SYSTEM_PROMPT = """Eres un analista de sentimiento enfocado en la percepción del cliente/usuario final para \"BBVA Empresas – Global Overview Radar\".
+_LLM_SYSTEM_PROMPT = """Eres un analista de sentimiento enfocado en la percepción del cliente/usuario final para \"BBVA Empresas - Global Overview Radar\".
 Recibirás UN JSON de un item individual. Debes inferir el sentimiento que ese contenido provocaría en un cliente (no en inversores ni en la empresa).
 Devuelve SOLO un JSON con {\"sentiment\": ..., \"score\": ...}.
 
@@ -834,10 +833,7 @@ class ReputationSentimentService:
 def _contains_any(normalized: str, phrases: Iterable[str]) -> bool:
     if not normalized:
         return False
-    for phrase in phrases:
-        if phrase and phrase in normalized:
-            return True
-    return False
+    return any(phrase and phrase in normalized for phrase in phrases)
 
 
 def _has_trigger(normalized: str, tokens: set[str]) -> bool:

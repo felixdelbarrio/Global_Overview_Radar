@@ -1,21 +1,13 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone, timedelta
 import os
 import re
+from datetime import datetime, timedelta, timezone
 from typing import Any, Iterable, cast
 from urllib.parse import quote_plus, urlparse
 
-from reputation.config import (
-    compute_config_hash,
-    effective_ttl_hours,
-    load_business_config,
-    settings,
-)
-from reputation.models import ReputationCacheDocument, ReputationCacheStats, ReputationItem
-from reputation.repositories.cache_repo import ReputationCacheRepo
-from reputation.collectors.base import ReputationCollector
 from reputation.collectors.appstore import AppStoreCollector
+from reputation.collectors.base import ReputationCollector
 from reputation.collectors.blogs import BlogsCollector
 from reputation.collectors.downdetector import DowndetectorCollector
 from reputation.collectors.forums import ForumsCollector
@@ -24,8 +16,16 @@ from reputation.collectors.news import NewsCollector
 from reputation.collectors.reddit import RedditCollector
 from reputation.collectors.trustpilot import TrustpilotCollector
 from reputation.collectors.twitter import TwitterCollector
-from reputation.collectors.youtube import YouTubeCollector
 from reputation.collectors.utils import normalize_text
+from reputation.collectors.youtube import YouTubeCollector
+from reputation.config import (
+    compute_config_hash,
+    effective_ttl_hours,
+    load_business_config,
+    settings,
+)
+from reputation.models import ReputationCacheDocument, ReputationCacheStats, ReputationItem
+from reputation.repositories.cache_repo import ReputationCacheRepo
 from reputation.services.sentiment_service import ReputationSentimentService
 
 
@@ -502,7 +502,9 @@ class ReputationIngestService:
                 notes.append("reddit: disabled in config.json")
             else:
                 client_id_env = _get_str(reddit_cfg, "client_id_env", "REDDIT_CLIENT_ID")
-                client_secret_env = _get_str(reddit_cfg, "client_secret_env", "REDDIT_CLIENT_SECRET")
+                client_secret_env = _get_str(
+                    reddit_cfg, "client_secret_env", "REDDIT_CLIENT_SECRET"
+                )
                 user_agent_env = _get_str(reddit_cfg, "user_agent_env", "REDDIT_USER_AGENT")
 
                 client_id = os.getenv(client_id_env, "").strip()
@@ -709,9 +711,7 @@ class ReputationIngestService:
                             "trustpilot", cfg, news_geo_map, segment_terms, segment_mode
                         )
                     )
-                rss_sources = self._limit_rss_sources(
-                    rss_sources, "TRUSTPILOT_MAX_RSS_URLS", notes
-                )
+                rss_sources = self._limit_rss_sources(rss_sources, "TRUSTPILOT_MAX_RSS_URLS", notes)
 
                 if not rss_sources:
                     notes.append("trustpilot: missing rss_urls in config.json")
@@ -1468,12 +1468,18 @@ class ReputationIngestService:
         for source in ordered:
             geo_value = source.get("geo", "")
             entity_value = source.get("entity", "")
-            if rss_query_max_per_geo > 0 and geo_value:
-                if geo_counts.get(geo_value, 0) >= rss_query_max_per_geo:
-                    continue
-            if rss_query_max_per_entity > 0 and entity_value:
-                if entity_counts.get(entity_value, 0) >= rss_query_max_per_entity:
-                    continue
+            if (
+                rss_query_max_per_geo > 0
+                and geo_value
+                and geo_counts.get(geo_value, 0) >= rss_query_max_per_geo
+            ):
+                continue
+            if (
+                rss_query_max_per_entity > 0
+                and entity_value
+                and entity_counts.get(entity_value, 0) >= rss_query_max_per_entity
+            ):
+                continue
             limited.append(source)
             if geo_value:
                 geo_counts[geo_value] = geo_counts.get(geo_value, 0) + 1

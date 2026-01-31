@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, timezone, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Iterable
 
 from fastapi import APIRouter, Query
-
 from reputation.config import settings as reputation_settings
 from reputation.models import ReputationCacheDocument, ReputationCacheStats, ReputationItem
 from reputation.repositories.cache_repo import ReputationCacheRepo
