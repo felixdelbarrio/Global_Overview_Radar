@@ -3,12 +3,12 @@
 @import "tailwindcss";
 
 :root {
-  --bbva-navy: #072146;
-  --bbva-blue: #004481;
-  --bbva-aqua: #2dcccd;
-  --bbva-ink: #06172c;
-  --bbva-mist: #e8f3f6;
-  --bbva-glow: rgba(45, 204, 205, 0.25);
+  --navy: #072146;
+  --blue: #004481;
+  --aqua: #2dcccd;
+  --ink: #06172c;
+  --mist: #e8f3f6;
+  --glow: rgba(45, 204, 205, 0.25);
 
   --bg: #f5f7fa;
   --panel: rgba(255, 255, 255, 0.78);
@@ -34,7 +34,7 @@ body {
     radial-gradient(rgba(7, 33, 70, 0.06) 1px, transparent 1px),
     linear-gradient(180deg, var(--bg), #ffffff 60%);
   background-size: auto, auto, auto, 28px 28px, auto;
-  color: var(--bbva-ink);
+  color: var(--ink);
 }
 
 .font-display {

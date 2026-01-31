@@ -206,15 +206,15 @@ export default function SentimientoPage() {
     <Shell>
       <section className="relative overflow-hidden rounded-[28px] border border-white/60 bg-[color:var(--panel-strong)] p-6 shadow-[0_30px_70px_rgba(7,33,70,0.12)] animate-rise">
         <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute -top-24 -right-10 h-48 w-48 rounded-full bg-[color:var(--bbva-aqua)]/15 blur-3xl" />
-          <div className="absolute -bottom-16 left-10 h-40 w-40 rounded-full bg-[color:var(--bbva-blue)]/10 blur-3xl" />
+          <div className="absolute -top-24 -right-10 h-48 w-48 rounded-full bg-[color:var(--aqua)]/15 blur-3xl" />
+          <div className="absolute -bottom-16 left-10 h-40 w-40 rounded-full bg-[color:var(--blue)]/10 blur-3xl" />
         </div>
         <div className="relative">
-          <div className="inline-flex items-center gap-2 rounded-full border border-white/60 bg-white/70 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-[color:var(--bbva-blue)] shadow-sm">
+          <div className="inline-flex items-center gap-2 rounded-full border border-white/60 bg-white/70 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-[color:var(--blue)] shadow-sm">
             <Sparkles className="h-3.5 w-3.5" />
             Panorama reputacional
           </div>
-          <h1 className="mt-4 text-3xl sm:text-4xl font-display font-semibold text-[color:var(--bbva-ink)]">
+          <h1 className="mt-4 text-3xl sm:text-4xl font-display font-semibold text-[color:var(--ink)]">
             Sentimiento histórico
           </h1>
           <p className="mt-2 max-w-2xl text-sm text-black/60">
@@ -223,15 +223,15 @@ export default function SentimientoPage() {
           </p>
           <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-black/55">
             <span className="inline-flex items-center gap-2 rounded-full bg-white/70 px-3 py-1">
-              <Calendar className="h-3.5 w-3.5 text-[color:var(--bbva-blue)]" />
+              <Calendar className="h-3.5 w-3.5 text-[color:var(--blue)]" />
               Rango: {rangeLabel}
             </span>
             <span className="inline-flex items-center gap-2 rounded-full bg-white/70 px-3 py-1">
-              <MessageSquare className="h-3.5 w-3.5 text-[color:var(--bbva-blue)]" />
+              <MessageSquare className="h-3.5 w-3.5 text-[color:var(--blue)]" />
               Menciones: {items.length}
             </span>
             <span className="inline-flex items-center gap-2 rounded-full bg-white/70 px-3 py-1">
-              <Clock className="h-3.5 w-3.5 text-[color:var(--bbva-blue)]" />
+              <Clock className="h-3.5 w-3.5 text-[color:var(--blue)]" />
               Última actualización: {latestLabel}
             </span>
           </div>
@@ -249,7 +249,7 @@ export default function SentimientoPage() {
           className="rounded-[26px] border border-white/60 bg-[color:var(--panel)] p-5 shadow-[0_20px_50px_rgba(7,33,70,0.08)] backdrop-blur-xl animate-rise"
           style={{ animationDelay: "120ms" }}
         >
-          <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--bbva-blue)]">
+          <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
             FILTROS PRINCIPALES
           </div>
           <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -261,7 +261,7 @@ export default function SentimientoPage() {
                   touchFilters();
                   setFromDate(e.target.value);
                 }}
-                className="w-full rounded-2xl border border-white/60 bg-white/80 px-3 py-2 text-sm text-[color:var(--bbva-ink)] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] outline-none focus:border-[color:var(--bbva-aqua)]/60 focus:ring-2 focus:ring-[color:var(--bbva-aqua)]/30"
+                className="w-full rounded-2xl border border-white/60 bg-white/80 px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] outline-none focus:border-[color:var(--aqua)]/60 focus:ring-2 focus:ring-[color:var(--aqua)]/30"
               />
             </FilterField>
             <FilterField label="Hasta">
@@ -272,7 +272,7 @@ export default function SentimientoPage() {
                   touchFilters();
                   setToDate(e.target.value);
                 }}
-                className="w-full rounded-2xl border border-white/60 bg-white/80 px-3 py-2 text-sm text-[color:var(--bbva-ink)] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] outline-none focus:border-[color:var(--bbva-aqua)]/60 focus:ring-2 focus:ring-[color:var(--bbva-aqua)]/30"
+                className="w-full rounded-2xl border border-white/60 bg-white/80 px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] outline-none focus:border-[color:var(--aqua)]/60 focus:ring-2 focus:ring-[color:var(--aqua)]/30"
               />
             </FilterField>
             <FilterField label="Sentimiento">
@@ -282,7 +282,7 @@ export default function SentimientoPage() {
                   touchFilters();
                   setSentiment(e.target.value as SentimentFilter);
                 }}
-                className="w-full rounded-2xl border border-white/60 bg-white/80 px-3 py-2 text-sm text-[color:var(--bbva-ink)] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] outline-none focus:border-[color:var(--bbva-aqua)]/60 focus:ring-2 focus:ring-[color:var(--bbva-aqua)]/30"
+                className="w-full rounded-2xl border border-white/60 bg-white/80 px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] outline-none focus:border-[color:var(--aqua)]/60 focus:ring-2 focus:ring-[color:var(--aqua)]/30"
               >
                 {SENTIMENTS.map((opt) => (
                   <option key={opt} value={opt}>
@@ -310,7 +310,7 @@ export default function SentimientoPage() {
                     setMentionsTab("bbva");
                   }
                 }}
-                className="w-full rounded-2xl border border-white/60 bg-white/80 px-3 py-2 text-sm text-[color:var(--bbva-ink)] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] outline-none focus:border-[color:var(--bbva-aqua)]/60 focus:ring-2 focus:ring-[color:var(--bbva-aqua)]/30"
+                className="w-full rounded-2xl border border-white/60 bg-white/80 px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] outline-none focus:border-[color:var(--aqua)]/60 focus:ring-2 focus:ring-[color:var(--aqua)]/30"
               >
                 <option value="bbva">BBVA</option>
                 <option value="otros_actores">Otros actores del mercado</option>
@@ -324,7 +324,7 @@ export default function SentimientoPage() {
                   touchFilters();
                   setGeo(e.target.value);
                 }}
-                className="w-full rounded-2xl border border-white/60 bg-white/80 px-3 py-2 text-sm text-[color:var(--bbva-ink)] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] outline-none focus:border-[color:var(--bbva-aqua)]/60 focus:ring-2 focus:ring-[color:var(--bbva-aqua)]/30"
+                className="w-full rounded-2xl border border-white/60 bg-white/80 px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] outline-none focus:border-[color:var(--aqua)]/60 focus:ring-2 focus:ring-[color:var(--aqua)]/30"
               >
                 <option value="all">Todos</option>
                 {geoOptions.map((opt) => (
@@ -341,7 +341,7 @@ export default function SentimientoPage() {
                   touchFilters();
                   setActor(e.target.value);
                 }}
-                className="w-full rounded-2xl border border-white/60 bg-white/80 px-3 py-2 text-sm text-[color:var(--bbva-ink)] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] outline-none focus:border-[color:var(--bbva-aqua)]/60 focus:ring-2 focus:ring-[color:var(--bbva-aqua)]/30 disabled:opacity-60"
+                className="w-full rounded-2xl border border-white/60 bg-white/80 px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] outline-none focus:border-[color:var(--aqua)]/60 focus:ring-2 focus:ring-[color:var(--aqua)]/30 disabled:opacity-60"
               >
                 <option value="all">Todos</option>
                 {actorOptions.map((opt) => (
@@ -354,7 +354,7 @@ export default function SentimientoPage() {
           </div>
 
           <div className="mt-4">
-            <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--bbva-blue)]">
+            <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
               FUENTES
             </div>
             <div className="mt-2 flex flex-wrap gap-2">
@@ -370,8 +370,8 @@ export default function SentimientoPage() {
                     className={
                       "rounded-full px-3 py-1.5 text-xs border transition shadow-sm " +
                       (active
-                        ? "bg-[color:var(--bbva-blue)] text-white border-transparent"
-                        : "bg-white/80 text-[color:var(--bbva-navy)] border-white/60")
+                        ? "bg-[color:var(--blue)] text-white border-transparent"
+                        : "bg-white/80 text-[color:var(--navy)] border-white/60")
                     }
                   >
                     {src}
@@ -391,7 +391,7 @@ export default function SentimientoPage() {
           className="rounded-[26px] border border-white/60 bg-[color:var(--panel)] p-5 shadow-[0_20px_50px_rgba(7,33,70,0.08)] backdrop-blur-xl animate-rise"
           style={{ animationDelay: "180ms" }}
         >
-          <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--bbva-blue)]">
+          <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
             RESUMEN
           </div>
           <div className="mt-4 grid grid-cols-2 gap-3">
@@ -404,7 +404,7 @@ export default function SentimientoPage() {
             <SummaryCard label="Negativas" value={sentimentSummary.negative} />
           </div>
           <div className="mt-5">
-            <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--bbva-blue)]">
+            <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
               TOP FUENTES
             </div>
             <div className="mt-2 space-y-2">
@@ -414,7 +414,7 @@ export default function SentimientoPage() {
             </div>
           </div>
           <div className="mt-4">
-            <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--bbva-blue)]">
+            <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
               TOP OTROS ACTORES DEL MERCADO
             </div>
             <div className="mt-2 space-y-2">
@@ -427,7 +427,7 @@ export default function SentimientoPage() {
       </div>
 
       <section className="mt-6 rounded-[26px] border border-white/60 bg-[color:var(--panel)] p-5 shadow-[0_20px_50px_rgba(7,33,70,0.08)] backdrop-blur-xl animate-rise" style={{ animationDelay: "240ms" }}>
-        <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--bbva-blue)]">
+        <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
           SENTIMIENTO POR PAÍS
         </div>
         <div className="mt-3 overflow-auto">
@@ -445,7 +445,7 @@ export default function SentimientoPage() {
             <tbody>
               {geoSummary.map((row) => (
                 <tr key={row.geo} className="border-t border-white/60">
-                  <td className="py-2 pr-4 font-semibold text-[color:var(--bbva-ink)]">
+                  <td className="py-2 pr-4 font-semibold text-[color:var(--ink)]">
                     {row.geo}
                   </td>
                   <td className="py-2 pr-4">{row.count}</td>
@@ -469,7 +469,7 @@ export default function SentimientoPage() {
 
       <section className="mt-6 rounded-[26px] border border-white/60 bg-[color:var(--panel)] p-5 shadow-[0_20px_50px_rgba(7,33,70,0.08)] backdrop-blur-xl animate-rise" style={{ animationDelay: "300ms" }}>
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--bbva-blue)]">
+          <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
             ÍNDICE REPUTACIONAL ACUMULADO
           </div>
           <div className="text-xs text-black/55">
@@ -491,7 +491,7 @@ export default function SentimientoPage() {
 
       <section className="mt-6 rounded-[26px] border border-white/60 bg-[color:var(--panel)] p-5 shadow-[0_20px_50px_rgba(7,33,70,0.08)] backdrop-blur-xl animate-rise" style={{ animationDelay: "360ms" }}>
         <div className="flex items-center justify-between gap-3">
-          <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--bbva-blue)]">
+          <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
           ÚLTIMAS MENCIONES
           </div>
           <div className="text-xs text-black/50">
@@ -504,8 +504,8 @@ export default function SentimientoPage() {
             className={
               "flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold transition " +
               (mentionsTab === "bbva"
-                ? "bg-white text-[color:var(--bbva-ink)] shadow-[0_8px_18px_rgba(7,33,70,0.12)]"
-                : "text-black/50 hover:text-[color:var(--bbva-ink)]")
+                ? "bg-white text-[color:var(--ink)] shadow-[0_8px_18px_rgba(7,33,70,0.12)]"
+                : "text-black/50 hover:text-[color:var(--ink)]")
             }
           >
             <span className="inline-block h-1.5 w-7 rounded-full bg-[#004481]" />
@@ -519,8 +519,8 @@ export default function SentimientoPage() {
             className={
               "flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold transition " +
               (mentionsTab === "actor"
-                ? "bg-white text-[color:var(--bbva-ink)] shadow-[0_8px_18px_rgba(7,33,70,0.12)]"
-                : "text-black/50 hover:text-[color:var(--bbva-ink)]")
+                ? "bg-white text-[color:var(--ink)] shadow-[0_8px_18px_rgba(7,33,70,0.12)]"
+                : "text-black/50 hover:text-[color:var(--ink)]")
             }
           >
             <span className="inline-block h-[3px] w-7 rounded-full border-t-2 border-dashed border-[#2dcccd]" />
@@ -571,11 +571,11 @@ function FilterField({
 function SummaryCard({ label, value }: { label: string; value: number | string }) {
   return (
     <div className="relative overflow-hidden rounded-2xl border border-white/70 bg-white/80 px-4 py-3 shadow-[0_10px_30px_rgba(7,33,70,0.08)]">
-      <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-[color:var(--bbva-aqua)] via-[color:var(--bbva-blue)] to-transparent" />
+      <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-[color:var(--aqua)] via-[color:var(--blue)] to-transparent" />
       <div className="text-[11px] uppercase tracking-[0.16em] text-black/45">
         {label}
       </div>
-      <div className="mt-2 text-2xl font-display font-semibold text-[color:var(--bbva-ink)]">
+      <div className="mt-2 text-2xl font-display font-semibold text-[color:var(--ink)]">
         {value}
       </div>
     </div>
@@ -588,7 +588,7 @@ function RowMeter({ label, value }: { label: string; value: number }) {
       <div className="w-28 text-xs text-black/55 truncate">{label}</div>
       <div className="flex-1 h-2 rounded-full bg-white/70 overflow-hidden border border-white/70">
         <div
-          className="h-full rounded-full bg-gradient-to-r from-[color:var(--bbva-blue)] to-[color:var(--bbva-aqua)]"
+          className="h-full rounded-full bg-gradient-to-r from-[color:var(--blue)] to-[color:var(--aqua)]"
           style={{ width: `${Math.min(100, value * 6)}%` }}
         />
       </div>
@@ -622,18 +622,18 @@ function MentionCard({ item, index }: { item: MentionGroup; index: number }) {
       className="group relative overflow-hidden rounded-[22px] border border-white/70 bg-white/85 p-4 shadow-[0_16px_40px_rgba(7,33,70,0.12)] animate-rise"
       style={{ animationDelay: `${Math.min(index, 8) * 60}ms` }}
     >
-      <div className="absolute inset-y-0 left-0 w-1 bg-gradient-to-b from-[color:var(--bbva-aqua)] via-[color:var(--bbva-blue)] to-transparent opacity-70" />
+      <div className="absolute inset-y-0 left-0 w-1 bg-gradient-to-b from-[color:var(--aqua)] via-[color:var(--blue)] to-transparent opacity-70" />
       <div className="flex flex-wrap items-center gap-2 text-[11px] text-black/55">
         <span className="inline-flex items-center gap-1 rounded-full border border-white/70 bg-white/80 px-2.5 py-1">
-          <MapPin className="h-3.5 w-3.5 text-[color:var(--bbva-blue)]" />
+          <MapPin className="h-3.5 w-3.5 text-[color:var(--blue)]" />
           {item.geo || "Global"}
         </span>
         <span className="inline-flex items-center gap-1 rounded-full border border-white/70 bg-white/80 px-2.5 py-1">
-          <Building2 className="h-3.5 w-3.5 text-[color:var(--bbva-blue)]" />
+          <Building2 className="h-3.5 w-3.5 text-[color:var(--blue)]" />
           {item.actor || "BBVA"}
         </span>
         <span className="inline-flex items-center gap-1 rounded-full border border-white/70 bg-white/80 px-2.5 py-1">
-          <Calendar className="h-3.5 w-3.5 text-[color:var(--bbva-blue)]" />
+          <Calendar className="h-3.5 w-3.5 text-[color:var(--blue)]" />
           {displayDate}
         </span>
         <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 ${sentimentTone.className}`}>
@@ -646,7 +646,7 @@ function MentionCard({ item, index }: { item: MentionGroup; index: number }) {
           </span>
         )}
       </div>
-      <div className="mt-3 text-base font-display font-semibold text-[color:var(--bbva-ink)]">
+      <div className="mt-3 text-base font-display font-semibold text-[color:var(--ink)]">
         {sanitizedTitle}
       </div>
       {sanitizedText && (
@@ -674,7 +674,7 @@ function MentionCard({ item, index }: { item: MentionGroup; index: number }) {
                 href={src.url}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-1 rounded-full border border-white/70 bg-white/80 px-2.5 py-1 text-[11px] text-[color:var(--bbva-blue)] hover:text-[color:var(--bbva-navy)] transition"
+                className="inline-flex items-center gap-1 rounded-full border border-white/70 bg-white/80 px-2.5 py-1 text-[11px] text-[color:var(--blue)] hover:text-[color:var(--navy)] transition"
               >
                 {src.name}
                 <ArrowUpRight className="h-3 w-3" />
@@ -682,7 +682,7 @@ function MentionCard({ item, index }: { item: MentionGroup; index: number }) {
             ) : (
               <span
                 key={src.name}
-                className="inline-flex items-center gap-1 rounded-full border border-white/70 bg-white/80 px-2.5 py-1 text-[11px] text-[color:var(--bbva-blue)]"
+                className="inline-flex items-center gap-1 rounded-full border border-white/70 bg-white/80 px-2.5 py-1 text-[11px] text-[color:var(--blue)]"
               >
                 {src.name}
               </span>
@@ -694,7 +694,7 @@ function MentionCard({ item, index }: { item: MentionGroup; index: number }) {
             href={item.sources[0].url}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex items-center gap-1 text-[color:var(--bbva-blue)] hover:text-[color:var(--bbva-navy)] transition"
+            className="inline-flex items-center gap-1 text-[color:var(--blue)] hover:text-[color:var(--navy)] transition"
           >
             Ver detalle
             <ArrowUpRight className="h-3.5 w-3.5" />

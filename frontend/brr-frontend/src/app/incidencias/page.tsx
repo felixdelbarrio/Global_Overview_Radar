@@ -81,15 +81,15 @@ export default function IncidenciasPage() {
     <Shell>
       <section className="relative overflow-hidden rounded-[28px] border border-white/60 bg-[color:var(--panel-strong)] p-6 shadow-[0_30px_70px_rgba(7,33,70,0.12)] animate-rise">
         <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute -top-24 -right-10 h-48 w-48 rounded-full bg-[color:var(--bbva-aqua)]/15 blur-3xl" />
-          <div className="absolute -bottom-16 left-10 h-40 w-40 rounded-full bg-[color:var(--bbva-blue)]/10 blur-3xl" />
+          <div className="absolute -top-24 -right-10 h-48 w-48 rounded-full bg-[color:var(--aqua)]/15 blur-3xl" />
+          <div className="absolute -bottom-16 left-10 h-40 w-40 rounded-full bg-[color:var(--blue)]/10 blur-3xl" />
         </div>
         <div className="relative">
-          <div className="inline-flex items-center gap-2 rounded-full border border-white/60 bg-white/70 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-[color:var(--bbva-blue)] shadow-sm">
+          <div className="inline-flex items-center gap-2 rounded-full border border-white/60 bg-white/70 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-[color:var(--blue)] shadow-sm">
             <Sparkles className="h-3.5 w-3.5" />
             Incidencias críticas
           </div>
-          <h1 className="mt-4 text-3xl sm:text-4xl font-display font-semibold text-[color:var(--bbva-ink)]">
+          <h1 className="mt-4 text-3xl sm:text-4xl font-display font-semibold text-[color:var(--ink)]">
             Incidencias
           </h1>
           <p className="mt-2 max-w-2xl text-sm text-black/60">
@@ -98,15 +98,15 @@ export default function IncidenciasPage() {
           </p>
           <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-black/55">
             <span className="inline-flex items-center gap-2 rounded-full bg-white/70 px-3 py-1">
-              <Calendar className="h-3.5 w-3.5 text-[color:var(--bbva-blue)]" />
+              <Calendar className="h-3.5 w-3.5 text-[color:var(--blue)]" />
               Total cargadas: {items.length}
             </span>
             <span className="inline-flex items-center gap-2 rounded-full bg-white/70 px-3 py-1">
-              <Search className="h-3.5 w-3.5 text-[color:var(--bbva-blue)]" />
+              <Search className="h-3.5 w-3.5 text-[color:var(--blue)]" />
               Mostrando: {filtered.length}
             </span>
             <span className="inline-flex items-center gap-2 rounded-full bg-white/70 px-3 py-1">
-              <Filter className="h-3.5 w-3.5 text-[color:var(--bbva-blue)]" />
+              <Filter className="h-3.5 w-3.5 text-[color:var(--blue)]" />
               Filtros activos: {activeFilters}
             </span>
           </div>
@@ -126,8 +126,8 @@ export default function IncidenciasPage() {
             <div className="text-[11px] uppercase tracking-[0.18em] text-black/50 mb-2">
               Buscar
             </div>
-            <div className="flex items-center gap-2 rounded-2xl border border-white/60 bg-white/80 px-3 py-2 text-sm text-[color:var(--bbva-ink)] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
-              <Search className="h-4 w-4 text-[color:var(--bbva-blue)]" />
+            <div className="flex items-center gap-2 rounded-2xl border border-white/60 bg-white/80 px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
+              <Search className="h-4 w-4 text-[color:var(--blue)]" />
               <input
                 className="w-full bg-transparent outline-none"
                 placeholder="ID, título, producto, funcionalidad…"
@@ -142,7 +142,7 @@ export default function IncidenciasPage() {
               Criticidad
             </div>
             <select
-              className="w-full rounded-2xl border border-white/60 bg-white/80 px-3 py-2 text-sm text-[color:var(--bbva-ink)] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] outline-none focus:border-[color:var(--bbva-aqua)]/60 focus:ring-2 focus:ring-[color:var(--bbva-aqua)]/30"
+              className="w-full rounded-2xl border border-white/60 bg-white/80 px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] outline-none focus:border-[color:var(--aqua)]/60 focus:ring-2 focus:ring-[color:var(--aqua)]/30"
               value={sev}
               onChange={(e) => setSev(e.target.value)}
             >
@@ -160,7 +160,7 @@ export default function IncidenciasPage() {
               Estado
             </div>
             <select
-              className="w-full rounded-2xl border border-white/60 bg-white/80 px-3 py-2 text-sm text-[color:var(--bbva-ink)] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] outline-none focus:border-[color:var(--bbva-aqua)]/60 focus:ring-2 focus:ring-[color:var(--bbva-aqua)]/30"
+              className="w-full rounded-2xl border border-white/60 bg-white/80 px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] outline-none focus:border-[color:var(--aqua)]/60 focus:ring-2 focus:ring-[color:var(--aqua)]/30"
               value={st}
               onChange={(e) => setSt(e.target.value)}
             >
@@ -203,7 +203,7 @@ export default function IncidenciasPage() {
                     {it.global_id}
                   </td>
                   <td className="px-4 py-3 min-w-[360px]">
-                    <div className="font-semibold text-[color:var(--bbva-ink)]">
+                    <div className="font-semibold text-[color:var(--ink)]">
                       {it.title}
                     </div>
                     <div className="text-xs text-black/55">
