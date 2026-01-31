@@ -96,6 +96,13 @@ load_dotenv(str(REPUTATION_ENV_PATH), override=False)
 # Singleton de settings
 settings = ReputationSettings()
 
+# Normaliza rutas relativas (si las variables de entorno usan rutas como './data/...')
+if not settings.config_path.is_absolute():
+    settings.config_path = (REPO_ROOT / settings.config_path).resolve()
+
+if not settings.cache_path.is_absolute():
+    settings.cache_path = (REPO_ROOT / settings.cache_path).resolve()
+
 
 def load_business_config(path: Path | None = None) -> Dict[str, Any]:
     """Carga el JSON de negocio (geografías, otros actores del mercado, templates, etc.)."""

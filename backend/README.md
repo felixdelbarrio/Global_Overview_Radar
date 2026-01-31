@@ -16,3 +16,4 @@ Quick start
 3. Run tests:
 
     .venv/bin/python -m pytest
+
