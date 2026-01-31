@@ -1,111 +1,95 @@
-# Global Overview Radar
+# 🌍 Global Overview Radar
 
-Global Overview Radar es una plataforma full‑stack para **ingestión, consolidación y análisis ejecutivo de incidencias**. Transforma fuentes heterogéneas (CSV/JSON/XLSX) en un **radar operativo** con KPIs, tendencias y priorización de riesgos. Diseñada para decisiones rápidas, trazabilidad y visibilidad de negocio.
+[![CI](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/ci.yml)
+[![Tests & Coverage](https://img.shields.io/github/actions/workflow/status/felixdelbarrio/Global_Overview_Radar/ci.yml?branch=main&label=Tests%20%26%20Coverage)](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/ci.yml)
+[![Typecheck](https://img.shields.io/github/actions/workflow/status/felixdelbarrio/Global_Overview_Radar/ci.yml?branch=main&label=Typecheck)](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/ci.yml)
+[![Sponsor](https://img.shields.io/badge/Sponsor-GitHub%20Sponsors-2ea44f.svg)](https://github.com/sponsors/felixdelbarrio)
+[![Donate](https://img.shields.io/badge/Donate-PayPal-blue.svg)](https://paypal.me/felixdelbarrio)
 
-**Valor comercial (tono ejecutivo)**
-- **Tiempo a decisión**: reduce horas de análisis manual a minutos con KPIs y paneles ejecutivos.
-- **Riesgo controlado**: identifica incidencias críticas y stale de forma inmediata.
-- **Trazabilidad completa**: cada incidencia conserva historial y procedencia de fuentes.
-- **Escalabilidad**: adaptable a nuevos orígenes y volúmenes crecientes.
-
----
-
-## Panorama rápido
-- **Backend (Python/FastAPI)**: ingestión, consolidación, cache y API.
-- **Frontend (Next.js)**: dashboards ejecutivos y vistas operativas.
-- **Cache**: documento consolidado JSON para consultas rápidas.
-
-> Documento detallado: ver `ARCHITECTURE.md`, `DOCUMENTATION.md` y `FILES.md`.
+> **CI coverage**: backend & frontend tests with coverage, plus full type-checking (Python + TypeScript).  
+> **Cobertura CI**: tests de backend y frontend con cobertura, más verificación completa de tipos (Python + TypeScript).
 
 ---
 
-## Funcionalidades clave
-- Ingesta de CSV/JSON/XLSX desde una carpeta de assets.
-- Consolidación con historial y procedencia.
-- KPIs ejecutivos, evolución temporal y lista de incidencias.
-- UI moderna con filtros, ordenación y resumen operativo.
+## EN | Overview
+
+**Global Overview Radar** is a **comparative public perception intelligence platform**.  
+It detects **narrative change**, surfaces **early reputational signals**, and benchmarks **relative positioning** across market actors — always with **explainable, auditable evidence**.
+
+This project is designed to move organizations from **reactive monitoring** to **anticipatory intelligence**.
 
 ---
 
-## Estructura del repositorio
-```
-backend/                    # Código backend (FastAPI)
-  bbva_bugresolutionradar/
-frontend/brr-frontend/       # Frontend (Next.js)
-data/                        # Assets y cache local
-.github/workflows/           # CI (GitHub Actions)
-```
+## ES | Visión general
+
+**Global Overview Radar** es una **plataforma de inteligencia de percepción pública comparada**.  
+Detecta **cambios narrativos**, identifica **señales reputacionales tempranas** y compara el **posicionamiento relativo** entre actores del mercado — siempre con **evidencia explicable y auditable**.
+
+El objetivo es pasar del **monitoring reactivo** a la **inteligencia anticipatoria**.
 
 ---
 
-## Requisitos
-- Python >= 3.9
-- Node.js >= 20
-- npm >= 9
+## 🧭 Documentation | Documentación
+
+All technical documentation lives in **`/docs`**:
+
+- 🏗️ Architecture → `docs/ARCHITECTURE.md`
+- 📘 System documentation → `docs/DOCUMENTACION.md`
+- 📦 Data contracts → `docs/DATA_CONTRACTS.md`
+- 🚨 Signals catalog → `docs/SIGNALS_CATALOG.md`
+- 🔐 Governance & security → `docs/GOVERNANCE_SECURITY.md`
+- 🧩 Extending the system → `docs/EXTENDING_THE_SYSTEM.md`
+- 🗂️ Project file index → `docs/FILES.md`
 
 ---
 
-## Instalación rápida
+## 🧩 Deployment modes | Modos de despliegue
 
-```bash
-make venv
-make install
-make env
-```
+### EN
+- **Open Source**: reference architecture and extensible pipelines.
+- **Commercial Product**: enterprise-ready defaults, dashboards, and SLAs.
+- **Internal Enterprise Platform**: private deployment with custom peers, taxonomies, and integrations.
 
----
-
-## Variables de entorno (principales)
-Se gestionan desde `.env` (copia base en `.env.example`).
-
-- `ASSETS_DIR`: ruta a los ficheros de ingestión.
-- `CACHE_PATH`: ruta del cache consolidado.
-- `SOURCES`: fuentes activas (csv, json, xlsx).
-- `MASTER_THRESHOLD_CLIENTS`: umbral para incidencias “master”.
-- `STALE_DAYS_THRESHOLD`: días para marcar incidencia stale.
-- `PERIOD_DAYS_DEFAULT`: ventana por defecto en KPIs.
+### ES
+- **Open Source**: arquitectura de referencia y pipelines extensibles.
+- **Producto comercial**: defaults enterprise, dashboards y SLAs.
+- **Plataforma interna enterprise**: despliegue privado con peers, taxonomías e integraciones a medida.
 
 ---
 
-## Comandos principales
+## 🛠️ Quick start (conceptual) | Arranque rápido (conceptual)
 
-```bash
-make dev-back         # API (FastAPI) en modo reload
-make dev-front        # Frontend (Next.js)
-make ingest           # Ejecuta ingestión + consolidación
-make test             # Tests backend + frontend
-make test-coverage    # Cobertura backend + frontend
-make typecheck        # mypy/pyright + TS build
-make lint             # ruff + eslint
-```
+### EN
+1. Configure sources, taxonomies, and peer groups.
+2. Run ingestion and processing pipelines.
+3. Explore insights via API and dashboards.
 
----
+### ES
+1. Configura fuentes, taxonomías y peer groups.
+2. Ejecuta los pipelines de ingesta y procesamiento.
+3. Explora los insights vía API y dashboards.
 
-## CI/CD
-El pipeline de GitHub ejecuta en cada push:
-- `make test-coverage-back`
-- `make test-coverage-front`
+> Note / Nota: concrete commands depend on your implementation.  
+> See `docs/DOCUMENTACION.md` for system mental model and extension points.
 
 ---
 
-## Arquitectura (resumen)
+## 🤝 Contributing | Contribuir
 
-- Los adaptadores leen fuentes de assets y generan observaciones canónicas.
-- La consolidación crea un documento de cache único (JSON).
-- La API expone KPIs, evolución temporal e incidencias.
-- El frontend consume la API y ofrece paneles ejecutivos.
+### EN
+Contributions are welcome. Please keep changes:
+- **comparative by design**
+- **explainable by default**
+- **configurable (no company-specific hardcoding)**
 
-Para un desglose completo con flujos, ver `ARCHITECTURE.md`.
-
----
-
-## Roadmap sugerido
-- Autenticación y control de acceso.
-- Observabilidad (logging estructurado + métricas).
-- Almacenamiento persistente (DB) y caché distribuida.
-- Conectores a sistemas corporativos (Jira/ServiceNow).
+### ES
+Las contribuciones son bienvenidas. Mantén los cambios:
+- **comparativos por diseño**
+- **explicables por defecto**
+- **configurables (sin hardcoding específico de empresa)**
 
 ---
 
-## Soporte
-Para cambios estructurales o despliegues, consulta `ARCHITECTURE.md` y ajusta `.env`.
+## 📜 License | Licencia
+
+See `LICENSE` for details.
