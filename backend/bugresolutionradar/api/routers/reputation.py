@@ -2,16 +2,19 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, timezone, timedelta
-from typing import Iterable
+import logging
+from datetime import date, datetime, timedelta, timezone
+from typing import Iterable, List
 
-from fastapi import APIRouter, Query
-
+from fastapi import APIRouter, Body, Query
+from pydantic import BaseModel
 from reputation.config import settings as reputation_settings
 from reputation.models import ReputationCacheDocument, ReputationCacheStats, ReputationItem
 from reputation.repositories.cache_repo import ReputationCacheRepo
 
 router = APIRouter()
+logger = logging.getLogger("bugresolutionradar.reputation")
+COMPARE_BODY = Body(..., description="Lista de filtros a comparar")
 
 
 @router.get("/items")
@@ -51,6 +54,7 @@ def reputation_items(
             q,
         )
     )
+    # Note: temporary debug logging removed for production readiness.
     return ReputationCacheDocument(
         generated_at=doc.generated_at,
         config_hash=doc.config_hash,
@@ -58,6 +62,70 @@ def reputation_items(
         items=items,
         stats=ReputationCacheStats(count=len(items), note=doc.stats.note),
     )
+
+
+class CompareFilter(BaseModel):
+    sources: str | None = None
+    entity: str | None = None
+    geo: str | None = None
+    actor: str | None = None
+    sentiment: str | None = None
+    from_date: str | None = None
+    to_date: str | None = None
+    period_days: int | None = None
+    q: str | None = None
+
+
+@router.post("/items/compare")
+def reputation_compare(filters: List[CompareFilter] = COMPARE_BODY):
+    """Comparar múltiples filtros en una sola llamada.
+
+    Devuelve los items por grupo y un conjunto combinado deduplicado (por id).
+    """
+    repo = ReputationCacheRepo(reputation_settings.cache_path)
+    doc = repo.load()
+    if doc is None:
+        return {
+            "groups": [],
+            "combined": {"items": [], "stats": {"count": 0, "note": "cache empty"}},
+        }
+
+    groups = []
+    combined_map: dict[str, ReputationItem] = {}
+
+    for idx, f in enumerate(filters):
+        items = list(
+            _filter_items(
+                doc.items,
+                f.sources,
+                f.entity,
+                f.geo,
+                f.actor,
+                f.sentiment,
+                f.from_date,
+                f.to_date,
+                f.period_days,
+                f.q,
+            )
+        )
+        # collect into combined map for dedup
+        for it in items:
+            combined_map[it.id] = it
+
+        groups.append(
+            {
+                "id": f"group_{idx}",
+                "filter": f.dict(exclude_none=True),
+                "items": [it.dict() for it in items],
+                "stats": {"count": len(items)},
+            }
+        )
+
+    combined_items = [v.dict() for v in combined_map.values()]
+    return {
+        "groups": groups,
+        "combined": {"items": combined_items, "stats": {"count": len(combined_items)}},
+    }
 
 
 def _filter_items(

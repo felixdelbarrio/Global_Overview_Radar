@@ -31,8 +31,8 @@ def test_ingest_service_combines_sources(tmp_path: Path) -> None:
     )
 
     settings = Settings(
-        ASSETS_DIR=str(tmp_path),
-        SOURCES="filesystem_csv,filesystem_json",
+        assets_dir=str(tmp_path),
+        sources="filesystem_csv,filesystem_json",
     )
 
     service = IngestService(settings)
@@ -45,8 +45,8 @@ def test_ingest_service_combines_sources(tmp_path: Path) -> None:
 
 def test_build_adapters_respects_enabled_sources(tmp_path: Path) -> None:
     settings = Settings(
-        ASSETS_DIR=str(tmp_path),
-        SOURCES="filesystem_xlsx",
+        assets_dir=str(tmp_path),
+        sources="filesystem_xlsx",
     )
     service = IngestService(settings)
     adapters = service.build_adapters()

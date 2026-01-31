@@ -14,6 +14,7 @@ from bugresolutionradar.domain.enums import Severity, Status
 def test_xlsx_adapter_reads_workbook(tmp_path: Path) -> None:
     wb = openpyxl.Workbook()
     ws = wb.active
+    assert ws is not None
     ws.title = "Reportes"
     ws.append(
         [
@@ -26,7 +27,9 @@ def test_xlsx_adapter_reads_workbook(tmp_path: Path) -> None:
             "Funcionalidad",
         ]
     )
-    ws.append(["INC-1", date(2025, 1, 10), "Resuelto", "Alta", "Fallo login", "App", "Login"])
+    ws.append(
+        ["INC-1", date(2025, 1, 10), "Resuelto", "Alta", "Fallo login", "App", "Login"]
+    )
     ws.append(["", date(2025, 1, 11), "", "Media", "Otro", "App", "Pagos"])
 
     path = tmp_path / "sample.xlsx"

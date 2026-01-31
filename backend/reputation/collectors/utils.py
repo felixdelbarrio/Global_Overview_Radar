@@ -1,15 +1,15 @@
 from __future__ import annotations
 
+import json
+import os
+import re
+import ssl
+import unicodedata
 from datetime import datetime
 from email.utils import parsedate_to_datetime
-import json
-import re
 from typing import Any, Iterable
-from urllib.parse import parse_qs, unquote_plus, urlparse, urlencode
+from urllib.parse import parse_qs, unquote_plus, urlencode, urlparse
 from urllib.request import Request, urlopen
-import ssl
-import os
-import unicodedata
 from xml.etree import ElementTree
 
 
@@ -204,7 +204,7 @@ def rss_source(value: dict[str, str] | str) -> tuple[str, dict[str, str]]:
         parsed = urlparse(url)
         qs = parse_qs(parsed.query)
         raw_query = ""
-        if "q" in qs and qs["q"]:
+        if qs.get("q"):
             raw_query = qs["q"][0]
         if raw_query and "query" not in meta:
             decoded = unquote_plus(raw_query)

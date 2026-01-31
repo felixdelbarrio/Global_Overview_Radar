@@ -6,7 +6,7 @@ import importlib
 import sys
 from datetime import date, datetime, timezone
 from pathlib import Path
-from typing import Dict
+from typing import Dict, TYPE_CHECKING
 
 import pytest
 
@@ -27,12 +27,19 @@ IncidentHistoryEvent = _models.IncidentHistoryEvent
 IncidentRecord = _models.IncidentRecord
 SourceRef = _models.SourceRef
 
+if TYPE_CHECKING:
+    from bugresolutionradar.domain.enums import Severity as _Severity, Status as _Status
+    from bugresolutionradar.domain.models import (
+        CacheDocument as _CacheDocument,
+        IncidentRecord as _IncidentRecord,
+    )
+
 
 def _make_record(
     *,
     global_id: str,
-    status: Status,
-    severity: Severity,
+    status: "_Status",
+    severity: "_Severity",
     opened_at: date | None,
     closed_at: date | None = None,
     updated_at: date | None = None,
@@ -40,7 +47,7 @@ def _make_record(
     clients_affected: int | None = None,
     product: str | None = None,
     feature: str | None = None,
-) -> IncidentRecord:
+) -> "_IncidentRecord":
     now = datetime(2025, 1, 1, 10, 0, 0, tzinfo=timezone.utc)
     current = IncidentCurrent(
         title=title,
@@ -77,9 +84,9 @@ def _make_record(
 
 
 @pytest.fixture()
-def sample_doc() -> CacheDocument:
+def sample_doc() -> "_CacheDocument":
     today = date.today()
-    incidents: Dict[str, IncidentRecord] = {
+    incidents: Dict[str, "_IncidentRecord"] = {
         "src:1": _make_record(
             global_id="src:1",
             status=Status.OPEN,
