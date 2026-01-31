@@ -22,12 +22,20 @@ def _make_item(gid: str, actor: str | None, geo: str, title: str | None = None) 
     }
 
 
+def _list_str(value: object) -> list[str]:
+    if isinstance(value, list):
+        return [v for v in value if isinstance(v, str) and v.strip()]
+    return []
+
+
 def test_compare_endpoint_normalizes_and_combines(monkeypatch, tmp_path: Path) -> None:
     cfg = load_business_config()
     principal = primary_actor_info(cfg)
     assert principal is not None
     principal_canonical = str(principal.get("canonical") or "").strip()
-    principal_aliases = list(principal.get("aliases") or principal.get("names") or [])
+    principal_aliases = _list_str(principal.get("aliases")) or _list_str(
+        principal.get("names")
+    )
     if not principal_aliases:
         principal_aliases = [principal_canonical]
     principal_alias = principal_aliases[0]
