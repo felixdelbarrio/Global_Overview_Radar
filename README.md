@@ -1,6 +1,6 @@
-# BBVA Empresas – Global Overview Radar
+# Global Overview Radar
 
-BBVA Empresas – Global Overview Radar es una plataforma full‑stack para **ingestión, consolidación y análisis ejecutivo de incidencias**. Transforma fuentes heterogéneas (CSV/JSON/XLSX) en un **radar operativo** con KPIs, tendencias y priorización de riesgos. Diseñada para decisiones rápidas, trazabilidad y visibilidad de negocio.
+Global Overview Radar es una plataforma full‑stack para **ingestión, consolidación y análisis ejecutivo de incidencias**. Transforma fuentes heterogéneas (CSV/JSON/XLSX) en un **radar operativo** con KPIs, tendencias y priorización de riesgos. Diseñada para decisiones rápidas, trazabilidad y visibilidad de negocio.
 
 **Valor comercial (tono ejecutivo)**
 - **Tiempo a decisión**: reduce horas de análisis manual a minutos con KPIs y paneles ejecutivos.

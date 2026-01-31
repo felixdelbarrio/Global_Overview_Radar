@@ -2,7 +2,7 @@
 [project]
 name = "bbva-bugresolutionradar"
 version = "0.1.0"
-description = "BBVA Empresas – Global Overview Radar - assets ingestion, consolidation and KPI dashboard backend"
+description = "Empresas – Global Overview Radar - assets ingestion, consolidation and KPI dashboard backend"
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
