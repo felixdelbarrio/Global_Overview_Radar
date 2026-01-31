@@ -5,9 +5,9 @@ from __future__ import annotations
 from datetime import date
 from typing import Optional
 
-from bbva_bugresolutionradar.config import Settings
-from bbva_bugresolutionradar.domain.kpis import KPIResult, compute_kpis
-from bbva_bugresolutionradar.domain.models import CacheDocument
+from bugresolutionradar.config import Settings
+from bugresolutionradar.domain.kpis import KPIResult, compute_kpis
+from bugresolutionradar.domain.models import CacheDocument
 
 
 class ReportingService:

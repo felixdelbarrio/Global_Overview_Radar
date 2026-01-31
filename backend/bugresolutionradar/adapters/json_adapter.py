@@ -8,10 +8,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, List, Optional, cast
 
-from bbva_bugresolutionradar.adapters.filesystem import FilesystemAdapter
-from bbva_bugresolutionradar.adapters.utils import to_date, to_int, to_str
-from bbva_bugresolutionradar.domain.enums import Severity, Status
-from bbva_bugresolutionradar.domain.models import ObservedIncident
+from bugresolutionradar.adapters.filesystem import FilesystemAdapter
+from bugresolutionradar.adapters.utils import to_date, to_int, to_str
+from bugresolutionradar.domain.enums import Severity, Status
+from bugresolutionradar.domain.models import ObservedIncident
 
 
 def _parse_status(raw: Optional[str]) -> Status:

@@ -5,10 +5,10 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from bbva_bugresolutionradar.config import settings
-from bbva_bugresolutionradar.domain.models import RunSource
-from bbva_bugresolutionradar.repositories import CacheRepo
-from bbva_bugresolutionradar.services import ConsolidateService, IngestService
+from bugresolutionradar.config import settings
+from bugresolutionradar.domain.models import RunSource
+from bugresolutionradar.repositories import CacheRepo
+from bugresolutionradar.services import ConsolidateService, IngestService
 
 
 def main() -> None:

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from bbva_bugresolutionradar.domain.enums import Severity, Status
-from bbva_bugresolutionradar.domain.merge import compute_global_id, merge_observation
-from bbva_bugresolutionradar.domain.models import IncidentRecord, ObservedIncident
+from bugresolutionradar.domain.enums import Severity, Status
+from bugresolutionradar.domain.merge import compute_global_id, merge_observation
+from bugresolutionradar.domain.models import IncidentRecord, ObservedIncident
 
 
 def _obs(title: str, status: Status, severity: Severity) -> ObservedIncident:

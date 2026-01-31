@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 from typing import Any
 
-from bbva_bugresolutionradar.domain.models import (
+from bugresolutionradar.domain.models import (
     IncidentCurrent,
     IncidentHistoryEvent,
     IncidentRecord,

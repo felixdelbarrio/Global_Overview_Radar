@@ -7,13 +7,13 @@ from datetime import date
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from bbva_bugresolutionradar.api.routers.evolution import router as evolution_router
-from bbva_bugresolutionradar.api.routers.incidents import router as incidents_router
-from bbva_bugresolutionradar.api.routers.kpis import router as kpis_router
-from bbva_bugresolutionradar.api.routers.reputation import router as reputation_router
-from bbva_bugresolutionradar.config import settings
-from bbva_bugresolutionradar.repositories import CacheRepo
-from bbva_bugresolutionradar.services import ReportingService
+from bugresolutionradar.api.routers.evolution import router as evolution_router
+from bugresolutionradar.api.routers.incidents import router as incidents_router
+from bugresolutionradar.api.routers.kpis import router as kpis_router
+from bugresolutionradar.api.routers.reputation import router as reputation_router
+from bugresolutionradar.config import settings
+from bugresolutionradar.repositories import CacheRepo
+from bugresolutionradar.services import ReportingService
 
 
 def create_app() -> FastAPI:

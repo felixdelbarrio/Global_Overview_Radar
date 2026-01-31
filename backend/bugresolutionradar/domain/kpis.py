@@ -7,8 +7,8 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from typing import Dict, List, Optional
 
-from bbva_bugresolutionradar.domain.enums import Severity
-from bbva_bugresolutionradar.domain.models import IncidentRecord
+from bugresolutionradar.domain.enums import Severity
+from bugresolutionradar.domain.models import IncidentRecord
 
 
 @dataclass(frozen=True)

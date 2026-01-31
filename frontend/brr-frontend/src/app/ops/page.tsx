@@ -172,15 +172,15 @@ export default function OpsPage() {
     <Shell>
       <section className="relative overflow-hidden rounded-[28px] border border-white/60 bg-[color:var(--panel-strong)] p-6 shadow-[0_30px_70px_rgba(7,33,70,0.12)] animate-rise">
         <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute -top-24 -right-10 h-48 w-48 rounded-full bg-[color:var(--bbva-aqua)]/15 blur-3xl" />
-          <div className="absolute -bottom-16 left-10 h-40 w-40 rounded-full bg-[color:var(--bbva-blue)]/10 blur-3xl" />
+          <div className="absolute -top-24 -right-10 h-48 w-48 rounded-full bg-[color:var(--aqua)]/15 blur-3xl" />
+          <div className="absolute -bottom-16 left-10 h-40 w-40 rounded-full bg-[color:var(--blue)]/10 blur-3xl" />
         </div>
         <div className="relative">
-          <div className="inline-flex items-center gap-2 rounded-full border border-white/60 bg-white/70 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-[color:var(--bbva-blue)] shadow-sm">
+          <div className="inline-flex items-center gap-2 rounded-full border border-white/60 bg-white/70 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-[color:var(--blue)] shadow-sm">
             <Sparkles className="h-3.5 w-3.5" />
             Ops Executive
           </div>
-          <h1 className="mt-4 text-3xl sm:text-4xl font-display font-semibold text-[color:var(--bbva-ink)]">
+          <h1 className="mt-4 text-3xl sm:text-4xl font-display font-semibold text-[color:var(--ink)]">
             Ops Executive
           </h1>
           <p className="mt-2 max-w-2xl text-sm text-black/60">
@@ -188,7 +188,7 @@ export default function OpsPage() {
           </p>
           <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-black/55">
             <span className="inline-flex items-center gap-2 rounded-full bg-white/70 px-3 py-1">
-              <Activity className="h-3.5 w-3.5 text-[color:var(--bbva-blue)]" />
+              <Activity className="h-3.5 w-3.5 text-[color:var(--blue)]" />
               Open: {kpis?.open_total ?? "—"}
             </span>
             <span className="inline-flex items-center gap-2 rounded-full bg-white/70 px-3 py-1">
@@ -209,18 +209,18 @@ export default function OpsPage() {
           <div className="rounded-[26px] border border-white/60 bg-[color:var(--panel)] p-5 shadow-[0_20px_50px_rgba(7,33,70,0.08)] backdrop-blur-xl animate-rise" style={{ animationDelay: "120ms" }}>
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--bbva-blue)]">
+                <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
                   FILTROS
                 </div>
                 <div className="text-xs text-black/50">Refina y prioriza incidencias</div>
               </div>
-              <Filter className="h-4 w-4 text-[color:var(--bbva-blue)]" />
+              <Filter className="h-4 w-4 text-[color:var(--blue)]" />
             </div>
 
             <div className="mt-4 flex flex-col xl:flex-row xl:items-center gap-3">
               <div className="flex-1">
-                <div className="flex items-center gap-2 rounded-2xl border border-white/60 bg-white/80 px-3 py-2 text-sm text-[color:var(--bbva-ink)] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
-                  <Search className="h-4 w-4 text-[color:var(--bbva-blue)]" />
+                <div className="flex items-center gap-2 rounded-2xl border border-white/60 bg-white/80 px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
+                  <Search className="h-4 w-4 text-[color:var(--blue)]" />
                   <input
                     className="w-full bg-transparent outline-none"
                     placeholder="Buscar por ID, título, producto..."
@@ -265,7 +265,7 @@ export default function OpsPage() {
 
               <div className="flex items-center gap-2">
                 <select
-                  className="text-sm rounded-2xl border border-white/60 bg-white/80 px-3 py-2 text-[color:var(--bbva-ink)] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] outline-none"
+                  className="text-sm rounded-2xl border border-white/60 bg-white/80 px-3 py-2 text-[color:var(--ink)] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] outline-none"
                   value={sortBy}
                   onChange={(e) => onSortByChange(e.target.value as SortBy)}
                 >
@@ -356,12 +356,12 @@ export default function OpsPage() {
           <div className="rounded-[26px] border border-white/60 bg-[color:var(--panel)] p-5 shadow-[0_20px_50px_rgba(7,33,70,0.08)] backdrop-blur-xl animate-rise" style={{ animationDelay: "200ms" }}>
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--bbva-blue)]">
+                <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
                   EXECUTIVE SUMMARY
                 </div>
                 <div className="text-xs text-black/60">Recomendaciones rápidas</div>
               </div>
-              <Zap className="h-5 w-5 text-[color:var(--bbva-blue)]" />
+              <Zap className="h-5 w-5 text-[color:var(--blue)]" />
             </div>
 
             <div className="mt-4 space-y-2 text-sm">
@@ -385,7 +385,7 @@ export default function OpsPage() {
           {/* Top stale */}
           <div className="rounded-[26px] border border-white/60 bg-[color:var(--panel)] p-5 shadow-[0_20px_50px_rgba(7,33,70,0.08)] backdrop-blur-xl animate-rise" style={{ animationDelay: "240ms" }}>
             <div className="flex items-center justify-between">
-              <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--bbva-blue)]">
+              <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
                 TOP STALE INCIDENTS
               </div>
               <Hourglass className="h-4 w-4 text-black/50" />
@@ -397,7 +397,7 @@ export default function OpsPage() {
               )}
               {staleList.slice(0, 6).map((gid) => (
                 <div key={gid} className="flex items-center gap-2 justify-between">
-                  <div className="text-sm font-mono text-[color:var(--bbva-ink)]">{gid}</div>
+                  <div className="text-sm font-mono text-[color:var(--ink)]">{gid}</div>
                   <div className="text-xs text-black/60">open</div>
                 </div>
               ))}
@@ -406,7 +406,7 @@ export default function OpsPage() {
 
           {/* Acciones rapidas */}
           <div className="rounded-[26px] border border-white/60 bg-[color:var(--panel)] p-5 shadow-[0_20px_50px_rgba(7,33,70,0.08)] backdrop-blur-xl animate-rise" style={{ animationDelay: "280ms" }}>
-            <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--bbva-blue)]">
+            <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
               QUICK ACTIONS
             </div>
             <div className="mt-4 flex flex-col gap-2">
@@ -519,7 +519,7 @@ function ActionBtn({
   return (
     <button
       onClick={onClick}
-      className="flex items-center gap-3 rounded-2xl border border-white/60 bg-white/80 px-3 py-2 text-sm text-[color:var(--bbva-ink)] shadow-sm hover:bg-white"
+      className="flex items-center gap-3 rounded-2xl border border-white/60 bg-white/80 px-3 py-2 text-sm text-[color:var(--ink)] shadow-sm hover:bg-white"
     >
       <div
         className="h-8 w-8 rounded-2xl grid place-items-center border border-white/70 bg-white/80"

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from datetime import date
 
-from bbva_bugresolutionradar.domain.enums import Severity, Status
-from bbva_bugresolutionradar.domain.kpis import compute_kpis
-from bbva_bugresolutionradar.domain.models import IncidentCurrent, IncidentRecord
+from bugresolutionradar.domain.enums import Severity, Status
+from bugresolutionradar.domain.kpis import compute_kpis
+from bugresolutionradar.domain.models import IncidentCurrent, IncidentRecord
 
 
 def _record(

@@ -5,8 +5,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 
-from bbva_bugresolutionradar.domain.models import CacheDocument
-from bbva_bugresolutionradar.repositories.cache_repo import CacheRepo
+from bugresolutionradar.domain.models import CacheDocument
+from bugresolutionradar.repositories.cache_repo import CacheRepo
 
 
 def test_cache_repo_save_and_load(tmp_path: Path) -> None:
