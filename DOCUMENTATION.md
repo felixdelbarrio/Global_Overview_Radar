@@ -1,4 +1,4 @@
-# Documentación Exhaustiva — BBVA Empresas – Global Overview Radar
+# Documentación Exhaustiva — Global Overview Radar
 
 Esta guía explica **todos los módulos, funciones y flujos** del proyecto para que cualquier persona pueda comprenderlo sin ambigüedades. Está organizada por capas: dominio, servicios, API y UI.
 
@@ -36,7 +36,7 @@ README.md
 **Responsabilidad:** centraliza configuración desde variables de entorno (via `pydantic-settings`).
 
 - **Clase `Settings`**
-  - `app_name`: nombre de app (default: “BBVA Empresas – Global Overview Radar”).
+- `app_name`: nombre de app (default: “Empresas – Global Overview Radar”).
   - `tz`: zona horaria.
   - `assets_dir`: carpeta de fuentes (CSV/JSON/XLSX).
   - `cache_path`: ruta del JSON consolidado.

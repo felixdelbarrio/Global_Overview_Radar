@@ -1,4 +1,4 @@
-"""Paquete principal de BBVA Empresas – Global Overview Radar.
+"""Paquete principal de Global Overview Radar.
 
 Expone la version publica del paquete y marca el namespace principal.
 """
