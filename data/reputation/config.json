@@ -10,22 +10,23 @@
   },
 
   "otros_actores_aliases": {
+    "BBVA": ["BBVA Empresas", "BBVA Business", "BBVA España", "BBVA Spain", "BBVA S.A.", "BBVA Bank", "BBVA Pyme", "BBVA Pymes"],
     "Santander": ["Banco Santander", "Santander Empresas", "Santander Business", "Santander Corporate"],
-    "Caixabank": ["CaixaBank", "Caixa Bank"],
-    "Sabadell": ["Banco Sabadell", "Sabadell Empresas"],
-    "Bankinter": ["Bankinter Empresas", "Bankinter Corporate"],
+    "Caixabank": ["CaixaBank", "Caixa Bank", "La Caixa"],
+    "Sabadell": ["Banco Sabadell", "Sabadell Empresas", "Sabadell S.A."],
+    "Bankinter": ["Bankinter Empresas", "Bankinter Corporate", "Bankinter S.A."],
     "Banorte": ["Grupo Financiero Banorte", "Banorte Empresas"],
     "Citibanamex": ["Citibamex", "Citi Banamex", "Banamex"],
-    "Scotiabank": ["Scotiabank Colpatria"],
-    "Hey": ["Hey Banco"],
-    "BCP": ["Banco de Credito del Peru", "Banco de Crédito del Perú"],
-    "Interbank": ["Inter Bank"],
-    "Bancolombia": ["Banco Bancolombia"],
-    "Banco de Bogota": ["Banco de Bogotá"],
-    "Davivienda": ["Banco Davivienda"],
-    "Banco de Galicia": ["Banco Galicia"],
+    "Scotiabank": ["Scotiabank Colpatria", "Scotiabank Perú", "Scotiabank Colombia"],
+    "Hey": ["Hey Banco", "Hey Bank"],
+    "BCP": ["Banco de Credito del Peru", "Banco de Crédito del Perú", "BCP Perú"],
+    "Interbank": ["Inter Bank", "Interbank Perú"],
+    "Bancolombia": ["Banco Bancolombia", "Bancolombia S.A."],
+    "Banco de Bogota": ["Banco de Bogotá", "Banco de Bogota"],
+    "Davivienda": ["Banco Davivienda", "Davivienda S.A."],
+    "Banco de Galicia": ["Banco Galicia", "Galicia"],
     "AKBANK": ["Akbank", "Ak Bank"],
-    "ING": ["ING Bank"]
+    "ING": ["ING Bank", "ING España"]
   },
 
   "otros_actores_globales": [

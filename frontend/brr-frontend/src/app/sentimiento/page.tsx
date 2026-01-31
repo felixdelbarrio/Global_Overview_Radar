@@ -31,12 +31,22 @@ import {
   Minus,
 } from "lucide-react";
 import { Shell } from "@/components/Shell";
-import { apiGet } from "@/lib/api";
+import { apiGet, apiPost } from "@/lib/api";
 import type { ReputationCacheDocument, ReputationItem } from "@/lib/types";
 
 const SENTIMENTS = ["all", "positive", "neutral", "negative"] as const;
 
 type SentimentFilter = (typeof SENTIMENTS)[number];
+type ReputationCompareGroup = {
+  id: string;
+  filter: Record<string, unknown>;
+  items: ReputationItem[];
+  stats: { count: number };
+};
+type ReputationCompareResponse = {
+  groups: ReputationCompareGroup[];
+  combined: { items: ReputationItem[]; stats: { count: number } };
+};
 
 export default function SentimientoPage() {
   const today = useMemo(() => new Date(), []);
@@ -61,35 +71,77 @@ export default function SentimientoPage() {
   const [actor, setActor] = useState("all");
   const [sources, setSources] = useState<string[]>([]);
 
-  const touchFilters = () => {
+  const touchItemsFilters = () => {
     setError(null);
+  };
+
+  const touchChartFilters = () => {
     setChartError(null);
     setChartLoading(true);
   };
 
+  const touchCommonFilters = () => {
+    touchItemsFilters();
+    touchChartFilters();
+  };
+
   useEffect(() => {
     let alive = true;
-    const params = new URLSearchParams();
-    if (fromDate) params.set("from_date", fromDate);
-    if (toDate) params.set("to_date", toDate);
-    if (sentiment !== "all") params.set("sentiment", sentiment);
-    if (entity !== "all") params.set("entity", entity);
-    if (geo !== "all") params.set("geo", geo);
-    if (actor !== "all" && entity !== "bbva") {
-      params.set("actor", actor);
-    }
-    if (sources.length) params.set("sources", sources.join(","));
 
-    apiGet<ReputationCacheDocument>(`/reputation/items?${params.toString()}`)
-      .then((doc) => {
+    // If comparing BBVA vs another actor, request both datasets and combine them.
+    const fetchCombinedIfComparing = async () => {
+      if (entity === "bbva" && actor !== "all") {
+        const makeFilter = (overrides: Partial<Record<string, unknown>>) => {
+          const f: Record<string, unknown> = {};
+          if (fromDate) f.from_date = fromDate;
+          if (toDate) f.to_date = toDate;
+          if (sentiment !== "all") f.sentiment = sentiment;
+          if (geo !== "all") f.geo = geo;
+          if (sources.length) f.sources = sources.join(",");
+          return { ...f, ...overrides };
+        };
+
+        const payload = [
+          makeFilter({ entity: "bbva" }),
+          makeFilter({ actor }),
+        ];
+
+        try {
+          const doc = await apiPost<ReputationCompareResponse>(
+            "/reputation/items/compare",
+            payload,
+          );
+          if (!alive) return;
+          setItems(doc.combined.items ?? []);
+          setError(null);
+        } catch (e) {
+          if (alive) setError(String(e));
+        }
+        return;
+      }
+
+      const params = new URLSearchParams();
+      if (fromDate) params.set("from_date", fromDate);
+      if (toDate) params.set("to_date", toDate);
+      if (sentiment !== "all") params.set("sentiment", sentiment);
+      if (entity !== "all") params.set("entity", entity);
+      if (geo !== "all") params.set("geo", geo);
+      if (actor !== "all" && entity !== "bbva") {
+        params.set("actor", actor);
+      }
+      if (sources.length) params.set("sources", sources.join(","));
+
+      try {
+        const doc = await apiGet<ReputationCacheDocument>(`/reputation/items?${params.toString()}`);
         if (!alive) return;
         setItems(doc.items ?? []);
         setError(null);
-      })
-      .catch((e) => {
+      } catch (e) {
         if (alive) setError(String(e));
-      })
-      .finally(() => undefined);
+      }
+    };
+
+    void fetchCombinedIfComparing();
 
     return () => {
       alive = false;
@@ -258,7 +310,7 @@ export default function SentimientoPage() {
                 type="date"
                 value={fromDate}
                 onChange={(e) => {
-                  touchFilters();
+                  touchCommonFilters();
                   setFromDate(e.target.value);
                 }}
                 className="w-full rounded-2xl border border-white/60 bg-white/80 px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] outline-none focus:border-[color:var(--aqua)]/60 focus:ring-2 focus:ring-[color:var(--aqua)]/30"
@@ -269,7 +321,7 @@ export default function SentimientoPage() {
                 type="date"
                 value={toDate}
                 onChange={(e) => {
-                  touchFilters();
+                  touchCommonFilters();
                   setToDate(e.target.value);
                 }}
                 className="w-full rounded-2xl border border-white/60 bg-white/80 px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] outline-none focus:border-[color:var(--aqua)]/60 focus:ring-2 focus:ring-[color:var(--aqua)]/30"
@@ -279,7 +331,7 @@ export default function SentimientoPage() {
               <select
                 value={sentiment}
                 onChange={(e) => {
-                  touchFilters();
+                  touchCommonFilters();
                   setSentiment(e.target.value as SentimentFilter);
                 }}
                 className="w-full rounded-2xl border border-white/60 bg-white/80 px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] outline-none focus:border-[color:var(--aqua)]/60 focus:ring-2 focus:ring-[color:var(--aqua)]/30"
@@ -296,7 +348,7 @@ export default function SentimientoPage() {
                 value={entity}
                 onChange={(e) => {
                   const next = e.target.value;
-                  touchFilters();
+                  touchItemsFilters();
                   setEntity(next);
                   if (next === "otros_actores" && isBbvaName(actor)) {
                     setActor("all");
@@ -321,7 +373,7 @@ export default function SentimientoPage() {
               <select
                 value={geo}
                 onChange={(e) => {
-                  touchFilters();
+                  touchCommonFilters();
                   setGeo(e.target.value);
                 }}
                 className="w-full rounded-2xl border border-white/60 bg-white/80 px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] outline-none focus:border-[color:var(--aqua)]/60 focus:ring-2 focus:ring-[color:var(--aqua)]/30"
@@ -338,7 +390,7 @@ export default function SentimientoPage() {
               <select
                 value={actor}
                 onChange={(e) => {
-                  touchFilters();
+                  touchItemsFilters();
                   setActor(e.target.value);
                 }}
                 className="w-full rounded-2xl border border-white/60 bg-white/80 px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] outline-none focus:border-[color:var(--aqua)]/60 focus:ring-2 focus:ring-[color:var(--aqua)]/30 disabled:opacity-60"
@@ -364,7 +416,7 @@ export default function SentimientoPage() {
                   <button
                     key={src}
                     onClick={() => {
-                      touchFilters();
+                      touchCommonFilters();
                       toggleSource(src, sources, setSources);
                     }}
                     className={
