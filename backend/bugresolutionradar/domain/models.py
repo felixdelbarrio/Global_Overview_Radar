@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional, cast
 
 from pydantic import BaseModel, Field
 
-from bbva_bugresolutionradar.domain.enums import Severity, Status
+from bugresolutionradar.domain.enums import Severity, Status
 
 
 class SourceRef(BaseModel):

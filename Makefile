@@ -97,22 +97,22 @@ ingest: bugs-ingest reputation-ingest
 
 bugs-ingest:
 	@echo "==> Ejecutando ingestion/consolidación (backend)..."
-	$(PY) -m bbva_bugresolutionradar.cli.main ingest
+	$(PY) -m bugresolutionradar.cli.main ingest
 
 reputation-ingest:
 	@echo "==> Ejecutando ingesta de reputación..."
-	$(PY) -m bbva_bugresolutionradar.cli.main reputation-ingest
+	$(PY) -m bugresolutionradar.cli.main reputation-ingest
 
 serve: serve-back
 	@true
 
 serve-back:
 	@echo "==> Iniciando API (uvicorn) en http://$(HOST):$(API_PORT)..."
-	$(PY) -m uvicorn bbva_bugresolutionradar.api.main:app --reload --host $(HOST) --port $(API_PORT)
+	$(PY) -m uvicorn bugresolutionradar.api.main:app --reload --host $(HOST) --port $(API_PORT)
 
 dev-back:
 	@echo "==> Desarrollo backend (uvicorn --reload). Usa otra terminal para frontend."
-	$(PY) -m uvicorn bbva_bugresolutionradar.api.main:app --reload --host $(HOST) --port $(API_PORT)
+	$(PY) -m uvicorn bugresolutionradar.api.main:app --reload --host $(HOST) --port $(API_PORT)
 
 # -------------------------
 # Frontend runtime
@@ -220,4 +220,4 @@ dev:
 	@echo "- Terminal B: make dev-front"
 	@echo ""
 	@echo "Si quieres hacerlo todo en un solo terminal instala 'concurrently' y ejecuta:"
-	@echo "cd $(FRONTDIR) && npx concurrently \"$(PY) -m uvicorn bbva_bugresolutionradar.api.main:app --reload --host $(HOST) --port $(API_PORT)\" \"npm run dev\""
+	@echo "cd $(FRONTDIR) && npx concurrently \"$(PY) -m uvicorn bugresolutionradar.api.main:app --reload --host $(HOST) --port $(API_PORT)\" \"npm run dev\""

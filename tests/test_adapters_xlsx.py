@@ -7,8 +7,8 @@ from pathlib import Path
 
 import openpyxl  # type: ignore[import-untyped]
 
-from bbva_bugresolutionradar.adapters.xlsx_adapter import XlsxAdapter
-from bbva_bugresolutionradar.domain.enums import Severity, Status
+from bugresolutionradar.adapters.xlsx_adapter import XlsxAdapter
+from bugresolutionradar.domain.enums import Severity, Status
 
 
 def test_xlsx_adapter_reads_workbook(tmp_path: Path) -> None:

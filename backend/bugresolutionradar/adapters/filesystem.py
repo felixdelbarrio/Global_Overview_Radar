@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from bbva_bugresolutionradar.adapters.base import Adapter
+from bugresolutionradar.adapters.base import Adapter
 
 
 class FilesystemAdapter(Adapter):

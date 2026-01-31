@@ -11,10 +11,10 @@ from typing import TYPE_CHECKING, List, Optional
 
 import openpyxl
 
-from bbva_bugresolutionradar.adapters.filesystem import FilesystemAdapter
-from bbva_bugresolutionradar.adapters.utils import to_date, to_str
-from bbva_bugresolutionradar.domain.enums import Severity, Status
-from bbva_bugresolutionradar.domain.models import ObservedIncident
+from bugresolutionradar.adapters.filesystem import FilesystemAdapter
+from bugresolutionradar.adapters.utils import to_date, to_str
+from bugresolutionradar.domain.enums import Severity, Status
+from bugresolutionradar.domain.models import ObservedIncident
 
 if TYPE_CHECKING:
     # Import only for type checking to avoid runtime overhead

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from bbva_bugresolutionradar.domain.enums import Severity, Status
-from bbva_bugresolutionradar.domain.models import ObservedIncident, RunSource
-from bbva_bugresolutionradar.services.consolidate_service import ConsolidateService
+from bugresolutionradar.domain.enums import Severity, Status
+from bugresolutionradar.domain.models import ObservedIncident, RunSource
+from bugresolutionradar.services.consolidate_service import ConsolidateService
 
 
 def test_consolidate_creates_history_on_change() -> None:

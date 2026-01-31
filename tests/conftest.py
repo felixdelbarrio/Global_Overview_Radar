@@ -17,10 +17,10 @@ BACKEND = ROOT / "backend"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
-_enums = importlib.import_module("bbva_bugresolutionradar.domain.enums")
+_enums = importlib.import_module("bugresolutionradar.domain.enums")
 Severity = _enums.Severity
 Status = _enums.Status
-_models = importlib.import_module("bbva_bugresolutionradar.domain.models")
+_models = importlib.import_module("bugresolutionradar.domain.models")
 CacheDocument = _models.CacheDocument
 IncidentCurrent = _models.IncidentCurrent
 IncidentHistoryEvent = _models.IncidentHistoryEvent

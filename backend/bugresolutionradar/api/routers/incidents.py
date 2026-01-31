@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
-from bbva_bugresolutionradar.domain.enums import Severity, Status
+from bugresolutionradar.domain.enums import Severity, Status
 
 router = APIRouter()
 

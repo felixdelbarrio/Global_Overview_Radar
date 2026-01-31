@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from bbva_bugresolutionradar.adapters.csv_adapter import FilesystemCSVAdapter
-from bbva_bugresolutionradar.adapters.json_adapter import FilesystemJSONAdapter
-from bbva_bugresolutionradar.domain.enums import Severity, Status
+from bugresolutionradar.adapters.csv_adapter import FilesystemCSVAdapter
+from bugresolutionradar.adapters.json_adapter import FilesystemJSONAdapter
+from bugresolutionradar.domain.enums import Severity, Status
 
 
 def test_csv_adapter_parses_rows(tmp_path: Path) -> None:

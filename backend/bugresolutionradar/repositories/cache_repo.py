@@ -6,7 +6,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-from bbva_bugresolutionradar.domain.models import CacheDocument
+from bugresolutionradar.domain.models import CacheDocument
 
 
 class CacheRepo:

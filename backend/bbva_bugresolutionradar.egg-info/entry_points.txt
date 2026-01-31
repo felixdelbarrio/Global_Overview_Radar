@@ -1,2 +1,0 @@
-[console_scripts]
-brr = bbva_bugresolutionradar.cli.main:app

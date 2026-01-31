@@ -5,8 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from bbva_bugresolutionradar.config import Settings
-from bbva_bugresolutionradar.services.ingest_service import IngestService
+from bugresolutionradar.config import Settings
+from bugresolutionradar.services.ingest_service import IngestService
 
 
 def test_ingest_service_combines_sources(tmp_path: Path) -> None:

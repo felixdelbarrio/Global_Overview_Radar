@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from bbva_bugresolutionradar.adapters.utils import to_date, to_int, to_str
+from bugresolutionradar.adapters.utils import to_date, to_int, to_str
 
 
 def test_to_str_handles_none_and_whitespace() -> None:

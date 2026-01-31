@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from bbva_bugresolutionradar.adapters import (
+from bugresolutionradar.adapters import (
     FilesystemCSVAdapter,
     FilesystemJSONAdapter,
     XlsxAdapter,
 )
-from bbva_bugresolutionradar.adapters.base import Adapter
-from bbva_bugresolutionradar.config import Settings
-from bbva_bugresolutionradar.domain.models import ObservedIncident
+from bugresolutionradar.adapters.base import Adapter
+from bugresolutionradar.config import Settings
+from bugresolutionradar.domain.models import ObservedIncident
 
 
 class IngestService:

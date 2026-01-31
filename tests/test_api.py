@@ -6,9 +6,9 @@ from datetime import date, datetime, timedelta, timezone
 
 from fastapi.testclient import TestClient
 
-from bbva_bugresolutionradar.api.main import create_app
-from bbva_bugresolutionradar.domain.enums import Severity, Status
-from bbva_bugresolutionradar.domain.models import CacheDocument, IncidentCurrent, IncidentRecord
+from bugresolutionradar.api.main import create_app
+from bugresolutionradar.domain.enums import Severity, Status
+from bugresolutionradar.domain.models import CacheDocument, IncidentCurrent, IncidentRecord
 
 
 class DummyRepo:

@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Dict, List
 
-from bbva_bugresolutionradar.domain.models import (
+from bugresolutionradar.domain.models import (
     CacheDocument,
     IncidentCurrent,
     IncidentHistoryEvent,
