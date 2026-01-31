@@ -1,111 +1,71 @@
-# Global Overview Radar
+# 🌍 Global Overview Radar
 
-Global Overview Radar es una plataforma full‑stack para **ingestión, consolidación y análisis ejecutivo de incidencias**. Transforma fuentes heterogéneas (CSV/JSON/XLSX) en un **radar operativo** con KPIs, tendencias y priorización de riesgos. Diseñada para decisiones rápidas, trazabilidad y visibilidad de negocio.
+**EN |** Global Overview Radar is a **comparative public perception intelligence** platform. It detects **narrative change**, surfaces **early reputational signals**, and benchmarks **relative positioning** across market actors—always with **explainable evidence**.
 
-**Valor comercial (tono ejecutivo)**
-- **Tiempo a decisión**: reduce horas de análisis manual a minutos con KPIs y paneles ejecutivos.
-- **Riesgo controlado**: identifica incidencias críticas y stale de forma inmediata.
-- **Trazabilidad completa**: cada incidencia conserva historial y procedencia de fuentes.
-- **Escalabilidad**: adaptable a nuevos orígenes y volúmenes crecientes.
+**ES |** Global Overview Radar es una plataforma de **inteligencia de percepción pública comparada**. Detecta **cambios narrativos**, identifica **señales reputacionales tempranas** y compara **posicionamiento relativo** entre actores del mercado—siempre con **evidencia explicable**.
 
 ---
 
-## Panorama rápido
-- **Backend (Python/FastAPI)**: ingestión, consolidación, cache y API.
-- **Frontend (Next.js)**: dashboards ejecutivos y vistas operativas.
-- **Cache**: documento consolidado JSON para consultas rápidas.
+## ✨ Why it exists | Por qué existe
 
-> Documento detallado: ver `ARCHITECTURE.md`, `DOCUMENTATION.md` y `FILES.md`.
+**EN |** Reputation is managed continuously, not episodically. The goal is to move from reactive monitoring to **anticipatory intelligence**.
 
----
-
-## Funcionalidades clave
-- Ingesta de CSV/JSON/XLSX desde una carpeta de assets.
-- Consolidación con historial y procedencia.
-- KPIs ejecutivos, evolución temporal y lista de incidencias.
-- UI moderna con filtros, ordenación y resumen operativo.
+**ES |** La reputación se gestiona de forma continua, no puntual. El objetivo es pasar del monitoring reactivo a la **inteligencia anticipatoria**.
 
 ---
 
-## Estructura del repositorio
-```
-backend/                    # Código backend (FastAPI)
-  bbva_bugresolutionradar/
-frontend/brr-frontend/       # Frontend (Next.js)
-data/                        # Assets y cache local
-.github/workflows/           # CI (GitHub Actions)
-```
+## 🧭 Docs | Documentación
+
+All technical documentation lives in **`/docs`**.
+
+- **Architecture (Mermaid + C4 + flows)** → [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)  
+- **System Documentation (deep dive)** → [`docs/DOCUMENTACION.md`](docs/DOCUMENTACION.md)  
+- **Data Contracts** → [`docs/DATA_CONTRACTS.md`](docs/DATA_CONTRACTS.md)  
+- **Signals Catalog + walkthroughs** → [`docs/SIGNALS_CATALOG.md`](docs/SIGNALS_CATALOG.md)  
+- **Governance & Security** → [`docs/GOVERNANCE_SECURITY.md`](docs/GOVERNANCE_SECURITY.md)  
+- **How to extend the system** → [`docs/EXTENDING_THE_SYSTEM.md`](docs/EXTENDING_THE_SYSTEM.md)  
+- **Project file index** → [`docs/FILES.md`](docs/FILES.md)
 
 ---
 
-## Requisitos
-- Python >= 3.9
-- Node.js >= 20
-- npm >= 9
+## 🧩 Deployment modes | Modos de despliegue
+
+**EN |**
+- **Open Source**: reference architecture + extensible pipelines.
+- **Commercial Product**: enterprise-ready defaults + dashboards + SLAs.
+- **Internal Enterprise Platform**: private deployment + custom peers/taxonomies + integrations.
+
+**ES |**
+- **Open Source**: arquitectura de referencia + pipelines extensibles.
+- **Producto comercial**: defaults enterprise + dashboards + SLAs.
+- **Plataforma interna enterprise**: despliegue privado + peers/taxonomías a medida + integraciones.
 
 ---
 
-## Instalación rápida
+## 🛠️ Quick start (repo-agnostic) | Arranque rápido (agnóstico)
 
-```bash
-make venv
-make install
-make env
-```
+**EN |** This repository is designed to be modular. Typical steps:
+1) Configure sources and taxonomies in `config/` (or your equivalent).
+2) Run ingestion + processing pipelines.
+3) Explore insights via API and dashboards.
 
----
+**ES |** Este repositorio está diseñado para ser modular. Pasos típicos:
+1) Configura fuentes y taxonomías en `config/` (o su equivalente).
+2) Ejecuta pipelines de ingesta + procesamiento.
+3) Explora insights vía API y dashboards.
 
-## Variables de entorno (principales)
-Se gestionan desde `.env` (copia base en `.env.example`).
-
-- `ASSETS_DIR`: ruta a los ficheros de ingestión.
-- `CACHE_PATH`: ruta del cache consolidado.
-- `SOURCES`: fuentes activas (csv, json, xlsx).
-- `MASTER_THRESHOLD_CLIENTS`: umbral para incidencias “master”.
-- `STALE_DAYS_THRESHOLD`: días para marcar incidencia stale.
-- `PERIOD_DAYS_DEFAULT`: ventana por defecto en KPIs.
+> Note / Nota: concrete commands depend on your implementation. See [`docs/DOCUMENTACION.md`](docs/DOCUMENTACION.md) for the system mental model and extension points.
 
 ---
 
-## Comandos principales
+## 🤝 Contributing | Contribuir
 
-```bash
-make dev-back         # API (FastAPI) en modo reload
-make dev-front        # Frontend (Next.js)
-make ingest           # Ejecuta ingestión + consolidación
-make test             # Tests backend + frontend
-make test-coverage    # Cobertura backend + frontend
-make typecheck        # mypy/pyright + TS build
-make lint             # ruff + eslint
-```
+**EN |** Contributions are welcome. Please keep changes:
+- comparative-by-design
+- explainable-by-default
+- configurable (no hardcoded company assumptions)
 
----
-
-## CI/CD
-El pipeline de GitHub ejecuta en cada push:
-- `make test-coverage-back`
-- `make test-coverage-front`
-
----
-
-## Arquitectura (resumen)
-
-- Los adaptadores leen fuentes de assets y generan observaciones canónicas.
-- La consolidación crea un documento de cache único (JSON).
-- La API expone KPIs, evolución temporal e incidencias.
-- El frontend consume la API y ofrece paneles ejecutivos.
-
-Para un desglose completo con flujos, ver `ARCHITECTURE.md`.
-
----
-
-## Roadmap sugerido
-- Autenticación y control de acceso.
-- Observabilidad (logging estructurado + métricas).
-- Almacenamiento persistente (DB) y caché distribuida.
-- Conectores a sistemas corporativos (Jira/ServiceNow).
-
----
-
-## Soporte
-Para cambios estructurales o despliegues, consulta `ARCHITECTURE.md` y ajusta `.env`.
+**ES |** Se agradecen contribuciones. Mantén los cambios:
+- comparativos por diseño
+- explicables por defecto
+- configurables (sin supuestos hardcoded por empresa)
