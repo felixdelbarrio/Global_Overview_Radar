@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime
 import json
+from datetime import datetime
 from typing import Any, Iterable, cast
 from urllib.request import Request, urlopen
 
