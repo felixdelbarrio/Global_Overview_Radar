@@ -20,7 +20,7 @@ const body = Source_Sans_3({
 
 /** Metadata base para SEO y titulo de la app. */
 export const metadata = {
-  title: "BBVA Empresas – Global Overview Radar",
+  title: "Global Overview Radar",
   description: "Enterprise Incident Intelligence",
 };
 

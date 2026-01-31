@@ -47,7 +47,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
             </div>
             <div className="leading-tight">
               <div className="font-display font-semibold tracking-tight">
-                BBVA Empresas – Global Overview Radar
+                Global Overview Radar
               </div>
               <div className="text-[11px] text-white/75 -mt-0.5">
                 Enterprise Incident Intelligence
