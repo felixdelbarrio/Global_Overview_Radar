@@ -5,6 +5,8 @@
 .env.*
 !.env.example
 !.env.reputation.example
+!backend/bugresolutionradar/.env.example
+!backend/reputation/.env.reputation.example
 
 ########################################
 # Python
@@ -67,7 +69,7 @@ htmlcov/
 # Data / cache
 ########################################
 data/cache/
-data/cache/cache.json
+data/cache/bugresolutionradar_cache.json
 
 ############################
 # Logs & runtime files

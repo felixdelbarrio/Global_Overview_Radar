@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, cast
 
@@ -9,8 +10,11 @@ from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from dotenv import load_dotenv
 
-# backend/reputation/config.py -> repo_root = parents[2]
+# Paths
 REPO_ROOT = Path(__file__).resolve().parents[2]
+REPUTATION_ENV_PATH = REPO_ROOT / "backend" / "reputation" / ".env.reputation"
+REPUTATION_ENV_EXAMPLE = REPO_ROOT / "backend" / "reputation" / ".env.reputation.example"
+
 DEFAULT_CONFIG_PATH = REPO_ROOT / "data" / "reputation" / "config.json"
 DEFAULT_CACHE_PATH = REPO_ROOT / "data" / "cache" / "reputation_cache.json"
 
@@ -19,7 +23,7 @@ class ReputationSettings(BaseSettings):
     """Configuración de reputación (se carga desde .env.reputation)."""
 
     model_config = SettingsConfigDict(
-        env_file=".env.reputation",
+        env_file=str(REPUTATION_ENV_PATH),
         env_file_encoding="utf-8",
         extra="ignore",
     )
@@ -77,8 +81,8 @@ class ReputationSettings(BaseSettings):
 
 
 def _ensure_env_file() -> None:
-    env_path = REPO_ROOT / ".env.reputation"
-    example_path = REPO_ROOT / ".env.reputation.example"
+    env_path = REPUTATION_ENV_PATH
+    example_path = REPUTATION_ENV_EXAMPLE
     if env_path.exists():
         return
     if not example_path.exists():
@@ -88,7 +92,7 @@ def _ensure_env_file() -> None:
 
 # Carga .env.reputation en variables de entorno para collectors que leen os.getenv
 _ensure_env_file()
-load_dotenv(".env.reputation", override=False)
+load_dotenv(str(REPUTATION_ENV_PATH), override=False)
 
 # Singleton de settings
 settings = ReputationSettings()

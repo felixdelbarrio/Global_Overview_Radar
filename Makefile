@@ -71,7 +71,7 @@ install: install-backend install-front
 install-backend: venv
 	@echo "==> Instalando dependencias Python (requirements / pyproject editable)..."
 	$(PIP) install -r requirements.txt || true
-	$(PIP) install -e .
+	$(PIP) install -e backend
 
 install-front:
 	@echo "==> Instalando dependencias frontend (cd $(FRONTDIR))..."
@@ -79,9 +79,10 @@ install-front:
 	@echo "==> Instalación frontend completada."
 
 env:
-	@test -f .env || cp .env.example .env
-	@test -f .env.reputation || cp .env.reputation.example .env.reputation
-	@echo "==> .env preparado (no olvides editarlo si procede)."
+	@# Create per-module env files from examples if missing
+	@test -f backend/bugresolutionradar/.env || cp backend/bugresolutionradar/.env.example backend/bugresolutionradar/.env
+	@test -f backend/reputation/.env.reputation || cp backend/reputation/.env.reputation.example backend/reputation/.env.reputation
+	@echo "==> .env files prepared (edit if needed)."
 
 ensure-backend: install-backend
 	@true
@@ -199,7 +200,7 @@ clean:
 	@echo "==> Limpiando entorno..."
 	rm -rf $(VENV) .mypy_cache .ruff_cache .pytest_cache .pytest_cache
 	rm -rf **/__pycache__ **/.pycache__
-	rm -rf data/cache/cache.json || true
+	rm -rf data/cache/bugresolutionradar_cache.json || true
 	# frontend
 	cd $(FRONTDIR) && rm -rf node_modules .next dist out || true
 	@echo "==> Limpieza completada."
