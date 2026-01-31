@@ -1,4 +1,4 @@
-# Makefile - Fullstack: BBVA Empresas – Global Overview Radar
+# Makefile - Fullstack: Global Overview Radar
 # Uso: make <target>
 SHELL := /bin/bash
 
