@@ -1,8 +1,8 @@
 # Configuracion principal del proyecto Python y herramientas de calidad.
 [project]
-name = "bbva-bugresolutionradar"
+name = "GlobalOverviewRadar"
 version = "0.1.0"
-description = "Empresas – Global Overview Radar - assets ingestion, consolidation and KPI dashboard backend"
+description = "Global Overview Radar - assets ingestion, consolidation and KPI dashboard backend"
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
@@ -13,7 +13,7 @@ dependencies = [
 ]
 
 [project.scripts]
-brr = "bbva_bugresolutionradar.cli.main:app"
+brr = "bugresolutionradar.cli.main:app"
 
 [build-system]
 requires = ["setuptools>=68"]

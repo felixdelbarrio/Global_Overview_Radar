@@ -59,15 +59,15 @@ export default function DashboardPage() {
     <Shell>
       <section className="relative overflow-hidden rounded-[28px] border border-white/60 bg-[color:var(--panel-strong)] p-6 shadow-[0_30px_70px_rgba(7,33,70,0.12)] animate-rise">
         <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute -top-24 -right-10 h-48 w-48 rounded-full bg-[color:var(--bbva-aqua)]/15 blur-3xl" />
-          <div className="absolute -bottom-16 left-10 h-40 w-40 rounded-full bg-[color:var(--bbva-blue)]/10 blur-3xl" />
+          <div className="absolute -top-24 -right-10 h-48 w-48 rounded-full bg-[color:var(--aqua)]/15 blur-3xl" />
+          <div className="absolute -bottom-16 left-10 h-40 w-40 rounded-full bg-[color:var(--blue)]/10 blur-3xl" />
         </div>
         <div className="relative">
-          <div className="inline-flex items-center gap-2 rounded-full border border-white/60 bg-white/70 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-[color:var(--bbva-blue)] shadow-sm">
+          <div className="inline-flex items-center gap-2 rounded-full border border-white/60 bg-white/70 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-[color:var(--blue)] shadow-sm">
             <Sparkles className="h-3.5 w-3.5" />
             Executive overview
           </div>
-          <h1 className="mt-4 text-3xl sm:text-4xl font-display font-semibold text-[color:var(--bbva-ink)]">
+          <h1 className="mt-4 text-3xl sm:text-4xl font-display font-semibold text-[color:var(--ink)]">
             Dashboard Ejecutivo
           </h1>
           <p className="mt-2 max-w-2xl text-sm text-black/60">
@@ -76,11 +76,11 @@ export default function DashboardPage() {
           </p>
           <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-black/55">
             <span className="inline-flex items-center gap-2 rounded-full bg-white/70 px-3 py-1">
-              <Calendar className="h-3.5 w-3.5 text-[color:var(--bbva-blue)]" />
+              <Calendar className="h-3.5 w-3.5 text-[color:var(--blue)]" />
               Últimos 60 días
             </span>
             <span className="inline-flex items-center gap-2 rounded-full bg-white/70 px-3 py-1">
-              <Activity className="h-3.5 w-3.5 text-[color:var(--bbva-blue)]" />
+              <Activity className="h-3.5 w-3.5 text-[color:var(--blue)]" />
               Open: {kpis?.open_total ?? "—"}
             </span>
             <span className="inline-flex items-center gap-2 rounded-full bg-white/70 px-3 py-1">
@@ -113,7 +113,7 @@ export default function DashboardPage() {
 
       {/* Evolución */}
       <div className="mt-8 rounded-[26px] border border-white/60 bg-[color:var(--panel)] p-5 shadow-[0_20px_50px_rgba(7,33,70,0.08)] backdrop-blur-xl animate-rise" style={{ animationDelay: "180ms" }}>
-        <h2 className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--bbva-blue)]">
+        <h2 className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
           EVOLUCIÓN TEMPORAL
         </h2>
 
@@ -139,14 +139,14 @@ function Kpi({
     <div
       className={
         "relative overflow-hidden rounded-2xl border border-white/70 bg-white/85 px-4 py-3 shadow-[0_16px_40px_rgba(7,33,70,0.12)] animate-rise " +
-        (highlight ? "ring-2 ring-[color:var(--bbva-aqua)]/30" : "")
+        (highlight ? "ring-2 ring-[color:var(--aqua)]/30" : "")
       }
     >
-      <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-[color:var(--bbva-aqua)] via-[color:var(--bbva-blue)] to-transparent" />
+      <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-[color:var(--aqua)] via-[color:var(--blue)] to-transparent" />
       <div className="text-[11px] uppercase tracking-[0.16em] text-black/45">
         {label}
       </div>
-      <div className="mt-2 text-2xl font-display font-semibold text-[color:var(--bbva-ink)]">
+      <div className="mt-2 text-2xl font-display font-semibold text-[color:var(--ink)]">
         {value}
       </div>
     </div>
