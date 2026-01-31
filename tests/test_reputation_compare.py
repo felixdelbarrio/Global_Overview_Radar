@@ -6,27 +6,51 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from bugresolutionradar.api.main import create_app
+from reputation.actors import primary_actor_info
+from reputation.config import load_business_config
 
 
-def _make_item(gid: str, actor: str | None, geo: str) -> dict:
+def _make_item(gid: str, actor: str | None, geo: str, title: str | None = None) -> dict:
     return {
         "id": gid,
         "source": "news",
         "geo": geo,
         "actor": actor,
-        "title": f"Title {gid}",
+        "title": title or f"Title {gid}",
         "text": f"Text {gid}",
         "published_at": "2025-01-01T00:00:00Z",
     }
 
 
 def test_compare_endpoint_normalizes_and_combines(monkeypatch, tmp_path: Path) -> None:
+    cfg = load_business_config()
+    principal = primary_actor_info(cfg)
+    assert principal is not None
+    principal_canonical = str(principal.get("canonical") or "").strip()
+    principal_aliases = list(principal.get("aliases") or principal.get("names") or [])
+    if not principal_aliases:
+        principal_aliases = [principal_canonical]
+    principal_alias = principal_aliases[0]
+
+    other_aliases = cfg.get("otros_actores_aliases") or {}
+    assert isinstance(other_aliases, dict)
+    assert other_aliases
+    other_canonical = next(iter(other_aliases.keys()))
+    other_alias_values = other_aliases.get(other_canonical) or []
+    if isinstance(other_alias_values, list) and other_alias_values:
+        other_alias = other_alias_values[0]
+    else:
+        other_alias = other_canonical
+
+    geos = cfg.get("geografias") or []
+    geo = geos[0] if isinstance(geos, list) and geos else "Global"
+
     # build a minimal cache doc with various actor variants and write to tmp file
     items = [
-        _make_item("a1", "Banco Santander", "España"),
-        _make_item("a2", "Santander", "España"),
-        _make_item("b1", "BBVA Empresas", "España"),
-        _make_item("b2", None, "España"),
+        _make_item("a1", other_alias, geo),
+        _make_item("a2", other_canonical, geo),
+        _make_item("p1", principal_alias, geo),
+        _make_item("p2", None, geo, title=f"{principal_alias} novedades"),
     ]
 
     doc_dict = {
@@ -53,14 +77,14 @@ def test_compare_endpoint_normalizes_and_combines(monkeypatch, tmp_path: Path) -
 
     payload = [
         {
-            "entity": "bbva",
-            "geo": "España",
+            "entity": "actor_principal",
+            "geo": geo,
             "from_date": "2024-01-01",
             "to_date": "2026-01-01",
         },
         {
-            "actor": "Santander",
-            "geo": "España",
+            "actor": other_canonical,
+            "geo": geo,
             "from_date": "2024-01-01",
             "to_date": "2026-01-01",
         },
@@ -72,10 +96,9 @@ def test_compare_endpoint_normalizes_and_combines(monkeypatch, tmp_path: Path) -
 
     # two groups
     assert len(body.get("groups", [])) == 2
-    # group counts: BBVA group should include b1 (normalized) and b2 (title contains BBVA?); at least 1
+    # group counts: actor principal group should include p1 (normalized) and p2 (title contains alias); at least 1
     assert body["groups"][0]["stats"]["count"] >= 1
     assert body["groups"][1]["stats"]["count"] >= 1
     # combined should include all unique ids
     combined_ids = {it["id"] for it in body["combined"]["items"]}
-    # b2 has no explicit BBVA mention in title/text, so it may be excluded.
-    assert {"a1", "a2", "b1"}.issubset(combined_ids)
+    assert {"a1", "a2", "p1"}.issubset(combined_ids)
