@@ -9,8 +9,23 @@
     "Turquía": ["Turquia", "Turquía", "Turkey", "TR", "Istanbul", "İstanbul"]
   },
 
+  "actor_principal": {
+    "BBVA": ["BBVA Empresas"]
+  },
+  "actor_principal_aliases": {
+    "BBVA": [
+      "BBVA Empresas",
+      "BBVA Business",
+      "BBVA España",
+      "BBVA Spain",
+      "BBVA S.A.",
+      "BBVA Bank",
+      "BBVA Pyme",
+      "BBVA Pymes"
+    ]
+  },
+
   "otros_actores_aliases": {
-    "BBVA": ["BBVA Empresas", "BBVA Business", "BBVA España", "BBVA Spain", "BBVA S.A.", "BBVA Bank", "BBVA Pyme", "BBVA Pymes"],
     "Santander": ["Banco Santander", "Santander Empresas", "Santander Business", "Santander Corporate"],
     "Caixabank": ["CaixaBank", "Caixa Bank", "La Caixa"],
     "Sabadell": ["Banco Sabadell", "Sabadell Empresas", "Sabadell S.A."],
@@ -37,14 +52,12 @@
 
   "otros_actores_por_geografia": {
     "España": [
-      "BBVA Empresas",
       "Santander",
       "Caixabank",
       "Sabadell",
       "Bankinter"
     ],
     "México": [
-      "BBVA Empresas",
       "Santander",
       "Banorte",
       "Citibanamex",

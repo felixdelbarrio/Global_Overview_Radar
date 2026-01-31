@@ -6,6 +6,13 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Iterable, cast
 from urllib.parse import quote_plus, urlparse
 
+from reputation.actors import (
+    actor_principal_canonicals,
+    actor_principal_terms,
+    build_actor_alias_map,
+    build_actor_aliases_by_canonical,
+    canonicalize_actor,
+)
 from reputation.collectors.appstore import AppStoreCollector
 from reputation.collectors.base import ReputationCollector
 from reputation.collectors.blogs import BlogsCollector
@@ -218,20 +225,20 @@ class ReputationIngestService:
         return service.analyze_items(items)
 
     @staticmethod
-    def _normalize_actor(name: str) -> str:
+    def _normalize_actor(name: str, alias_map: dict[str, str]) -> str:
         if not name:
             return ""
-        if "bbva" in normalize_text(name):
-            return "BBVA"
-        return name.strip()
+        if not alias_map:
+            return name.strip()
+        return canonicalize_actor(name, alias_map)
 
     @classmethod
-    def _all_actors(cls, cfg: dict[str, Any]) -> list[str]:
+    def _all_actors(cls, cfg: dict[str, Any], alias_map: dict[str, str]) -> list[str]:
         seen: set[str] = set()
         ordered: list[str] = []
 
         def add(name: str) -> None:
-            normalized = cls._normalize_actor(name)
+            normalized = cls._normalize_actor(name, alias_map)
             if not normalized or normalized in seen:
                 return
             seen.add(normalized)
@@ -247,7 +254,8 @@ class ReputationIngestService:
         for name in cfg.get("otros_actores_globales") or []:
             if isinstance(name, str) and name.strip():
                 add(name)
-        add("BBVA")
+        for name in actor_principal_canonicals(cfg):
+            add(name)
         return ordered
 
     def _count_distribution(
@@ -255,6 +263,7 @@ class ReputationIngestService:
         items: list[ReputationItem],
         geos: list[str],
         actors: list[str],
+        alias_map: dict[str, str],
     ) -> tuple[dict[str, int], dict[str, int]]:
         geo_counts = {geo: 0 for geo in geos}
         comp_counts = {comp: 0 for comp in actors}
@@ -263,12 +272,12 @@ class ReputationIngestService:
                 geo_counts[item.geo] += 1
             comps: set[str] = set()
             if item.actor:
-                comps.add(self._normalize_actor(item.actor))
+                comps.add(self._normalize_actor(item.actor, alias_map))
             signals = item.signals or {}
             if isinstance(signals.get("actors"), list):
                 for comp in signals["actors"]:
                     if isinstance(comp, str) and comp.strip():
-                        comps.add(self._normalize_actor(comp))
+                        comps.add(self._normalize_actor(comp, alias_map))
             for comp in comps:
                 if comp in comp_counts:
                     comp_counts[comp] += 1
@@ -301,7 +310,8 @@ class ReputationIngestService:
         sources = balance_cfg.get("sources") or ["news"]
 
         geos = [g for g in cfg.get("geografias", []) if isinstance(g, str) and g.strip()]
-        actors = self._all_actors(cfg)
+        alias_map = build_actor_alias_map(cfg)
+        actors = self._all_actors(cfg, alias_map)
 
         existing_recent = (
             self._normalize_items(list(existing_items), lookback_days) if existing_items else []
@@ -309,7 +319,7 @@ class ReputationIngestService:
         combined = self._merge_items(existing_recent, items)
 
         for pass_idx in range(max_passes):
-            geo_counts, comp_counts = self._count_distribution(combined, geos, actors)
+            geo_counts, comp_counts = self._count_distribution(combined, geos, actors, alias_map)
             missing_geos = [
                 g for g in geos if min_per_geo > 0 and geo_counts.get(g, 0) < min_per_geo
             ]
@@ -974,6 +984,7 @@ class ReputationIngestService:
     @staticmethod
     def _load_entity_terms(cfg: dict[str, Any], keywords: list[str]) -> list[str]:
         terms = list(keywords)
+        terms.extend(actor_principal_terms(cfg))
         global_actors = cfg.get("otros_actores_globales") or []
         actors_by_geo = cfg.get("otros_actores_por_geografia") or {}
         actors_aliases = cfg.get("otros_actores_aliases") or {}
@@ -995,8 +1006,6 @@ class ReputationIngestService:
                     for alias in aliases:
                         if isinstance(alias, str):
                             terms.append(alias.strip())
-        # Garantiza BBVA como término base
-        terms.append("BBVA")
         return list(dict.fromkeys([t for t in terms if t]))
 
     @staticmethod
@@ -1250,31 +1259,37 @@ class ReputationIngestService:
         actors_by_geo = cfg.get("otros_actores_por_geografia") or {}
         global_actors = cfg.get("otros_actores_globales") or []
         keywords = self._load_keywords(cfg)
-        bbva_terms = [k for k in keywords if "bbva" in k.lower()] or [
-            "BBVA Empresas",
-            "BBVA Business",
-        ]
+        principal_terms = actor_principal_terms(cfg)
+        for term in keywords:
+            if term and term not in principal_terms:
+                principal_terms.append(term)
 
-        aliases_map = cfg.get("otros_actores_aliases") or {}
+        aliases_map = build_actor_aliases_by_canonical(cfg)
+        alias_lookup = build_actor_alias_map(cfg)
+        principal_canonicals = set(actor_principal_canonicals(cfg))
+        principal_keys = {normalize_text(term) for term in principal_terms if term}
         only_entities_expanded: set[str] | None = None
-        include_bbva_terms = True
+        include_principal_terms = True
         if only_entities:
             expanded: set[str] = set()
-            include_bbva = False
+            include_principal = False
             for name in only_entities:
                 cleaned = name.strip()
                 if not cleaned:
                     continue
                 expanded.add(cleaned)
-                if "bbva" in normalize_text(cleaned):
-                    include_bbva = True
-                if isinstance(aliases_map, dict):
-                    for alias in aliases_map.get(cleaned, []) or []:
-                        if isinstance(alias, str) and alias.strip():
-                            expanded.add(alias.strip())
-            if include_bbva:
-                expanded.update(bbva_terms)
-            include_bbva_terms = include_bbva
+                canonical = alias_lookup.get(normalize_text(cleaned))
+                if canonical:
+                    expanded.add(canonical)
+                    for alias in aliases_map.get(canonical, []):
+                        expanded.add(alias)
+                    if canonical in principal_canonicals:
+                        include_principal = True
+                if normalize_text(cleaned) in principal_keys:
+                    include_principal = True
+            if include_principal:
+                expanded.update(principal_terms)
+            include_principal_terms = include_principal
             only_entities_expanded = expanded
         geo_entities: dict[str, list[str]] = {}
         if isinstance(actors_by_geo, dict):
@@ -1284,17 +1299,16 @@ class ReputationIngestService:
                 names = list(actors) if isinstance(actors, list) else []
                 if isinstance(global_actors, list):
                     names.extend(global_actors)
-                if not only_entities_expanded or include_bbva_terms:
-                    names.extend(bbva_terms)
-                if isinstance(aliases_map, dict):
-                    alias_names: list[str] = []
-                    for name in names:
-                        if not isinstance(name, str):
-                            continue
-                        for alias in aliases_map.get(name, []) or []:
-                            if isinstance(alias, str) and alias.strip():
-                                alias_names.append(alias.strip())
-                    names.extend(alias_names)
+                if not only_entities_expanded or include_principal_terms:
+                    names.extend(principal_terms)
+                alias_names: list[str] = []
+                for name in names:
+                    if not isinstance(name, str):
+                        continue
+                    for alias in aliases_map.get(name, []) or []:
+                        if isinstance(alias, str) and alias.strip():
+                            alias_names.append(alias.strip())
+                names.extend(alias_names)
                 cleaned_names = [n.strip() for n in names if isinstance(n, str) and n.strip()]
                 if only_entities_expanded is not None:
                     cleaned_names = [n for n in cleaned_names if n in only_entities_expanded]
