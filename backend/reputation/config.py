@@ -17,6 +17,7 @@ REPUTATION_ENV_EXAMPLE = REPO_ROOT / "backend" / "reputation" / ".env.reputation
 
 DEFAULT_CONFIG_PATH = REPO_ROOT / "data" / "reputation"
 DEFAULT_CACHE_PATH = REPO_ROOT / "data" / "cache" / "reputation_cache.json"
+DEFAULT_OVERRIDES_PATH = REPO_ROOT / "data" / "cache" / "reputation_overrides.json"
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +37,10 @@ class ReputationSettings(BaseSettings):
     # Rutas
     config_path: Path = Field(default=DEFAULT_CONFIG_PATH, alias="REPUTATION_CONFIG_PATH")
     cache_path: Path = Field(default=DEFAULT_CACHE_PATH, alias="REPUTATION_CACHE_PATH")
+    overrides_path: Path = Field(
+        default=DEFAULT_OVERRIDES_PATH,
+        alias="REPUTATION_OVERRIDES_PATH",
+    )
 
     # TTL por defecto (horas) si el config.json no define output.cache_ttl_hours
     cache_ttl_hours: int = Field(default=24, alias="REPUTATION_CACHE_TTL_HOURS")
@@ -123,6 +128,9 @@ if not settings.config_path.is_absolute():
 
 if not settings.cache_path.is_absolute():
     settings.cache_path = (REPO_ROOT / settings.cache_path).resolve()
+
+if not settings.overrides_path.is_absolute():
+    settings.overrides_path = (REPO_ROOT / settings.overrides_path).resolve()
 
 
 def load_business_config(path: Path | None = None) -> Dict[str, Any]:
@@ -252,11 +260,9 @@ def _list_item_key(item: Any) -> tuple[str, str]:
 def _is_empty_value(value: Any) -> bool:
     if value is None:
         return True
-    if isinstance(value, str) and not value.strip():
-        return True
-    if isinstance(value, (list, dict)) and not value:
-        return True
-    return False
+    if isinstance(value, str):
+        return not value.strip()
+    return isinstance(value, (list, dict)) and not value
 
 
 def _clone_value(value: Any) -> Any:

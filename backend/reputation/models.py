@@ -7,6 +7,13 @@ from pydantic import BaseModel, Field
 from typing_extensions import Annotated
 
 
+class ReputationItemOverride(BaseModel):
+    geo: str | None = None
+    sentiment: str | None = None
+    updated_at: datetime | None = None
+    note: str | None = None
+
+
 class ReputationItem(BaseModel):
     """Mención / review / post normalizado."""
 
@@ -26,6 +33,7 @@ class ReputationItem(BaseModel):
     signals: dict[str, Any] = Field(default_factory=dict)
     sentiment: str | None = None
     aspects: list[str] = Field(default_factory=list)
+    manual_override: ReputationItemOverride | None = None
 
 
 class ReputationCacheStats(BaseModel):
