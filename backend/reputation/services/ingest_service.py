@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 from typing import Any, Iterable, cast
 from urllib.parse import quote_plus, urlparse
@@ -124,12 +125,34 @@ class ReputationIngestService:
         notes: list[str],
     ) -> list[ReputationItem]:
         items: list[ReputationItem] = []
-        for collector in collectors:
-            try:
-                items.extend(list(collector.collect()))
-            except Exception as exc:  # pragma: no cover - defensive
-                notes.append(f"{collector.source_name}: error {exc}")
-                logger.warning("Collector %s failed: %s", collector.source_name, exc)
+        collector_list = list(collectors)
+        if not collector_list:
+            return items
+
+        workers = _env_int("REPUTATION_COLLECTOR_WORKERS", 4)
+        if workers <= 1 or len(collector_list) == 1:
+            for collector in collector_list:
+                try:
+                    items.extend(list(collector.collect()))
+                except Exception as exc:  # pragma: no cover - defensive
+                    notes.append(f"{collector.source_name}: error {exc}")
+                    logger.warning("Collector %s failed: %s", collector.source_name, exc)
+            return items
+
+        max_workers = max(1, min(workers, len(collector_list)))
+
+        def _run(collector: ReputationCollector) -> list[ReputationItem]:
+            return list(collector.collect())
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_map = {executor.submit(_run, collector): collector for collector in collector_list}
+            for future in as_completed(future_map):
+                collector = future_map[future]
+                try:
+                    items.extend(future.result())
+                except Exception as exc:  # pragma: no cover - defensive
+                    notes.append(f"{collector.source_name}: error {exc}")
+                    logger.warning("Collector %s failed: %s", collector.source_name, exc)
         return items
 
     @staticmethod
