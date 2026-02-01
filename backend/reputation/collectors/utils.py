@@ -121,14 +121,12 @@ def _ssl_context() -> ssl.SSLContext | None:
         return None
 
 
+def _env_true(key: str) -> bool:
+    return os.getenv(key, "false").strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
 def rss_debug_enabled() -> bool:
-    return os.getenv("REPUTATION_DEBUG_FEEDS", "false").strip().lower() in {
-        "1",
-        "true",
-        "yes",
-        "y",
-        "on",
-    }
+    return _env_true("REPUTATION_DEBUG_FEEDS") or _env_true("REPUTATION_LOG_DEBUG")
 
 
 _STOPWORDS = {
