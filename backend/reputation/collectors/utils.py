@@ -1,34 +1,169 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import ssl
+import time
 import unicodedata
+from collections import OrderedDict
 from datetime import datetime
 from email.utils import parsedate_to_datetime
+from threading import Lock
 from typing import Any, Iterable
 from urllib.parse import parse_qs, unquote_plus, urlencode, urlparse
+from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 from xml.etree import ElementTree
+
+logger = logging.getLogger(__name__)
+
+_HTTP_CACHE: "OrderedDict[str, tuple[float, str]]" = OrderedDict()
+_HTTP_CACHE_LOCK = Lock()
+_HTTP_BLOCKED: dict[str, float] = {}
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        return default
+
+
+def _env_float(name: str, default: float) -> float:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        return default
+
+
+def _http_cache_key(url: str, headers: dict[str, str]) -> str:
+    if not headers:
+        return url
+    header_items = sorted(headers.items())
+    return f"{url}|{header_items}"
+
+
+def _http_cache_get(key: str) -> str | None:
+    ttl = _env_int("REPUTATION_HTTP_CACHE_TTL_SEC", 0)
+    if ttl <= 0:
+        return None
+    now = time.time()
+    with _HTTP_CACHE_LOCK:
+        entry = _HTTP_CACHE.get(key)
+        if not entry:
+            return None
+        expires_at, value = entry
+        if expires_at < now:
+            _HTTP_CACHE.pop(key, None)
+            return None
+        _HTTP_CACHE.move_to_end(key)
+        return value
+
+
+def _http_cache_set(key: str, value: str) -> None:
+    ttl = _env_int("REPUTATION_HTTP_CACHE_TTL_SEC", 0)
+    if ttl <= 0:
+        return
+    expires_at = time.time() + ttl
+    with _HTTP_CACHE_LOCK:
+        _HTTP_CACHE[key] = (expires_at, value)
+        _HTTP_CACHE.move_to_end(key)
+        max_entries = _env_int("REPUTATION_HTTP_CACHE_MAX_ENTRIES", 0)
+        if max_entries > 0:
+            while len(_HTTP_CACHE) > max_entries:
+                _HTTP_CACHE.popitem(last=False)
+
+
+def _is_blocked(url: str) -> bool:
+    ttl = _env_int("REPUTATION_HTTP_BLOCK_TTL_SEC", 0)
+    if ttl <= 0:
+        return False
+    host = urlparse(url).netloc
+    if not host:
+        return False
+    now = time.time()
+    expires_at = _HTTP_BLOCKED.get(host)
+    if expires_at is None:
+        return False
+    if expires_at < now:
+        _HTTP_BLOCKED.pop(host, None)
+        return False
+    return True
+
+
+def _block_host(url: str) -> None:
+    ttl = _env_int("REPUTATION_HTTP_BLOCK_TTL_SEC", 0)
+    if ttl <= 0:
+        return
+    host = urlparse(url).netloc
+    if not host:
+        return
+    _HTTP_BLOCKED[host] = time.time() + ttl
 
 
 def http_get_text(url: str, headers: dict[str, str] | None = None, timeout: int = 15) -> str:
     req_headers = {"User-Agent": "global-overview-radar/0.1"}
     if headers:
         req_headers.update(headers)
-    req = Request(url, headers=req_headers)
+    if _is_blocked(url):
+        return ""
+    cache_key = _http_cache_key(url, req_headers)
+    cached = _http_cache_get(cache_key)
+    if cached is not None:
+        return cached
+
+    retries = max(0, _env_int("REPUTATION_HTTP_RETRIES", 0))
+    backoff = max(0.0, _env_float("REPUTATION_HTTP_RETRY_BACKOFF_SEC", 0.4))
+    attempt = 0
     context = _ssl_context()
-    with urlopen(req, timeout=timeout, context=context) as response:
-        raw = response.read()
-    if isinstance(raw, bytes):
-        return raw.decode("utf-8", errors="replace")
-    return str(raw)
+
+    while True:
+        try:
+            req = Request(url, headers=req_headers)
+            with urlopen(req, timeout=timeout, context=context) as response:
+                raw = response.read()
+            if isinstance(raw, bytes):
+                text = raw.decode("utf-8", errors="replace")
+            else:
+                text = str(raw)
+            _http_cache_set(cache_key, text)
+            return text
+        except HTTPError as exc:
+            if exc.code in {429, 502, 503, 403}:
+                _block_host(url)
+            if attempt >= retries:
+                return ""
+            sleep_for = backoff * (2**attempt)
+            attempt += 1
+            if sleep_for > 0:
+                time.sleep(sleep_for)
+        except Exception:
+            if attempt >= retries:
+                raise
+            sleep_for = backoff * (2**attempt)
+            attempt += 1
+            if sleep_for > 0:
+                time.sleep(sleep_for)
 
 
 def http_get_json(url: str, headers: dict[str, str] | None = None, timeout: int = 15) -> Any:
     raw = http_get_text(url, headers=headers, timeout=timeout)
-    return json.loads(raw)
+    if not raw or not raw.strip():
+        return {}
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        if rss_debug_enabled():
+            logger.debug("http_get_json decode failed for %s", url)
+        return {}
 
 
 def build_url(base: str, params: dict[str, Any]) -> str:
