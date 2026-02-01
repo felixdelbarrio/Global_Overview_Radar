@@ -34,6 +34,13 @@ export type EvolutionPoint = {
   closed: number;
 };
 
+export type ReputationItemOverride = {
+  geo?: string | null;
+  sentiment?: "positive" | "neutral" | "negative" | null;
+  updated_at?: string | null;
+  note?: string | null;
+};
+
 export type ReputationItem = {
   id: string;
   source: string;
@@ -49,6 +56,7 @@ export type ReputationItem = {
   signals?: Record<string, unknown>;
   sentiment?: "positive" | "neutral" | "negative" | null;
   aspects?: string[];
+  manual_override?: ReputationItemOverride | null;
 };
 
 export type ReputationCacheDocument = {
@@ -70,4 +78,7 @@ export type ActorPrincipalMeta = {
 
 export type ReputationMeta = {
   actor_principal?: ActorPrincipalMeta | null;
+  sources_enabled?: string[];
+  sources_available?: string[];
+  source_counts?: Record<string, number>;
 };

@@ -22,13 +22,17 @@ import {
   ArrowUpRight,
   Building2,
   Calendar,
+  CheckCircle2,
   Clock,
+  Loader2,
   MapPin,
   MessageSquare,
+  PenSquare,
   Sparkles,
   ThumbsDown,
   ThumbsUp,
   Minus,
+  X,
 } from "lucide-react";
 import { Shell } from "@/components/Shell";
 import { apiGet, apiPost } from "@/lib/api";
@@ -42,6 +46,13 @@ import type {
 const SENTIMENTS = ["all", "positive", "neutral", "negative"] as const;
 
 type SentimentFilter = (typeof SENTIMENTS)[number];
+type SentimentValue = Exclude<SentimentFilter, "all">;
+type OverridePayload = {
+  ids: string[];
+  geo?: string;
+  sentiment?: SentimentValue;
+  note?: string;
+};
 type ReputationCompareGroup = {
   id: string;
   filter: Record<string, unknown>;
@@ -68,6 +79,7 @@ export default function SentimientoPage() {
   const [error, setError] = useState<string | null>(null);
   const [chartError, setChartError] = useState<string | null>(null);
   const [actorPrincipal, setActorPrincipal] = useState<ActorPrincipalMeta | null>(null);
+  const [meta, setMeta] = useState<ReputationMeta | null>(null);
 
   const [fromDate, setFromDate] = useState(defaultFrom);
   const [toDate, setToDate] = useState(defaultTo);
@@ -76,6 +88,7 @@ export default function SentimientoPage() {
   const [geo, setGeo] = useState("all");
   const [actor, setActor] = useState("all");
   const [sources, setSources] = useState<string[]>([]);
+  const [overrideRefresh, setOverrideRefresh] = useState(0);
 
   const touchItemsFilters = () => {
     setError(null);
@@ -89,6 +102,11 @@ export default function SentimientoPage() {
   const touchCommonFilters = () => {
     touchItemsFilters();
     touchChartFilters();
+  };
+
+  const handleOverride = async (payload: OverridePayload) => {
+    await apiPost<{ updated: number }>("/reputation/items/override", payload);
+    setOverrideRefresh((value) => value + 1);
   };
 
   const actorPrincipalName = useMemo(
@@ -111,9 +129,13 @@ export default function SentimientoPage() {
       .then((meta) => {
         if (!alive) return;
         setActorPrincipal(meta.actor_principal ?? null);
+        setMeta(meta);
       })
       .catch(() => {
-        if (alive) setActorPrincipal(null);
+        if (alive) {
+          setActorPrincipal(null);
+          setMeta(null);
+        }
       });
     return () => {
       alive = false;
@@ -185,7 +207,17 @@ export default function SentimientoPage() {
     return () => {
       alive = false;
     };
-  }, [fromDate, toDate, sentiment, entity, geo, actor, sources, principalAliasKeys]);
+  }, [
+    fromDate,
+    toDate,
+    sentiment,
+    entity,
+    geo,
+    actor,
+    sources,
+    principalAliasKeys,
+    overrideRefresh,
+  ]);
 
   useEffect(() => {
     let alive = true;
@@ -212,9 +244,19 @@ export default function SentimientoPage() {
     return () => {
       alive = false;
     };
-  }, [fromDate, toDate, sentiment, geo, sources]);
+  }, [fromDate, toDate, sentiment, geo, sources, overrideRefresh]);
 
-  const sourcesOptions = useMemo(() => unique(items.map((i) => i.source)), [items]);
+  const sourceCounts = useMemo(
+    () => meta?.source_counts ?? {},
+    [meta],
+  );
+  const sourcesOptions = useMemo(() => {
+    const fromMeta = meta?.sources_enabled ?? [];
+    const fromAvailable = meta?.sources_available ?? [];
+    const fromItems = items.map((i) => i.source);
+    const combined = unique([...fromMeta, ...fromAvailable, ...fromItems]).filter(Boolean);
+    return combined.sort((a, b) => a.localeCompare(b));
+  }, [items, meta]);
   const geoOptions = useMemo(
     () => unique(items.map((i) => i.geo).filter(Boolean) as string[]),
     [items],
@@ -453,6 +495,9 @@ export default function SentimientoPage() {
             <div className="mt-2 flex flex-wrap gap-2">
               {sourcesOptions.map((src) => {
                 const active = sources.includes(src);
+                const count = sourceCounts[src];
+                const countLabel =
+                  typeof count === "number" ? count.toLocaleString("es-ES") : null;
                 return (
                   <button
                     key={src}
@@ -467,7 +512,19 @@ export default function SentimientoPage() {
                         : "bg-white/80 text-[color:var(--navy)] border-white/60")
                     }
                   >
-                    {src}
+                    <span>{src}</span>
+                    {countLabel !== null && (
+                      <span
+                        className={
+                          "ml-2 rounded-full px-2 py-0.5 text-[10px] font-semibold " +
+                          (active
+                            ? "bg-white/15 text-white"
+                            : "bg-[color:var(--sand)] text-[color:var(--navy)]")
+                        }
+                      >
+                        {countLabel}
+                      </span>
+                    )}
                   </button>
                 );
               })}
@@ -634,6 +691,8 @@ export default function SentimientoPage() {
                 item={item}
                 index={index}
                 principalLabel={actorPrincipalName}
+                geoOptions={geoOptions}
+                onOverride={handleOverride}
               />
             ))}
           {!chartLoading && !mentionsToShow.length && (
@@ -692,8 +751,10 @@ function RowMeter({ label, value }: { label: string; value: number }) {
 }
 
 type MentionSource = { name: string; url?: string };
+type ManualOverride = ReputationItem["manual_override"];
 type MentionGroup = {
   key: string;
+  ids: string[];
   title: string;
   text?: string;
   geo?: string;
@@ -703,21 +764,75 @@ type MentionGroup = {
   collected_at?: string | null;
   sources: MentionSource[];
   count: number;
+  manual_override?: ManualOverride | null;
 };
 
 function MentionCard({
   item,
   index,
   principalLabel,
+  geoOptions,
+  onOverride,
 }: {
   item: MentionGroup;
   index: number;
   principalLabel: string;
+  geoOptions: string[];
+  onOverride: (payload: OverridePayload) => Promise<void>;
 }) {
   const sentimentTone = getSentimentTone(item.sentiment);
   const sanitizedTitle = cleanText(item.title) || "Sin título";
   const sanitizedText = cleanText(item.text);
   const displayDate = formatDate(item.published_at || item.collected_at);
+  const [editOpen, setEditOpen] = useState(false);
+  const [draftGeo, setDraftGeo] = useState(item.geo ?? "");
+  const [draftSentiment, setDraftSentiment] = useState<SentimentValue>(
+    (item.sentiment as SentimentValue) ?? "neutral",
+  );
+  const [saving, setSaving] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setDraftGeo(item.geo ?? "");
+    setDraftSentiment((item.sentiment as SentimentValue) ?? "neutral");
+    setLocalError(null);
+  }, [item.key, item.geo, item.sentiment]);
+
+  const currentGeo = item.geo ?? "";
+  const currentSentiment = (item.sentiment as SentimentValue) ?? "neutral";
+  const geoChanged = draftGeo.trim() !== currentGeo;
+  const sentimentChanged = draftSentiment !== currentSentiment;
+  const isDirty = geoChanged || sentimentChanged;
+  const manualUpdatedAt = item.manual_override?.updated_at ?? null;
+  const geoListId = `geo-options-${index}`;
+
+  const handleSave = async () => {
+    if (!isDirty || saving) return;
+    const trimmedGeo = draftGeo.trim();
+    if (geoChanged && !trimmedGeo) {
+      setLocalError("Indica un país válido para guardar el ajuste.");
+      return;
+    }
+    if (!item.ids.length) {
+      setLocalError("No hay IDs disponibles para aplicar el ajuste.");
+      return;
+    }
+
+    const payload: OverridePayload = { ids: item.ids };
+    if (geoChanged) payload.geo = trimmedGeo;
+    if (sentimentChanged) payload.sentiment = draftSentiment;
+
+    setSaving(true);
+    setLocalError(null);
+    try {
+      await onOverride(payload);
+      setEditOpen(false);
+    } catch (error) {
+      setLocalError(String(error));
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <article
@@ -742,6 +857,12 @@ function MentionCard({
           {sentimentTone.icon}
           {sentimentTone.label}
         </span>
+        {item.manual_override && (
+          <span className="inline-flex items-center gap-1 rounded-full border border-[color:var(--aqua)]/40 bg-[color:var(--aqua)]/10 px-2.5 py-1 text-[11px] text-[color:var(--navy)]">
+            <Sparkles className="h-3 w-3" />
+            Ajuste manual
+          </span>
+        )}
         {item.sources.length > 1 && (
           <span className="inline-flex items-center gap-1 rounded-full border border-white/70 bg-white/80 px-2.5 py-1 text-[11px] text-black/60">
             {item.sources.length} fuentes
@@ -764,6 +885,106 @@ function MentionCard({
           {sanitizedText}
         </div>
       )}
+      <div className="mt-4 rounded-2xl border border-[color:var(--aqua)]/30 bg-[linear-gradient(135deg,rgba(45,204,205,0.16),rgba(0,68,129,0.08),rgba(255,255,255,0.95))] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.3em] text-[color:var(--blue)]">
+            Control manual
+          </div>
+          <button
+            onClick={() => setEditOpen((value) => !value)}
+            className="inline-flex items-center gap-2 rounded-full border border-white/70 bg-white/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--navy)] shadow-[0_6px_18px_rgba(7,33,70,0.12)] transition hover:-translate-y-0.5 hover:shadow-[0_10px_24px_rgba(7,33,70,0.16)]"
+          >
+            <PenSquare className="h-3.5 w-3.5" />
+            {editOpen ? "Cerrar" : "Ajustar"}
+          </button>
+        </div>
+        {!editOpen && (
+          <div className="mt-2 text-xs text-black/55">
+            {manualUpdatedAt
+              ? `Último ajuste: ${formatDate(manualUpdatedAt)}`
+              : "Ajusta país o sentimiento si el análisis no refleja tu criterio."}
+          </div>
+        )}
+        {editOpen && (
+          <div className="mt-3 grid gap-3">
+            <div className="grid gap-1">
+              <span className="text-[10px] uppercase tracking-[0.2em] text-black/45">
+                País
+              </span>
+              <input
+                type="text"
+                list={geoListId}
+                value={draftGeo}
+                onChange={(e) => setDraftGeo(e.target.value)}
+                placeholder="Ej: España"
+                className="w-full rounded-2xl border border-white/70 bg-white/85 px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] outline-none focus:border-[color:var(--aqua)]/60 focus:ring-2 focus:ring-[color:var(--aqua)]/30"
+              />
+              <datalist id={geoListId}>
+                {geoOptions.map((opt) => (
+                  <option key={opt} value={opt} />
+                ))}
+              </datalist>
+            </div>
+            <div className="grid gap-2">
+              <span className="text-[10px] uppercase tracking-[0.2em] text-black/45">
+                Sentimiento
+              </span>
+              <div className="flex flex-wrap gap-2">
+                {(["positive", "neutral", "negative"] as const).map((value) => {
+                  const tone = getSentimentTone(value);
+                  const active = value === draftSentiment;
+                  return (
+                    <button
+                      key={value}
+                      onClick={() => setDraftSentiment(value)}
+                      className={
+                        "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition " +
+                        (active
+                          ? `${tone.className} shadow-[0_10px_20px_rgba(7,33,70,0.12)]`
+                          : "border-white/70 bg-white/80 text-black/50 hover:text-[color:var(--ink)]")
+                      }
+                    >
+                      {tone.icon}
+                      {tone.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            {localError && (
+              <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+                {localError}
+              </div>
+            )}
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={handleSave}
+                disabled={!isDirty || saving}
+                className="inline-flex items-center gap-2 rounded-full bg-[color:var(--blue)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-white shadow-[0_12px_26px_rgba(0,68,129,0.28)] transition hover:-translate-y-0.5 hover:shadow-[0_16px_32px_rgba(0,68,129,0.32)] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {saving ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                )}
+                Guardar ajuste
+              </button>
+              <button
+                onClick={() => {
+                  setEditOpen(false);
+                  setDraftGeo(currentGeo);
+                  setDraftSentiment(currentSentiment);
+                  setLocalError(null);
+                }}
+                className="inline-flex items-center gap-2 rounded-full border border-white/70 bg-white/80 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-black/60 transition hover:text-[color:var(--ink)]"
+              >
+                <X className="h-3.5 w-3.5" />
+                Cancelar
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
       <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs text-black/45">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-[11px] uppercase tracking-[0.16em] text-black/40">
@@ -865,6 +1086,7 @@ function groupMentions(items: ReputationItem[]) {
     if (!map.has(key)) {
       map.set(key, {
         key,
+        ids: [],
         title: title || text || "Sin título",
         text: text || undefined,
         geo: item.geo || undefined,
@@ -874,6 +1096,7 @@ function groupMentions(items: ReputationItem[]) {
         collected_at: item.collected_at || null,
         sources: [],
         count: 0,
+        manual_override: item.manual_override ?? undefined,
       });
     }
 
@@ -881,6 +1104,9 @@ function groupMentions(items: ReputationItem[]) {
     if (!group) continue;
 
     group.count += 1;
+    if (item.id && !group.ids.includes(item.id)) {
+      group.ids.push(item.id);
+    }
 
     const candidateDate = item.published_at || item.collected_at || "";
     const currentDate = group.published_at || group.collected_at || "";
@@ -891,6 +1117,14 @@ function groupMentions(items: ReputationItem[]) {
 
     if (text && (!group.text || text.length > group.text.length)) {
       group.text = text;
+    }
+
+    if (item.manual_override) {
+      const candidateOverrideAt = item.manual_override.updated_at ?? "";
+      const currentOverrideAt = group.manual_override?.updated_at ?? "";
+      if (!group.manual_override || candidateOverrideAt > currentOverrideAt) {
+        group.manual_override = item.manual_override;
+      }
     }
 
     if (item.source) {
