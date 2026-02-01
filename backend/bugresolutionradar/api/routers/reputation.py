@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Iterable, List
 
-from fastapi import APIRouter, Body, Query
+from fastapi import APIRouter, Body, HTTPException, Query
 from pydantic import BaseModel
 from reputation.actors import (
     actor_principal_canonicals,
@@ -16,8 +16,14 @@ from reputation.actors import (
 from reputation.collectors.utils import match_keywords, normalize_text
 from reputation.config import load_business_config
 from reputation.config import settings as reputation_settings
-from reputation.models import ReputationCacheDocument, ReputationCacheStats, ReputationItem
+from reputation.models import (
+    ReputationCacheDocument,
+    ReputationCacheStats,
+    ReputationItem,
+    ReputationItemOverride,
+)
 from reputation.repositories.cache_repo import ReputationCacheRepo
+from reputation.repositories.overrides_repo import ReputationOverridesRepo
 
 from bugresolutionradar.logging_utils import get_logger
 
@@ -49,9 +55,10 @@ def reputation_items(
             stats=ReputationCacheStats(count=0, note="cache empty"),
         )
 
+    overrides = _load_overrides()
     items = list(
         _filter_items(
-            doc.items,
+            _apply_overrides(doc.items, overrides),
             sources,
             entity,
             geo,
@@ -108,6 +115,48 @@ class CompareFilter(BaseModel):
     q: str | None = None
 
 
+class OverrideRequest(BaseModel):
+    ids: List[str]
+    geo: str | None = None
+    sentiment: str | None = None
+    note: str | None = None
+
+
+@router.post("/items/override")
+def reputation_override(payload: OverrideRequest):
+    if not payload.ids:
+        raise HTTPException(status_code=400, detail="ids is required")
+    if payload.geo is None and payload.sentiment is None:
+        raise HTTPException(status_code=400, detail="geo or sentiment is required")
+
+    geo_value = payload.geo.strip() if isinstance(payload.geo, str) else None
+    if payload.geo is not None and not geo_value:
+        raise HTTPException(status_code=400, detail="geo cannot be empty")
+
+    sentiment_value = payload.sentiment.lower() if payload.sentiment else None
+    if sentiment_value and sentiment_value not in {"positive", "neutral", "negative"}:
+        raise HTTPException(status_code=400, detail="invalid sentiment value")
+
+    overrides_repo = ReputationOverridesRepo(reputation_settings.overrides_path)
+    overrides = overrides_repo.load()
+    now = datetime.now(timezone.utc)
+    now_iso = now.isoformat()
+
+    for item_id in payload.ids:
+        entry: dict[str, Any] = overrides.get(item_id, {})
+        if geo_value is not None:
+            entry["geo"] = geo_value
+        if sentiment_value is not None:
+            entry["sentiment"] = sentiment_value
+        if payload.note:
+            entry["note"] = payload.note
+        entry["updated_at"] = now_iso
+        overrides[item_id] = entry
+
+    overrides_repo.save(overrides)
+    return {"updated": len(payload.ids), "ids": payload.ids, "updated_at": now_iso}
+
+
 @router.post("/items/compare")
 def reputation_compare(filters: List[CompareFilter] = COMPARE_BODY):
     """Comparar múltiples filtros en una sola llamada.
@@ -122,13 +171,15 @@ def reputation_compare(filters: List[CompareFilter] = COMPARE_BODY):
             "combined": {"items": [], "stats": {"count": 0, "note": "cache empty"}},
         }
 
+    overrides = _load_overrides()
+    base_items = _apply_overrides(doc.items, overrides)
     groups = []
     combined_map: dict[str, ReputationItem] = {}
 
     for idx, f in enumerate(filters):
         items = list(
             _filter_items(
-                doc.items,
+                base_items,
                 f.sources,
                 f.entity,
                 f.geo,
@@ -147,13 +198,13 @@ def reputation_compare(filters: List[CompareFilter] = COMPARE_BODY):
         groups.append(
             {
                 "id": f"group_{idx}",
-                "filter": f.dict(exclude_none=True),
-                "items": [it.dict() for it in items],
+                "filter": f.model_dump(exclude_none=True),
+                "items": [it.model_dump() for it in items],
                 "stats": {"count": len(items)},
             }
         )
 
-    combined_items = [v.dict() for v in combined_map.values()]
+    combined_items = [v.model_dump() for v in combined_map.values()]
     return {
         "groups": groups,
         "combined": {"items": combined_items, "stats": {"count": len(combined_items)}},
@@ -250,6 +301,40 @@ def _filter_items(
         yield item
 
 
+def _load_overrides() -> dict[str, dict[str, Any]]:
+    repo = ReputationOverridesRepo(reputation_settings.overrides_path)
+    return repo.load()
+
+
+def _apply_overrides(
+    items: Iterable[ReputationItem],
+    overrides: dict[str, dict[str, Any]],
+) -> list[ReputationItem]:
+    if not overrides:
+        return list(items)
+
+    for item in items:
+        entry = overrides.get(item.id)
+        if not entry:
+            continue
+
+        override = ReputationItemOverride(
+            geo=entry.get("geo"),
+            sentiment=entry.get("sentiment"),
+            updated_at=_parse_datetime(entry.get("updated_at")),
+            note=entry.get("note"),
+        )
+
+        if isinstance(override.geo, str) and override.geo.strip():
+            item.geo = override.geo.strip()
+        if override.sentiment in {"positive", "neutral", "negative"}:
+            item.sentiment = override.sentiment
+
+        item.manual_override = override
+
+    return list(items)
+
+
 def _split_csv(value: str | None) -> set[str]:
     if not value:
         return set()
@@ -265,6 +350,19 @@ def _parse_date(value: str | None, start: bool) -> datetime | None:
         return None
     time_value = datetime.min.time() if start else datetime.max.time()
     return datetime.combine(d, time_value, tzinfo=timezone.utc)
+
+
+def _parse_datetime(value: Any) -> datetime | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, str) and value:
+        try:
+            return datetime.fromisoformat(value)
+        except ValueError:
+            return None
+    return None
 
 
 def _principal_terms_from_cfg(cfg: dict[str, Any]) -> list[str]:
