@@ -1,0 +1,1444 @@
+{
+  "geografias": [
+    "Estados Unidos",
+    "Canadá",
+    "México",
+    "Argentina",
+    "Brasil",
+    "Japón",
+    "Singapur",
+    "Australia",
+    "Reino Unido",
+    "Irlanda",
+    "Francia",
+    "Suecia",
+    "Portugal",
+    "España",
+    "Países Bajos",
+    "Suiza",
+    "Italia",
+    "Alemania",
+    "Austria",
+    "Dinamarca"
+  ],
+  "geografias_aliases": {
+    "Estados Unidos": [
+      "USA",
+      "US",
+      "United States",
+      "EEUU",
+      "EUA"
+    ],
+    "Canadá": [
+      "Canada",
+      "CA"
+    ],
+    "México": [
+      "Mexico",
+      "MX",
+      "CDMX",
+      "Ciudad de Mexico",
+      "Ciudad de México"
+    ],
+    "Argentina": [
+      "AR",
+      "Buenos Aires"
+    ],
+    "Brasil": [
+      "BR",
+      "Brazil",
+      "São Paulo",
+      "Sao Paulo",
+      "Rio de Janeiro"
+    ],
+    "Japón": [
+      "Japan",
+      "JP",
+      "Tokyo",
+      "Tokio"
+    ],
+    "Singapur": [
+      "Singapore",
+      "SG"
+    ],
+    "Australia": [
+      "AU",
+      "Sydney",
+      "Melbourne"
+    ],
+    "Reino Unido": [
+      "UK",
+      "United Kingdom",
+      "England",
+      "Scotland",
+      "Wales",
+      "GB"
+    ],
+    "Irlanda": [
+      "Ireland",
+      "IE",
+      "Dublin",
+      "Dublín"
+    ],
+    "Francia": [
+      "France",
+      "FR",
+      "Paris",
+      "París",
+      "Lyon"
+    ],
+    "Suecia": [
+      "Sweden",
+      "SE",
+      "Stockholm",
+      "Estocolmo"
+    ],
+    "Portugal": [
+      "PT",
+      "Lisboa",
+      "Lisbon"
+    ],
+    "España": [
+      "Espana",
+      "España",
+      "Spain",
+      "ES",
+      "Madrid",
+      "Barcelona"
+    ],
+    "Países Bajos": [
+      "Netherlands",
+      "NL",
+      "Amsterdam",
+      "Ámsterdam"
+    ],
+    "Suiza": [
+      "Switzerland",
+      "CH",
+      "Zürich",
+      "Zurich",
+      "Ginebra",
+      "Geneva"
+    ],
+    "Italia": [
+      "Italy",
+      "IT",
+      "Milán",
+      "Milan",
+      "Roma",
+      "Rome"
+    ],
+    "Alemania": [
+      "Germany",
+      "DE",
+      "Berlin",
+      "Múnich",
+      "Munich",
+      "Hamburgo"
+    ],
+    "Austria": [
+      "AT",
+      "Vienna",
+      "Viena"
+    ],
+    "Dinamarca": [
+      "Denmark",
+      "DK",
+      "Copenhagen",
+      "Copenhague"
+    ]
+  },
+  "actor_principal": {
+    "Taylor Swift": [
+      "Taylor Swift"
+    ]
+  },
+  "actor_principal_aliases": {
+    "Taylor Swift": [
+      "1989 (Taylor's Version)",
+      "Eras Tour",
+      "Eras Tour movie",
+      "ErasTour",
+      "Evermore",
+      "Folklore",
+      "Friendship bracelets",
+      "Midnights",
+      "Red (Taylor's Version)",
+      "Reputation (Taylor's Version)",
+      "Speak Now (Taylor's Version)",
+      "Surprise song",
+      "Swift",
+      "Swiftie",
+      "Swifties",
+      "T. Swift",
+      "TS",
+      "TTPD",
+      "Taylor",
+      "Taylor Swift",
+      "Taylor Swift Eras Tour",
+      "Taylor Swift concert film",
+      "The Eras Tour",
+      "The Tortured Poets Department",
+      "Ticketmaster Taylor Swift"
+    ]
+  },
+  "otros_actores_aliases": {
+    "Beyoncé": [
+      "Beyonce",
+      "Beyoncé",
+      "Queen B",
+      "Renaissance Tour"
+    ],
+    "Billie Eilish": [
+      "Billie Eilish",
+      "Billie",
+      "Hit Me Hard and Soft"
+    ],
+    "Olivia Rodrigo": [
+      "Olivia Rodrigo",
+      "Olivia",
+      "GUTS Tour"
+    ],
+    "Dua Lipa": [
+      "Dua Lipa",
+      "Future Nostalgia",
+      "Radical Optimism"
+    ],
+    "Adele": [
+      "Adele"
+    ],
+    "Lady Gaga": [
+      "Lady Gaga",
+      "Gaga"
+    ],
+    "Rihanna": [
+      "Rihanna",
+      "Riri"
+    ],
+    "Sabrina Carpenter": [
+      "Sabrina Carpenter",
+      "Sabrina",
+      "Short n' Sweet"
+    ],
+    "Shakira": [
+      "Shakira",
+      "Las Mujeres Ya No Lloran"
+    ],
+    "Karol G": [
+      "Karol G",
+      "KarolG",
+      "Mañana Será Bonito"
+    ],
+    "Rosalía": [
+      "Rosalia",
+      "Rosalía",
+      "Motomami"
+    ],
+    "Anitta": [
+      "Anitta"
+    ],
+    "Utada Hikaru": [
+      "Utada Hikaru",
+      "Hikaru Utada"
+    ],
+    "Kylie Minogue": [
+      "Kylie Minogue",
+      "Kylie"
+    ],
+    "Sia": [
+      "Sia"
+    ]
+  },
+  "otros_actores_globales": [
+    "Beyoncé",
+    "Billie Eilish",
+    "Olivia Rodrigo",
+    "Dua Lipa",
+    "Adele",
+    "Lady Gaga",
+    "Rihanna"
+  ],
+  "otros_actores_por_geografia": {
+    "Estados Unidos": [
+      "Beyoncé",
+      "Billie Eilish",
+      "Olivia Rodrigo",
+      "Sabrina Carpenter",
+      "Lady Gaga",
+      "Rihanna"
+    ],
+    "Canadá": [
+      "Beyoncé",
+      "Billie Eilish",
+      "Olivia Rodrigo",
+      "Dua Lipa"
+    ],
+    "México": [
+      "Shakira",
+      "Karol G",
+      "Rosalía",
+      "Dua Lipa"
+    ],
+    "Argentina": [
+      "Shakira",
+      "Karol G",
+      "Rosalía"
+    ],
+    "Brasil": [
+      "Anitta",
+      "Shakira",
+      "Karol G"
+    ],
+    "Japón": [
+      "Utada Hikaru",
+      "Billie Eilish",
+      "Dua Lipa"
+    ],
+    "Singapur": [
+      "Dua Lipa",
+      "Billie Eilish",
+      "Beyoncé"
+    ],
+    "Australia": [
+      "Kylie Minogue",
+      "Sia",
+      "Dua Lipa",
+      "Billie Eilish"
+    ],
+    "Reino Unido": [
+      "Adele",
+      "Dua Lipa",
+      "Billie Eilish",
+      "Olivia Rodrigo"
+    ],
+    "Irlanda": [
+      "Adele",
+      "Dua Lipa"
+    ],
+    "Francia": [
+      "Dua Lipa",
+      "Billie Eilish"
+    ],
+    "Suecia": [
+      "Dua Lipa",
+      "Billie Eilish"
+    ],
+    "Portugal": [
+      "Rosalía",
+      "Dua Lipa"
+    ],
+    "España": [
+      "Rosalía",
+      "Dua Lipa",
+      "Shakira"
+    ],
+    "Países Bajos": [
+      "Dua Lipa",
+      "Billie Eilish"
+    ],
+    "Suiza": [
+      "Dua Lipa",
+      "Adele"
+    ],
+    "Italia": [
+      "Dua Lipa",
+      "Billie Eilish"
+    ],
+    "Alemania": [
+      "Dua Lipa",
+      "Billie Eilish"
+    ],
+    "Austria": [
+      "Dua Lipa",
+      "Billie Eilish"
+    ],
+    "Dinamarca": [
+      "Dua Lipa",
+      "Billie Eilish"
+    ]
+  },
+  "keywords": [
+    "Adele residency",
+    "Beyoncé tour tickets",
+    "Billie Eilish tour tickets",
+    "Dua Lipa tour",
+    "Eras Tour merch",
+    "Eras Tour setlist",
+    "Eras Tour surprise song",
+    "Eras Tour tickets",
+    "Olivia Rodrigo tour tickets",
+    "Reputation TV",
+    "Swifties",
+    "TTPD",
+    "Taylor Swift",
+    "Taylor Swift Apple Music",
+    "Taylor Swift Spotify",
+    "Taylor Swift album",
+    "Taylor Swift chart",
+    "Taylor Swift merch",
+    "Taylor Swift presale",
+    "Taylor Swift queue",
+    "Taylor Swift record",
+    "Taylor Swift resale",
+    "Taylor Swift scalpers",
+    "Taylor Swift streaming",
+    "Taylor Swift ticket resale",
+    "Taylor Swift vs Beyoncé",
+    "Taylor Swift vs Billie Eilish",
+    "Taylor Swift vs Olivia Rodrigo",
+    "Taylor's Version",
+    "The Eras Tour",
+    "The Tortured Poets Department",
+    "Ticketmaster Taylor Swift",
+    "friendship bracelets"
+  ],
+  "segment_terms": [
+    "agotado",
+    "apple music",
+    "bilhetes",
+    "billboard",
+    "boletos",
+    "charts",
+    "cola",
+    "controversy",
+    "copyright",
+    "devolución",
+    "dmca",
+    "entradas",
+    "envío",
+    "estafa",
+    "fraud",
+    "hotel prices",
+    "impacto económico",
+    "merch",
+    "merch line",
+    "merchandising",
+    "opening act",
+    "paquetería",
+    "phishing",
+    "polémica",
+    "precios hotel",
+    "presale",
+    "preventa",
+    "preventas",
+    "queue",
+    "reembolso",
+    "refund",
+    "resale",
+    "reventa",
+    "scalpers",
+    "scam",
+    "set list",
+    "setlist",
+    "shipping",
+    "sold out",
+    "spotify",
+    "streaming",
+    "surprise song",
+    "telonera",
+    "telonero",
+    "tickets",
+    "tour economy",
+    "youtube music"
+  ],
+  "reddit": {
+    "subreddits": [
+      "TaylorSwift",
+      "popheads",
+      "music",
+      "LiveFromNewYork",
+      "concerts",
+      "SwiftlyNeutral",
+      "spain",
+      "mexico",
+      "argentina",
+      "brasil",
+      "japan",
+      "singapore",
+      "australia",
+      "unitedkingdom",
+      "ireland",
+      "france",
+      "sweden",
+      "netherlands",
+      "germany",
+      "italy"
+    ],
+    "query_templates": [
+      "\"{actor}\" (Eras Tour OR tickets OR presale OR resale OR setlist)",
+      "\"{actor}\" (queue OR Ticketmaster OR AXS OR See Tickets OR Eventim)",
+      "\"{actor}\" (scam OR fraud OR estafa OR phishing) (tickets OR resale)",
+      "\"{actor}\" (merch OR refund OR reembolso OR shipping)",
+      "\"{actor}\" vs (Beyoncé OR Billie Eilish OR Olivia Rodrigo OR Dua Lipa OR Adele)"
+    ]
+  },
+  "news": {
+    "rss_query_templates": [
+      "https://news.google.com/rss/search?q={query}&hl={hl}&gl={gl}&ceid={ceid}"
+    ],
+    "rss_geo_map": {
+      "Estados Unidos": {
+        "hl": "en-US",
+        "gl": "US",
+        "ceid": "US:en"
+      },
+      "Canadá": {
+        "hl": "en-CA",
+        "gl": "CA",
+        "ceid": "CA:en"
+      },
+      "México": {
+        "hl": "es-419",
+        "gl": "MX",
+        "ceid": "MX:es-419"
+      },
+      "Argentina": {
+        "hl": "es-419",
+        "gl": "AR",
+        "ceid": "AR:es-419"
+      },
+      "Brasil": {
+        "hl": "pt-BR",
+        "gl": "BR",
+        "ceid": "BR:pt-419"
+      },
+      "Japón": {
+        "hl": "ja",
+        "gl": "JP",
+        "ceid": "JP:ja"
+      },
+      "Singapur": {
+        "hl": "en-SG",
+        "gl": "SG",
+        "ceid": "SG:en"
+      },
+      "Australia": {
+        "hl": "en-AU",
+        "gl": "AU",
+        "ceid": "AU:en"
+      },
+      "Reino Unido": {
+        "hl": "en-GB",
+        "gl": "GB",
+        "ceid": "GB:en"
+      },
+      "Irlanda": {
+        "hl": "en-IE",
+        "gl": "IE",
+        "ceid": "IE:en"
+      },
+      "Francia": {
+        "hl": "fr",
+        "gl": "FR",
+        "ceid": "FR:fr"
+      },
+      "Suecia": {
+        "hl": "sv",
+        "gl": "SE",
+        "ceid": "SE:sv"
+      },
+      "Portugal": {
+        "hl": "pt-PT",
+        "gl": "PT",
+        "ceid": "PT:pt-150"
+      },
+      "España": {
+        "hl": "es",
+        "gl": "ES",
+        "ceid": "ES:es"
+      },
+      "Países Bajos": {
+        "hl": "nl",
+        "gl": "NL",
+        "ceid": "NL:nl"
+      },
+      "Suiza": {
+        "hl": "de",
+        "gl": "CH",
+        "ceid": "CH:de"
+      },
+      "Italia": {
+        "hl": "it",
+        "gl": "IT",
+        "ceid": "IT:it"
+      },
+      "Alemania": {
+        "hl": "de",
+        "gl": "DE",
+        "ceid": "DE:de"
+      },
+      "Austria": {
+        "hl": "de",
+        "gl": "AT",
+        "ceid": "AT:de"
+      },
+      "Dinamarca": {
+        "hl": "da",
+        "gl": "DK",
+        "ceid": "DK:da"
+      }
+    },
+    "site_query_terms_by_category": {
+      "press": [
+        "tour",
+        "tickets",
+        "concert",
+        "stadium",
+        "album",
+        "charts",
+        "streaming",
+        "merch"
+      ],
+      "industry": [
+        "music industry",
+        "ticketing",
+        "live nation",
+        "streaming wars",
+        "touring",
+        "concert economy"
+      ],
+      "regulators": [
+        "consumer protection",
+        "antitrust",
+        "competition authority",
+        "ticket resale law",
+        "fraud"
+      ]
+    },
+    "site_sources_by_geo": {
+      "Estados Unidos": {
+        "press": [
+          "reuters.com",
+          "apnews.com",
+          "efe.com",
+          "bbc.com",
+          "theguardian.com",
+          "nytimes.com",
+          "washingtonpost.com",
+          "latimes.com",
+          "wsj.com"
+        ],
+        "industry": [
+          "billboard.com",
+          "rollingstone.com",
+          "variety.com",
+          "pitchfork.com",
+          "nme.com",
+          "musicbusinessworldwide.com",
+          "pollstar.com",
+          "hitsdailydouble.com",
+          "theverge.com"
+        ],
+        "regulators": [
+          "ftc.gov",
+          "justice.gov",
+          "ec.europa.eu",
+          "cma.gov.uk",
+          "competitionbureau.gc.ca",
+          "profeco.gob.mx"
+        ]
+      },
+      "Canadá": {
+        "press": [
+          "reuters.com",
+          "apnews.com",
+          "efe.com",
+          "bbc.com",
+          "theguardian.com",
+          "nytimes.com",
+          "washingtonpost.com",
+          "cbc.ca",
+          "theglobeandmail.com"
+        ],
+        "industry": [
+          "billboard.com",
+          "rollingstone.com",
+          "variety.com",
+          "pitchfork.com",
+          "nme.com",
+          "musicbusinessworldwide.com",
+          "pollstar.com",
+          "hitsdailydouble.com",
+          "theverge.com"
+        ],
+        "regulators": [
+          "ftc.gov",
+          "justice.gov",
+          "ec.europa.eu",
+          "cma.gov.uk",
+          "competitionbureau.gc.ca",
+          "profeco.gob.mx"
+        ]
+      },
+      "México": {
+        "press": [
+          "reuters.com",
+          "apnews.com",
+          "efe.com",
+          "bbc.com",
+          "theguardian.com",
+          "nytimes.com",
+          "washingtonpost.com",
+          "elfinanciero.com.mx",
+          "expansion.mx",
+          "eleconomista.com.mx",
+          "eluniversal.com.mx"
+        ],
+        "industry": [
+          "billboard.com",
+          "rollingstone.com",
+          "variety.com",
+          "pitchfork.com",
+          "nme.com",
+          "musicbusinessworldwide.com",
+          "pollstar.com",
+          "hitsdailydouble.com",
+          "theverge.com"
+        ],
+        "regulators": [
+          "ftc.gov",
+          "justice.gov",
+          "ec.europa.eu",
+          "cma.gov.uk",
+          "competitionbureau.gc.ca",
+          "profeco.gob.mx"
+        ]
+      },
+      "Argentina": {
+        "press": [
+          "reuters.com",
+          "apnews.com",
+          "efe.com",
+          "bbc.com",
+          "theguardian.com",
+          "nytimes.com",
+          "washingtonpost.com",
+          "lanacion.com.ar",
+          "infobae.com",
+          "clarin.com"
+        ],
+        "industry": [
+          "billboard.com",
+          "rollingstone.com",
+          "variety.com",
+          "pitchfork.com",
+          "nme.com",
+          "musicbusinessworldwide.com",
+          "pollstar.com",
+          "hitsdailydouble.com",
+          "theverge.com"
+        ],
+        "regulators": [
+          "ftc.gov",
+          "justice.gov",
+          "ec.europa.eu",
+          "cma.gov.uk",
+          "competitionbureau.gc.ca",
+          "profeco.gob.mx"
+        ]
+      },
+      "Brasil": {
+        "press": [
+          "reuters.com",
+          "apnews.com",
+          "efe.com",
+          "bbc.com",
+          "theguardian.com",
+          "nytimes.com",
+          "washingtonpost.com",
+          "g1.globo.com",
+          "folha.uol.com.br"
+        ],
+        "industry": [
+          "billboard.com",
+          "rollingstone.com",
+          "variety.com",
+          "pitchfork.com",
+          "nme.com",
+          "musicbusinessworldwide.com",
+          "pollstar.com",
+          "hitsdailydouble.com",
+          "theverge.com"
+        ],
+        "regulators": [
+          "ftc.gov",
+          "justice.gov",
+          "ec.europa.eu",
+          "cma.gov.uk",
+          "competitionbureau.gc.ca",
+          "profeco.gob.mx"
+        ]
+      },
+      "Japón": {
+        "press": [
+          "reuters.com",
+          "apnews.com",
+          "efe.com",
+          "bbc.com",
+          "theguardian.com",
+          "nytimes.com",
+          "washingtonpost.com",
+          "nhk.or.jp",
+          "asahi.com"
+        ],
+        "industry": [
+          "billboard.com",
+          "rollingstone.com",
+          "variety.com",
+          "pitchfork.com",
+          "nme.com",
+          "musicbusinessworldwide.com",
+          "pollstar.com",
+          "hitsdailydouble.com",
+          "theverge.com"
+        ],
+        "regulators": [
+          "ftc.gov",
+          "justice.gov",
+          "ec.europa.eu",
+          "cma.gov.uk",
+          "competitionbureau.gc.ca",
+          "profeco.gob.mx"
+        ]
+      },
+      "Singapur": {
+        "press": [
+          "reuters.com",
+          "apnews.com",
+          "efe.com",
+          "bbc.com",
+          "theguardian.com",
+          "nytimes.com",
+          "washingtonpost.com",
+          "straitstimes.com"
+        ],
+        "industry": [
+          "billboard.com",
+          "rollingstone.com",
+          "variety.com",
+          "pitchfork.com",
+          "nme.com",
+          "musicbusinessworldwide.com",
+          "pollstar.com",
+          "hitsdailydouble.com",
+          "theverge.com"
+        ],
+        "regulators": [
+          "ftc.gov",
+          "justice.gov",
+          "ec.europa.eu",
+          "cma.gov.uk",
+          "competitionbureau.gc.ca",
+          "profeco.gob.mx"
+        ]
+      },
+      "Australia": {
+        "press": [
+          "reuters.com",
+          "apnews.com",
+          "efe.com",
+          "bbc.com",
+          "theguardian.com",
+          "nytimes.com",
+          "washingtonpost.com",
+          "abc.net.au",
+          "smh.com.au"
+        ],
+        "industry": [
+          "billboard.com",
+          "rollingstone.com",
+          "variety.com",
+          "pitchfork.com",
+          "nme.com",
+          "musicbusinessworldwide.com",
+          "pollstar.com",
+          "hitsdailydouble.com",
+          "theverge.com"
+        ],
+        "regulators": [
+          "ftc.gov",
+          "justice.gov",
+          "ec.europa.eu",
+          "cma.gov.uk",
+          "competitionbureau.gc.ca",
+          "profeco.gob.mx"
+        ]
+      },
+      "Reino Unido": {
+        "press": [
+          "reuters.com",
+          "apnews.com",
+          "efe.com",
+          "bbc.com",
+          "theguardian.com",
+          "nytimes.com",
+          "washingtonpost.com",
+          "bbc.co.uk",
+          "telegraph.co.uk",
+          "independent.co.uk"
+        ],
+        "industry": [
+          "billboard.com",
+          "rollingstone.com",
+          "variety.com",
+          "pitchfork.com",
+          "nme.com",
+          "musicbusinessworldwide.com",
+          "pollstar.com",
+          "hitsdailydouble.com",
+          "theverge.com"
+        ],
+        "regulators": [
+          "ftc.gov",
+          "justice.gov",
+          "ec.europa.eu",
+          "cma.gov.uk",
+          "competitionbureau.gc.ca",
+          "profeco.gob.mx"
+        ]
+      },
+      "Irlanda": {
+        "press": [
+          "reuters.com",
+          "apnews.com",
+          "efe.com",
+          "bbc.com",
+          "theguardian.com",
+          "nytimes.com",
+          "washingtonpost.com"
+        ],
+        "industry": [
+          "billboard.com",
+          "rollingstone.com",
+          "variety.com",
+          "pitchfork.com",
+          "nme.com",
+          "musicbusinessworldwide.com",
+          "pollstar.com",
+          "hitsdailydouble.com",
+          "theverge.com"
+        ],
+        "regulators": [
+          "ftc.gov",
+          "justice.gov",
+          "ec.europa.eu",
+          "cma.gov.uk",
+          "competitionbureau.gc.ca",
+          "profeco.gob.mx"
+        ]
+      },
+      "Francia": {
+        "press": [
+          "reuters.com",
+          "apnews.com",
+          "efe.com",
+          "bbc.com",
+          "theguardian.com",
+          "nytimes.com",
+          "washingtonpost.com",
+          "lemonde.fr",
+          "lefigaro.fr"
+        ],
+        "industry": [
+          "billboard.com",
+          "rollingstone.com",
+          "variety.com",
+          "pitchfork.com",
+          "nme.com",
+          "musicbusinessworldwide.com",
+          "pollstar.com",
+          "hitsdailydouble.com",
+          "theverge.com"
+        ],
+        "regulators": [
+          "ftc.gov",
+          "justice.gov",
+          "ec.europa.eu",
+          "cma.gov.uk",
+          "competitionbureau.gc.ca",
+          "profeco.gob.mx"
+        ]
+      },
+      "Suecia": {
+        "press": [
+          "reuters.com",
+          "apnews.com",
+          "efe.com",
+          "bbc.com",
+          "theguardian.com",
+          "nytimes.com",
+          "washingtonpost.com",
+          "svt.se",
+          "aftonbladet.se"
+        ],
+        "industry": [
+          "billboard.com",
+          "rollingstone.com",
+          "variety.com",
+          "pitchfork.com",
+          "nme.com",
+          "musicbusinessworldwide.com",
+          "pollstar.com",
+          "hitsdailydouble.com",
+          "theverge.com"
+        ],
+        "regulators": [
+          "ftc.gov",
+          "justice.gov",
+          "ec.europa.eu",
+          "cma.gov.uk",
+          "competitionbureau.gc.ca",
+          "profeco.gob.mx"
+        ]
+      },
+      "Portugal": {
+        "press": [
+          "reuters.com",
+          "apnews.com",
+          "efe.com",
+          "bbc.com",
+          "theguardian.com",
+          "nytimes.com",
+          "washingtonpost.com",
+          "publico.pt",
+          "expresso.pt"
+        ],
+        "industry": [
+          "billboard.com",
+          "rollingstone.com",
+          "variety.com",
+          "pitchfork.com",
+          "nme.com",
+          "musicbusinessworldwide.com",
+          "pollstar.com",
+          "hitsdailydouble.com",
+          "theverge.com"
+        ],
+        "regulators": [
+          "ftc.gov",
+          "justice.gov",
+          "ec.europa.eu",
+          "cma.gov.uk",
+          "competitionbureau.gc.ca",
+          "profeco.gob.mx"
+        ]
+      },
+      "España": {
+        "press": [
+          "reuters.com",
+          "apnews.com",
+          "efe.com",
+          "bbc.com",
+          "theguardian.com",
+          "nytimes.com",
+          "washingtonpost.com",
+          "elpais.com",
+          "elconfidencial.com",
+          "rtve.es",
+          "marca.com"
+        ],
+        "industry": [
+          "billboard.com",
+          "rollingstone.com",
+          "variety.com",
+          "pitchfork.com",
+          "nme.com",
+          "musicbusinessworldwide.com",
+          "pollstar.com",
+          "hitsdailydouble.com",
+          "theverge.com"
+        ],
+        "regulators": [
+          "ftc.gov",
+          "justice.gov",
+          "ec.europa.eu",
+          "cma.gov.uk",
+          "competitionbureau.gc.ca",
+          "profeco.gob.mx"
+        ]
+      },
+      "Países Bajos": {
+        "press": [
+          "reuters.com",
+          "apnews.com",
+          "efe.com",
+          "bbc.com",
+          "theguardian.com",
+          "nytimes.com",
+          "washingtonpost.com",
+          "nos.nl",
+          "telegraaf.nl"
+        ],
+        "industry": [
+          "billboard.com",
+          "rollingstone.com",
+          "variety.com",
+          "pitchfork.com",
+          "nme.com",
+          "musicbusinessworldwide.com",
+          "pollstar.com",
+          "hitsdailydouble.com",
+          "theverge.com"
+        ],
+        "regulators": [
+          "ftc.gov",
+          "justice.gov",
+          "ec.europa.eu",
+          "cma.gov.uk",
+          "competitionbureau.gc.ca",
+          "profeco.gob.mx"
+        ]
+      },
+      "Suiza": {
+        "press": [
+          "reuters.com",
+          "apnews.com",
+          "efe.com",
+          "bbc.com",
+          "theguardian.com",
+          "nytimes.com",
+          "washingtonpost.com",
+          "srf.ch",
+          "tagesanzeiger.ch"
+        ],
+        "industry": [
+          "billboard.com",
+          "rollingstone.com",
+          "variety.com",
+          "pitchfork.com",
+          "nme.com",
+          "musicbusinessworldwide.com",
+          "pollstar.com",
+          "hitsdailydouble.com",
+          "theverge.com"
+        ],
+        "regulators": [
+          "ftc.gov",
+          "justice.gov",
+          "ec.europa.eu",
+          "cma.gov.uk",
+          "competitionbureau.gc.ca",
+          "profeco.gob.mx"
+        ]
+      },
+      "Italia": {
+        "press": [
+          "reuters.com",
+          "apnews.com",
+          "efe.com",
+          "bbc.com",
+          "theguardian.com",
+          "nytimes.com",
+          "washingtonpost.com",
+          "corriere.it",
+          "repubblica.it"
+        ],
+        "industry": [
+          "billboard.com",
+          "rollingstone.com",
+          "variety.com",
+          "pitchfork.com",
+          "nme.com",
+          "musicbusinessworldwide.com",
+          "pollstar.com",
+          "hitsdailydouble.com",
+          "theverge.com"
+        ],
+        "regulators": [
+          "ftc.gov",
+          "justice.gov",
+          "ec.europa.eu",
+          "cma.gov.uk",
+          "competitionbureau.gc.ca",
+          "profeco.gob.mx"
+        ]
+      },
+      "Alemania": {
+        "press": [
+          "reuters.com",
+          "apnews.com",
+          "efe.com",
+          "bbc.com",
+          "theguardian.com",
+          "nytimes.com",
+          "washingtonpost.com",
+          "spiegel.de",
+          "zeit.de"
+        ],
+        "industry": [
+          "billboard.com",
+          "rollingstone.com",
+          "variety.com",
+          "pitchfork.com",
+          "nme.com",
+          "musicbusinessworldwide.com",
+          "pollstar.com",
+          "hitsdailydouble.com",
+          "theverge.com"
+        ],
+        "regulators": [
+          "ftc.gov",
+          "justice.gov",
+          "ec.europa.eu",
+          "cma.gov.uk",
+          "competitionbureau.gc.ca",
+          "profeco.gob.mx"
+        ]
+      },
+      "Austria": {
+        "press": [
+          "reuters.com",
+          "apnews.com",
+          "efe.com",
+          "bbc.com",
+          "theguardian.com",
+          "nytimes.com",
+          "washingtonpost.com",
+          "derstandard.at"
+        ],
+        "industry": [
+          "billboard.com",
+          "rollingstone.com",
+          "variety.com",
+          "pitchfork.com",
+          "nme.com",
+          "musicbusinessworldwide.com",
+          "pollstar.com",
+          "hitsdailydouble.com",
+          "theverge.com"
+        ],
+        "regulators": [
+          "ftc.gov",
+          "justice.gov",
+          "ec.europa.eu",
+          "cma.gov.uk",
+          "competitionbureau.gc.ca",
+          "profeco.gob.mx"
+        ]
+      },
+      "Dinamarca": {
+        "press": [
+          "reuters.com",
+          "apnews.com",
+          "efe.com",
+          "bbc.com",
+          "theguardian.com",
+          "nytimes.com",
+          "washingtonpost.com",
+          "dr.dk"
+        ],
+        "industry": [
+          "billboard.com",
+          "rollingstone.com",
+          "variety.com",
+          "pitchfork.com",
+          "nme.com",
+          "musicbusinessworldwide.com",
+          "pollstar.com",
+          "hitsdailydouble.com",
+          "theverge.com"
+        ],
+        "regulators": [
+          "ftc.gov",
+          "justice.gov",
+          "ec.europa.eu",
+          "cma.gov.uk",
+          "competitionbureau.gc.ca",
+          "profeco.gob.mx"
+        ]
+      }
+    },
+    "rss_urls": [
+      {
+        "url": "https://www.billboard.com/feed/",
+        "geo": "Estados Unidos",
+        "category": "industry"
+      },
+      {
+        "url": "https://www.rollingstone.com/music/music-news/feed/",
+        "geo": "Estados Unidos",
+        "category": "press"
+      },
+      {
+        "url": "https://www.nme.com/feed",
+        "geo": "Reino Unido",
+        "category": "press"
+      },
+      {
+        "url": "https://variety.com/v/music/music/feed/",
+        "geo": "Estados Unidos",
+        "category": "industry"
+      }
+    ]
+  },
+  "forums": {
+    "rss_query_templates": [
+      "https://news.google.com/rss/search?q={query}&hl={hl}&gl={gl}&ceid={ceid}"
+    ],
+    "query_terms": [
+      "forum",
+      "forums",
+      "foro",
+      "foros",
+      "community",
+      "comunidad",
+      "scam",
+      "estafa",
+      "reventa",
+      "resale",
+      "tickets"
+    ],
+    "rss_urls": [
+      "https://news.google.com/rss/search?q=site%3Areddit.com+Taylor+Swift+Eras+Tour",
+      "https://news.google.com/rss/search?q=site%3Areddit.com+Swifties+tickets+scam",
+      "https://news.google.com/rss/search?q=site%3Aticketmaster.com+Taylor+Swift+Eras+Tour",
+      "https://news.google.com/rss/search?q=site%3Aaxs.com+Taylor+Swift+Eras+Tour",
+      "https://news.google.com/rss/search?q=site%3Aeventim.de+Taylor+Swift+Eras+Tour",
+      "https://news.google.com/rss/search?q=site%3Aseetickets.com+Taylor+Swift",
+      "https://news.google.com/rss/search?q=site%3Aviagogo.com+Taylor+Swift+Eras+Tour",
+      "https://news.google.com/rss/search?q=site%3Astubhub.com+Taylor+Swift+Eras+Tour"
+    ]
+  },
+  "blogs": {
+    "rss_query_templates": [
+      "https://news.google.com/rss/search?q={query}&hl={hl}&gl={gl}&ceid={ceid}"
+    ],
+    "query_terms": [
+      "analysis",
+      "analisis",
+      "análisis",
+      "blog",
+      "opinion",
+      "opinión",
+      "industry",
+      "ticketing",
+      "streaming"
+    ],
+    "rss_urls": [
+      "https://news.google.com/rss/search?q=Taylor+Swift+Eras+Tour+economic+impact",
+      "https://news.google.com/rss/search?q=Taylor+Swift+ticketing+antitrust",
+      "https://news.google.com/rss/search?q=site%3Amusicbusinessworldwide.com+Taylor+Swift",
+      "https://news.google.com/rss/search?q=site%3Apollstar.com+Taylor+Swift",
+      "https://news.google.com/rss/search?q=site%3Atheverge.com+Taylor+Swift+ticketmaster",
+      "https://news.google.com/rss/search?q=site%3Asubstack.com+Taylor+Swift+industry"
+    ]
+  },
+  "appstore": {
+    "app_ids": [
+      "324684580",
+      "500003565",
+      "366562751"
+    ],
+    "app_ids_by_geo": {},
+    "country_by_geo": {
+      "Estados Unidos": "us",
+      "Canadá": "ca",
+      "México": "mx",
+      "Argentina": "ar",
+      "Brasil": "br",
+      "Japón": "jp",
+      "Singapur": "sg",
+      "Australia": "au",
+      "Reino Unido": "gb",
+      "Irlanda": "ie",
+      "Francia": "fr",
+      "Suecia": "se",
+      "Portugal": "pt",
+      "España": "es",
+      "Países Bajos": "nl",
+      "Suiza": "ch",
+      "Italia": "it",
+      "Alemania": "de",
+      "Austria": "at",
+      "Dinamarca": "dk"
+    }
+  },
+  "google_play": {
+    "package_ids": [],
+    "package_ids_by_geo": {},
+    "geo_to_gl": {
+      "Estados Unidos": "US",
+      "Canadá": "CA",
+      "México": "MX",
+      "Argentina": "AR",
+      "Brasil": "BR",
+      "Japón": "JP",
+      "Singapur": "SG",
+      "Australia": "AU",
+      "Reino Unido": "GB",
+      "Irlanda": "IE",
+      "Francia": "FR",
+      "Suecia": "SE",
+      "Portugal": "PT",
+      "España": "ES",
+      "Países Bajos": "NL",
+      "Suiza": "CH",
+      "Italia": "IT",
+      "Alemania": "DE",
+      "Austria": "AT",
+      "Dinamarca": "DK"
+    },
+    "geo_to_hl": {
+      "Estados Unidos": "en-US",
+      "Canadá": "en-CA",
+      "México": "es-419",
+      "Argentina": "es-419",
+      "Brasil": "pt-BR",
+      "Japón": "ja",
+      "Singapur": "en-SG",
+      "Australia": "en-AU",
+      "Reino Unido": "en-GB",
+      "Irlanda": "en-IE",
+      "Francia": "fr",
+      "Suecia": "sv",
+      "Portugal": "pt-PT",
+      "España": "es",
+      "Países Bajos": "nl",
+      "Suiza": "de",
+      "Italia": "it",
+      "Alemania": "de",
+      "Austria": "de",
+      "Dinamarca": "da"
+    }
+  },
+  "trustpilot": {
+    "rss_query_templates": [
+      "https://news.google.com/rss/search?q={query}&hl={hl}&gl={gl}&ceid={ceid}"
+    ],
+    "query_terms": [
+      "trustpilot",
+      "review",
+      "reviews",
+      "reseña",
+      "reseñas",
+      "opiniones",
+      "tickets",
+      "ticketing"
+    ],
+    "rss_urls": [
+      "https://news.google.com/rss/search?q=Trustpilot+Ticketmaster",
+      "https://news.google.com/rss/search?q=Trustpilot+StubHub",
+      "https://news.google.com/rss/search?q=Trustpilot+Viagogo"
+    ]
+  },
+  "google_reviews": {
+    "place_ids": []
+  },
+  "downdetector": {
+    "rss_query_templates": [
+      "https://news.google.com/rss/search?q={query}&hl={hl}&gl={gl}&ceid={ceid}"
+    ],
+    "query_terms": [
+      "downdetector",
+      "outage",
+      "caída",
+      "caida",
+      "status",
+      "incidencia"
+    ],
+    "rss_urls": [
+      "https://news.google.com/rss/search?q=Downdetector+Ticketmaster",
+      "https://news.google.com/rss/search?q=Downdetector+Spotify"
+    ]
+  }
+}

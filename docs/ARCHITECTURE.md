@@ -1,108 +1,105 @@
-# 🏗️ ARCHITECTURE.md (EN / ES)
+# ARCHITECTURE.md (EN / ES)
 
-> **Entry points / Puntos de entrada**
-- System documentation / Documentación del sistema: [`DOCUMENTACION.md`](DOCUMENTACION.md)
-- Data contracts / Contratos de datos: [`DATA_CONTRACTS.md`](DATA_CONTRACTS.md)
-- Signals catalog / Catálogo de señales: [`SIGNALS_CATALOG.md`](SIGNALS_CATALOG.md)
-- Governance & security / Gobierno y seguridad: [`GOVERNANCE_SECURITY.md`](GOVERNANCE_SECURITY.md)
-- Extending / Extender: [`EXTENDING_THE_SYSTEM.md`](EXTENDING_THE_SYSTEM.md)
+Entry points:
+- System guide: `DOCUMENTACION.md`
+- Data contracts: `DATA_CONTRACTS.md`
+- Extension guide: `EXTENDING_THE_SYSTEM.md`
+- File index: `FILES.md`
 
 ---
 
-## EN | Architecture at a glance
+## EN | Architecture today
 
-Global Overview Radar is built as a **layered, event-driven intelligence pipeline**:
-- capture public discourse
-- enrich it semantically
-- compute **relative** intelligence
-- detect **change** as explainable signals
-- expose insights via API and dashboards
+Global Overview Radar runs two complementary pipelines on top of a shared API layer:
 
-### End-to-end flow (Mermaid)
+1) BugResolutionRadar (incident intelligence)
+- Ingests structured files from `data/assets` (CSV/JSON/XLSX).
+- Normalizes and consolidates incidents into a cache.
+- Exposes KPIs, incident lists, and evolution endpoints.
+
+2) Reputation Radar (public signals)
+- Collects public items from multiple sources (news, social, reviews, app stores).
+- Uses mergeable business configs from `data/reputation/*.json`.
+- Normalizes, enriches (geo hints + sentiment), and caches results.
+- Exposes reputation items and comparison endpoints.
+
+### End-to-end flow (BugResolutionRadar)
 
 ```mermaid
 flowchart LR
-  A[Public Sources] --> B[Ingestion]
-  B --> C[Processing & Enrichment]
-  C --> D[Intelligence: Baselines + Comparisons]
-  D --> E[Signals & Alerts: Explainable Change]
-  E --> F[API]
-  F --> G[Dashboards / Consumers]
+  A[data/assets] --> B[Adapters: CSV/JSON/XLSX]
+  B --> C[IngestService]
+  C --> D[ConsolidateService]
+  D --> E[data/cache/bugresolutionradar_cache.json]
+  E --> F[FastAPI]
+  F --> G[Frontend]
 ```
 
-### C4 — Context
-
-```mermaid
-graph TD
-  ENV[Public Environment<br/>(Media, Social, Institutional)] --> RADAR[Global Overview Radar]
-  RADAR --> USERS[Teams & Decision Makers<br/>(Reputation, Strategy, Risk, Public Affairs)]
-```
-
-### C4 — Containers
-
-```mermaid
-flowchart TB
-  S[Sources] --> I[Ingestion Services]
-  I --> P[Processing & Enrichment Pipelines]
-  P --> INT[Intelligence Engine]
-  INT --> SIG[Signals Engine]
-  SIG --> API[API Layer]
-  API --> UI[Dashboards / Integrations]
-```
-
-### Design principles
-- **Comparative by design** (no absolute insights)
-- **Signals over noise** (focus on change: acceleration/divergence/emergence)
-- **Explainability first** (why/compared-to/since-when/evidence)
-- **Reproducibility** (immutable raw + reprocessable derivations)
-- **Configuration over hardcoding** (taxonomies/peers/markets drive meaning)
-
----
-
-## ES | Arquitectura de un vistazo
-
-Global Overview Radar se construye como un **pipeline de inteligencia por capas y orientado a eventos**:
-- captura discurso público
-- lo enriquece semánticamente
-- calcula inteligencia **relativa**
-- detecta **cambio** como señales explicables
-- expone insights vía API y dashboards
-
-### Flujo end-to-end (Mermaid)
+### End-to-end flow (Reputation)
 
 ```mermaid
 flowchart LR
-  A[Fuentes públicas] --> B[Ingesta]
-  B --> C[Procesamiento y enriquecimiento]
-  C --> D[Inteligencia: baselines + comparativas]
-  D --> E[Señales y alertas: cambio explicable]
-  E --> F[API]
-  F --> G[Dashboards / Consumidores]
+  A[data/reputation/*.json] --> B[ReputationIngestService]
+  C[Collectors: news/social/reviews/markets] --> B
+  B --> D[Normalize + geo hints + sentiment]
+  D --> E[data/cache/reputation_cache.json]
+  E --> F[FastAPI]
+  F --> G[Frontend]
 ```
 
-### Principios de diseño
-- **Comparativo por diseño** (sin insights absolutos)
-- **Señales por encima del ruido** (cambio: aceleración/divergencia/emergencia)
-- **Explainability first** (por qué / respecto a qué / desde cuándo / evidencia)
-- **Reproducibilidad** (raw inmutable + derivados reprocesables)
-- **Configuración sobre hardcoding** (taxonomías/peers/mercados)
+### Configuration at a glance
+
+- Backend env files live in:
+  - `backend/bugresolutionradar/.env`
+  - `backend/reputation/.env.reputation`
+- Reputation configs are **multi-file** by design: drop one or many JSONs in `data/reputation/`.
+- Merge rules: dicts merge deep, lists de-duplicate, scalars override when non-empty.
 
 ---
 
-## EN | Core data objects (logical)
-See full contracts in [`DATA_CONTRACTS.md`](DATA_CONTRACTS.md).
+## ES | Arquitectura actual
 
-- `ContentEvent` (immutable raw)
-- `EnrichedContent` (derived, reprocessable)
-- `ComparativeScore` (relative metrics)
-- `SignalEvent` (explainable change event)
+Global Overview Radar ejecuta dos pipelines complementarios sobre una API compartida:
 
----
+1) BugResolutionRadar (incidencias)
+- Ingesta ficheros estructurados desde `data/assets` (CSV/JSON/XLSX).
+- Normaliza y consolida incidencias en cache.
+- Expone KPIs, listados y evolucion.
 
-## ES | Objetos de datos (lógicos)
-Ver contratos completos en [`DATA_CONTRACTS.md`](DATA_CONTRACTS.md).
+2) Reputation Radar (senales publicas)
+- Recolecta items publicos desde multiples fuentes.
+- Usa configuraciones mergeables en `data/reputation/*.json`.
+- Normaliza, enriquece (geo + sentimiento) y cachea resultados.
+- Expone endpoints de reputacion y comparativas.
 
-- `ContentEvent` (raw inmutable)
-- `EnrichedContent` (derivado, reprocesable)
-- `ComparativeScore` (métricas relativas)
-- `SignalEvent` (evento de cambio explicable)
+### Flujo end-to-end (BugResolutionRadar)
+
+```mermaid
+flowchart LR
+  A[data/assets] --> B[Adapters: CSV/JSON/XLSX]
+  B --> C[IngestService]
+  C --> D[ConsolidateService]
+  D --> E[data/cache/bugresolutionradar_cache.json]
+  E --> F[FastAPI]
+  F --> G[Frontend]
+```
+
+### Flujo end-to-end (Reputacion)
+
+```mermaid
+flowchart LR
+  A[data/reputation/*.json] --> B[ReputationIngestService]
+  C[Collectors: news/social/reviews/markets] --> B
+  B --> D[Normalize + geo hints + sentimiento]
+  D --> E[data/cache/reputation_cache.json]
+  E --> F[FastAPI]
+  F --> G[Frontend]
+```
+
+### Configuracion
+
+- .env backend:
+  - `backend/bugresolutionradar/.env`
+  - `backend/reputation/.env.reputation`
+- Reputacion usa **multi-config**: uno o varios JSON en `data/reputation/`.
+- Reglas de merge: dicts merge profundo, listas deduplicadas, escalares override si no estan vacios.

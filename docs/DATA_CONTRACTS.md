@@ -1,98 +1,85 @@
 # DATA_CONTRACTS.md (EN / ES)
 
-Logical contracts used across the system. These are storage-agnostic schemas designed for traceability and reproducibility.
+Storage-agnostic contracts used by the current codebase.
 
-Back to architecture: [`ARCHITECTURE.md`](ARCHITECTURE.md)
-
----
-
-## EN | Contract philosophy
-- Raw content is **immutable**
-- Derived artifacts are **reprocessable**
-- Every insight must be **traceable** to evidence
-
-## ES | Filosofía
-- El contenido raw es **inmutable**
-- Los derivados son **reprocesables**
-- Todo insight debe ser **trazable** a evidencia
+Back to architecture: `ARCHITECTURE.md`
 
 ---
 
-## Core objects (Mermaid)
+## EN | BugResolutionRadar contracts
 
-```mermaid
-classDiagram
-  class ContentEvent{
-    +event_id
-    +source_type
-    +source_name
-    +published_at
-    +ingested_at
-    +raw_text
-    +raw_metadata
-  }
+### ObservedIncident (adapter output)
+Minimal fields (see `backend/bugresolutionradar/domain/models.py`):
+- `source_id`, `source_key`, `observed_at`
+- `title`, `status`, `severity`
+- `opened_at`, `closed_at`, `updated_at`
+- `clients_affected`, `product`, `feature`, `resolution_type`
 
-  class EnrichedContent{
-    +event_id
-    +language
-    +entities[]
-    +topics[]
-    +embeddings
-  }
+### IncidentRecord (consolidated)
+- `global_id`
+- `current` (IncidentCurrent)
+- `provenance` (list of SourceRef)
+- `history` (list of IncidentHistoryEvent)
 
-  class ComparativeScore{
-    +entity
-    +topic
-    +time_window
-    +value
-    +baseline
-    +peer_group
-  }
-
-  class SignalEvent{
-    +signal_id
-    +signal_type
-    +entities_affected[]
-    +topic
-    +trigger_reason
-    +comparison_context
-    +confidence
-    +evidence_refs[]
-  }
-
-  ContentEvent --> EnrichedContent
-  EnrichedContent --> ComparativeScore
-  ComparativeScore --> SignalEvent
-```
+### CacheDocument (backend cache)
+- `schema_version`, `generated_at`
+- `runs` (metadata of ingest runs)
+- `incidents` (dict of IncidentRecord)
 
 ---
 
-## EN | Minimal fields (recommended)
+## ES | Contratos de BugResolutionRadar
 
-### ContentEvent
-- `event_id`, `published_at`, `source_type`, `raw_text`, `raw_metadata`
+### ObservedIncident (salida de adapters)
+Campos minimos (ver `backend/bugresolutionradar/domain/models.py`):
+- `source_id`, `source_key`, `observed_at`
+- `title`, `status`, `severity`
+- `opened_at`, `closed_at`, `updated_at`
+- `clients_affected`, `product`, `feature`, `resolution_type`
 
-### EnrichedContent
-- `language`, `entities`, `topics`, `embeddings` (optional)
+### IncidentRecord (consolidado)
+- `global_id`
+- `current` (IncidentCurrent)
+- `provenance` (lista de SourceRef)
+- `history` (lista de IncidentHistoryEvent)
 
-### ComparativeScore
-- `value`, `baseline`, `peer_group`, `time_window`
-
-### SignalEvent
-- `signal_type`, `trigger_reason`, `comparison_context`, `evidence_refs`, `confidence`
+### CacheDocument (cache del backend)
+- `schema_version`, `generated_at`
+- `runs` (metadata de ejecuciones)
+- `incidents` (dict de IncidentRecord)
 
 ---
 
-## ES | Campos mínimos (recomendado)
+## EN | Reputation contracts
 
-### ContentEvent
-- `event_id`, `published_at`, `source_type`, `raw_text`, `raw_metadata`
+### ReputationItem
+- `id`, `source`
+- `geo`, `actor`, `language`
+- `published_at`, `collected_at`
+- `author`, `url`, `title`, `text`
+- `signals` (dict with extra metadata)
+- `sentiment`, `aspects`
 
-### EnrichedContent
-- `language`, `entities`, `topics`, `embeddings` (opcional)
+### ReputationCacheDocument
+- `generated_at`, `config_hash`
+- `sources_enabled`
+- `items` (list of ReputationItem)
+- `stats` (`count`, optional `note`)
 
-### ComparativeScore
-- `value`, `baseline`, `peer_group`, `time_window`
+---
 
-### SignalEvent
-- `signal_type`, `trigger_reason`, `comparison_context`, `evidence_refs`, `confidence`
+## ES | Contratos de Reputacion
+
+### ReputationItem
+- `id`, `source`
+- `geo`, `actor`, `language`
+- `published_at`, `collected_at`
+- `author`, `url`, `title`, `text`
+- `signals` (metadatos extra)
+- `sentiment`, `aspects`
+
+### ReputationCacheDocument
+- `generated_at`, `config_hash`
+- `sources_enabled`
+- `items` (lista de ReputationItem)
+- `stats` (`count`, y `note` opcional)

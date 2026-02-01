@@ -1,83 +1,53 @@
 # GOVERNANCE_SECURITY.md (EN / ES)
 
-Enterprise-grade governance and security model.
+Governance and security model aligned with the current repository.
 
-Back to docs index: [`../README.md`](../README.md)
+Back to docs index: `../README.md`
 
 ---
 
 ## EN | Governance
 
-### Ownership
-Define explicit owners for:
-- taxonomies
-- peer groups
-- sensitivity mappings
-- source registry
+- Configs are source-of-truth for scope and peer groups.
+- Reputation configs can be split across multiple JSON files (mergeable).
+- Log and cache artifacts are generated, not committed.
 
 ### Change management
-- version configurations
-- require review for taxonomy changes
-- keep an audit trail of changes impacting scores/signals
-
-### Explainability governance
-Ensure every signal links to:
-- evidence
-- baseline definition
-- peer group definition
-- configuration version
+- Version `data/reputation/*.json` changes.
+- Keep a short decision log for taxonomy/keyword changes.
+- Re-run ingestion after config changes (hash changes invalidate cache).
 
 ---
 
-## EN | Security model
+## EN | Security
 
-### Isolation
-- logical tenant isolation per organization
-- separate storage namespaces (recommended)
-
-### Access control
-- RBAC for API and dashboards
-- permission by market, topic, and source type (optional)
-
-### Evidence-level controls
-- ability to restrict which sources can be surfaced as evidence
-- redact sensitive metadata when needed
+- Secrets live in local env files:
+  - `backend/bugresolutionradar/.env`
+  - `backend/reputation/.env.reputation`
+  - `frontend/brr-frontend/.env.local`
+- `.env*.example` files are committed; real `.env` files are ignored.
+- Logs are written under `./logs/` and ignored by git.
 
 ---
 
 ## ES | Gobierno
 
-### Ownership
-Propietarios explícitos de:
-- taxonomías
-- peer groups
-- mapeos de sensibilidad
-- registro de fuentes
+- Las configs son la fuente de verdad del scope y peers.
+- Reputacion soporta varios JSON (mergeables).
+- Logs y caches se generan localmente y no se versionan.
 
-### Gestión de cambios
-- versionar configuración
-- revisión obligatoria para cambios de taxonomía
-- auditoría de cambios que impactan scores/señales
-
-### Gobierno de explicabilidad
-Cada señal debe enlazar a:
-- evidencia
-- definición de baseline
-- definición de peer group
-- versión de configuración
+### Gestion de cambios
+- Versiona cambios en `data/reputation/*.json`.
+- Mantener un decision log para cambios de taxonomias/keywords.
+- Re-ejecuta ingestas al cambiar config (el hash invalida el cache).
 
 ---
 
-## ES | Modelo de seguridad
+## ES | Seguridad
 
-### Aislamiento
-- aislamiento lógico por organización (tenant)
-- espacios de almacenamiento separados (recomendado)
-
-### Control de acceso
-- RBAC para API y dashboards
-- permisos por mercado, tema y tipo de fuente (opcional)
-
-### Control a nivel de evidencia
-- restringir qué fuentes pueden mostrarse como evidencia
-- redactar metadatos sensibles cuando aplique
+- Los secretos viven en .env locales:
+  - `backend/bugresolutionradar/.env`
+  - `backend/reputation/.env.reputation`
+  - `frontend/brr-frontend/.env.local`
+- `.env*.example` se versionan; los `.env` reales no.
+- Logs en `./logs/` (ignorado por git).

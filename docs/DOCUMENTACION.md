@@ -1,98 +1,151 @@
-# DOCUMENTACION.md — Global Overview Radar (EN / ES)
+# DOCUMENTACION.md (EN / ES)
 
-This is the **system-level guide**: modules, flows, extension points, and operational mental models.
+System-level guide for the current codebase.
 
-> Architecture & diagrams / Arquitectura y diagramas: [`ARCHITECTURE.md`](ARCHITECTURE.md)  
-> File index / Índice de archivos: [`FILES.md`](FILES.md)
-
----
-
-## EN | What this system is (in one paragraph)
-
-Global Overview Radar turns public discourse into **comparative, explainable intelligence**. It detects **narrative change** and surfaces **early reputational signals** by comparing an organization’s exposure and framing against peers, baselines, and historical patterns.
-
-## ES | Qué es este sistema (en un párrafo)
-
-Global Overview Radar transforma el discurso público en **inteligencia comparativa y explicable**. Detecta **cambios narrativos** y saca a la luz **señales reputacionales tempranas** comparando la exposición y el framing de una organización contra peers, baselines y patrones históricos.
+Related:
+- `ARCHITECTURE.md`
+- `DATA_CONTRACTS.md`
+- `EXTENDING_THE_SYSTEM.md`
+- `FILES.md`
 
 ---
 
-## EN | Layer responsibilities (practical)
+## EN | Overview
 
-### Ingestion
-Capture content with traceability → emit `ContentEvent`.
+Global Overview Radar is split into two operational domains:
 
-### Processing & Enrichment
-Normalize + dedupe + semantics (language, entities, topics, embeddings) → emit `EnrichedContent`.
+1) BugResolutionRadar (incidents)
+- Reads incidents from structured files in `data/assets`.
+- Normalizes + consolidates into `data/cache/bugresolutionradar_cache.json`.
+- Exposes KPIs, incidents, and evolution endpoints via FastAPI.
 
-### Intelligence
-Baselines + clustering + trends + **relative** metrics → emit `ComparativeScore`, `NarrativeTrend`.
-
-### Signals
-Detect change (acceleration/divergence/emergence/polarity shifts) → emit explainable `SignalEvent`.
-
-### API/Dashboards
-Query, explore, and drill down to evidence.
+2) Reputation Radar (public perception)
+- Collects public items from multiple sources (news, social, reviews, markets).
+- Uses one or many JSON configs in `data/reputation/` (mergeable).
+- Normalizes, applies geo hints, runs sentiment, caches to `data/cache/reputation_cache.json`.
+- Exposes reputation items + comparison endpoints.
 
 ---
 
-## ES | Responsabilidades por capa (práctico)
+## EN | Runtime flow
 
-### Ingesta
-Captura contenido con trazabilidad → emite `ContentEvent`.
+### BugResolutionRadar
+1) Adapters read data from `data/assets` (CSV/JSON/XLSX).
+2) `IngestService` emits `ObservedIncident` objects.
+3) `ConsolidateService` merges into `IncidentRecord` and writes cache.
+4) `ReportingService` computes KPIs from cache.
+5) FastAPI exposes `/kpis`, `/incidents`, `/evolution`.
 
-### Procesamiento y enriquecimiento
-Normaliza + dedupe + semántica (idioma, entidades, temas, embeddings) → emite `EnrichedContent`.
-
-### Inteligencia
-Baselines + clustering + tendencias + métricas **relativas** → emite `ComparativeScore`, `NarrativeTrend`.
-
-### Señales
-Detecta cambio (aceleración/divergencia/emergencia/cambios de framing) → emite `SignalEvent` explicable.
-
-### API/Dashboards
-Consulta, exploración y drill-down a evidencia.
-
----
-
-## EN | Day-in-the-life walkthrough (mock)
-
-Scenario: a regulatory narrative suddenly accelerates around a topic in your sector.
-
-1) A set of articles appears in multiple outlets.
-2) Ingestion stores each as `ContentEvent` (immutable).
-3) Enrichment tags entities (companies/regulators) and topics (taxonomy).
-4) Intelligence computes velocity vs baseline + peer group divergence.
-5) Signals engine triggers `Acceleration + Divergence` with:
-   - compared-to context (peer group, last 30 days baseline)
-   - supporting evidence (top articles/posts)
-   - confidence score
-6) Users see the signal with drill-down sources and timeline.
-
-See signal definitions: [`SIGNALS_CATALOG.md`](SIGNALS_CATALOG.md)
+### Reputation Radar
+1) Load business config (all `*.json` in `data/reputation/`).
+2) Build collectors based on `.env.reputation` toggles.
+3) Collect items, normalize, add geo hints, run sentiment.
+4) Merge + cache to `data/cache/reputation_cache.json`.
+5) FastAPI exposes `/reputation/items`, `/reputation/items/compare`, `/reputation/meta`.
 
 ---
 
-## ES | Walkthrough “day-in-the-life” (mock)
+## EN | Configuration
 
-Escenario: una narrativa regulatoria acelera de forma abrupta en tu sector.
+### Env files (auto-created if missing)
+- `backend/bugresolutionradar/.env`
+- `backend/reputation/.env.reputation`
+- `frontend/brr-frontend/.env.local`
 
-1) Aparecen artículos en múltiples medios.
-2) La ingesta guarda cada uno como `ContentEvent` (inmutable).
-3) El enriquecimiento etiqueta entidades (empresas/reguladores) y temas (taxonomía).
-4) La inteligencia calcula velocidad vs baseline + divergencia vs peers.
-5) Se dispara `Aceleración + Divergencia` con:
-   - contexto comparativo (peer group, baseline 30 días)
-   - evidencia (top piezas)
-   - score de confianza
-6) El usuario ve la señal con drill-down y timeline.
-
-Ver señales: [`SIGNALS_CATALOG.md`](SIGNALS_CATALOG.md)
+### Reputation config (multi-file)
+- Default path: `REPUTATION_CONFIG_PATH=./data/reputation`
+- All `*.json` are merged (load order: `config.json` first, then alphabetical).
+- Merge rules:
+  - dicts: deep merge
+  - lists: append + dedupe
+  - scalars: override only if incoming value is non-empty
 
 ---
 
-## EN | Extension points
-See the step-by-step guide in [`EXTENDING_THE_SYSTEM.md`](EXTENDING_THE_SYSTEM.md).
+## EN | Running locally
 
-## ES | Puntos de extensión
-Guía paso a paso en [`EXTENDING_THE_SYSTEM.md`](EXTENDING_THE_SYSTEM.md).
+Backend:
+```bash
+make ensure-backend
+make env
+make bugs-ingest
+make reputation-ingest
+make dev-back
+```
+
+Frontend:
+```bash
+make ensure-front
+make dev-front
+```
+
+---
+
+## ES | Vision general
+
+Global Overview Radar se divide en dos dominios:
+
+1) BugResolutionRadar (incidencias)
+- Lee incidencias desde `data/assets`.
+- Normaliza + consolida en `data/cache/bugresolutionradar_cache.json`.
+- Expone KPIs, incidencias y evolucion via FastAPI.
+
+2) Reputation Radar (percepcion publica)
+- Recolecta items desde multiples fuentes.
+- Usa uno o varios JSON en `data/reputation/` (mergeable).
+- Normaliza, aplica geos, calcula sentimiento, cachea.
+- Expone endpoints de reputacion y comparativas.
+
+---
+
+## ES | Flujo de ejecucion
+
+### BugResolutionRadar
+1) Adapters leen `data/assets` (CSV/JSON/XLSX).
+2) `IngestService` produce `ObservedIncident`.
+3) `ConsolidateService` genera `IncidentRecord` y escribe cache.
+4) `ReportingService` calcula KPIs.
+5) FastAPI expone `/kpis`, `/incidents`, `/evolution`.
+
+### Reputation Radar
+1) Carga config (todos los `*.json` en `data/reputation/`).
+2) Construye collectors segun `.env.reputation`.
+3) Recolecta, normaliza, aplica geo, sentimiento.
+4) Merge + cache en `data/cache/reputation_cache.json`.
+5) FastAPI expone `/reputation/items`, `/reputation/items/compare`, `/reputation/meta`.
+
+---
+
+## ES | Configuracion
+
+### Env files (se crean si no existen)
+- `backend/bugresolutionradar/.env`
+- `backend/reputation/.env.reputation`
+- `frontend/brr-frontend/.env.local`
+
+### Configuracion de reputacion (multi-archivo)
+- Path por defecto: `REPUTATION_CONFIG_PATH=./data/reputation`
+- Se mezclan todos los `*.json` (orden: `config.json` primero).
+- Reglas de merge:
+  - dicts: merge profundo
+  - listas: append + dedupe
+  - escalares: override solo si el valor entrante no esta vacio
+
+---
+
+## ES | Ejecucion local
+
+Backend:
+```bash
+make ensure-backend
+make env
+make bugs-ingest
+make reputation-ingest
+make dev-back
+```
+
+Frontend:
+```bash
+make ensure-front
+make dev-front
+```

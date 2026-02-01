@@ -1,95 +1,153 @@
-# 🌍 Global Overview Radar
+# Global Overview Radar
 
-[![CI](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/ci.yml)
-[![Tests & Coverage](https://img.shields.io/github/actions/workflow/status/felixdelbarrio/Global_Overview_Radar/ci.yml?branch=main&label=Tests%20%26%20Coverage)](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/ci.yml)
-[![Typecheck](https://img.shields.io/github/actions/workflow/status/felixdelbarrio/Global_Overview_Radar/ci.yml?branch=main&label=Typecheck)](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/ci.yml)
-[![Sponsor](https://img.shields.io/badge/Sponsor-GitHub%20Sponsors-2ea44f.svg)](https://github.com/sponsors/felixdelbarrio)
-[![Donate](https://img.shields.io/badge/Donate-PayPal-blue.svg)](https://paypal.me/felixdelbarrio)
+Global Overview Radar is a full-stack system that combines:
+- a Bug Resolution Radar for incident/ops visibility
+- a Reputation Radar for public signals and market perception
 
-> **CI coverage**: backend & frontend tests with coverage, plus full type-checking (Python + TypeScript).  
-> **Cobertura CI**: tests de backend y frontend con cobertura, más verificación completa de tipos (Python + TypeScript).
+It is designed to be configuration-driven, reproducible, and explainable by default.
 
 ---
 
-## EN | Overview
+## EN | What is inside
 
-**Global Overview Radar** is a **comparative public perception intelligence platform**.  
-It detects **narrative change**, surfaces **early reputational signals**, and benchmarks **relative positioning** across market actors — always with **explainable, auditable evidence**.
-
-This project is designed to move organizations from **reactive monitoring** to **anticipatory intelligence**.
-
----
-
-## ES | Visión general
-
-**Global Overview Radar** es una **plataforma de inteligencia de percepción pública comparada**.  
-Detecta **cambios narrativos**, identifica **señales reputacionales tempranas** y compara el **posicionamiento relativo** entre actores del mercado — siempre con **evidencia explicable y auditable**.
-
-El objetivo es pasar del **monitoring reactivo** a la **inteligencia anticipatoria**.
+- Backend (Python + FastAPI)
+  - `backend/bugresolutionradar`: ingestion of incidents (CSV/JSON/XLSX), consolidation, KPIs, API.
+  - `backend/reputation`: multi-source collectors, normalization, sentiment, caching, API endpoints.
+- Frontend (Next.js)
+  - `frontend/brr-frontend`: UI + client logging pipeline.
+- Data
+  - `data/reputation/*.json`: business configurations (mergeable, multi-file).
+  - `data/reputation_samples/*.json`: sample configs to copy from.
+  - `data/cache/`: generated caches.
 
 ---
 
-## 🧭 Documentation | Documentación
+## ES | Que contiene
 
-All technical documentation lives in **`/docs`**:
-
-- 🏗️ Architecture → `docs/ARCHITECTURE.md`
-- 📘 System documentation → `docs/DOCUMENTACION.md`
-- 📦 Data contracts → `docs/DATA_CONTRACTS.md`
-- 🚨 Signals catalog → `docs/SIGNALS_CATALOG.md`
-- 🔐 Governance & security → `docs/GOVERNANCE_SECURITY.md`
-- 🧩 Extending the system → `docs/EXTENDING_THE_SYSTEM.md`
-- 🗂️ Project file index → `docs/FILES.md`
-
----
-
-## 🧩 Deployment modes | Modos de despliegue
-
-### EN
-- **Open Source**: reference architecture and extensible pipelines.
-- **Commercial Product**: enterprise-ready defaults, dashboards, and SLAs.
-- **Internal Enterprise Platform**: private deployment with custom peers, taxonomies, and integrations.
-
-### ES
-- **Open Source**: arquitectura de referencia y pipelines extensibles.
-- **Producto comercial**: defaults enterprise, dashboards y SLAs.
-- **Plataforma interna enterprise**: despliegue privado con peers, taxonomías e integraciones a medida.
+- Backend (Python + FastAPI)
+  - `backend/bugresolutionradar`: ingesta de incidencias (CSV/JSON/XLSX), consolidacion, KPIs, API.
+  - `backend/reputation`: collectors multi-fuente, normalizacion, sentimiento, cache, endpoints.
+- Frontend (Next.js)
+  - `frontend/brr-frontend`: UI + pipeline de logs del cliente.
+- Data
+  - `data/reputation/*.json`: configuracion de negocio (multi-archivo, mergeable).
+  - `data/reputation_samples/*.json`: muestras para copiar.
+  - `data/cache/`: caches generados.
 
 ---
 
-## 🛠️ Quick start (conceptual) | Arranque rápido (conceptual)
+## EN | Quick start (local)
 
-### EN
-1. Configure sources, taxonomies, and peer groups.
-2. Run ingestion and processing pipelines.
-3. Explore insights via API and dashboards.
+Backend:
+```bash
+make ensure-backend
+make env
+make bugs-ingest
+make reputation-ingest
+make dev-back
+```
 
-### ES
-1. Configura fuentes, taxonomías y peer groups.
-2. Ejecuta los pipelines de ingesta y procesamiento.
-3. Explora los insights vía API y dashboards.
+Frontend:
+```bash
+make ensure-front
+make dev-front
+```
 
-> Note / Nota: concrete commands depend on your implementation.  
-> See `docs/DOCUMENTACION.md` for system mental model and extension points.
-
----
-
-## 🤝 Contributing | Contribuir
-
-### EN
-Contributions are welcome. Please keep changes:
-- **comparative by design**
-- **explainable by default**
-- **configurable (no company-specific hardcoding)**
-
-### ES
-Las contribuciones son bienvenidas. Mantén los cambios:
-- **comparativos por diseño**
-- **explicables por defecto**
-- **configurables (sin hardcoding específico de empresa)**
+Open:
+- API: http://127.0.0.1:8000
+- Frontend: http://localhost:3000
 
 ---
 
-## 📜 License | Licencia
+## ES | Arranque rapido (local)
 
-See `LICENSE` for details.
+Backend:
+```bash
+make ensure-backend
+make env
+make bugs-ingest
+make reputation-ingest
+make dev-back
+```
+
+Frontend:
+```bash
+make ensure-front
+make dev-front
+```
+
+Abrir:
+- API: http://127.0.0.1:8000
+- Frontend: http://localhost:3000
+
+---
+
+## EN | Configuration notes
+
+- Backend env files are auto-created from examples if missing:
+  - `backend/bugresolutionradar/.env` from `.env.example`
+  - `backend/reputation/.env.reputation` from `.env.reputation.example`
+- Frontend env file:
+  - `frontend/brr-frontend/.env.local` from `.env.local.example`
+
+Reputation config loading:
+- `REPUTATION_CONFIG_PATH` points to a directory by default (`./data/reputation`).
+- All `*.json` files in that directory are merged (load order: `config.json` first, then alphabetical).
+- Merge rules:
+  - dicts: deep merge
+  - lists: concatenated with de-duplication
+  - scalars: override only when incoming value is not empty
+
+---
+
+## ES | Notas de configuracion
+
+- Los .env del backend se crean desde los ejemplos si faltan:
+  - `backend/bugresolutionradar/.env` desde `.env.example`
+  - `backend/reputation/.env.reputation` desde `.env.reputation.example`
+- Frontend:
+  - `frontend/brr-frontend/.env.local` desde `.env.local.example`
+
+Carga de configuracion de reputacion:
+- `REPUTATION_CONFIG_PATH` apunta a un directorio por defecto (`./data/reputation`).
+- Se mezclan todos los `*.json` (orden: `config.json` primero, luego alfabetico).
+- Reglas de merge:
+  - diccionarios: merge profundo
+  - listas: concatenadas con deduplicado
+  - escalares: override solo si el valor entrante no esta vacio
+
+---
+
+## EN | Logging
+
+BugResolutionRadar:
+- `LOG_ENABLED`, `LOG_TO_FILE`, `LOG_FILE_NAME`, `LOG_DEBUG`
+
+Reputation:
+- `REPUTATION_LOG_ENABLED`, `REPUTATION_LOG_TO_FILE`, `REPUTATION_LOG_FILE_NAME`, `REPUTATION_LOG_DEBUG`
+
+Frontend:
+- `NEXT_PUBLIC_LOG_ENABLED`, `NEXT_PUBLIC_LOG_TO_FILE`, `NEXT_PUBLIC_LOG_DEBUG`, `LOG_FILE_NAME`
+- If `NEXT_PUBLIC_LOG_TO_FILE=true`, logs are batched to `/api/log` and written to `./logs/`.
+
+All log files live under `./logs/` (ignored by git).
+
+---
+
+## Documentation
+
+- Architecture: `docs/ARCHITECTURE.md`
+- System guide: `docs/DOCUMENTACION.md`
+- Data contracts: `docs/DATA_CONTRACTS.md`
+- Signals: `docs/SIGNALS_CATALOG.md`
+- Metrics: `docs/METRICS_AND_SCORES.md`
+- Governance & security: `docs/GOVERNANCE_SECURITY.md`
+- Extending: `docs/EXTENDING_THE_SYSTEM.md`
+- File index: `docs/FILES.md`
+- Decision log: `docs/DECISION_LOG.md`
+
+---
+
+## License
+
+See `LICENSE`.

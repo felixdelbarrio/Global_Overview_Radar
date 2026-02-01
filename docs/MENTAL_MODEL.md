@@ -1,39 +1,33 @@
 # MENTAL_MODEL.md (EN / ES)
 
-Back to root: [`../README.md`](../README.md)
+Back to root: `../README.md`
 
 ---
 
 ## EN | How to think about the system
 
-Don’t think:
-- dashboards
-- alerts as pings
-- raw volume
+Do not think in terms of raw volume or dashboards.
+Think in terms of:
+- scope defined by configuration
+- reproducible ingestion
+- explainable comparisons
 
-Do think:
-- narratives
-- change
-- peer comparison
-- explainability
-
-The system answers:
-**What changed, compared to whom, since when, and why does it matter?**
+Change the system by:
+- adding/removing JSON configs in `data/reputation/`
+- toggling sources in `.env.reputation`
+- running ingestion to refresh caches
 
 ---
 
 ## ES | Modelo mental
 
-No pienses en:
-- dashboards
-- alertas como pings
-- volumen bruto
-
+No pienses en volumen bruto ni en dashboards.
 Piensa en:
-- narrativas
-- cambio
-- comparación con peers
-- explicabilidad
+- scope definido por configuracion
+- ingesta reproducible
+- comparativas explicables
 
-La pregunta:
-**¿Qué cambió, respecto a quién, desde cuándo y por qué importa?**
+Cambias el sistema:
+- anadiendo/eliminando JSON en `data/reputation/`
+- activando fuentes en `.env.reputation`
+- ejecutando ingestas para refrescar caches
