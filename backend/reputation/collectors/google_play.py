@@ -138,17 +138,17 @@ def _extract_reviews_from_api(data: object) -> list[dict[str, Any]]:
 
 def _extract_reviews_from_html(html: str, limit: int) -> list[dict[str, Any]]:
     reviews: list[dict[str, Any]] = []
-    headers = list(re.finditer(r'<header class=\"c1bOId\"[^>]*data-review-id=\"([^\"]+)\"', html))
+    headers = list(re.finditer(r"<header class=\"c1bOId\"[^>]*data-review-id=\"([^\"]+)\"", html))
     for idx, match in enumerate(headers):
         review_id = match.group(1)
         start = match.start()
         end = headers[idx + 1].start() if idx + 1 < len(headers) else start + 8000
         block = html[start:end]
 
-        author = _extract_text(block, r'<div class=\"X5PpBb\">(.*?)</div>')
-        date_text = _extract_text(block, r'<span class=\"bp9Aid\">(.*?)</span>')
+        author = _extract_text(block, r"<div class=\"X5PpBb\">(.*?)</div>")
+        date_text = _extract_text(block, r"<span class=\"bp9Aid\">(.*?)</span>")
         rating = _extract_rating(block)
-        content = _extract_text(block, r'<div class=\"h3YV2d\">(.*?)</div>', strip_tags=True)
+        content = _extract_text(block, r"<div class=\"h3YV2d\">(.*?)</div>", strip_tags=True)
 
         reviews.append(
             {
@@ -177,9 +177,9 @@ def _extract_text(block: str, pattern: str, strip_tags: bool = False) -> str | N
 
 def _extract_rating(block: str) -> float | None:
     patterns = [
-        r'aria-label=\"Valoración:\\s*([0-9.,]+)',
-        r'aria-label=\"Rated\\s*([0-9.,]+)\\s*stars',
-        r'aria-label=\"([0-9.,]+)\\s*estrellas',
+        r"aria-label=\"Valoración:\\s*([0-9.,]+)",
+        r"aria-label=\"Rated\\s*([0-9.,]+)\\s*stars",
+        r"aria-label=\"([0-9.,]+)\\s*estrellas",
     ]
     for pattern in patterns:
         match = re.search(pattern, block)
