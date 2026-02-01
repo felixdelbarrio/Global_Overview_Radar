@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from datetime import datetime
 from typing import Any, Iterable, cast
-from urllib.request import Request, urlopen
+from urllib.request import Request
 
 from reputation.collectors.base import ReputationCollector
 from reputation.collectors.utils import http_get_text, parse_datetime
@@ -55,9 +55,8 @@ class AppStoreCollector(ReputationCollector):
             f"customerreviews/id={self._app_id}/page={page}/sortby=mostrecent/json"
         )
         req = Request(url, headers={"User-Agent": "global-overview-radar/0.1"})
-        with urlopen(req, timeout=15) as response:
-            raw = response.read().decode("utf-8")
-        data = json.loads(raw)
+        raw = http_get_text(req.full_url, headers=dict(req.header_items()), timeout=15)
+        data = json.loads(raw) if raw else {}
         if not isinstance(data, dict):
             return []
         data_dict = cast(dict[str, object], data)
