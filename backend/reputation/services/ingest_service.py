@@ -13,13 +13,17 @@ from reputation.actors import (
     build_actor_aliases_by_canonical,
     canonicalize_actor,
 )
-from reputation.collectors.appstore import AppStoreCollector
+from reputation.collectors.appstore import AppStoreCollector, AppStoreScraperCollector
 from reputation.collectors.base import ReputationCollector
 from reputation.collectors.blogs import BlogsCollector
 from reputation.collectors.downdetector import DowndetectorCollector
 from reputation.collectors.forums import ForumsCollector
+from reputation.collectors.gdelt import GdeltCollector
+from reputation.collectors.google_play import GooglePlayApiCollector, GooglePlayScraperCollector
 from reputation.collectors.google_reviews import GoogleReviewsCollector
+from reputation.collectors.guardian import GuardianCollector
 from reputation.collectors.news import NewsCollector
+from reputation.collectors.newsapi import NewsApiCollector
 from reputation.collectors.reddit import RedditCollector
 from reputation.collectors.trustpilot import TrustpilotCollector
 from reputation.collectors.twitter import TwitterCollector
@@ -91,7 +95,12 @@ class ReputationIngestService:
         items = self._apply_geo_hints(cfg, items)
         items = self._apply_sentiment(cfg, items)
         items = self._balance_items(
-            cfg, items, existing.items if existing else [], lookback_days, notes
+            cfg,
+            items,
+            existing.items if existing else [],
+            lookback_days,
+            notes,
+            sources_enabled,
         )
         merged_items = self._merge_items(existing.items if existing else [], items)
         final_note: str | None = "; ".join(notes) if notes else None
@@ -325,9 +334,25 @@ class ReputationIngestService:
         existing_items: list[ReputationItem],
         lookback_days: int,
         notes: list[str],
+        sources_enabled: list[str],
     ) -> list[ReputationItem]:
         balance_cfg = self._load_balance_cfg()
         if not balance_cfg.get("enabled", False):
+            return items
+
+        sources_enabled_set = {s.strip().lower() for s in sources_enabled if s.strip()}
+        balance_sources_raw = balance_cfg.get("sources") or ["news"]
+        balance_sources = [
+            str(source).strip().lower()
+            for source in balance_sources_raw
+            if isinstance(source, str) and source.strip()
+        ]
+        if not sources_enabled_set:
+            notes.append("balance: skipped (no sources enabled)")
+            return items
+        active_balance_sources = [s for s in balance_sources if s in sources_enabled_set]
+        if not active_balance_sources:
+            notes.append("balance: skipped (balance sources not enabled)")
             return items
 
         min_per_geo = int(balance_cfg.get("min_per_geo", 0))
@@ -342,7 +367,7 @@ class ReputationIngestService:
         max_queries_per_pass = int(balance_cfg.get("max_queries_per_pass", 0))
         max_geos = int(balance_cfg.get("max_geos", 0))
         max_actores = int(balance_cfg.get("max_actores", 0))
-        sources = balance_cfg.get("sources") or ["news"]
+        sources = active_balance_sources
 
         geos = [g for g in cfg.get("geografias", []) if isinstance(g, str) and g.strip()]
         alias_map = build_actor_alias_map(cfg)
@@ -499,21 +524,103 @@ class ReputationIngestService:
             cfg_app_ids = _get_list_str(appstore_cfg, "app_ids")
             app_ids = list(cfg_app_ids)
 
+            api_enabled = _env_bool(os.getenv("APPSTORE_API_ENABLED", "true"))
             country = os.getenv("APPSTORE_COUNTRY", "es").strip().lower() or "es"
             max_reviews = _env_int("APPSTORE_MAX_REVIEWS", 200)
+            scrape_timeout = _env_int("APPSTORE_SCRAPE_TIMEOUT", 15)
+            app_ids_by_geo = _get_dict_str_list_str(appstore_cfg, "app_ids_by_geo")
+            country_by_geo = _get_dict_str_str(appstore_cfg, "country_by_geo")
 
             app_ids = list(dict.fromkeys(app_ids))
-            if not app_ids:
+            if not app_ids and not app_ids_by_geo:
                 notes.append("appstore: missing app_ids in config.json")
             else:
                 for app_id_value in app_ids:
                     collectors.append(
-                        AppStoreCollector(
+                        self._build_appstore_collector(
+                            api_enabled=api_enabled,
                             country=country,
                             app_id=app_id_value,
                             max_reviews=max_reviews,
+                            scrape_timeout=scrape_timeout,
+                            geo=None,
                         )
                     )
+                for geo, geo_app_ids in app_ids_by_geo.items():
+                    geo_country = country_by_geo.get(geo, country)
+                    for app_id_value in geo_app_ids:
+                        collectors.append(
+                            self._build_appstore_collector(
+                                api_enabled=api_enabled,
+                                country=geo_country,
+                                app_id=app_id_value,
+                                max_reviews=max_reviews,
+                                scrape_timeout=scrape_timeout,
+                                geo=geo,
+                            )
+                        )
+
+        if "google_play" in sources_enabled:
+            handled_sources.add("google_play")
+            gp_cfg = _as_dict(cfg.get("google_play"))
+            cfg_packages = _get_list_str(gp_cfg, "package_ids")
+            package_ids = list(cfg_packages)
+            env_packages = os.getenv("GOOGLE_PLAY_PACKAGE_IDS", "").strip()
+            if env_packages:
+                package_ids.extend([p.strip() for p in env_packages.split(",") if p.strip()])
+
+            api_enabled = _env_bool(os.getenv("GOOGLE_PLAY_API_ENABLED", "false"))
+            gp_endpoint = os.getenv("GOOGLE_PLAY_API_ENDPOINT", "").strip()
+            api_key = os.getenv("GOOGLE_PLAY_API_KEY", "").strip() or None
+            api_key_param = os.getenv("GOOGLE_PLAY_API_KEY_PARAM", "key").strip()
+            default_country = os.getenv("GOOGLE_PLAY_DEFAULT_COUNTRY", "ES").strip().upper()
+            default_language = os.getenv("GOOGLE_PLAY_DEFAULT_LANGUAGE", "es").strip()
+            max_reviews = _env_int("GOOGLE_PLAY_MAX_REVIEWS", 200)
+            scrape_timeout = _env_int("GOOGLE_PLAY_SCRAPE_TIMEOUT", 15)
+
+            package_ids_by_geo = _get_dict_str_list_str(gp_cfg, "package_ids_by_geo")
+            geo_to_gl = _get_dict_str_str(gp_cfg, "geo_to_gl")
+            geo_to_hl = _get_dict_str_str(gp_cfg, "geo_to_hl")
+
+            if api_enabled and not gp_endpoint:
+                notes.append("google_play: missing GOOGLE_PLAY_API_ENDPOINT")
+            if not package_ids and not package_ids_by_geo:
+                notes.append("google_play: missing package_ids in config.json")
+            else:
+                for package_id in list(dict.fromkeys(package_ids)):
+                    collector = self._build_google_play_collector(
+                        api_enabled=api_enabled,
+                        endpoint=gp_endpoint,
+                        api_key=api_key,
+                        api_key_param=api_key_param,
+                        package_id=package_id,
+                        country=default_country,
+                        language=default_language,
+                        max_reviews=max_reviews,
+                        scrape_timeout=scrape_timeout,
+                        geo=None,
+                    )
+                    if collector:
+                        collectors.append(collector)
+
+                for geo, geo_packages in package_ids_by_geo.items():
+                    geo_country = geo_to_gl.get(geo, default_country)
+                    geo_language = geo_to_hl.get(geo, default_language)
+                    for package_id in geo_packages:
+                        collector = self._build_google_play_collector(
+                            api_enabled=api_enabled,
+                            endpoint=gp_endpoint,
+                            api_key=api_key,
+                            api_key_param=api_key_param,
+                            package_id=package_id,
+                            country=geo_country,
+                            language=geo_language,
+                            max_reviews=max_reviews,
+                            scrape_timeout=scrape_timeout,
+                            geo=geo,
+                        )
+                        if collector:
+                            collectors.append(collector)
 
         if "reddit" in sources_enabled:
             handled_sources.add("reddit")
@@ -570,7 +677,7 @@ class ReputationIngestService:
             max_articles_default = _env_int("REPUTATION_DEFAULT_MAX_ITEMS", 200)
             max_articles = _env_int("NEWS_MAX_ARTICLES", max_articles_default)
             sources = os.getenv("NEWS_SOURCES", "").strip() or None
-            endpoint = os.getenv("NEWS_API_ENDPOINT", "").strip() or None
+            news_endpoint = os.getenv("NEWS_API_ENDPOINT", "").strip() or None
             rss_only = _env_bool(os.getenv("NEWS_RSS_ONLY", "false"))
 
             queries = self._build_search_queries(
@@ -596,10 +703,115 @@ class ReputationIngestService:
                         language=language,
                         max_articles=max_articles,
                         sources=sources,
-                        endpoint=endpoint,
+                        endpoint=news_endpoint,
                         rss_urls=rss_sources,
                         rss_only=rss_only,
                         filter_terms=entity_terms,
+                    )
+                )
+
+        if "newsapi" in sources_enabled:
+            handled_sources.add("newsapi")
+            api_key = os.getenv("NEWSAPI_API_KEY", "").strip()
+            language = os.getenv("NEWSAPI_LANGUAGE", "es").strip()
+            max_articles_default = _env_int("REPUTATION_DEFAULT_MAX_ITEMS", 200)
+            max_articles = _env_int("NEWSAPI_MAX_ARTICLES", max_articles_default)
+            sources = os.getenv("NEWSAPI_SOURCES", "").strip() or None
+            domains = os.getenv("NEWSAPI_DOMAINS", "").strip() or None
+            sort_by = os.getenv("NEWSAPI_SORT_BY", "").strip() or None
+            search_in = os.getenv("NEWSAPI_SEARCH_IN", "").strip() or None
+            newsapi_endpoint = os.getenv("NEWSAPI_ENDPOINT", "").strip() or None
+
+            queries = self._build_search_queries(
+                entity_terms,
+                segment_terms,
+                segment_mode,
+                include_unquoted=True,
+            )
+            if not api_key:
+                notes.append("newsapi: missing NEWSAPI_API_KEY")
+            else:
+                collectors.append(
+                    NewsApiCollector(
+                        api_key=api_key,
+                        queries=queries,
+                        language=language,
+                        max_articles=max_articles,
+                        sources=sources,
+                        domains=domains,
+                        sort_by=sort_by,
+                        search_in=search_in,
+                        endpoint=newsapi_endpoint,
+                    )
+                )
+
+        if "gdelt" in sources_enabled:
+            handled_sources.add("gdelt")
+            max_items_default = _env_int("REPUTATION_DEFAULT_MAX_ITEMS", 200)
+            max_items = _env_int("GDELT_MAX_ITEMS", max_items_default)
+            max_records = _env_int("GDELT_MAX_RECORDS", 250)
+            timespan = os.getenv("GDELT_TIMESPAN", "7d").strip() or None
+            sort = os.getenv("GDELT_SORT", "HybridRel").strip() or "HybridRel"
+            query_suffix = os.getenv("GDELT_QUERY_SUFFIX", "").strip() or None
+            start_datetime = os.getenv("GDELT_START_DATETIME", "").strip() or None
+            end_datetime = os.getenv("GDELT_END_DATETIME", "").strip() or None
+
+            queries = self._build_search_queries(
+                entity_terms,
+                segment_terms,
+                segment_mode,
+                include_unquoted=True,
+            )
+            if not queries:
+                notes.append("gdelt: missing queries")
+            else:
+                collectors.append(
+                    GdeltCollector(
+                        queries=queries,
+                        max_records=max_records,
+                        max_items=max_items,
+                        timespan=timespan,
+                        sort=sort,
+                        query_suffix=query_suffix,
+                        start_datetime=start_datetime,
+                        end_datetime=end_datetime,
+                    )
+                )
+
+        if "guardian" in sources_enabled:
+            handled_sources.add("guardian")
+            api_key = os.getenv("GUARDIAN_API_KEY", "").strip()
+            max_items_default = _env_int("REPUTATION_DEFAULT_MAX_ITEMS", 200)
+            max_items = _env_int("GUARDIAN_MAX_ITEMS", max_items_default)
+            page_size = _env_int("GUARDIAN_PAGE_SIZE", 50)
+            order_by = os.getenv("GUARDIAN_ORDER_BY", "newest").strip() or "newest"
+            show_fields = os.getenv("GUARDIAN_SHOW_FIELDS", "").strip() or None
+            from_date = os.getenv("GUARDIAN_FROM_DATE", "").strip() or None
+            to_date = os.getenv("GUARDIAN_TO_DATE", "").strip() or None
+            section = os.getenv("GUARDIAN_SECTION", "").strip() or None
+            tag = os.getenv("GUARDIAN_TAG", "").strip() or None
+
+            queries = self._build_search_queries(
+                entity_terms,
+                segment_terms,
+                segment_mode,
+                include_unquoted=True,
+            )
+            if not api_key:
+                notes.append("guardian: missing GUARDIAN_API_KEY")
+            else:
+                collectors.append(
+                    GuardianCollector(
+                        api_key=api_key,
+                        queries=queries,
+                        max_items=max_items,
+                        page_size=page_size,
+                        order_by=order_by,
+                        show_fields=show_fields,
+                        from_date=from_date,
+                        to_date=to_date,
+                        section=section,
+                        tag=tag,
                     )
                 )
 
@@ -812,6 +1024,66 @@ class ReputationIngestService:
             notes.append(f"{env_key}: capped rss_urls {len(rss_sources)} -> {limit}")
             return rss_sources[:limit]
         return rss_sources
+
+
+    @staticmethod
+    def _build_appstore_collector(
+        api_enabled: bool,
+        country: str,
+        app_id: str,
+        max_reviews: int,
+        scrape_timeout: int,
+        geo: str | None,
+    ) -> ReputationCollector:
+        if api_enabled:
+            return AppStoreCollector(
+                country=country,
+                app_id=app_id,
+                max_reviews=max_reviews,
+                geo=geo,
+            )
+        return AppStoreScraperCollector(
+            country=country,
+            app_id=app_id,
+            max_reviews=max_reviews,
+            geo=geo,
+            timeout=scrape_timeout,
+        )
+
+    @staticmethod
+    def _build_google_play_collector(
+        api_enabled: bool,
+        endpoint: str,
+        api_key: str | None,
+        api_key_param: str,
+        package_id: str,
+        country: str,
+        language: str,
+        max_reviews: int,
+        scrape_timeout: int,
+        geo: str | None,
+    ) -> ReputationCollector | None:
+        if api_enabled:
+            if not endpoint:
+                return None
+            return GooglePlayApiCollector(
+                endpoint=endpoint,
+                api_key=api_key,
+                api_key_param=api_key_param,
+                package_id=package_id,
+                country=country,
+                language=language,
+                max_reviews=max_reviews,
+                geo=geo,
+            )
+        return GooglePlayScraperCollector(
+            package_id=package_id,
+            country=country,
+            language=language,
+            max_reviews=max_reviews,
+            geo=geo,
+            timeout=scrape_timeout,
+        )
 
     @staticmethod
     def _default_keyword_queries(keywords: list[str], include_unquoted: bool = False) -> list[str]:
@@ -1474,6 +1746,33 @@ def _get_dict_str_dict_str(cfg: dict[str, object], key: str) -> dict[str, dict[s
         mapped = {ik: iv for ik, iv in inner.items() if isinstance(iv, str)}
         if mapped:
             result[k] = mapped
+    return result
+
+
+def _get_dict_str_list_str(cfg: dict[str, object], key: str) -> dict[str, list[str]]:
+    value = cfg.get(key)
+    if not isinstance(value, dict):
+        return {}
+    value_dict = cast(dict[str, object], value)
+    result: dict[str, list[str]] = {}
+    for k, v in value_dict.items():
+        if not isinstance(v, list):
+            continue
+        items = [item.strip() for item in v if isinstance(item, str) and item.strip()]
+        if items:
+            result[str(k)] = items
+    return result
+
+
+def _get_dict_str_str(cfg: dict[str, object], key: str) -> dict[str, str]:
+    value = cfg.get(key)
+    if not isinstance(value, dict):
+        return {}
+    value_dict = cast(dict[str, object], value)
+    result: dict[str, str] = {}
+    for k, v in value_dict.items():
+        if isinstance(v, str) and v.strip():
+            result[str(k)] = v.strip()
     return result
 
 

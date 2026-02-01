@@ -8,7 +8,7 @@
     "prebuild": "node scripts/ensure-env.mjs",
     "build": "next build",
     "prestart": "node scripts/ensure-env.mjs",
-    "start": "next start",
+    "start": "NODE_OPTIONS=--no-deprecation next start",
     "lint": "eslint",
     "test": "vitest",
     "test:coverage": "vitest run --coverage"
