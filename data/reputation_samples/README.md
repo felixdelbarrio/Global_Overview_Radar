@@ -1,6 +1,5 @@
 # Global Overview Radar — Sample config.json packs
 
-Este ZIP incluye varios `config.json` “WoW” para sectores distintos.
 Todos mantienen la **misma estructura** que tu config actual (news/forums/blogs/appstore/etc).
 
 ## Cómo usar
@@ -21,4 +20,4 @@ Todos mantienen la **misma estructura** que tu config actual (news/forums/blogs/
   - `NEWS_SITE_QUERY_MAX_TOTAL`, `NEWS_MAX_RSS_URLS`, `NEWS_MAX_ARTICLES`
 
 
-- `banking_bbva_retail_oro_puro.json` — banca retail (BBVA + países + Garanti BBVA) con foco en **app issues, fraude, comisiones, Bizum/transferencias**, reguladores y comparativa multi-geo.
+- `banking_bbva_retail.json` — banca retail (BBVA + países + Garanti BBVA) con foco en **app issues, fraude, comisiones, Bizum/transferencias**, reguladores y comparativa multi-geo.

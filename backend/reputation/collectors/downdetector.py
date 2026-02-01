@@ -34,7 +34,7 @@ class DowndetectorCollector(ReputationCollector):
         self._max_items = max(0, max_items)
 
     def collect(self) -> Iterable[ReputationItem]:
-        if not self._scraping_enabled or not self._rss_urls or self._max_items <= 0:
+        if not self._rss_urls or self._max_items <= 0:
             return []
 
         items: list[ReputationItem] = []
