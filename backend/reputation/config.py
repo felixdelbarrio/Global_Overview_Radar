@@ -37,6 +37,12 @@ class ReputationSettings(BaseSettings):
     # TTL por defecto (horas) si el config.json no define output.cache_ttl_hours
     cache_ttl_hours: int = Field(default=24, alias="REPUTATION_CACHE_TTL_HOURS")
 
+    # Logging
+    log_enabled: bool = Field(default=False, alias="REPUTATION_LOG_ENABLED")
+    log_to_file: bool = Field(default=False, alias="REPUTATION_LOG_TO_FILE")
+    log_file_name: str = Field(default="reputation.log", alias="REPUTATION_LOG_FILE_NAME")
+    log_debug: bool = Field(default=False, alias="REPUTATION_LOG_DEBUG")
+
     # Toggles de fuentes (Paso 1: todas false por defecto)
     source_reddit: bool = Field(default=False, alias="REPUTATION_SOURCE_REDDIT")
     source_twitter: bool = Field(default=False, alias="REPUTATION_SOURCE_TWITTER")
