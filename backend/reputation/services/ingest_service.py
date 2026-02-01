@@ -1257,9 +1257,7 @@ class ReputationIngestService:
             if isinstance(raw_aliases, dict):
                 values = raw_aliases.get(geo, [])
                 if isinstance(values, list):
-                    aliases.extend(
-                        [a.strip() for a in values if isinstance(a, str) and a.strip()]
-                    )
+                    aliases.extend([a.strip() for a in values if isinstance(a, str) and a.strip()])
             aliases.append(geo)
             result[geo] = list(dict.fromkeys([a for a in aliases if a]))
         return result
@@ -1287,9 +1285,7 @@ class ReputationIngestService:
         return False
 
     @staticmethod
-    def _name_conflicts_geo(
-        name: str, geo: str, geo_aliases: dict[str, list[str]]
-    ) -> bool:
+    def _name_conflicts_geo(name: str, geo: str, geo_aliases: dict[str, list[str]]) -> bool:
         if not name or not geo_aliases:
             return False
         normalized = normalize_text(name)
@@ -1574,9 +1570,7 @@ class ReputationIngestService:
                 names.extend(alias_names)
                 cleaned_names = [n.strip() for n in names if isinstance(n, str) and n.strip()]
                 cleaned_names = [
-                    n
-                    for n in cleaned_names
-                    if not self._name_conflicts_geo(n, geo, geo_aliases)
+                    n for n in cleaned_names if not self._name_conflicts_geo(n, geo, geo_aliases)
                 ]
                 if only_entities_expanded is not None:
                     cleaned_names = [n for n in cleaned_names if n in only_entities_expanded]
