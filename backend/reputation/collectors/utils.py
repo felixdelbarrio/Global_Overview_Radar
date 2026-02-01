@@ -12,8 +12,8 @@ from datetime import datetime
 from email.utils import parsedate_to_datetime
 from threading import Lock
 from typing import Any, Iterable
-from urllib.parse import parse_qs, unquote_plus, urlencode, urlparse
 from urllib.error import HTTPError
+from urllib.parse import parse_qs, unquote_plus, urlencode, urlparse
 from urllib.request import Request, urlopen
 from xml.etree import ElementTree
 
@@ -130,10 +130,7 @@ def http_get_text(url: str, headers: dict[str, str] | None = None, timeout: int 
             req = Request(url, headers=req_headers)
             with urlopen(req, timeout=timeout, context=context) as response:
                 raw = response.read()
-            if isinstance(raw, bytes):
-                text = raw.decode("utf-8", errors="replace")
-            else:
-                text = str(raw)
+            text = raw.decode("utf-8", errors="replace") if isinstance(raw, bytes) else str(raw)
             _http_cache_set(cache_key, text)
             return text
         except HTTPError as exc:
