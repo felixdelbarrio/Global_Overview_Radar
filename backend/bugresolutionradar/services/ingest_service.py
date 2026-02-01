@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from bugresolutionradar.adapters import (
     FilesystemCSVAdapter,
     FilesystemJSONAdapter,
@@ -10,6 +12,9 @@ from bugresolutionradar.adapters import (
 from bugresolutionradar.adapters.base import Adapter
 from bugresolutionradar.config import Settings
 from bugresolutionradar.domain.models import ObservedIncident
+from bugresolutionradar.logging_utils import get_logger
+
+logger = get_logger(__name__)
 
 
 class IngestService:
@@ -42,11 +47,15 @@ class IngestService:
         if "filesystem_xlsx" in enabled:
             adapters.append(XlsxAdapter("filesystem_xlsx", assets_dir_val))
 
+        if logger.isEnabledFor(logging.DEBUG):
+            logger.debug("Adapters enabled: %s", [adapter.source_id() for adapter in adapters])
         return adapters
 
     def ingest(self) -> list[ObservedIncident]:
         """Ejecuta la lectura de todas las fuentes y concatena resultados."""
         observations: list[ObservedIncident] = []
         for adapter in self.build_adapters():
+            logger.debug("Reading adapter: %s", adapter.source_id())
             observations.extend(adapter.read())
+        logger.debug("Total observations: %s", len(observations))
         return observations

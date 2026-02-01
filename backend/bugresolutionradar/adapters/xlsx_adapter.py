@@ -15,10 +15,14 @@ from bugresolutionradar.adapters.filesystem import FilesystemAdapter
 from bugresolutionradar.adapters.utils import to_date, to_str
 from bugresolutionradar.domain.enums import Severity, Status
 from bugresolutionradar.domain.models import ObservedIncident
+from bugresolutionradar.logging_utils import get_logger
 
 if TYPE_CHECKING:
     # Import only for type checking to avoid runtime overhead
     from openpyxl.worksheet.worksheet import Worksheet
+
+
+logger = get_logger(__name__)
 
 
 def _s(v: object) -> str:
@@ -72,8 +76,9 @@ class XlsxAdapter(FilesystemAdapter):
                 wb = openpyxl.load_workbook(path, data_only=True)
             except zipfile.BadZipFile:
                 # fichero corrupto o no-xlsx renombrado
-                print(
-                    f"[XlsxAdapter] WARN: '{path.name}' no es un XLSX válido (BadZipFile). Se ignora."
+                logger.warning(
+                    "[XlsxAdapter] '%s' no es un XLSX valido (BadZipFile). Se ignora.",
+                    path.name,
                 )
                 continue
 

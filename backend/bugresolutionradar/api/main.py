@@ -12,12 +12,16 @@ from bugresolutionradar.api.routers.incidents import router as incidents_router
 from bugresolutionradar.api.routers.kpis import router as kpis_router
 from bugresolutionradar.api.routers.reputation import router as reputation_router
 from bugresolutionradar.config import settings
+from bugresolutionradar.logging_utils import configure_logging, get_logger
 from bugresolutionradar.repositories import CacheRepo
 from bugresolutionradar.services import ReportingService
 
 
 def create_app() -> FastAPI:
     """Crea y configura la instancia de FastAPI."""
+    configure_logging(force=True)
+    logger = get_logger(__name__)
+
     app = FastAPI(title=settings.app_name)
 
     # CORS: permite llamadas desde frontend local y por IP (LAN)
@@ -45,6 +49,8 @@ def create_app() -> FastAPI:
     app.include_router(incidents_router, prefix="/incidents", tags=["incidents"])
     app.include_router(evolution_router, prefix="/evolution", tags=["evolution"])
     app.include_router(reputation_router, prefix="/reputation", tags=["reputation"])
+
+    logger.debug("FastAPI app created with cache at %s", settings.cache_path)
 
     @app.get("/health", include_in_schema=False, status_code=200)
     def health() -> dict[str, str]:  # pyright: ignore[reportUnusedFunction]
