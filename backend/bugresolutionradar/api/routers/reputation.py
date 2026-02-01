@@ -77,7 +77,23 @@ def reputation_items(
 def reputation_meta() -> dict[str, Any]:
     cfg = load_business_config()
     principal = primary_actor_info(cfg)
-    return {"actor_principal": principal}
+    repo = ReputationCacheRepo(reputation_settings.cache_path)
+    doc = repo.load()
+    source_counts: dict[str, int] = {}
+    if doc:
+        for item in doc.items:
+            if item.source:
+                source_counts[item.source] = source_counts.get(item.source, 0) + 1
+    sources_enabled = list(reputation_settings.enabled_sources())
+    for source in sources_enabled:
+        source_counts.setdefault(source, 0)
+    sources_available = sorted([s for s, count in source_counts.items() if count > 0])
+    return {
+        "actor_principal": principal,
+        "sources_enabled": sources_enabled,
+        "sources_available": sources_available,
+        "source_counts": source_counts,
+    }
 
 
 class CompareFilter(BaseModel):
