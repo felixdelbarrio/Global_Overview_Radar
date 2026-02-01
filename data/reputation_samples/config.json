@@ -541,7 +541,15 @@
     ]
   },
   "appstore": {
-    "app_ids": []
+    "app_ids": [],
+    "app_ids_by_geo": {},
+    "country_by_geo": {}
+  },
+  "google_play": {
+    "package_ids": [],
+    "package_ids_by_geo": {},
+    "geo_to_gl": {},
+    "geo_to_hl": {}
   },
   "trustpilot": {
     "rss_query_templates": [

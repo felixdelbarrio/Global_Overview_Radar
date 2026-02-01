@@ -1,89 +1,76 @@
 # EXTENDING_THE_SYSTEM.md (EN / ES)
 
-How to extend Global Overview Radar safely without breaking comparability and explainability.
+Practical guide to extend the current codebase without breaking consistency.
 
-Back to architecture: [`ARCHITECTURE.md`](ARCHITECTURE.md)
+Back to architecture: `ARCHITECTURE.md`
 
 ---
 
-## EN | Add a new source
+## EN | Add a new BugResolutionRadar adapter
 
-1) Implement connector in `ingestion/`
-2) Map content to `ContentEvent`
-3) Add configuration entry (no secrets in repo)
-4) Add tests:
-   - parsing/normalization
-   - dedupe behavior
-   - timestamp correctness
+1) Implement a new adapter under `backend/bugresolutionradar/adapters/`.
+2) Extend adapter discovery in `backend/bugresolutionradar/services/ingest_service.py`.
+3) Add config knobs in `backend/bugresolutionradar/.env.example` if needed.
+4) Add tests for parsing + normalization + dedupe.
 
 Checklist:
-- traceability preserved
+- consistent `ObservedIncident` output
+- stable `source_id` / `source_key`
 - idempotent ingestion
-- consistent metadata fields
 
 ---
 
-## EN | Add a new signal
+## EN | Add a new Reputation collector
 
-1) Define trigger logic (metric + threshold)
-2) Define baseline and peer group context
-3) Implement in `alerts/`
-4) Emit `SignalEvent` with:
-   - trigger_reason
-   - comparison_context
-   - evidence_refs
-   - confidence
-5) Add to [`SIGNALS_CATALOG.md`](SIGNALS_CATALOG.md)
-6) Add golden tests (expected triggers)
+1) Create a collector in `backend/reputation/collectors/` (see `base.py`).
+2) Wire it in `backend/reputation/services/ingest_service.py`.
+3) Add env toggles in `backend/reputation/config.py` and `.env.reputation.example`.
+4) Update `docs` and add tests if parsing logic is complex.
+
+If the source has an API + scraper fallback, follow the existing pattern in
+`appstore.py` and `google_play.py` (API enabled => API collector, else scraper).
 
 ---
 
-## EN | Add a new metric / score
+## EN | Add a new business scope (multi-config)
 
-1) Define what it measures (relative only)
-2) Define baseline (historical) + peer group (market)
-3) Ensure time window semantics are explicit
-4) Implement in `intelligence/`
-5) Document in `METRICS_AND_SCORES.md`
+1) Drop a new JSON config into `data/reputation/`.
+2) Keep it focused (only the extra keywords/actors/sources you need).
+3) The loader will merge it with other configs automatically.
+
+Example: combine `banking_bbva_empresas.json` + `banking_bbva_retail.json`.
 
 ---
 
-## ES | Añadir una nueva fuente
+## ES | Anadir un adapter de BugResolutionRadar
 
-1) Implementa conector en `ingestion/`
-2) Mapea a `ContentEvent`
-3) Añade entrada de config (sin secretos en repo)
-4) Tests:
-   - parsing/normalización
-   - dedupe
-   - timestamps
+1) Implementa un adapter en `backend/bugresolutionradar/adapters/`.
+2) Extiende el discovery en `backend/bugresolutionradar/services/ingest_service.py`.
+3) Anade variables en `.env.example` si son necesarias.
+4) Tests: parsing + normalizacion + dedupe.
 
 Checklist:
-- trazabilidad intacta
+- salida consistente de `ObservedIncident`
+- `source_id` / `source_key` estables
 - ingesta idempotente
-- metadatos consistentes
 
 ---
 
-## ES | Añadir una nueva señal
+## ES | Anadir un collector de Reputacion
 
-1) Define trigger (métrica + umbral)
-2) Define baseline y contexto de peer group
-3) Implementa en `alerts/`
-4) Emite `SignalEvent` con:
-   - trigger_reason
-   - comparison_context
-   - evidence_refs
-   - confidence
-5) Añade al [`SIGNALS_CATALOG.md`](SIGNALS_CATALOG.md)
-6) Golden tests (triggers esperados)
+1) Crea el collector en `backend/reputation/collectors/`.
+2) Conecta en `backend/reputation/services/ingest_service.py`.
+3) Anade toggles en `backend/reputation/config.py` y `.env.reputation.example`.
+4) Actualiza docs y tests si hay parsing complejo.
+
+Si hay API + scraper, sigue el patron de `appstore.py` y `google_play.py`.
 
 ---
 
-## ES | Añadir una nueva métrica / score
+## ES | Anadir un nuevo scope de negocio (multi-config)
 
-1) Define qué mide (solo relativo)
-2) Define baseline (histórico) + peer group (mercado)
-3) Ventana temporal explícita
-4) Implementa en `intelligence/`
-5) Documenta en `METRICS_AND_SCORES.md`
+1) Coloca un JSON nuevo en `data/reputation/`.
+2) Mantenlo pequeno y especifico.
+3) El loader lo combinara automaticamente con el resto.
+
+Ejemplo: `banking_bbva_empresas.json` + `banking_bbva_retail.json`.

@@ -1,0 +1,521 @@
+{
+  "geografias": [
+    "España",
+    "México",
+    "Perú",
+    "Colombia",
+    "Argentina",
+    "Turquía"
+  ],
+  "geografias_aliases": {
+    "España": [
+      "Espana",
+      "España",
+      "Spain",
+      "ES"
+    ],
+    "México": [
+      "Mexico",
+      "México",
+      "MX",
+      "CDMX",
+      "Ciudad de Mexico",
+      "Ciudad de México"
+    ],
+    "Perú": [
+      "Peru",
+      "Perú",
+      "PE",
+      "Lima"
+    ],
+    "Colombia": [
+      "Colombia",
+      "CO",
+      "Bogota",
+      "Bogotá",
+      "Medellin",
+      "Medellín"
+    ],
+    "Argentina": [
+      "Argentina",
+      "AR",
+      "Buenos Aires"
+    ],
+    "Turquía": [
+      "Turquia",
+      "Turquía",
+      "Turkey",
+      "TR",
+      "Istanbul",
+      "İstanbul"
+    ]
+  },
+  "actor_principal": {
+    "Bitcoin": [
+      "Bitcoin"
+    ]
+  },
+  "actor_principal_aliases": {
+    "Bitcoin": [
+      "BTC",
+      "Bitcoin",
+      "Bitcoin Core",
+      "Bitcoin Lightning",
+      "Lightning Network",
+      "Satoshi"
+    ]
+  },
+  "otros_actores_aliases": {
+    "Ethereum": [
+      "ETH",
+      "Ether",
+      "Ethereum"
+    ],
+    "Solana": [
+      "SOL",
+      "Solana"
+    ],
+    "Binance": [
+      "Binance",
+      "Binance Exchange",
+      "Binance app"
+    ],
+    "Coinbase": [
+      "Coinbase",
+      "Coinbase Exchange",
+      "Coinbase app"
+    ],
+    "Kraken": [
+      "Kraken",
+      "Kraken Exchange"
+    ],
+    "Tether": [
+      "Tether",
+      "USDT"
+    ],
+    "USDC": [
+      "Circle USDC",
+      "USD Coin",
+      "USDC"
+    ]
+  },
+  "otros_actores_globales": [
+    "Lightning Network",
+    "Bitcoin ETF",
+    "Halving"
+  ],
+  "otros_actores_por_geografia": {
+    "España": [
+      "Ethereum",
+      "Solana",
+      "Binance",
+      "Coinbase",
+      "Kraken",
+      "Tether",
+      "USDC"
+    ],
+    "México": [
+      "Ethereum",
+      "Solana",
+      "Binance",
+      "Coinbase",
+      "Kraken",
+      "Tether",
+      "USDC"
+    ],
+    "Perú": [
+      "Ethereum",
+      "Solana",
+      "Binance",
+      "Coinbase",
+      "Kraken",
+      "Tether",
+      "USDC"
+    ],
+    "Colombia": [
+      "Ethereum",
+      "Solana",
+      "Binance",
+      "Coinbase",
+      "Kraken",
+      "Tether",
+      "USDC"
+    ],
+    "Argentina": [
+      "Ethereum",
+      "Solana",
+      "Binance",
+      "Coinbase",
+      "Kraken",
+      "Tether",
+      "USDC"
+    ],
+    "Turquía": [
+      "Ethereum",
+      "Solana",
+      "Binance",
+      "Coinbase",
+      "Kraken",
+      "Tether",
+      "USDC"
+    ]
+  },
+  "keywords": [
+    "BTC",
+    "Bitcoin",
+    "Bitcoin ETF",
+    "Bitcoin custody",
+    "Bitcoin estafa",
+    "Bitcoin exchange",
+    "Bitcoin hack",
+    "Bitcoin halving",
+    "Bitcoin impuestos",
+    "Bitcoin price",
+    "Bitcoin regulación",
+    "Bitcoin volatilidad",
+    "Bitcoin wallet",
+    "Lightning Network"
+  ],
+  "segment_terms": [
+    "breach",
+    "cold wallet",
+    "cotizacion",
+    "cotización",
+    "custodia",
+    "custody",
+    "estafa",
+    "etf",
+    "exchange",
+    "hack",
+    "halving",
+    "impuestos",
+    "layer 2",
+    "lightning",
+    "mineria",
+    "minería",
+    "precio",
+    "regulacion",
+    "regulación",
+    "scam",
+    "spot etf",
+    "volatilidad",
+    "wallet"
+  ],
+  "reddit": {
+    "subreddits": [
+      "spain",
+      "mexico",
+      "fintech",
+      "technology",
+      "news",
+      "personalfinance",
+      "europe",
+      "worldnews"
+    ],
+    "query_templates": [
+      "\"{actor}\" (app OR web OR servicio OR soporte OR login OR error)",
+      "\"{actor}\" (precio OR comision OR comisión OR subida OR caída OR caida OR outage)",
+      "\"{actor}\" (competencia OR alternativa OR vs)"
+    ]
+  },
+  "news": {
+    "rss_query_templates": [
+      "https://news.google.com/rss/search?q={query}&hl={hl}&gl={gl}&ceid={ceid}"
+    ],
+    "rss_geo_map": {
+      "España": {
+        "hl": "es",
+        "gl": "ES",
+        "ceid": "ES:es"
+      },
+      "México": {
+        "hl": "es-419",
+        "gl": "MX",
+        "ceid": "MX:es-419"
+      },
+      "Colombia": {
+        "hl": "es-419",
+        "gl": "CO",
+        "ceid": "CO:es-419"
+      },
+      "Perú": {
+        "hl": "es-419",
+        "gl": "PE",
+        "ceid": "PE:es-419"
+      },
+      "Argentina": {
+        "hl": "es-419",
+        "gl": "AR",
+        "ceid": "AR:es-419"
+      },
+      "Turquía": {
+        "hl": "tr",
+        "gl": "TR",
+        "ceid": "TR:tr"
+      }
+    },
+    "site_query_terms_by_category": {
+      "press": [
+        "ultimas",
+        "actualidad",
+        "negocios",
+        "empresas",
+        "mercados",
+        "economia",
+        "economía"
+      ],
+      "industry": [
+        "tendencias",
+        "sector",
+        "innovacion",
+        "innovación",
+        "producto",
+        "estrategia"
+      ],
+      "regulators": [
+        "regulador",
+        "regulacion",
+        "regulación",
+        "sancion",
+        "sanción",
+        "normativa"
+      ]
+    },
+    "site_sources_by_geo": {
+      "España": {
+        "press": [
+          "efe.com",
+          "reuters.com",
+          "bloomberg.com",
+          "bloomberglinea.com",
+          "forbes.com"
+        ],
+        "industry": [
+          "coindesk.com",
+          "cointelegraph.com",
+          "theblock.co",
+          "decrypt.co",
+          "bitcoinmagazine.com"
+        ],
+        "regulators": [
+          "cnmv.es",
+          "bde.es",
+          "ecb.europa.eu",
+          "eba.europa.eu"
+        ]
+      },
+      "México": {
+        "press": [
+          "efe.com",
+          "reuters.com",
+          "bloomberg.com",
+          "bloomberglinea.com",
+          "forbes.com"
+        ],
+        "industry": [
+          "coindesk.com",
+          "cointelegraph.com",
+          "theblock.co",
+          "decrypt.co",
+          "bitcoinmagazine.com"
+        ],
+        "regulators": [
+          "banxico.org.mx",
+          "cnbv.gob.mx",
+          "shcp.gob.mx"
+        ]
+      },
+      "Perú": {
+        "press": [
+          "efe.com",
+          "reuters.com",
+          "bloomberg.com",
+          "bloomberglinea.com",
+          "forbes.com"
+        ],
+        "industry": [
+          "coindesk.com",
+          "cointelegraph.com",
+          "theblock.co",
+          "decrypt.co",
+          "bitcoinmagazine.com"
+        ],
+        "regulators": [
+          "sbs.gob.pe",
+          "bcrp.gob.pe"
+        ]
+      },
+      "Colombia": {
+        "press": [
+          "efe.com",
+          "reuters.com",
+          "bloomberg.com",
+          "bloomberglinea.com",
+          "forbes.com"
+        ],
+        "industry": [
+          "coindesk.com",
+          "cointelegraph.com",
+          "theblock.co",
+          "decrypt.co",
+          "bitcoinmagazine.com"
+        ],
+        "regulators": [
+          "superfinanciera.gov.co",
+          "banrep.gov.co"
+        ]
+      },
+      "Argentina": {
+        "press": [
+          "efe.com",
+          "reuters.com",
+          "bloomberg.com",
+          "bloomberglinea.com",
+          "forbes.com"
+        ],
+        "industry": [
+          "coindesk.com",
+          "cointelegraph.com",
+          "theblock.co",
+          "decrypt.co",
+          "bitcoinmagazine.com"
+        ],
+        "regulators": [
+          "bcra.gob.ar",
+          "cnv.gov.ar"
+        ]
+      },
+      "Turquía": {
+        "press": [
+          "efe.com",
+          "reuters.com",
+          "bloomberg.com",
+          "bloomberglinea.com",
+          "forbes.com"
+        ],
+        "industry": [
+          "coindesk.com",
+          "cointelegraph.com",
+          "theblock.co",
+          "decrypt.co",
+          "bitcoinmagazine.com"
+        ],
+        "regulators": [
+          "tcmb.gov.tr",
+          "bddk.org.tr",
+          "spk.gov.tr"
+        ]
+      }
+    },
+    "rss_urls": []
+  },
+  "forums": {
+    "rss_query_templates": [
+      "https://news.google.com/rss/search?q={query}&hl={hl}&gl={gl}&ceid={ceid}"
+    ],
+    "query_terms": [
+      "foro",
+      "foros",
+      "forum",
+      "forums",
+      "comunidad",
+      "opiniones",
+      "queja",
+      "quejas",
+      "problema",
+      "problemas"
+    ],
+    "rss_urls": [
+      "https://news.google.com/rss/search?q=site%3Areddit.com+Bitcoin",
+      "https://news.google.com/rss/search?q=site%3Arankia.com+Bitcoin",
+      "https://news.google.com/rss/search?q=site%3Aforocoches.com+Bitcoin",
+      "https://news.google.com/rss/search?q=site%3Abitcointalk.org+Bitcoin",
+      "https://news.google.com/rss/search?q=site%3Astackexchange.com+Bitcoin",
+      "https://news.google.com/rss/search?q=site%3Aplay.google.com+Bitcoin wallet",
+      "https://news.google.com/rss/search?q=site%3Aapps.apple.com+Bitcoin wallet",
+      "https://news.google.com/rss/search?q=site%3Aplay.google.com+Binance",
+      "https://news.google.com/rss/search?q=site%3Aapps.apple.com+Binance",
+      "https://news.google.com/rss/search?q=site%3Aplay.google.com+Coinbase",
+      "https://news.google.com/rss/search?q=site%3Aapps.apple.com+Coinbase"
+    ]
+  },
+  "blogs": {
+    "rss_query_templates": [
+      "https://news.google.com/rss/search?q={query}&hl={hl}&gl={gl}&ceid={ceid}"
+    ],
+    "query_terms": [
+      "blog",
+      "blogs",
+      "opinion",
+      "opinión",
+      "analisis",
+      "análisis",
+      "review",
+      "reseña",
+      "reseñas"
+    ],
+    "rss_urls": [
+      "https://news.google.com/rss/search?q=site%3Amedium.com+Bitcoin",
+      "https://news.google.com/rss/search?q=site%3Asubstack.com+Bitcoin",
+      "https://news.google.com/rss/search?q=site%3Abitcoinmagazine.com+Bitcoin",
+      "https://news.google.com/rss/search?q=site%3Atheblock.co+Bitcoin",
+      "https://news.google.com/rss/search?q=site%3Acoindesk.com+Bitcoin",
+      "https://news.google.com/rss/search?q=site%3Aplay.google.com+Bitcoin wallet",
+      "https://news.google.com/rss/search?q=site%3Aapps.apple.com+Bitcoin wallet",
+      "https://news.google.com/rss/search?q=site%3Aplay.google.com+Binance",
+      "https://news.google.com/rss/search?q=site%3Aapps.apple.com+Binance",
+      "https://news.google.com/rss/search?q=site%3Aplay.google.com+Coinbase",
+      "https://news.google.com/rss/search?q=site%3Aapps.apple.com+Coinbase"
+    ]
+  },
+  "appstore": {
+    "app_ids": [
+      "886427730",
+      "1436799971",
+      "1481947260",
+      "1288339409",
+      "1361671700",
+      "1438144202",
+      "1406825640"
+    ]
+  },
+  "trustpilot": {
+    "rss_query_templates": [
+      "https://news.google.com/rss/search?q={query}&hl={hl}&gl={gl}&ceid={ceid}"
+    ],
+    "query_terms": [
+      "trustpilot",
+      "reseña",
+      "reseñas",
+      "review",
+      "reviews",
+      "opiniones"
+    ],
+    "rss_urls": [
+      "https://news.google.com/rss/search?q=Trustpilot+Bitcoin",
+      "https://news.google.com/rss/search?q=Trustpilot+Ethereum",
+      "https://news.google.com/rss/search?q=Trustpilot+Binance",
+      "https://news.google.com/rss/search?q=Trustpilot+Coinbase",
+      "https://news.google.com/rss/search?q=Trustpilot+Kraken"
+    ]
+  },
+  "google_reviews": {
+    "place_ids": []
+  },
+  "downdetector": {
+    "rss_query_templates": [
+      "https://news.google.com/rss/search?q={query}&hl={hl}&gl={gl}&ceid={ceid}"
+    ],
+    "query_terms": [
+      "downdetector",
+      "incidencia",
+      "incidencias",
+      "caida",
+      "caída",
+      "outage",
+      "interrupcion",
+      "interrupción"
+    ],
+    "rss_urls": []
+  }
+}

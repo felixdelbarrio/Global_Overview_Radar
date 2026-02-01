@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, cast
 
@@ -14,8 +15,10 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 REPUTATION_ENV_PATH = REPO_ROOT / "backend" / "reputation" / ".env.reputation"
 REPUTATION_ENV_EXAMPLE = REPO_ROOT / "backend" / "reputation" / ".env.reputation.example"
 
-DEFAULT_CONFIG_PATH = REPO_ROOT / "data" / "reputation" / "config.json"
+DEFAULT_CONFIG_PATH = REPO_ROOT / "data" / "reputation"
 DEFAULT_CACHE_PATH = REPO_ROOT / "data" / "cache" / "reputation_cache.json"
+
+logger = logging.getLogger(__name__)
 
 
 class ReputationSettings(BaseSettings):
@@ -47,11 +50,15 @@ class ReputationSettings(BaseSettings):
     source_reddit: bool = Field(default=False, alias="REPUTATION_SOURCE_REDDIT")
     source_twitter: bool = Field(default=False, alias="REPUTATION_SOURCE_TWITTER")
     source_news: bool = Field(default=False, alias="REPUTATION_SOURCE_NEWS")
+    source_newsapi: bool = Field(default=False, alias="REPUTATION_SOURCE_NEWSAPI")
+    source_gdelt: bool = Field(default=False, alias="REPUTATION_SOURCE_GDELT")
+    source_guardian: bool = Field(default=False, alias="REPUTATION_SOURCE_GUARDIAN")
     source_forums: bool = Field(default=False, alias="REPUTATION_SOURCE_FORUMS")
     source_blogs: bool = Field(default=False, alias="REPUTATION_SOURCE_BLOGS_RSS")
     source_appstore: bool = Field(default=False, alias="REPUTATION_SOURCE_APPSTORE")
     source_trustpilot: bool = Field(default=False, alias="REPUTATION_SOURCE_TRUSTPILOT")
     source_google_reviews: bool = Field(default=False, alias="REPUTATION_SOURCE_GOOGLE_REVIEWS")
+    source_google_play: bool = Field(default=False, alias="REPUTATION_SOURCE_GOOGLE_PLAY")
     source_youtube: bool = Field(default=False, alias="REPUTATION_SOURCE_YOUTUBE")
     source_downdetector: bool = Field(default=False, alias="REPUTATION_SOURCE_DOWNDETECTOR")
     sources_allowlist: str = Field(default="", alias="REPUTATION_SOURCES_ALLOWLIST")
@@ -65,6 +72,12 @@ class ReputationSettings(BaseSettings):
             result.append("twitter")
         if self.source_news:
             result.append("news")
+        if self.source_newsapi:
+            result.append("newsapi")
+        if self.source_gdelt:
+            result.append("gdelt")
+        if self.source_guardian:
+            result.append("guardian")
         if self.source_forums:
             result.append("forums")
         if self.source_blogs:
@@ -75,6 +88,8 @@ class ReputationSettings(BaseSettings):
             result.append("trustpilot")
         if self.source_google_reviews:
             result.append("google_reviews")
+        if self.source_google_play:
+            result.append("google_play")
         if self.source_youtube:
             result.append("youtube")
         if self.source_downdetector:
@@ -111,13 +126,145 @@ if not settings.cache_path.is_absolute():
 
 
 def load_business_config(path: Path | None = None) -> Dict[str, Any]:
-    """Carga el JSON de negocio (geografías, otros actores del mercado, templates, etc.)."""
+    """Carga uno o varios JSON de negocio (geografías, actores, templates, etc.)."""
     cfg_path = path or settings.config_path
-    if not cfg_path.exists():
-        raise FileNotFoundError(f"Reputation config.json not found at {cfg_path}")
-    with cfg_path.open("r", encoding="utf-8") as f:
-        data: Dict[str, Any] = json.load(f)
-    return data
+    if not cfg_path.is_absolute():
+        cfg_path = (REPO_ROOT / cfg_path).resolve()
+
+    config_files = _resolve_config_files(cfg_path)
+    if not config_files:
+        raise FileNotFoundError(
+            f"Reputation config files not found at {cfg_path} (searched *.json)"
+        )
+
+    merged: Dict[str, Any] = {}
+    for file_path in config_files:
+        data = _load_config_file(file_path)
+        merged = _merge_configs(merged, data, file_path)
+
+    if len(config_files) > 1:
+        logger.info(
+            "Loaded %s reputation config files: %s",
+            len(config_files),
+            ", ".join(str(p) for p in config_files),
+        )
+
+    return merged
+
+
+def _resolve_config_files(cfg_path: Path) -> list[Path]:
+    if cfg_path.exists():
+        if cfg_path.is_dir():
+            return _sorted_config_files(cfg_path)
+        return [cfg_path]
+
+    search_dir = cfg_path if cfg_path.suffix == "" else cfg_path.parent
+    if search_dir.exists() and search_dir.is_dir():
+        return _sorted_config_files(search_dir)
+
+    return []
+
+
+def _sorted_config_files(directory: Path) -> list[Path]:
+    files = [p for p in directory.glob("*.json") if p.is_file()]
+
+    def sort_key(path: Path) -> tuple[int, str]:
+        name = path.name.lower()
+        return (0 if name == "config.json" else 1, name)
+
+    return sorted(files, key=sort_key)
+
+
+def _load_config_file(path: Path) -> Dict[str, Any]:
+    with path.open("r", encoding="utf-8") as f:
+        data = json.load(f)
+    if not isinstance(data, dict):
+        raise ValueError(f"Reputation config at {path} must be a JSON object")
+    return cast(Dict[str, Any], data)
+
+
+def _merge_configs(
+    base: Dict[str, Any],
+    incoming: Dict[str, Any],
+    source: Path,
+) -> Dict[str, Any]:
+    return _merge_dicts(base, incoming, path=source.name)
+
+
+def _merge_dicts(
+    base: Dict[str, Any],
+    incoming: Dict[str, Any],
+    path: str,
+) -> Dict[str, Any]:
+    for key, value in incoming.items():
+        if key not in base:
+            base[key] = _clone_value(value)
+            continue
+        base[key] = _merge_values(base[key], value, f"{path}.{key}")
+    return base
+
+
+def _merge_values(existing: Any, incoming: Any, path: str) -> Any:
+    if isinstance(existing, dict) and isinstance(incoming, dict):
+        return _merge_dicts(existing, incoming, path)
+    if isinstance(existing, list) and isinstance(incoming, list):
+        return _merge_lists(existing, incoming)
+
+    if _is_empty_value(incoming):
+        return existing
+    if _is_empty_value(existing):
+        return incoming
+    if existing != incoming:
+        logger.debug("Config override at %s: %r -> %r", path, existing, incoming)
+    return incoming
+
+
+def _merge_lists(base: list[Any], incoming: list[Any]) -> list[Any]:
+    merged: list[Any] = []
+    seen: set[tuple[str, str]] = set()
+
+    def add(item: Any) -> None:
+        key = _list_item_key(item)
+        if key in seen:
+            return
+        seen.add(key)
+        merged.append(item)
+
+    for item in base:
+        add(item)
+    for item in incoming:
+        add(item)
+    return merged
+
+
+def _list_item_key(item: Any) -> tuple[str, str]:
+    if isinstance(item, (dict, list)):
+        try:
+            return ("json", json.dumps(item, sort_keys=True, ensure_ascii=False))
+        except TypeError:
+            return ("repr", repr(item))
+    try:
+        return ("value", str(item))
+    except Exception:
+        return ("repr", repr(item))
+
+
+def _is_empty_value(value: Any) -> bool:
+    if value is None:
+        return True
+    if isinstance(value, str) and not value.strip():
+        return True
+    if isinstance(value, (list, dict)) and not value:
+        return True
+    return False
+
+
+def _clone_value(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {k: _clone_value(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_clone_value(v) for v in value]
+    return value
 
 
 def compute_config_hash(cfg: Mapping[str, Any]) -> str:

@@ -1,49 +1,37 @@
 # SIGNALS_CATALOG.md (EN / ES)
 
-Catalog of explainable signal types. Signals represent **change**, not volume.
+Catalog of explainable signal types (conceptual). Some signals are roadmap items.
 
-Back to architecture: [`ARCHITECTURE.md`](ARCHITECTURE.md)
-
----
-
-## EN | Signal lifecycle (Mermaid)
-
-```mermaid
-sequenceDiagram
-  participant Source as Public Source
-  participant Ingest as Ingestion
-  participant Proc as Processing/Enrichment
-  participant Intel as Intelligence
-  participant Sig as Signals Engine
-  participant User as User
-
-  Source->>Ingest: Content appears (articles/posts)
-  Ingest->>Proc: ContentEvent stream
-  Proc->>Intel: EnrichedContent
-  Intel->>Sig: Comparative metrics + baselines
-  Sig->>User: SignalEvent (explainable) + evidence
-```
+Back to architecture: `ARCHITECTURE.md`
 
 ---
 
-## EN | Signal types (core)
+## EN | Current status
 
-### 1) Acceleration
-Detect abnormal growth in topic velocity relative to baseline and peers.
+The current codebase focuses on ingestion, normalization, KPIs, and reputation item
+collection. A full signals engine (comparative triggers) is planned but not yet
+implemented. Use this catalog as target behavior for the next iteration.
 
-### 2) Divergence
-Entity framing/exposure diverges from peer group.
+---
 
-### 3) Emergence
-New topic crosses relevance thresholds (often high sensitivity).
+## EN | Signal types (target)
 
-### 4) Polarity / Framing Shift
-Structural change in how a topic is framed (tone or narrative lens).
+1) Acceleration
+- Abnormal growth in topic velocity vs baseline.
 
-### 5) Saturation / Fatigue (optional)
-Overexposure risk: topic dominates beyond healthy baseline.
+2) Divergence
+- Entity framing/exposure diverges from peers.
 
-Each signal must include:
+3) Emergence
+- New topic crosses relevance thresholds.
+
+4) Polarity / Framing Shift
+- Structural change in tone or narrative lens.
+
+5) Saturation / Fatigue (optional)
+- Overexposure risk vs historical baseline.
+
+Each signal should include:
 - what changed
 - compared to what (baseline/peers)
 - since when (time window)
@@ -52,26 +40,33 @@ Each signal must include:
 
 ---
 
-## ES | Tipos de señal (core)
+## ES | Estado actual
 
-### 1) Aceleración
-Crecimiento anómalo de velocidad vs baseline y peers.
+El codigo actual se centra en ingesta, normalizacion, KPIs y recoleccion de items.
+El motor de senales comparativas esta en roadmap. Este catalogo es el objetivo.
 
-### 2) Divergencia
-Framing/exposición de una entidad se separa del peer group.
+---
 
-### 3) Emergencia
-Nuevo tema cruza umbrales de relevancia (a menudo sensible).
+## ES | Tipos de senal (objetivo)
 
-### 4) Cambio de framing / polaridad
-Cambio estructural de cómo se interpreta el tema.
+1) Aceleracion
+- Crecimiento anomalo vs baseline.
 
-### 5) Saturación / fatiga (opcional)
-Riesgo por sobreexposición: domina más allá del baseline.
+2) Divergencia
+- Framing/exposicion se separa de peers.
 
-Cada señal incluye:
-- qué cambió
-- respecto a qué (baseline/peers)
-- desde cuándo (ventana temporal)
+3) Emergencia
+- Nuevo tema supera umbrales.
+
+4) Cambio de polaridad / framing
+- Cambio estructural en tono o narrativa.
+
+5) Saturacion / fatiga (opcional)
+- Riesgo de sobreexposicion.
+
+Cada senal debe incluir:
+- que cambio
+- respecto a que (baseline/peers)
+- desde cuando (ventana temporal)
 - evidencia (top piezas)
 - confianza

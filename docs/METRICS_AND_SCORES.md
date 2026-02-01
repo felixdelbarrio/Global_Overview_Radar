@@ -1,51 +1,45 @@
 # METRICS_AND_SCORES.md (EN / ES)
 
-Back to signals: [`SIGNALS_CATALOG.md`](SIGNALS_CATALOG.md)
+Back to signals: `SIGNALS_CATALOG.md`
 
 ---
 
-## EN | Philosophy
-We avoid raw counts. Metrics must be:
-- comparative
-- time-bound
-- baseline-aware
-- explainable
+## EN | Current metrics (BugResolutionRadar)
 
-## ES | Filosofía
-Evitamos counts brutos. Las métricas deben ser:
-- comparativas
-- acotadas en tiempo
-- con baseline
-- explicables
+Computed in `backend/bugresolutionradar/domain/kpis.py`:
+- Open incidents (total + by severity)
+- New incidents in period (total + by severity)
+- New masters (over threshold of affected clients)
+- Closed incidents in period (total + by severity)
+- Mean resolution time (overall + by severity)
+- Stale open incidents (older than threshold)
+
+These KPIs are exposed via `/kpis` and summarized by the frontend.
 
 ---
 
-## EN | Example formulas (conceptual)
+## EN | Reputation metrics (current state)
 
-### Exposure Index
-`Exposure(entity, topic, window) / AvgExposure(peers, topic, window)`
-
-### Velocity
-`d(Exposure)/dt`
-
-### Acceleration
-`d(Velocity)/dt`
-
-### Sensitivity-weighted impact
-`Exposure * SensitivityWeight(topic)`
+Reputation currently stores normalized items plus optional sentiment tagging.
+Aggregated metrics and comparative signals are planned but not yet implemented.
 
 ---
 
-## ES | Fórmulas ejemplo (conceptual)
+## ES | Metricas actuales (BugResolutionRadar)
 
-### Exposure Index
-`Exposición(entidad, tema, ventana) / ExposiciónMedia(peers, tema, ventana)`
+Calculadas en `backend/bugresolutionradar/domain/kpis.py`:
+- Incidencias abiertas (total + por severidad)
+- Incidencias nuevas en el periodo (total + por severidad)
+- Nuevas masters (superan el umbral de clientes)
+- Incidencias cerradas en el periodo (total + por severidad)
+- Tiempo medio de resolucion (global + por severidad)
+- Incidencias abiertas obsoletas (sobre el umbral)
 
-### Velocidad
-`d(Exposición)/dt`
+Los KPIs se exponen via `/kpis` y el frontend los resume.
 
-### Aceleración
-`d(Velocidad)/dt`
+---
 
-### Impacto ponderado por sensibilidad
-`Exposición * PesoSensibilidad(tema)`
+## ES | Metricas de reputacion (estado actual)
+
+Reputacion almacena items normalizados y sentimiento opcional.
+Las metricas agregadas y las senales comparativas estan en roadmap.
