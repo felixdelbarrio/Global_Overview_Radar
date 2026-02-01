@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from datetime import datetime
 from typing import Any, Iterable
 
@@ -41,7 +42,12 @@ class GdeltCollector(ReputationCollector):
             return []
 
         items: list[ReputationItem] = []
-        for query in self._queries:
+        max_queries = _env_int("GDELT_MAX_QUERIES", 0)
+        max_errors = _env_int("GDELT_MAX_ERRORS", 10)
+        error_count = 0
+        for idx, query in enumerate(self._queries):
+            if max_queries > 0 and idx >= max_queries:
+                break
             query_value = self._merge_query(query)
             params: dict[str, Any] = {
                 "query": query_value,
@@ -61,6 +67,10 @@ class GdeltCollector(ReputationCollector):
                 data = http_get_json(url)
             except Exception as exc:
                 logger.warning("GDELT fetch failed: %s", exc)
+                error_count += 1
+                if max_errors > 0 and error_count >= max_errors:
+                    logger.warning("GDELT skipped after %s errors", error_count)
+                    break
                 continue
 
             articles = data.get("articles") or []
@@ -103,6 +113,16 @@ class GdeltCollector(ReputationCollector):
                 "image": _as_str(article.get("socialimage")),
             },
         )
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        return default
 
 
 def _as_str(value: Any) -> str:
