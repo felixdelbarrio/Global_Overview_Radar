@@ -4,10 +4,18 @@ from __future__ import annotations
 
 import logging
 from datetime import date, datetime, timedelta, timezone
-from typing import Iterable, List
+from typing import Any, Iterable, List
 
 from fastapi import APIRouter, Body, Query
 from pydantic import BaseModel
+from reputation.actors import (
+    actor_principal_canonicals,
+    actor_principal_terms,
+    build_actor_alias_map,
+    primary_actor_info,
+)
+from reputation.collectors.utils import match_keywords, normalize_text
+from reputation.config import load_business_config
 from reputation.config import settings as reputation_settings
 from reputation.models import ReputationCacheDocument, ReputationCacheStats, ReputationItem
 from reputation.repositories.cache_repo import ReputationCacheRepo
@@ -20,7 +28,7 @@ COMPARE_BODY = Body(..., description="Lista de filtros a comparar")
 @router.get("/items")
 def reputation_items(
     sources: str | None = Query(default=None, description="Lista CSV de fuentes"),
-    entity: str | None = Query(default=None, description="bbva|otros_actores|all"),
+    entity: str | None = Query(default=None, description="actor_principal|otros_actores|all"),
     geo: str | None = Query(default=None),
     actor: str | None = Query(default=None),
     sentiment: str | None = Query(default=None),
@@ -62,6 +70,13 @@ def reputation_items(
         items=items,
         stats=ReputationCacheStats(count=len(items), note=doc.stats.note),
     )
+
+
+@router.get("/meta")
+def reputation_meta() -> dict[str, Any]:
+    cfg = load_business_config()
+    principal = primary_actor_info(cfg)
+    return {"actor_principal": principal}
 
 
 class CompareFilter(BaseModel):
@@ -146,6 +161,20 @@ def _filter_items(
     actor_lc = actor.lower() if actor else None
     sentiment_lc = sentiment.lower() if sentiment else None
     text_query = q.lower() if q else None
+    actor_filter = actor_lc
+
+    alias_map: dict[str, str] = {}
+    principal_canonicals: set[str] = set()
+    principal_terms: list[str] = []
+
+    needs_actor_meta = entity_lc in {"actor_principal", "otros_actores"} or actor_lc is not None
+    if needs_actor_meta:
+        cfg = load_business_config()
+        alias_map = build_actor_alias_map(cfg)
+        principal_canonicals = set(actor_principal_canonicals(cfg))
+        principal_terms = _principal_terms_from_cfg(cfg)
+        if actor_lc:
+            actor_filter = alias_map.get(normalize_text(actor or ""), actor or "").lower()
 
     from_dt: datetime | None
     to_dt: datetime | None
@@ -169,17 +198,24 @@ def _filter_items(
         if sources_set and item.source.lower() not in sources_set:
             continue
         if entity_lc and entity_lc != "all":
-            item_actor = (item.actor or "").lower()
-            if entity_lc == "bbva" and item_actor != "bbva":
-                haystack = f"{item.title or ''} {item.text or ''}".lower()
-                if "bbva" not in haystack:
-                    continue
-            if entity_lc == "otros_actores" and (not item_actor or item_actor == "bbva"):
+            is_principal = _item_is_principal(
+                item,
+                principal_canonicals,
+                alias_map,
+                principal_terms,
+            )
+            if entity_lc == "actor_principal" and not is_principal:
+                continue
+            if entity_lc == "otros_actores" and (is_principal or not item.actor):
                 continue
         if geo_lc and (item.geo or "").lower() != geo_lc:
             continue
-        if actor_lc and (item.actor or "").lower() != actor_lc:
-            continue
+        if actor_filter:
+            item_actor = item.actor or ""
+            if alias_map:
+                item_actor = alias_map.get(normalize_text(item_actor), item_actor)
+            if item_actor.lower() != actor_filter:
+                continue
         if sentiment_lc and (item.sentiment or "").lower() != sentiment_lc:
             continue
 
@@ -212,3 +248,29 @@ def _parse_date(value: str | None, start: bool) -> datetime | None:
         return None
     time_value = datetime.min.time() if start else datetime.max.time()
     return datetime.combine(d, time_value, tzinfo=timezone.utc)
+
+
+def _principal_terms_from_cfg(cfg: dict[str, Any]) -> list[str]:
+    terms = actor_principal_terms(cfg)
+    keywords = [k.strip() for k in cfg.get("keywords", []) if isinstance(k, str) and k.strip()]
+    for term in keywords:
+        if term and term not in terms:
+            terms.append(term)
+    return terms
+
+
+def _item_is_principal(
+    item: ReputationItem,
+    principal_canonicals: set[str],
+    alias_map: dict[str, str],
+    principal_terms: list[str],
+) -> bool:
+    item_actor = item.actor or ""
+    if item_actor:
+        canonical = alias_map.get(normalize_text(item_actor), item_actor)
+        if canonical in principal_canonicals:
+            return True
+    haystack = f"{item.title or ''} {item.text or ''}".strip()
+    if haystack and principal_terms:
+        return match_keywords(haystack, principal_terms)
+    return False

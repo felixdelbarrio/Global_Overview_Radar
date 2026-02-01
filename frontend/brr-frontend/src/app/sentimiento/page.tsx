@@ -32,7 +32,12 @@ import {
 } from "lucide-react";
 import { Shell } from "@/components/Shell";
 import { apiGet, apiPost } from "@/lib/api";
-import type { ReputationCacheDocument, ReputationItem } from "@/lib/types";
+import type {
+  ActorPrincipalMeta,
+  ReputationCacheDocument,
+  ReputationItem,
+  ReputationMeta,
+} from "@/lib/types";
 
 const SENTIMENTS = ["all", "positive", "neutral", "negative"] as const;
 
@@ -62,11 +67,12 @@ export default function SentimientoPage() {
   const [chartLoading, setChartLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [chartError, setChartError] = useState<string | null>(null);
+  const [actorPrincipal, setActorPrincipal] = useState<ActorPrincipalMeta | null>(null);
 
   const [fromDate, setFromDate] = useState(defaultFrom);
   const [toDate, setToDate] = useState(defaultTo);
   const [sentiment, setSentiment] = useState<SentimentFilter>("all");
-  const [entity, setEntity] = useState("bbva");
+  const [entity, setEntity] = useState("actor_principal");
   const [geo, setGeo] = useState("all");
   const [actor, setActor] = useState("all");
   const [sources, setSources] = useState<string[]>([]);
@@ -85,12 +91,45 @@ export default function SentimientoPage() {
     touchChartFilters();
   };
 
+  const actorPrincipalName = useMemo(
+    () => actorPrincipal?.canonical || "Actor principal",
+    [actorPrincipal],
+  );
+  const principalAliases = useMemo(
+    () => buildPrincipalAliases(actorPrincipal),
+    [actorPrincipal],
+  );
+  const principalAliasKeys = useMemo(
+    () =>
+      Array.from(new Set(principalAliases.map(normalizeKey).filter(Boolean))),
+    [principalAliases],
+  );
+
+  useEffect(() => {
+    let alive = true;
+    apiGet<ReputationMeta>("/reputation/meta")
+      .then((meta) => {
+        if (!alive) return;
+        setActorPrincipal(meta.actor_principal ?? null);
+      })
+      .catch(() => {
+        if (alive) setActorPrincipal(null);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   useEffect(() => {
     let alive = true;
 
-    // If comparing BBVA vs another actor, request both datasets and combine them.
+    // If comparing actor principal vs another actor, request both datasets and combine them.
     const fetchCombinedIfComparing = async () => {
-      if (entity === "bbva" && actor !== "all") {
+      if (
+        entity === "actor_principal" &&
+        actor !== "all" &&
+        !isPrincipalName(actor, principalAliasKeys)
+      ) {
         const makeFilter = (overrides: Partial<Record<string, unknown>>) => {
           const f: Record<string, unknown> = {};
           if (fromDate) f.from_date = fromDate;
@@ -102,7 +141,7 @@ export default function SentimientoPage() {
         };
 
         const payload = [
-          makeFilter({ entity: "bbva" }),
+          makeFilter({ entity: "actor_principal" }),
           makeFilter({ actor }),
         ];
 
@@ -126,7 +165,7 @@ export default function SentimientoPage() {
       if (sentiment !== "all") params.set("sentiment", sentiment);
       if (entity !== "all") params.set("entity", entity);
       if (geo !== "all") params.set("geo", geo);
-      if (actor !== "all" && entity !== "bbva") {
+      if (actor !== "all" && entity !== "actor_principal") {
         params.set("actor", actor);
       }
       if (sources.length) params.set("sources", sources.join(","));
@@ -146,7 +185,7 @@ export default function SentimientoPage() {
     return () => {
       alive = false;
     };
-  }, [fromDate, toDate, sentiment, entity, geo, actor, sources]);
+  }, [fromDate, toDate, sentiment, entity, geo, actor, sources, principalAliasKeys]);
 
   useEffect(() => {
     let alive = true;
@@ -188,9 +227,8 @@ export default function SentimientoPage() {
       values.push(actor);
       values.sort((a, b) => a.localeCompare(b));
     }
-    if (entity === "otros_actores") return values.filter((v) => !isBbvaName(v));
-    return values.filter((v) => !isBbvaName(v));
-  }, [chartItems, entity, actor]);
+    return values.filter((v) => !isPrincipalName(v, principalAliasKeys));
+  }, [chartItems, actor, principalAliasKeys]);
 
   const sentimentSummary = useMemo(() => summarize(items), [items]);
   const geoSummary = useMemo(() => summarizeByGeo(items), [items]);
@@ -200,8 +238,8 @@ export default function SentimientoPage() {
     [items],
   );
   const sentimentSeries = useMemo(
-    () => buildComparativeSeries(chartItems, actor, fromDate, toDate),
-    [chartItems, actor, fromDate, toDate],
+    () => buildComparativeSeries(chartItems, actor, principalAliasKeys, fromDate, toDate),
+    [chartItems, actor, principalAliasKeys, fromDate, toDate],
   );
   const groupedMentions = useMemo(() => groupMentions(chartItems), [chartItems]);
   const rangeLabel = useMemo(
@@ -213,46 +251,49 @@ export default function SentimientoPage() {
     () => formatDate(latestTimestamp),
     [latestTimestamp],
   );
-  const bbvaLabel = useMemo(
-    () => buildEntityLabel("BBVA", geo),
-    [geo],
+  const principalLabel = useMemo(
+    () => buildEntityLabel(actorPrincipalName, geo),
+    [actorPrincipalName, geo],
   );
   const actorLabel = useMemo(
     () =>
       buildEntityLabel(
-        actor && actor !== "all" && !isBbvaName(actor)
+        actor && actor !== "all" && !isPrincipalName(actor, principalAliasKeys)
           ? actor
           : "Otros actores del mercado",
         geo,
       ),
-    [actor, geo],
+    [actor, geo, principalAliasKeys],
   );
   const selectedActor = useMemo(
-    () => (actor !== "all" && !isBbvaName(actor) ? actor : null),
-    [actor],
+    () =>
+      actor !== "all" && !isPrincipalName(actor, principalAliasKeys)
+        ? actor
+        : null,
+    [actor, principalAliasKeys],
   );
   const selectedActorKey = useMemo(
     () => (selectedActor ? normalizeKey(selectedActor) : null),
     [selectedActor],
   );
-  const bbvaMentions = useMemo(
-    () => groupedMentions.filter((item) => isBbvaGroup(item)),
-    [groupedMentions],
+  const principalMentions = useMemo(
+    () => groupedMentions.filter((item) => isPrincipalGroup(item, principalAliasKeys)),
+    [groupedMentions, principalAliasKeys],
   );
   const actorMentions = useMemo(
     () =>
       groupedMentions.filter((item) => {
-        if (isBbvaGroup(item)) return false;
+        if (isPrincipalGroup(item, principalAliasKeys)) return false;
         if (!selectedActorKey) return true;
         return normalizeKey(item.actor || "") === selectedActorKey;
       }),
-    [groupedMentions, selectedActorKey],
+    [groupedMentions, principalAliasKeys, selectedActorKey],
   );
-  const [mentionsTab, setMentionsTab] = useState<"bbva" | "actor">("bbva");
+  const [mentionsTab, setMentionsTab] = useState<"principal" | "actor">("principal");
 
   const mentionsToShow =
-    mentionsTab === "bbva" ? bbvaMentions : actorMentions;
-  const mentionsLabel = mentionsTab === "bbva" ? bbvaLabel : actorLabel;
+    mentionsTab === "principal" ? principalMentions : actorMentions;
+  const mentionsLabel = mentionsTab === "principal" ? principalLabel : actorLabel;
 
   return (
     <Shell>
@@ -350,21 +391,21 @@ export default function SentimientoPage() {
                   const next = e.target.value;
                   touchItemsFilters();
                   setEntity(next);
-                  if (next === "otros_actores" && isBbvaName(actor)) {
+                  if (next === "otros_actores" && isPrincipalName(actor, principalAliasKeys)) {
                     setActor("all");
                   }
-                  if (next === "all" && isBbvaName(actor)) {
+                  if (next === "all" && isPrincipalName(actor, principalAliasKeys)) {
                     setActor("all");
                   }
                   if (next === "otros_actores") {
                     setMentionsTab("actor");
-                  } else if (next === "bbva") {
-                    setMentionsTab("bbva");
+                  } else if (next === "actor_principal") {
+                    setMentionsTab("principal");
                   }
                 }}
                 className="w-full rounded-2xl border border-white/60 bg-white/80 px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] outline-none focus:border-[color:var(--aqua)]/60 focus:ring-2 focus:ring-[color:var(--aqua)]/30"
               >
-                <option value="bbva">BBVA</option>
+                <option value="actor_principal">{actorPrincipalName}</option>
                 <option value="otros_actores">Otros actores del mercado</option>
                 <option value="all">Todas</option>
               </select>
@@ -525,7 +566,7 @@ export default function SentimientoPage() {
             ÍNDICE REPUTACIONAL ACUMULADO
           </div>
           <div className="text-xs text-black/55">
-            Comparativa {bbvaLabel} vs {actorLabel} · {rangeLabel}
+            Comparativa {principalLabel} vs {actorLabel} · {rangeLabel}
           </div>
         </div>
         <div className="mt-3 h-72 min-h-[240px]">
@@ -534,7 +575,7 @@ export default function SentimientoPage() {
           ) : (
             <SentimentChart
               data={sentimentSeries}
-              bbvaLabel={bbvaLabel}
+              principalLabel={principalLabel}
               actorLabel={actorLabel}
             />
           )}
@@ -552,18 +593,18 @@ export default function SentimientoPage() {
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-2 rounded-full border border-white/70 bg-white/70 p-1 shadow-[0_10px_30px_rgba(7,33,70,0.08)]">
           <button
-            onClick={() => setMentionsTab("bbva")}
+            onClick={() => setMentionsTab("principal")}
             className={
               "flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold transition " +
-              (mentionsTab === "bbva"
+              (mentionsTab === "principal"
                 ? "bg-white text-[color:var(--ink)] shadow-[0_8px_18px_rgba(7,33,70,0.12)]"
                 : "text-black/50 hover:text-[color:var(--ink)]")
             }
           >
             <span className="inline-block h-1.5 w-7 rounded-full bg-[#004481]" />
-            {bbvaLabel}
+            {principalLabel}
             <span className="text-[10px] text-black/40">
-              {Math.min(20, bbvaMentions.length)} recientes
+              {Math.min(20, principalMentions.length)} recientes
             </span>
           </button>
           <button
@@ -592,6 +633,7 @@ export default function SentimientoPage() {
                 key={item.key}
                 item={item}
                 index={index}
+                principalLabel={actorPrincipalName}
               />
             ))}
           {!chartLoading && !mentionsToShow.length && (
@@ -663,7 +705,15 @@ type MentionGroup = {
   count: number;
 };
 
-function MentionCard({ item, index }: { item: MentionGroup; index: number }) {
+function MentionCard({
+  item,
+  index,
+  principalLabel,
+}: {
+  item: MentionGroup;
+  index: number;
+  principalLabel: string;
+}) {
   const sentimentTone = getSentimentTone(item.sentiment);
   const sanitizedTitle = cleanText(item.title) || "Sin título";
   const sanitizedText = cleanText(item.text);
@@ -682,7 +732,7 @@ function MentionCard({ item, index }: { item: MentionGroup; index: number }) {
         </span>
         <span className="inline-flex items-center gap-1 rounded-full border border-white/70 bg-white/80 px-2.5 py-1">
           <Building2 className="h-3.5 w-3.5 text-[color:var(--blue)]" />
-          {item.actor || "BBVA"}
+          {item.actor || principalLabel}
         </span>
         <span className="inline-flex items-center gap-1 rounded-full border border-white/70 bg-white/80 px-2.5 py-1">
           <Calendar className="h-3.5 w-3.5 text-[color:var(--blue)]" />
@@ -788,6 +838,16 @@ function normalizeKey(value: string) {
     .trim();
 }
 
+function buildPrincipalAliases(actorPrincipal: ActorPrincipalMeta | null) {
+  if (!actorPrincipal) return [];
+  const values = [
+    actorPrincipal.canonical,
+    ...(actorPrincipal.names ?? []),
+    ...(actorPrincipal.aliases ?? []),
+  ];
+  return Array.from(new Set(values.filter((v) => v && v.trim())));
+}
+
 function groupMentions(items: ReputationItem[]) {
   const map = new Map<string, MentionGroup>();
 
@@ -853,20 +913,30 @@ function groupMentions(items: ReputationItem[]) {
     });
 }
 
-function isBbvaName(name: string) {
-  return name.toLowerCase().includes("bbva");
+function isPrincipalName(name: string, principalAliases: string[]) {
+  if (!name) return false;
+  const key = normalizeKey(name);
+  if (!key) return false;
+  return principalAliases.includes(key);
 }
 
-function isBbvaItem(item: ReputationItem) {
-  if (item.actor) return isBbvaName(item.actor);
-  const haystack = `${item.title ?? ""} ${item.text ?? ""}`.toLowerCase();
-  return haystack.includes("bbva");
+function containsPrincipal(text: string, principalAliases: string[]) {
+  if (!text) return false;
+  const haystack = normalizeKey(text);
+  if (!haystack) return false;
+  return principalAliases.some((alias) => alias && haystack.includes(alias));
 }
 
-function isBbvaGroup(item: MentionGroup) {
-  if (item.actor) return isBbvaName(item.actor);
-  const haystack = `${item.title ?? ""} ${item.text ?? ""}`.toLowerCase();
-  return haystack.includes("bbva");
+function isPrincipalItem(item: ReputationItem, principalAliases: string[]) {
+  if (item.actor) return isPrincipalName(item.actor, principalAliases);
+  const haystack = `${item.title ?? ""} ${item.text ?? ""}`;
+  return containsPrincipal(haystack, principalAliases);
+}
+
+function isPrincipalGroup(item: MentionGroup, principalAliases: string[]) {
+  if (item.actor) return isPrincipalName(item.actor, principalAliases);
+  const haystack = `${item.title ?? ""} ${item.text ?? ""}`;
+  return containsPrincipal(haystack, principalAliases);
 }
 
 function buildEntityLabel(base: string, geo: string) {
@@ -1010,17 +1080,18 @@ function topCounts(items: ReputationItem[], getKey: (item: ReputationItem) => st
 function buildComparativeSeries(
   items: ReputationItem[],
   selectedActor: string,
+  principalAliases: string[],
   fromDate?: string,
   toDate?: string,
 ) {
   const restrictActor =
-    selectedActor !== "all" && !isBbvaName(selectedActor);
+    selectedActor !== "all" && !isPrincipalName(selectedActor, principalAliases);
   const normalizedActor = selectedActor.toLowerCase();
   const map = new Map<
     string,
     {
-      bbvaScore: number;
-      bbvaCount: number;
+      principalScore: number;
+      principalCount: number;
       actorScore: number;
       actorCount: number;
     }
@@ -1037,8 +1108,8 @@ function buildComparativeSeries(
 
     if (!map.has(date)) {
       map.set(date, {
-        bbvaScore: 0,
-        bbvaCount: 0,
+        principalScore: 0,
+        principalCount: 0,
         actorScore: 0,
         actorCount: 0,
       });
@@ -1046,9 +1117,9 @@ function buildComparativeSeries(
     const entry = map.get(date);
     if (!entry) continue;
 
-    if (isBbvaItem(item)) {
-      entry.bbvaScore += score;
-      entry.bbvaCount += 1;
+    if (isPrincipalItem(item, principalAliases)) {
+      entry.principalScore += score;
+      entry.principalCount += 1;
       continue;
     }
 
@@ -1064,7 +1135,9 @@ function buildComparativeSeries(
   const daily = Array.from(map.entries())
     .map(([date, entry]) => ({
       date,
-      bbva: entry.bbvaCount ? entry.bbvaScore / entry.bbvaCount : null,
+      principal: entry.principalCount
+        ? entry.principalScore / entry.principalCount
+        : null,
       actor: entry.actorCount ? entry.actorScore / entry.actorCount : null,
     }))
     .sort((a, b) => a.date.localeCompare(b.date));
@@ -1075,9 +1148,9 @@ function buildComparativeSeries(
   const end = toDate || daily[daily.length - 1].date;
   const dailyMap = new Map(daily.map((row) => [row.date, row]));
 
-  let bbvaAcc = 0;
+  let principalAcc = 0;
   let actorAcc = 0;
-  const result: { date: string; bbva: number; actor: number }[] = [];
+  const result: { date: string; principal: number; actor: number }[] = [];
 
   const cursor = new Date(`${start}T00:00:00`);
   const endDate = new Date(`${end}T00:00:00`);
@@ -1086,8 +1159,8 @@ function buildComparativeSeries(
     const key = toDateInput(cursor);
     const row = dailyMap.get(key);
     if (row) {
-      if (typeof row.bbva === "number") {
-        bbvaAcc += row.bbva;
+      if (typeof row.principal === "number") {
+        principalAcc += row.principal;
       }
       if (typeof row.actor === "number") {
         actorAcc += row.actor;
@@ -1095,7 +1168,7 @@ function buildComparativeSeries(
     }
     result.push({
       date: key,
-      bbva: bbvaAcc,
+      principal: principalAcc,
       actor: actorAcc,
     });
     cursor.setDate(cursor.getDate() + 1);
@@ -1106,11 +1179,11 @@ function buildComparativeSeries(
 
 function SentimentChart({
   data,
-  bbvaLabel,
+  principalLabel,
   actorLabel,
 }: {
-  data: { date: string; bbva: number | null; actor: number | null }[];
-  bbvaLabel: string;
+  data: { date: string; principal: number | null; actor: number | null }[];
+  principalLabel: string;
   actorLabel: string;
 }) {
   const tooltipFormatter: Formatter<ValueType, string | number> = (value) => {
@@ -1155,8 +1228,8 @@ function SentimentChart({
         <Legend wrapperStyle={{ fontSize: 12 }} />
         <Line
           type="monotone"
-          dataKey="bbva"
-          name={bbvaLabel}
+          dataKey="principal"
+          name={principalLabel}
           stroke="#004481"
           strokeWidth={2}
           dot={false}

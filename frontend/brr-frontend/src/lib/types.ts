@@ -61,3 +61,13 @@ export type ReputationCacheDocument = {
     note?: string | null;
   };
 };
+
+export type ActorPrincipalMeta = {
+  canonical: string;
+  names?: string[];
+  aliases?: string[];
+};
+
+export type ReputationMeta = {
+  actor_principal?: ActorPrincipalMeta | null;
+};
