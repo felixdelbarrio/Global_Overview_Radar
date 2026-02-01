@@ -1,16 +1,59 @@
 {
-  "geografias": ["España", "México", "Perú", "Colombia", "Argentina", "Turquía"],
+  "geografias": [
+    "España",
+    "México",
+    "Perú",
+    "Colombia",
+    "Argentina",
+    "Turquía"
+  ],
   "geografias_aliases": {
-    "España": ["Espana", "España", "Spain", "ES"],
-    "México": ["Mexico", "México", "MX", "CDMX", "Ciudad de Mexico", "Ciudad de México"],
-    "Perú": ["Peru", "Perú", "PE", "Lima"],
-    "Colombia": ["Colombia", "CO", "Bogota", "Bogotá", "Medellin", "Medellín"],
-    "Argentina": ["Argentina", "AR", "Buenos Aires"],
-    "Turquía": ["Turquia", "Turquía", "Turkey", "TR", "Istanbul", "İstanbul"]
+    "España": [
+      "Espana",
+      "España",
+      "Spain",
+      "ES"
+    ],
+    "México": [
+      "Mexico",
+      "México",
+      "MX",
+      "CDMX",
+      "Ciudad de Mexico",
+      "Ciudad de México"
+    ],
+    "Perú": [
+      "Peru",
+      "Perú",
+      "PE",
+      "Lima"
+    ],
+    "Colombia": [
+      "Colombia",
+      "CO",
+      "Bogota",
+      "Bogotá",
+      "Medellin",
+      "Medellín"
+    ],
+    "Argentina": [
+      "Argentina",
+      "AR",
+      "Buenos Aires"
+    ],
+    "Turquía": [
+      "Turquia",
+      "Turquía",
+      "Turkey",
+      "TR",
+      "Istanbul",
+      "İstanbul"
+    ]
   },
-
   "actor_principal": {
-    "BBVA": ["BBVA Empresas"]
+    "BBVA": [
+      "BBVA Empresas"
+    ]
   },
   "actor_principal_aliases": {
     "BBVA": [
@@ -24,32 +67,85 @@
       "BBVA Pymes"
     ]
   },
-
   "otros_actores_aliases": {
-    "Santander": ["Banco Santander", "Santander Empresas", "Santander Business", "Santander Corporate"],
-    "Caixabank": ["CaixaBank", "Caixa Bank", "La Caixa"],
-    "Sabadell": ["Banco Sabadell", "Sabadell Empresas", "Sabadell S.A."],
-    "Bankinter": ["Bankinter Empresas", "Bankinter Corporate", "Bankinter S.A."],
-    "Banorte": ["Grupo Financiero Banorte", "Banorte Empresas"],
-    "Citibanamex": ["Citibamex", "Citi Banamex", "Banamex"],
-    "Scotiabank": ["Scotiabank Colpatria", "Scotiabank Perú", "Scotiabank Colombia"],
-    "Hey": ["Hey Banco", "Hey Bank"],
-    "BCP": ["Banco de Credito del Peru", "Banco de Crédito del Perú", "BCP Perú"],
-    "Interbank": ["Inter Bank", "Interbank Perú"],
-    "Bancolombia": ["Banco Bancolombia", "Bancolombia S.A."],
-    "Banco de Bogota": ["Banco de Bogotá", "Banco de Bogota"],
-    "Davivienda": ["Banco Davivienda", "Davivienda S.A."],
-    "Banco de Galicia": ["Banco Galicia", "Galicia"],
-    "AKBANK": ["Akbank", "Ak Bank"],
-    "ING": ["ING Bank", "ING España"]
+    "Santander": [
+      "Banco Santander",
+      "Santander Empresas",
+      "Santander Business",
+      "Santander Corporate"
+    ],
+    "Caixabank": [
+      "CaixaBank",
+      "Caixa Bank",
+      "La Caixa"
+    ],
+    "Sabadell": [
+      "Banco Sabadell",
+      "Sabadell Empresas",
+      "Sabadell S.A."
+    ],
+    "Bankinter": [
+      "Bankinter Empresas",
+      "Bankinter Corporate",
+      "Bankinter S.A."
+    ],
+    "Banorte": [
+      "Grupo Financiero Banorte",
+      "Banorte Empresas"
+    ],
+    "Citibanamex": [
+      "Citibamex",
+      "Citi Banamex",
+      "Banamex"
+    ],
+    "Scotiabank": [
+      "Scotiabank Colpatria",
+      "Scotiabank Perú",
+      "Scotiabank Colombia"
+    ],
+    "Hey": [
+      "Hey Banco",
+      "Hey Bank"
+    ],
+    "BCP": [
+      "Banco de Credito del Peru",
+      "Banco de Crédito del Perú",
+      "BCP Perú"
+    ],
+    "Interbank": [
+      "Inter Bank",
+      "Interbank Perú"
+    ],
+    "Bancolombia": [
+      "Banco Bancolombia",
+      "Bancolombia S.A."
+    ],
+    "Banco de Bogota": [
+      "Banco de Bogotá",
+      "Banco de Bogota"
+    ],
+    "Davivienda": [
+      "Banco Davivienda",
+      "Davivienda S.A."
+    ],
+    "Banco de Galicia": [
+      "Banco Galicia",
+      "Galicia"
+    ],
+    "AKBANK": [
+      "Akbank",
+      "Ak Bank"
+    ],
+    "ING": [
+      "ING Bank",
+      "ING España"
+    ]
   },
-
   "otros_actores_globales": [
     "Revolut",
     "Wise",
     "Qonto"
   ],
-
   "otros_actores_por_geografia": {
     "España": [
       "Santander",
@@ -84,14 +180,6 @@
       "ING"
     ]
   },
-
-  "periodo": "últimos 24 meses",
-  "lookback_days": 730,
-
-  "idiomas": ["es", "en"],
-
-  "segment_query_mode": "broad",
-
   "keywords": [
     "BBVA Empresas",
     "BBVA Business",
@@ -111,7 +199,6 @@
     "BBVA Cash",
     "BBVA Cash Management"
   ],
-
   "segment_terms": [
     "empresa",
     "empresas",
@@ -124,48 +211,7 @@
     "cash management",
     "tesoreria"
   ],
-
-  "plataformas_prioritarias": ["Reddit", "App Store", "News", "YouTube"],
-
-  "muestra_max": 1200,
-  "umbral_suficiencia": 30,
-  "max_muestras_anonimas_por_geo": 10,
-
-  "quality": {
-    "duplicate_threshold": 0.85
-  },
-
-  "output": {
-    "format": "json",
-    "path": "./output",
-    "cache_enabled": true,
-    "cache_ttl_hours": 24
-  },
-
-  "balance": {
-    "enabled": true,
-    "min_per_geo": 40,
-    "min_per_actor": 25,
-    "max_passes": 3,
-    "max_items_per_pass": 400,
-    "max_queries_per_pass": 500,
-    "max_geos": 0,
-    "max_actores": 0,
-    "segment_query_mode": "broad",
-    "rss_query_geo_mode": "required",
-    "rss_query_order": "round_robin_geo_entity",
-    "rss_query_max_total": 600,
-    "rss_query_max_per_geo": 120,
-    "rss_query_max_per_entity": 20,
-    "sources": ["news"]
-  },
-
   "reddit": {
-    "enabled": true,
-    "client_id_env": "REDDIT_CLIENT_ID",
-    "client_secret_env": "REDDIT_CLIENT_SECRET",
-    "user_agent_env": "REDDIT_USER_AGENT",
-
     "subreddits": [
       "spain",
       "mexico",
@@ -174,67 +220,71 @@
       "personalfinance",
       "europe"
     ],
-
     "query_templates": [
       "\"{actor}\" (empresa OR empresas OR business OR corporate) (app OR web)",
       "\"{actor}\" (empresas OR business) (login OR error OR bug OR comisión OR soporte)",
       "\"{actor}\" banca empresas app"
-    ],
-
-    "limit_per_query": 150
+    ]
   },
-
-  "twitter": {
-    "enabled": false,
-    "api_key_env": "TWITTER_API_KEY",
-    "api_secret_env": "TWITTER_API_SECRET",
-    "bearer_token_env": "TWITTER_BEARER_TOKEN",
-    "max_results_env": "TWITTER_MAX_RESULTS"
-  },
-
-  "linkedin": {
-    "enabled": false,
-    "email_env": "LINKEDIN_EMAIL",
-    "password_env": "LINKEDIN_PASSWORD",
-    "company_search_env": "LINKEDIN_COMPANY_SEARCH",
-    "max_posts_env": "LINKEDIN_MAX_POSTS"
-  },
-
   "news": {
-    "enabled": true,
-    "api_key_env": "NEWS_API_KEY",
-    "lang_env": "NEWS_LANG",
-    "max_articles_env": "NEWS_MAX_ARTICLES",
-    "sources_env": "NEWS_SOURCES",
-    "endpoint_env": "NEWS_API_ENDPOINT",
-    "rss_only_env": "NEWS_RSS_ONLY",
-    "rss_query_enabled": true,
-    "rss_query_geo_mode": "optional",
-    "rss_query_order": "round_robin_geo_entity",
-    "rss_query_max_total": 1200,
-    "rss_query_max_per_geo": 220,
-    "rss_query_max_per_entity": 40,
     "rss_query_templates": [
       "https://news.google.com/rss/search?q={query}&hl={hl}&gl={gl}&ceid={ceid}"
     ],
     "rss_geo_map": {
-      "España": { "hl": "es", "gl": "ES", "ceid": "ES:es" },
-      "México": { "hl": "es-419", "gl": "MX", "ceid": "MX:es-419" },
-      "Colombia": { "hl": "es-419", "gl": "CO", "ceid": "CO:es-419" },
-      "Perú": { "hl": "es-419", "gl": "PE", "ceid": "PE:es-419" },
-      "Argentina": { "hl": "es-419", "gl": "AR", "ceid": "AR:es-419" },
-      "Turquía": { "hl": "tr", "gl": "TR", "ceid": "TR:tr" }
+      "España": {
+        "hl": "es",
+        "gl": "ES",
+        "ceid": "ES:es"
+      },
+      "México": {
+        "hl": "es-419",
+        "gl": "MX",
+        "ceid": "MX:es-419"
+      },
+      "Colombia": {
+        "hl": "es-419",
+        "gl": "CO",
+        "ceid": "CO:es-419"
+      },
+      "Perú": {
+        "hl": "es-419",
+        "gl": "PE",
+        "ceid": "PE:es-419"
+      },
+      "Argentina": {
+        "hl": "es-419",
+        "gl": "AR",
+        "ceid": "AR:es-419"
+      },
+      "Turquía": {
+        "hl": "tr",
+        "gl": "TR",
+        "ceid": "TR:tr"
+      }
     },
-    "site_query_enabled": true,
-    "site_query_mode": "broad",
-    "site_query_geo_mode": "none",
-    "site_query_max_per_geo": 20,
-    "site_query_per_site": 3,
-    "site_query_max_total": 800,
     "site_query_terms_by_category": {
-      "press": ["economia", "finanzas", "banca", "empresas", "mercados", "negocios"],
-      "fintech": ["fintech", "banca digital", "neobanco", "pagos", "open banking"],
-      "regulators": ["regulador", "regulacion", "supervision", "banco central", "superintendencia"]
+      "press": [
+        "economia",
+        "finanzas",
+        "banca",
+        "empresas",
+        "mercados",
+        "negocios"
+      ],
+      "fintech": [
+        "fintech",
+        "banca digital",
+        "neobanco",
+        "pagos",
+        "open banking"
+      ],
+      "regulators": [
+        "regulador",
+        "regulacion",
+        "supervision",
+        "banco central",
+        "superintendencia"
+      ]
     },
     "site_sources_by_geo": {
       "España": {
@@ -251,8 +301,19 @@
           "eldiario.es",
           "economiadigital.es"
         ],
-        "fintech": ["fintechspain.com", "aefi.es", "adigital.org"],
-        "regulators": ["bde.es", "cnmv.es", "mineco.gob.es", "aebanca.es", "ceca.es", "cnmc.es"]
+        "fintech": [
+          "fintechspain.com",
+          "aefi.es",
+          "adigital.org"
+        ],
+        "regulators": [
+          "bde.es",
+          "cnmv.es",
+          "mineco.gob.es",
+          "aebanca.es",
+          "ceca.es",
+          "cnmc.es"
+        ]
       },
       "México": {
         "press": [
@@ -266,7 +327,10 @@
           "heraldodemexico.com.mx",
           "reforma.com"
         ],
-        "fintech": ["fintechmexico.org", "finnovista.com"],
+        "fintech": [
+          "fintechmexico.org",
+          "finnovista.com"
+        ],
         "regulators": [
           "banxico.org.mx",
           "cnbv.gob.mx",
@@ -286,8 +350,16 @@
           "andina.pe",
           "peru21.pe"
         ],
-        "fintech": ["fintechperu.pe"],
-        "regulators": ["bcrp.gob.pe", "sbs.gob.pe", "smv.gob.pe", "mef.gob.pe", "asbanc.com.pe"]
+        "fintech": [
+          "fintechperu.pe"
+        ],
+        "regulators": [
+          "bcrp.gob.pe",
+          "sbs.gob.pe",
+          "smv.gob.pe",
+          "mef.gob.pe",
+          "asbanc.com.pe"
+        ]
       },
       "Colombia": {
         "press": [
@@ -300,7 +372,10 @@
           "elespectador.com",
           "noticiascaracol.com"
         ],
-        "fintech": ["colombiafintech.co", "asobancaria.com"],
+        "fintech": [
+          "colombiafintech.co",
+          "asobancaria.com"
+        ],
         "regulators": [
           "banrep.gov.co",
           "superfinanciera.gov.co",
@@ -320,7 +395,10 @@
           "iprofesional.com",
           "baenegocios.com"
         ],
-        "fintech": ["camaraargentinadefintech.org", "fintech.com.ar"],
+        "fintech": [
+          "camaraargentinadefintech.org",
+          "fintech.com.ar"
+        ],
         "regulators": [
           "bcra.gob.ar",
           "cnv.gov.ar",
@@ -339,8 +417,17 @@
           "hurriyet.com.tr",
           "sabah.com.tr"
         ],
-        "fintech": ["fintechistanbul.org", "todeb.org.tr"],
-        "regulators": ["tcmb.gov.tr", "bddk.org.tr", "spk.gov.tr", "tbb.org.tr", "tmsf.org.tr"]
+        "fintech": [
+          "fintechistanbul.org",
+          "todeb.org.tr"
+        ],
+        "regulators": [
+          "tcmb.gov.tr",
+          "bddk.org.tr",
+          "spk.gov.tr",
+          "tbb.org.tr",
+          "tmsf.org.tr"
+        ]
       }
     },
     "rss_urls": [
@@ -369,8 +456,16 @@
         "geo": "Perú",
         "category": "press"
       },
-      { "url": "http://portafolio.co/rss/economia.xml", "geo": "Colombia", "category": "press" },
-      { "url": "http://portafolio.co/rss/negocios.xml", "geo": "Colombia", "category": "press" },
+      {
+        "url": "http://portafolio.co/rss/economia.xml",
+        "geo": "Colombia",
+        "category": "press"
+      },
+      {
+        "url": "http://portafolio.co/rss/negocios.xml",
+        "geo": "Colombia",
+        "category": "press"
+      },
       {
         "url": "http://portafolio.co/rss/negocios/empresas.xml",
         "geo": "Colombia",
@@ -391,113 +486,100 @@
         "geo": "Colombia",
         "category": "press"
       },
-      { "url": "https://eleconomista.com.ar/economia/feed/", "geo": "Argentina", "category": "press" },
-      { "url": "https://eleconomista.com.ar/negocios/feed/", "geo": "Argentina", "category": "press" },
-      { "url": "https://www.anews.com.tr/rss/economy.xml", "geo": "Turquía", "category": "press" }
+      {
+        "url": "https://eleconomista.com.ar/economia/feed/",
+        "geo": "Argentina",
+        "category": "press"
+      },
+      {
+        "url": "https://eleconomista.com.ar/negocios/feed/",
+        "geo": "Argentina",
+        "category": "press"
+      },
+      {
+        "url": "https://www.anews.com.tr/rss/economy.xml",
+        "geo": "Turquía",
+        "category": "press"
+      }
     ]
   },
-
   "forums": {
-    "enabled": true,
-    "scraping_env": "FORUMS_SCRAPING",
-    "max_threads_env": "FORUMS_MAX_THREADS",
-    "timeout_seconds_env": "FORUMS_TIMEOUT_SECONDS",
-    "rss_query_enabled": true,
-    "rss_query_geo_mode": "optional",
     "rss_query_templates": [
       "https://news.google.com/rss/search?q={query}&hl={hl}&gl={gl}&ceid={ceid}"
     ],
-    "query_terms": ["foro", "foros", "forum", "forums", "comunidad", "opiniones"],
+    "query_terms": [
+      "foro",
+      "foros",
+      "forum",
+      "forums",
+      "comunidad",
+      "opiniones"
+    ],
     "rss_urls": [
       "https://news.google.com/rss/search?q=BBVA+Empresas+foro",
       "https://news.google.com/rss/search?q=BBVA+Business+forum",
       "https://news.google.com/rss/search?q=banca+empresas+foro"
     ]
   },
-
   "blogs": {
-    "enabled": true,
-    "rss_only_env": "BLOGS_RSS_ONLY",
-    "max_items_env": "BLOGS_MAX_ITEMS",
-    "rss_query_enabled": true,
-    "rss_query_geo_mode": "optional",
     "rss_query_templates": [
       "https://news.google.com/rss/search?q={query}&hl={hl}&gl={gl}&ceid={ceid}"
     ],
-    "query_terms": ["blog", "blogs", "post", "articulo", "artículo", "opinion", "opinión"],
+    "query_terms": [
+      "blog",
+      "blogs",
+      "post",
+      "articulo",
+      "artículo",
+      "opinion",
+      "opinión"
+    ],
     "rss_urls": [
       "https://news.google.com/rss/search?q=BBVA+Empresas+blog",
       "https://news.google.com/rss/search?q=BBVA+Business+blog",
       "https://news.google.com/rss/search?q=banca+empresas+blog"
     ]
   },
-
   "appstore": {
-    "enabled": false,
-    "country_env": "APPSTORE_COUNTRY",
-    "app_id_env": "APPSTORE_APP_ID",
-    "app_ids_env": "APPSTORE_APP_IDS",
-    "app_ids": [],
-    "max_reviews_env": "APPSTORE_MAX_REVIEWS"
+    "app_ids": []
   },
   "trustpilot": {
-    "enabled": true,
-    "scraping_env": "TRUSTPILOT_SCRAPING",
-    "max_items_env": "TRUSTPILOT_MAX_ITEMS",
-    "rss_query_enabled": true,
-    "rss_query_geo_mode": "optional",
     "rss_query_templates": [
       "https://news.google.com/rss/search?q={query}&hl={hl}&gl={gl}&ceid={ceid}"
     ],
-    "query_terms": ["trustpilot", "reseña", "reseñas", "review", "reviews", "opiniones"],
+    "query_terms": [
+      "trustpilot",
+      "reseña",
+      "reseñas",
+      "review",
+      "reviews",
+      "opiniones"
+    ],
     "rss_urls": [
       "https://news.google.com/rss/search?q=Trustpilot+BBVA+Empresas",
       "https://news.google.com/rss/search?q=Trustpilot+BBVA+Business"
     ]
   },
   "google_reviews": {
-    "enabled": false,
-    "api_key_env": "GOOGLE_PLACES_API_KEY",
-    "place_id_env": "GOOGLE_PLACE_ID",
-    "place_ids_env": "GOOGLE_PLACE_IDS",
-    "place_ids": [],
-    "max_reviews_env": "GOOGLE_MAX_REVIEWS"
-  },
-  "youtube": {
-    "enabled": false,
-    "api_key_env": "YOUTUBE_API_KEY",
-    "max_results_env": "YOUTUBE_MAX_RESULTS"
+    "place_ids": []
   },
   "downdetector": {
-    "enabled": true,
-    "scraping_env": "DOWNDETECTOR_SCRAPING",
-    "max_items_env": "DOWNDETECTOR_MAX_ITEMS",
-    "rss_query_enabled": true,
-    "rss_query_geo_mode": "optional",
     "rss_query_templates": [
       "https://news.google.com/rss/search?q={query}&hl={hl}&gl={gl}&ceid={ceid}"
     ],
-    "query_terms": ["downdetector", "incidencia", "incidencias", "caida", "caída", "outage", "interrupcion", "interrupción"],
+    "query_terms": [
+      "downdetector",
+      "incidencia",
+      "incidencias",
+      "caida",
+      "caída",
+      "outage",
+      "interrupcion",
+      "interrupción"
+    ],
     "rss_urls": [
       "https://news.google.com/rss/search?q=Downdetector+BBVA+Empresas",
       "https://news.google.com/rss/search?q=Downdetector+BBVA+Business"
     ]
-  },
-
-  "models": {
-    "sentiment_mode_env": "SENTIMENT_MODEL",
-    "sentiment_llm_model_env": "OPENAI_SENTIMENT_MODEL",
-    "aspect_mode_env": "ASPECT_MODEL"
-  },
-
-  "llm": {
-    "enabled_env": "LLM_ENABLED",
-    "openai_api_key_env": "OPENAI_API_KEY"
-  },
-
-  "limits": {
-    "max_total_samples_env": "MAX_TOTAL_SAMPLES",
-    "min_samples_per_actor_env": "MIN_SAMPLES_PER_ACTOR",
-    "max_anon_samples_per_geo_env": "MAX_ANON_SAMPLES_PER_GEO"
   }
 }
