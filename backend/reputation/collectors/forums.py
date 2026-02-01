@@ -12,7 +12,10 @@ from reputation.collectors.utils import (
     rss_is_query_feed,
     rss_source,
 )
+from reputation.logging_utils import get_logger
 from reputation.models import ReputationItem
+
+logger = get_logger(__name__)
 
 
 class ForumsCollector(ReputationCollector):
@@ -50,7 +53,7 @@ class ForumsCollector(ReputationCollector):
                 if len(items) >= self._max_items:
                     return items
             if rss_debug_enabled():
-                print(f"[forums] {url_value} items={len(entries)} kept={kept}")
+                logger.debug("[forums] %s items=%s kept=%s", url_value, len(entries), kept)
         return items
 
     def _is_relevant(

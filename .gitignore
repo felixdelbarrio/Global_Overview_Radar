@@ -3,8 +3,7 @@
 ########################################
 .env
 .env.*
-!backend/bugresolutionradar/.env.example
-!backend/reputation/.env.reputation.example
+!**/.env*.example
 
 ########################################
 # Python
