@@ -14,7 +14,7 @@ from xml.etree import ElementTree
 
 
 def http_get_text(url: str, headers: dict[str, str] | None = None, timeout: int = 15) -> str:
-    req_headers = {"User-Agent": "bbva-brr-reputation/0.1"}
+    req_headers = {"User-Agent": "global-overview-radar/0.1"}
     if headers:
         req_headers.update(headers)
     req = Request(url, headers=req_headers)

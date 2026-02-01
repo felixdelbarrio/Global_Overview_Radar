@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+from reputation.actors import build_actor_alias_map, canonicalize_actor
 from reputation.models import ReputationCacheDocument
 
 
@@ -31,32 +32,15 @@ class ReputationCacheRepo:
             try:
                 with config_file.open("r", encoding="utf-8") as f:
                     cfg = json.load(f)
-                raw = cfg.get("otros_actores_aliases") or {}
-                # raw maps canonical -> list of aliases
-                for canonical, aliases in raw.items():
-                    # register canonical itself
-                    ck = " ".join(str(canonical).strip().split()).lower()
-                    alias_map[ck] = str(canonical)
-                    if isinstance(aliases, list):
-                        for a in aliases:
-                            ak = " ".join(str(a).strip().split()).lower()
-                            alias_map[ak] = str(canonical)
-                    else:
-                        # single string alias
-                        ak = " ".join(str(aliases).strip().split()).lower()
-                        alias_map[ak] = str(canonical)
+                alias_map = build_actor_alias_map(cfg)
             except Exception:
-                # En caso de error, usar un mapeo mínimo por defecto
-                alias_map = {"bbva": "BBVA", "bbva empresas": "BBVA"}
-        else:
-            alias_map = {"bbva": "BBVA", "bbva empresas": "BBVA"}
+                alias_map = {}
 
         for item in doc.items:
             if item.actor:
-                a = item.actor.strip()
-                key = " ".join(a.split()).lower()
-                if key in alias_map:
-                    item.actor = alias_map[key]
+                normalized = canonicalize_actor(item.actor, alias_map) if alias_map else item.actor
+                if normalized:
+                    item.actor = normalized
 
         return doc
 

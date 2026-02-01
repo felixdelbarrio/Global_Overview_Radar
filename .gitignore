@@ -3,8 +3,6 @@
 ########################################
 .env
 .env.*
-!.env.example
-!.env.reputation.example
 !backend/bugresolutionradar/.env.example
 !backend/reputation/.env.reputation.example
 
@@ -93,4 +91,3 @@ temp/
 Thumbs.db
 *.swp
 *.swo
-

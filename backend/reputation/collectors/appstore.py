@@ -45,7 +45,7 @@ class AppStoreCollector(ReputationCollector):
             f"https://itunes.apple.com/{self._country}/rss/"
             f"customerreviews/id={self._app_id}/page={page}/sortby=mostrecent/json"
         )
-        req = Request(url, headers={"User-Agent": "bbva-brr-reputation/0.1"})
+        req = Request(url, headers={"User-Agent": "global-overview-radar/0.1"})
         with urlopen(req, timeout=15) as response:
             raw = response.read().decode("utf-8")
         data = json.loads(raw)

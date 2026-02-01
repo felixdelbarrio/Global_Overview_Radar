@@ -9,6 +9,7 @@ from typing import Any, Iterable
 
 import httpx
 
+from reputation.actors import actor_principal_canonicals, build_actor_aliases_by_canonical
 from reputation.collectors.utils import match_keywords, normalize_text
 from reputation.models import ReputationItem
 
@@ -359,7 +360,7 @@ _POS_IMPROVEMENT_PHRASES = _norm_list(
 _GEN_POSITIVE_TOKENS = _tokenize_keywords(_ES_POSITIVE | _EN_POSITIVE)
 _GEN_NEGATIVE_TOKENS = _tokenize_keywords(_ES_NEGATIVE | _EN_NEGATIVE)
 
-_LLM_SYSTEM_PROMPT = """Eres un analista de sentimiento enfocado en la percepción del cliente/usuario final para \"BBVA Empresas - Global Overview Radar\".
+_LLM_SYSTEM_PROMPT = """Eres un analista de sentimiento enfocado en la percepción del cliente/usuario final para \"Global Overview Radar\".
 Recibirás UN JSON de un item individual. Debes inferir el sentimiento que ese contenido provocaría en un cliente (no en inversores ni en la empresa).
 Devuelve SOLO un JSON con {\"sentiment\": ..., \"score\": ...}.
 
@@ -455,9 +456,8 @@ class SentimentResult:
 class ReputationSentimentService:
     def __init__(self, cfg: dict[str, Any]) -> None:
         self._cfg = cfg
-        self._keywords = [
-            k.strip() for k in cfg.get("keywords", []) if isinstance(k, str) and k.strip()
-        ]
+        self._principal_canonicals = actor_principal_canonicals(cfg)
+        self._primary_actor = self._principal_canonicals[0] if self._principal_canonicals else None
         raw_global = cfg.get("otros_actores_globales") or []
         self._global_actors = [c.strip() for c in raw_global if isinstance(c, str) and c.strip()]
 
@@ -475,19 +475,18 @@ class ReputationSentimentService:
                 if cleaned:
                     self._actors_by_geo[geo] = cleaned
 
-        raw_actor_aliases = cfg.get("otros_actores_aliases") or {}
+        raw_actor_aliases = build_actor_aliases_by_canonical(cfg)
         self._actor_aliases: dict[str, list[str]] = {}
-        if isinstance(raw_actor_aliases, dict):
-            for name, aliases in raw_actor_aliases.items():
-                if not isinstance(name, str):
-                    continue
-                cleaned = (
-                    [a.strip() for a in aliases if isinstance(a, str) and a.strip()]
-                    if isinstance(aliases, list)
-                    else []
-                )
-                if cleaned:
-                    self._actor_aliases[name] = cleaned
+        for name, aliases in raw_actor_aliases.items():
+            if not isinstance(name, str):
+                continue
+            cleaned = (
+                [a.strip() for a in aliases if isinstance(a, str) and a.strip()]
+                if isinstance(aliases, list)
+                else []
+            )
+            if cleaned:
+                self._actor_aliases[name] = cleaned
 
         self._geos = [
             g.strip() for g in cfg.get("geografias", []) if isinstance(g, str) and g.strip()
@@ -615,7 +614,6 @@ class ReputationSentimentService:
         signals: dict[str, Any] | None = None,
     ) -> list[str]:
         actors: list[str] = []
-        normalized = normalize_text(text)
         hints: list[str] = []
         if signals:
             for key in ("entity", "entity_hint", "query"):
@@ -630,6 +628,7 @@ class ReputationSentimentService:
             for names in self._actors_by_geo.values():
                 scoped.extend(names)
         scoped.extend(self._global_actors)
+        scoped.extend(self._principal_canonicals)
 
         hint_actors: list[str] = []
         if hints:
@@ -644,15 +643,8 @@ class ReputationSentimentService:
                 if matched:
                     hint_actors.append(name)
 
-        bbva_in_hints = any("bbva" in normalize_text(h) for h in hints)
-        bbva_in_text = "bbva" in normalized or any(
-            match_keywords(text, [kw]) for kw in self._keywords
-        )
-
         if hint_actors:
             actors.extend(hint_actors)
-        elif bbva_in_text or bbva_in_hints:
-            actors.append("BBVA")
 
         for name in scoped:
             if name in actors:
@@ -678,12 +670,6 @@ class ReputationSentimentService:
                         break
             if matched:
                 actors.append(name)
-
-        if (bbva_in_text or bbva_in_hints) and "BBVA" not in actors:
-            if hint_actors:
-                actors.append("BBVA")
-            else:
-                actors.insert(0, "BBVA")
 
         seen: set[str] = set()
         ordered: list[str] = []
@@ -773,7 +759,7 @@ class ReputationSentimentService:
         geo: str | None,
         actors: list[str],
     ) -> tuple[str, float] | None:
-        actor = actors[0] if actors else (item.actor or "BBVA")
+        actor = actors[0] if actors else (item.actor or self._primary_actor or "")
         payload = {
             "evaluated_text": evaluated_text,
             "actor": actor,
