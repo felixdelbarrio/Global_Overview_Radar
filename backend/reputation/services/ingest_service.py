@@ -145,7 +145,9 @@ class ReputationIngestService:
             return list(collector.collect())
 
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            future_map = {executor.submit(_run, collector): collector for collector in collector_list}
+            future_map = {
+                executor.submit(_run, collector): collector for collector in collector_list
+            }
             for future in as_completed(future_map):
                 collector = future_map[future]
                 try:
@@ -1048,7 +1050,6 @@ class ReputationIngestService:
             return rss_sources[:limit]
         return rss_sources
 
-
     @staticmethod
     def _build_appstore_collector(
         api_enabled: bool,
@@ -1243,6 +1244,67 @@ class ReputationIngestService:
                 if alias_norm in normalized:
                     return geo
         return None
+
+    @staticmethod
+    def _geo_aliases_from_cfg(cfg: dict[str, Any]) -> dict[str, list[str]]:
+        geos = [g.strip() for g in cfg.get("geografias", []) if isinstance(g, str) and g.strip()]
+        raw_aliases = cfg.get("geografias_aliases") or {}
+        if not geos and isinstance(raw_aliases, dict):
+            geos = [g.strip() for g in raw_aliases if isinstance(g, str) and g.strip()]
+        result: dict[str, list[str]] = {}
+        for geo in geos:
+            aliases: list[str] = []
+            if isinstance(raw_aliases, dict):
+                values = raw_aliases.get(geo, [])
+                if isinstance(values, list):
+                    aliases.extend([a.strip() for a in values if isinstance(a, str) and a.strip()])
+            aliases.append(geo)
+            result[geo] = list(dict.fromkeys([a for a in aliases if a]))
+        return result
+
+    @staticmethod
+    def _name_has_geo(name: str, geo: str, geo_aliases: dict[str, list[str]]) -> bool:
+        if not name or not geo:
+            return False
+        aliases = geo_aliases.get(geo, [])
+        if not aliases:
+            return False
+        normalized = normalize_text(name)
+        if not normalized:
+            return False
+        tokens = set(normalized.split())
+        for alias in aliases:
+            alias_norm = normalize_text(alias)
+            if not alias_norm:
+                continue
+            if len(alias_norm) <= 3:
+                if alias_norm in tokens:
+                    return True
+            elif alias_norm in normalized:
+                return True
+        return False
+
+    @staticmethod
+    def _name_conflicts_geo(name: str, geo: str, geo_aliases: dict[str, list[str]]) -> bool:
+        if not name or not geo_aliases:
+            return False
+        normalized = normalize_text(name)
+        if not normalized:
+            return False
+        tokens = set(normalized.split())
+        for other_geo, aliases in geo_aliases.items():
+            if other_geo == geo:
+                continue
+            for alias in aliases:
+                alias_norm = normalize_text(alias)
+                if not alias_norm:
+                    continue
+                if len(alias_norm) <= 3:
+                    if alias_norm in tokens:
+                        return True
+                elif alias_norm in normalized:
+                    return True
+        return False
 
     @classmethod
     def _infer_geo_from_source(
@@ -1453,6 +1515,7 @@ class ReputationIngestService:
         ]
         segment_terms_local = list(dict.fromkeys([*segment_terms, *source_terms]))
         actors_by_geo = cfg.get("otros_actores_por_geografia") or {}
+        geo_aliases = self._geo_aliases_from_cfg(cfg)
         global_actors = cfg.get("otros_actores_globales") or []
         keywords = self._load_keywords(cfg)
         principal_terms = actor_principal_terms(cfg)
@@ -1506,6 +1569,9 @@ class ReputationIngestService:
                             alias_names.append(alias.strip())
                 names.extend(alias_names)
                 cleaned_names = [n.strip() for n in names if isinstance(n, str) and n.strip()]
+                cleaned_names = [
+                    n for n in cleaned_names if not self._name_conflicts_geo(n, geo, geo_aliases)
+                ]
                 if only_entities_expanded is not None:
                     cleaned_names = [n for n in cleaned_names if n in only_entities_expanded]
                 geo_entities[geo] = list(dict.fromkeys(cleaned_names))
@@ -1526,7 +1592,8 @@ class ReputationIngestService:
                 )
                 for base_query in base_queries:
                     query_variants: list[tuple[str, str | None]] = []
-                    if geo_mode in {"required", "optional"}:
+                    name_has_geo = self._name_has_geo(name, geo, geo_aliases)
+                    if geo_mode in {"required", "optional"} and not name_has_geo:
                         query_variants.append((f'{base_query} "{geo}"', geo))
                     if geo_mode in {"none", "optional"}:
                         query_variants.append((base_query, None))
@@ -1615,7 +1682,8 @@ class ReputationIngestService:
                         )
                         for base_query in base_queries:
                             site_query_variants: list[str] = []
-                            if site_geo_mode in {"required", "optional"}:
+                            name_has_geo = self._name_has_geo(name, geo, geo_aliases)
+                            if site_geo_mode in {"required", "optional"} and not name_has_geo:
                                 site_query_variants.append(f'{base_query} "{geo}" site:{domain}')
                             if site_geo_mode in {"none", "optional"}:
                                 site_query_variants.append(f"{base_query} site:{domain}")

@@ -68,6 +68,7 @@ export default function SentimientoPage() {
   const [error, setError] = useState<string | null>(null);
   const [chartError, setChartError] = useState<string | null>(null);
   const [actorPrincipal, setActorPrincipal] = useState<ActorPrincipalMeta | null>(null);
+  const [meta, setMeta] = useState<ReputationMeta | null>(null);
 
   const [fromDate, setFromDate] = useState(defaultFrom);
   const [toDate, setToDate] = useState(defaultTo);
@@ -111,9 +112,13 @@ export default function SentimientoPage() {
       .then((meta) => {
         if (!alive) return;
         setActorPrincipal(meta.actor_principal ?? null);
+        setMeta(meta);
       })
       .catch(() => {
-        if (alive) setActorPrincipal(null);
+        if (alive) {
+          setActorPrincipal(null);
+          setMeta(null);
+        }
       });
     return () => {
       alive = false;
@@ -214,7 +219,17 @@ export default function SentimientoPage() {
     };
   }, [fromDate, toDate, sentiment, geo, sources]);
 
-  const sourcesOptions = useMemo(() => unique(items.map((i) => i.source)), [items]);
+  const sourceCounts = useMemo(
+    () => meta?.source_counts ?? {},
+    [meta],
+  );
+  const sourcesOptions = useMemo(() => {
+    const fromMeta = meta?.sources_enabled ?? [];
+    const fromAvailable = meta?.sources_available ?? [];
+    const fromItems = items.map((i) => i.source);
+    const combined = unique([...fromMeta, ...fromAvailable, ...fromItems]).filter(Boolean);
+    return combined.sort((a, b) => a.localeCompare(b));
+  }, [items, meta]);
   const geoOptions = useMemo(
     () => unique(items.map((i) => i.geo).filter(Boolean) as string[]),
     [items],
@@ -453,6 +468,9 @@ export default function SentimientoPage() {
             <div className="mt-2 flex flex-wrap gap-2">
               {sourcesOptions.map((src) => {
                 const active = sources.includes(src);
+                const count = sourceCounts[src];
+                const countLabel =
+                  typeof count === "number" ? count.toLocaleString("es-ES") : null;
                 return (
                   <button
                     key={src}
@@ -467,7 +485,19 @@ export default function SentimientoPage() {
                         : "bg-white/80 text-[color:var(--navy)] border-white/60")
                     }
                   >
-                    {src}
+                    <span>{src}</span>
+                    {countLabel !== null && (
+                      <span
+                        className={
+                          "ml-2 rounded-full px-2 py-0.5 text-[10px] font-semibold " +
+                          (active
+                            ? "bg-white/15 text-white"
+                            : "bg-[color:var(--sand)] text-[color:var(--navy)]")
+                        }
+                      >
+                        {countLabel}
+                      </span>
+                    )}
                   </button>
                 );
               })}
