@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Iterable, List
 
@@ -20,8 +19,10 @@ from reputation.config import settings as reputation_settings
 from reputation.models import ReputationCacheDocument, ReputationCacheStats, ReputationItem
 from reputation.repositories.cache_repo import ReputationCacheRepo
 
+from bugresolutionradar.logging_utils import get_logger
+
 router = APIRouter()
-logger = logging.getLogger("bugresolutionradar.reputation")
+logger = get_logger(__name__)
 COMPARE_BODY = Body(..., description="Lista de filtros a comparar")
 
 
@@ -62,7 +63,7 @@ def reputation_items(
             q,
         )
     )
-    # Note: temporary debug logging removed for production readiness.
+    logger.debug("Reputation items filtered: %s -> %s", len(doc.items), len(items))
     return ReputationCacheDocument(
         generated_at=doc.generated_at,
         config_hash=doc.config_hash,

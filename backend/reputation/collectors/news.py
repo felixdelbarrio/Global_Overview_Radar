@@ -14,7 +14,10 @@ from reputation.collectors.utils import (
     rss_is_query_feed,
     rss_source,
 )
+from reputation.logging_utils import get_logger
 from reputation.models import ReputationItem
+
+logger = get_logger(__name__)
 
 
 class NewsCollector(ReputationCollector):
@@ -67,7 +70,7 @@ class NewsCollector(ReputationCollector):
                 raw = http_get_text(url_value)
             except Exception as exc:
                 if rss_debug_enabled():
-                    print(f"[news] error {rss_url}: {exc}")
+                    logger.warning("[news] error %s: %s", rss_url, exc)
                 continue
             entries = parse_rss(raw)
             kept = 0
@@ -78,7 +81,7 @@ class NewsCollector(ReputationCollector):
                 if len(items) >= self._max_articles:
                     return items
             if rss_debug_enabled():
-                print(f"[news] {url_value} items={len(entries)} kept={kept}")
+                logger.debug("[news] %s items=%s kept=%s", url_value, len(entries), kept)
         return items
 
     def _collect_query(self, query: str) -> list[ReputationItem]:

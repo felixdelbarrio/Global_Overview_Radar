@@ -77,6 +77,17 @@ class Settings(BaseSettings):
     stale_days_threshold: int = Field(default=15, validation_alias="STALE_DAYS_THRESHOLD")
     period_days_default: int = Field(default=15, validation_alias="PERIOD_DAYS_DEFAULT")
 
+    ########################################
+    # Logging
+    ########################################
+    log_enabled: bool = Field(default=False, validation_alias="LOG_ENABLED")
+    log_to_file: bool = Field(default=False, validation_alias="LOG_TO_FILE")
+    log_file_name: str = Field(
+        default="bugresolutionradar.log",
+        validation_alias="LOG_FILE_NAME",
+    )
+    log_debug: bool = Field(default=False, validation_alias="LOG_DEBUG")
+
     def enabled_sources(self) -> List[str]:
         """Devuelve la lista de fuentes habilitadas en SOURCES."""
         return [s.strip() for s in self.sources.split(",") if s.strip()]

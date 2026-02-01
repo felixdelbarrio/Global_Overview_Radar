@@ -31,9 +31,12 @@ from reputation.config import (
     load_business_config,
     settings,
 )
+from reputation.logging_utils import get_logger
 from reputation.models import ReputationCacheDocument, ReputationCacheStats, ReputationItem
 from reputation.repositories.cache_repo import ReputationCacheRepo
 from reputation.services.sentiment_service import ReputationSentimentService
+
+logger = get_logger(__name__)
 
 
 class ReputationIngestService:
@@ -49,9 +52,12 @@ class ReputationIngestService:
         ttl_hours = effective_ttl_hours(cfg)
         sources_enabled = list(self._settings.enabled_sources())
         lookback_days = _env_int("REPUTATION_LOOKBACK_DAYS", 730)
+        logger.info("Reputation ingest started (force=%s)", force)
+        logger.debug("Sources enabled: %s", sources_enabled)
 
         # Feature apagada: devolvemos doc vacío, no escribimos
         if not self._settings.reputation_enabled:
+            logger.info("Reputation ingest skipped: REPUTATION_ENABLED=false")
             return self._build_empty_doc(
                 cfg_hash=cfg_hash,
                 sources_enabled=sources_enabled,
@@ -71,6 +77,7 @@ class ReputationIngestService:
             and not collectors
         ):
             cache_note = "; ".join(notes) if notes else "cache hit"
+            logger.info("Reputation cache hit (%s items)", len(existing.items))
             return ReputationCacheDocument(
                 generated_at=datetime.now(timezone.utc),
                 config_hash=cfg_hash,
@@ -98,6 +105,7 @@ class ReputationIngestService:
         )
 
         self._repo.save(doc)
+        logger.info("Reputation ingest finished (%s items)", len(merged_items))
 
         return doc
 
@@ -112,6 +120,7 @@ class ReputationIngestService:
                 items.extend(list(collector.collect()))
             except Exception as exc:  # pragma: no cover - defensive
                 notes.append(f"{collector.source_name}: error {exc}")
+                logger.warning("Collector %s failed: %s", collector.source_name, exc)
         return items
 
     @staticmethod
