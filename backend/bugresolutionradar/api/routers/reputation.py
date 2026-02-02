@@ -288,7 +288,21 @@ def _filter_items(
             item_actor = item.actor or ""
             if alias_map:
                 item_actor = alias_map.get(normalize_text(item_actor), item_actor)
-            if item_actor.lower() != actor_filter:
+            matched = item_actor.lower() == actor_filter
+            if not matched:
+                signals = item.signals or {}
+                actors_signal = signals.get("actors")
+                if isinstance(actors_signal, list):
+                    for value in actors_signal:
+                        if not isinstance(value, str) or not value.strip():
+                            continue
+                        candidate = value
+                        if alias_map:
+                            candidate = alias_map.get(normalize_text(candidate), candidate)
+                        if candidate.lower() == actor_filter:
+                            matched = True
+                            break
+            if not matched:
                 continue
         if sentiment_lc and (item.sentiment or "").lower() != sentiment_lc:
             continue
