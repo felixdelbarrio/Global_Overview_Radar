@@ -109,6 +109,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
   }, [today]);
 
   const [items, setItems] = useState<ReputationItem[]>([]);
+  const [itemsLoading, setItemsLoading] = useState(true);
   const [chartItems, setChartItems] = useState<ReputationItem[]>([]);
   const [chartLoading, setChartLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -232,6 +233,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
 
     // If comparing actor principal vs another actor, request both datasets and combine them.
     const fetchCombinedIfComparing = async () => {
+      setItemsLoading(true);
       if (actor !== "all" && !isPrincipalName(actor, principalAliasKeys)) {
         const makeFilter = (overrides: Partial<Record<string, unknown>>) => {
           const f: Record<string, unknown> = {};
@@ -258,6 +260,8 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
           setError(null);
         } catch (e) {
           if (alive) setError(String(e));
+        } finally {
+          if (alive) setItemsLoading(false);
         }
         return;
       }
@@ -278,6 +282,8 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
         setError(null);
       } catch (e) {
         if (alive) setError(String(e));
+      } finally {
+        if (alive) setItemsLoading(false);
       }
     };
 
@@ -572,6 +578,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
     mentionsTab === "principal" ? principalMentions : actorMentions;
   const mentionsLabel = mentionsTab === "principal" ? principalLabel : actorLabel;
   const errorMessage = error || chartError || incidentsError;
+  const mentionsLoading = itemsLoading || chartLoading;
   const headerEyebrow = mode === "dashboard" ? "Dashboard" : "Panorama reputacional";
   const headerTitle =
     mode === "dashboard" ? "Dashboard reputacional" : "Sentimiento histórico";
@@ -605,11 +612,21 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
             </span>
             <span className="inline-flex items-center gap-2 rounded-full bg-white/70 px-3 py-1">
               <MessageSquare className="h-3.5 w-3.5 text-[color:var(--blue)]" />
-              Menciones: {items.length}
+              Menciones:{" "}
+              {itemsLoading ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-[color:var(--blue)]" />
+              ) : (
+                items.length
+              )}
             </span>
             <span className="inline-flex items-center gap-2 rounded-full bg-white/70 px-3 py-1">
               <Clock className="h-3.5 w-3.5 text-[color:var(--blue)]" />
-              Última actualización: {latestLabel}
+              Última actualización:{" "}
+              {itemsLoading ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-[color:var(--blue)]" />
+              ) : (
+                latestLabel
+              )}
             </span>
             {filterRestoredAt && (
               <span className="inline-flex items-center gap-2 rounded-full border border-[color:var(--aqua)]/40 bg-[color:var(--aqua)]/10 px-3 py-1 text-[color:var(--navy)] animate-rise">
@@ -740,7 +757,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
                     }
                   >
                     <span>{src}</span>
-                    {countLabel !== null && (
+                    {countLabel !== null && !itemsLoading && (
                       <span
                         className={
                           "ml-2 rounded-full px-2 py-0.5 text-[10px] font-semibold " +
@@ -750,6 +767,18 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
                         }
                       >
                         {countLabel}
+                      </span>
+                    )}
+                    {itemsLoading && (
+                      <span
+                        className={
+                          "ml-2 rounded-full px-2 py-0.5 text-[10px] font-semibold " +
+                          (active
+                            ? "bg-white/15 text-white"
+                            : "bg-[color:var(--sand)] text-[color:var(--navy)]")
+                        }
+                      >
+                        <Loader2 className="h-3 w-3 animate-spin" />
                       </span>
                     )}
                   </button>
@@ -772,22 +801,27 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
             RESUMEN
           </div>
           <div className="mt-4 grid grid-cols-2 gap-3">
-            <SummaryCard label="Total menciones" value={items.length} />
+            <SummaryCard label="Total menciones" value={items.length} loading={itemsLoading} />
             <SummaryCard
               label="Score medio"
               value={sentimentSummary.avgScore.toFixed(2)}
+              loading={itemsLoading}
             />
-            <SummaryCard label="Positivas" value={sentimentSummary.positive} />
-            <SummaryCard label="Negativas" value={sentimentSummary.negative} />
+            <SummaryCard label="Positivas" value={sentimentSummary.positive} loading={itemsLoading} />
+            <SummaryCard label="Negativas" value={sentimentSummary.negative} loading={itemsLoading} />
           </div>
           <div className="mt-5">
             <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
               TOP FUENTES
             </div>
             <div className="mt-2 space-y-2">
-              {topSources.map((row) => (
-                <RowMeter key={row.key} label={row.key} value={row.count} />
-              ))}
+              {itemsLoading ? (
+                <SkeletonRows count={4} />
+              ) : (
+                topSources.map((row) => (
+                  <RowMeter key={row.key} label={row.key} value={row.count} />
+                ))
+              )}
             </div>
           </div>
           <div className="mt-4">
@@ -795,9 +829,13 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
               TOP OTROS ACTORES DEL MERCADO
             </div>
             <div className="mt-2 space-y-2">
-              {topActores.map((row) => (
-                <RowMeter key={row.key} label={row.key} value={row.count} />
-              ))}
+              {itemsLoading ? (
+                <SkeletonRows count={4} />
+              ) : (
+                topActores.map((row) => (
+                  <RowMeter key={row.key} label={row.key} value={row.count} />
+                ))
+              )}
             </div>
           </div>
         </section>
@@ -820,19 +858,23 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
               </tr>
             </thead>
             <tbody>
-              {geoSummary.map((row) => (
-                <tr key={row.geo} className="border-t border-white/60">
-                  <td className="py-2 pr-4 font-semibold text-[color:var(--ink)]">
-                    {row.geo}
-                  </td>
-                  <td className="py-2 pr-4">{row.count}</td>
-                  <td className="py-2 pr-4">{row.avgScore.toFixed(2)}</td>
-                  <td className="py-2 pr-4">{row.positive}</td>
-                  <td className="py-2 pr-4">{row.neutral}</td>
-                  <td className="py-2">{row.negative}</td>
-                </tr>
-              ))}
-              {!geoSummary.length && (
+              {itemsLoading ? (
+                <SkeletonTableRows columns={6} rows={3} />
+              ) : (
+                geoSummary.map((row) => (
+                  <tr key={row.geo} className="border-t border-white/60">
+                    <td className="py-2 pr-4 font-semibold text-[color:var(--ink)]">
+                      {row.geo}
+                    </td>
+                    <td className="py-2 pr-4">{row.count}</td>
+                    <td className="py-2 pr-4">{row.avgScore.toFixed(2)}</td>
+                    <td className="py-2 pr-4">{row.positive}</td>
+                    <td className="py-2 pr-4">{row.neutral}</td>
+                    <td className="py-2">{row.negative}</td>
+                  </tr>
+                ))
+              )}
+              {!itemsLoading && !geoSummary.length && (
                 <tr>
                   <td className="py-3 text-sm text-black/45" colSpan={6}>
                     No hay datos para los filtros seleccionados.
@@ -903,15 +945,24 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
               ÚLTIMAS MENCIONES
             </div>
             <div className="text-xs text-black/50">
-              Mostrando {dashboardMentions.length} recientes ·{" "}
-              {showIncidents ? "Sentimiento + incidencias" : "Sentimiento"}
+              {mentionsLoading ? (
+                <span className="inline-flex items-center gap-2">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-[color:var(--blue)]" />
+                  Cargando menciones
+                </span>
+              ) : (
+                <>
+                  Mostrando {dashboardMentions.length} recientes ·{" "}
+                  {showIncidents ? "Sentimiento + incidencias" : "Sentimiento"}
+                </>
+              )}
             </div>
           </div>
           <div className="mt-4 space-y-3">
-            {chartLoading && (
+            {mentionsLoading && (
               <div className="text-sm text-black/50">Cargando sentimiento…</div>
             )}
-            {!chartLoading &&
+            {!mentionsLoading &&
               dashboardMentions.map((item, index) => (
                 <DashboardMentionCard
                   key={item.key}
@@ -920,7 +971,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
                   principalLabel={actorPrincipalName}
                 />
               ))}
-            {!chartLoading && !dashboardMentions.length && (
+            {!mentionsLoading && !dashboardMentions.length && (
               <div className="text-sm text-black/45">
                 No hay menciones para mostrar.
               </div>
@@ -934,7 +985,16 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
               LISTADO COMPLETO
             </div>
             <div className="text-xs text-black/50">
-              Mostrando {mentionsToShow.length} resultados · {mentionsLabel}
+              {mentionsLoading ? (
+                <span className="inline-flex items-center gap-2">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-[color:var(--blue)]" />
+                  Cargando resultados
+                </span>
+              ) : (
+                <>
+                  Mostrando {mentionsToShow.length} resultados · {mentionsLabel}
+                </>
+              )}
             </div>
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-2 rounded-full border border-white/70 bg-white/70 p-1 shadow-[0_10px_30px_rgba(7,33,70,0.08)]">
@@ -983,10 +1043,10 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
             )}
           </div>
           <div className="mt-4 space-y-3">
-            {chartLoading && (
+            {mentionsLoading && (
               <div className="text-sm text-black/50">Cargando sentimiento…</div>
             )}
-            {!chartLoading &&
+            {!mentionsLoading &&
               mentionsToShow.map((item, index) => (
                 <MentionCard
                   key={item.key}
@@ -997,7 +1057,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
                   onOverride={handleOverride}
                 />
               ))}
-            {!chartLoading && !mentionsToShow.length && (
+            {!mentionsLoading && !mentionsToShow.length && (
               <div className="text-sm text-black/45">
                 No hay menciones para mostrar.
               </div>
@@ -1024,7 +1084,15 @@ function FilterField({
   );
 }
 
-function SummaryCard({ label, value }: { label: string; value: number | string }) {
+function SummaryCard({
+  label,
+  value,
+  loading = false,
+}: {
+  label: string;
+  value: number | string;
+  loading?: boolean;
+}) {
   return (
     <div className="relative overflow-hidden rounded-2xl border border-white/70 bg-white/80 px-4 py-3 shadow-[0_10px_30px_rgba(7,33,70,0.08)]">
       <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-[color:var(--aqua)] via-[color:var(--blue)] to-transparent" />
@@ -1032,7 +1100,14 @@ function SummaryCard({ label, value }: { label: string; value: number | string }
         {label}
       </div>
       <div className="mt-2 text-2xl font-display font-semibold text-[color:var(--ink)]">
-        {value}
+        {loading ? (
+          <span className="inline-flex items-center gap-2 text-sm text-black/40">
+            <Loader2 className="h-4 w-4 animate-spin text-[color:var(--blue)]" />
+            Cargando
+          </span>
+        ) : (
+          value
+        )}
       </div>
     </div>
   );
@@ -1050,6 +1125,36 @@ function RowMeter({ label, value }: { label: string; value: number }) {
       </div>
       <div className="w-8 text-right text-xs text-black/55">{value}</div>
     </div>
+  );
+}
+
+function SkeletonRows({ count }: { count: number }) {
+  return (
+    <>
+      {Array.from({ length: count }).map((_, idx) => (
+        <div key={idx} className="flex items-center gap-3 animate-pulse">
+          <div className="h-3 w-24 rounded-full bg-white/70 border border-white/60" />
+          <div className="flex-1 h-2 rounded-full bg-white/70 border border-white/60" />
+          <div className="h-3 w-8 rounded-full bg-white/70 border border-white/60" />
+        </div>
+      ))}
+    </>
+  );
+}
+
+function SkeletonTableRows({ columns, rows }: { columns: number; rows: number }) {
+  return (
+    <>
+      {Array.from({ length: rows }).map((_, rowIdx) => (
+        <tr key={rowIdx} className="border-t border-white/60 animate-pulse">
+          {Array.from({ length: columns }).map((_, colIdx) => (
+            <td key={colIdx} className="py-2 pr-4">
+              <div className="h-3 w-full max-w-[120px] rounded-full bg-white/70 border border-white/60" />
+            </td>
+          ))}
+        </tr>
+      ))}
+    </>
   );
 }
 
