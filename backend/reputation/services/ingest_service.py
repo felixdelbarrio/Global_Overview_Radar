@@ -107,6 +107,7 @@ class ReputationIngestService:
             sources_enabled,
         )
         merged_items = self._merge_items(existing.items if existing else [], items)
+        merged_items = self._filter_noise_items(cfg, merged_items, notes)
         final_note: str | None = "; ".join(notes) if notes else None
 
         doc = ReputationCacheDocument(
@@ -428,26 +429,58 @@ class ReputationIngestService:
 
         noise_terms = cls._load_noise_terms(cfg)
         context_terms = cls._build_context_terms(cfg)
+        alias_map = build_actor_alias_map(cfg)
+        aliases_by_canonical = build_actor_aliases_by_canonical(cfg)
+        guard_actors = cls._load_guard_actors(cfg, alias_map)
+        allowed_by_geo, known_actors = cls._build_actor_geo_allowlist(cfg, alias_map)
         filtered: list[ReputationItem] = []
         dropped_actor = 0
+        dropped_actor_text = 0
+        dropped_guard = 0
+        dropped_geo = 0
         dropped_noise = 0
 
         for item in items:
+            text = f"{item.title or ''} {item.text or ''}".strip()
             if item.source in require_actor_sources and not cls._item_has_actor(item):
                 dropped_actor += 1
                 continue
+            if item.source in require_actor_sources and not cls._item_actor_in_text(
+                item, alias_map, aliases_by_canonical
+            ):
+                dropped_actor_text += 1
+                continue
+            if allowed_by_geo and item.geo:
+                if not cls._item_actor_allowed_for_geo(
+                    item, item.geo, allowed_by_geo, known_actors, alias_map
+                ):
+                    dropped_geo += 1
+                    continue
+            if guard_actors and cls._item_has_guard_actor(item, guard_actors, alias_map):
+                if text and context_terms and not match_keywords(text, context_terms):
+                    dropped_guard += 1
+                    continue
             if noise_terms and item.source in noise_sources:
-                text = f"{item.title or ''} {item.text or ''}".strip()
                 if text and match_keywords(text, noise_terms):
                     if not context_terms or not match_keywords(text, context_terms):
                         dropped_noise += 1
                         continue
             filtered.append(item)
 
-        if dropped_actor or dropped_noise:
+        if dropped_actor or dropped_actor_text or dropped_guard or dropped_geo or dropped_noise:
+            total_dropped = (
+                dropped_actor + dropped_actor_text + dropped_guard + dropped_geo + dropped_noise
+            )
             notes.append(
-                "filter: dropped %s items (missing_actor=%s, noise=%s)"
-                % (dropped_actor + dropped_noise, dropped_actor, dropped_noise)
+                "filter: dropped %s items (missing_actor=%s, actor_text=%s, guard=%s, geo=%s, noise=%s)"
+                % (
+                    total_dropped,
+                    dropped_actor,
+                    dropped_actor_text,
+                    dropped_guard,
+                    dropped_geo,
+                    dropped_noise,
+                )
             )
         return filtered
 
@@ -460,6 +493,159 @@ class ReputationIngestService:
         if isinstance(actors, list):
             return any(isinstance(actor, str) and actor.strip() for actor in actors)
         return False
+
+    @staticmethod
+    def _item_actor_candidates(item: ReputationItem) -> list[str]:
+        candidates: list[str] = []
+        if item.actor and item.actor.strip():
+            candidates.append(item.actor.strip())
+        signals = item.signals or {}
+        actors = signals.get("actors")
+        if isinstance(actors, list):
+            for actor in actors:
+                if isinstance(actor, str) and actor.strip():
+                    candidates.append(actor.strip())
+        return list(dict.fromkeys(candidates))
+
+    @classmethod
+    def _item_actor_in_text(
+        cls,
+        item: ReputationItem,
+        alias_map: dict[str, str],
+        aliases_by_canonical: dict[str, list[str]],
+    ) -> bool:
+        text = f"{item.title or ''} {item.text or ''}".strip()
+        if not text:
+            return False
+        candidates = cls._item_actor_candidates(item)
+        if not candidates:
+            return False
+        for candidate in candidates:
+            if match_keywords(text, [candidate]):
+                return True
+            canonical = canonicalize_actor(candidate, alias_map) if alias_map else candidate
+            if canonical and canonical != candidate and match_keywords(text, [canonical]):
+                return True
+            aliases = aliases_by_canonical.get(canonical) or []
+            for alias in aliases:
+                if match_keywords(text, [alias]):
+                    return True
+        return False
+
+    @staticmethod
+    def _load_guard_actors(
+        cfg: dict[str, Any], alias_map: dict[str, str]
+    ) -> set[str]:
+        raw = cfg.get("actor_context_guard") or []
+        if not isinstance(raw, list):
+            return set()
+        guard: set[str] = set()
+        for value in raw:
+            if isinstance(value, str) and value.strip():
+                canonical = canonicalize_actor(value, alias_map) if alias_map else value.strip()
+                if canonical:
+                    guard.add(canonical)
+        return guard
+
+    @classmethod
+    def _item_has_guard_actor(
+        cls,
+        item: ReputationItem,
+        guard_actors: set[str],
+        alias_map: dict[str, str],
+    ) -> bool:
+        if not guard_actors:
+            return False
+        for candidate in cls._item_actor_candidates(item):
+            canonical = canonicalize_actor(candidate, alias_map) if alias_map else candidate
+            if canonical in guard_actors:
+                return True
+        return False
+
+    @staticmethod
+    def _normalize_geo_key(value: str) -> str:
+        return normalize_text(value or "")
+
+    @classmethod
+    def _build_actor_geo_allowlist(
+        cls,
+        cfg: dict[str, Any],
+        alias_map: dict[str, str],
+    ) -> tuple[dict[str, set[str]], set[str]]:
+        allowed_by_geo: dict[str, set[str]] = {}
+        known_actors: set[str] = set()
+
+        def _canonical(name: str) -> str:
+            if not name:
+                return ""
+            if alias_map:
+                return canonicalize_actor(name, alias_map)
+            return name.strip()
+
+        principal = actor_principal_canonicals(cfg)
+        global_actors = cfg.get("otros_actores_globales") or []
+        base: set[str] = set()
+        for name in [*principal, *global_actors]:
+            if isinstance(name, str) and name.strip():
+                canonical = _canonical(name.strip())
+                if canonical:
+                    base.add(canonical)
+                    known_actors.add(canonical)
+
+        raw_by_geo = cfg.get("otros_actores_por_geografia") or {}
+        if isinstance(raw_by_geo, dict):
+            for geo, names in raw_by_geo.items():
+                if not isinstance(geo, str) or not geo.strip():
+                    continue
+                bucket = set(base)
+                if isinstance(names, list):
+                    for name in names:
+                        if not isinstance(name, str) or not name.strip():
+                            continue
+                        canonical = _canonical(name.strip())
+                        if canonical:
+                            bucket.add(canonical)
+                            known_actors.add(canonical)
+                allowed_by_geo[cls._normalize_geo_key(geo)] = bucket
+
+        geos = cfg.get("geografias") or []
+        if isinstance(geos, list):
+            for geo in geos:
+                if isinstance(geo, str) and geo.strip():
+                    key = cls._normalize_geo_key(geo)
+                    allowed_by_geo.setdefault(key, set(base))
+
+        if alias_map:
+            known_actors.update(alias_map.values())
+
+        return allowed_by_geo, known_actors
+
+    @classmethod
+    def _item_actor_allowed_for_geo(
+        cls,
+        item: ReputationItem,
+        geo: str,
+        allowed_by_geo: dict[str, set[str]],
+        known_actors: set[str],
+        alias_map: dict[str, str],
+    ) -> bool:
+        geo_key = cls._normalize_geo_key(geo)
+        allowed = allowed_by_geo.get(geo_key)
+        if not allowed:
+            return True
+        candidates = cls._item_actor_candidates(item)
+        if not candidates:
+            return True
+        matched_known = False
+        for candidate in candidates:
+            canonical = canonicalize_actor(candidate, alias_map) if alias_map else candidate
+            if canonical in known_actors:
+                matched_known = True
+                if canonical in allowed:
+                    return True
+        if matched_known:
+            return False
+        return True
 
     @staticmethod
     def _load_sources_list(value: object) -> set[str]:

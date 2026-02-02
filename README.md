@@ -5,6 +5,7 @@ Global Overview Radar is a full-stack system that combines:
 - a Reputation Radar for public signals and market perception
 
 It is designed to be configuration-driven, reproducible, and explainable by default.
+The current product focus is **sentiment-first** with incidents as a complementary layer.
 
 ---
 
@@ -36,6 +37,34 @@ It is designed to be configuration-driven, reproducible, and explainable by defa
 
 ---
 
+## EN | Current state (product)
+
+- **Dashboard (/) = sentiment-first.** It shows sentiment trend + incident trend (when enabled) and the latest 20 mixed mentions.
+- **Sentiment tab** includes filters + full listing and CSV downloads (chart + grid).
+- **Incidencias** and **Ops Executive** remain available but can be disabled per business config for non-IT actors.
+- **Noise control is strict by design:** actor presence is required for selected sources, actor must appear in text, guard actors block ambiguous context, and actor/geo allowlists discard mismatched items.
+
+## ES | Estado actual (producto)
+
+- **Dashboard (/) = sentimiento primero.** Muestra tendencia de sentimiento + incidencias (si estan habilitadas) y las ultimas 20 menciones mezcladas.
+- **Pestana Sentimiento** con filtros + listado completo y descargas CSV (grafico + grid).
+- **Incidencias** y **Ops Executive** siguen disponibles pero pueden deshabilitarse por config cuando el actor no es tecnologico.
+- **Control de ruido estricto:** requerimos actor para fuentes sensibles, el actor debe aparecer en el texto, usamos guard actors para evitar ambiguedad y descartamos items fuera de su geo permitido.
+
+## EN | Rationale
+
+- The main product value is **sentiment visibility** with minimal noise.
+- Incidents are meaningful only for certain actors; therefore they are **configurable** and secondary.
+- Strict ingestion filters keep the customer experience clean and trustworthy.
+
+## ES | Racional
+
+- El valor principal es **visibilidad de sentimiento** con el menor ruido posible.
+- Incidencias solo aportan valor en actores IT/ops; por eso son **configurables** y secundarias.
+- Filtros estrictos en ingesta mantienen la experiencia limpia y confiable.
+
+---
+
 ## EN | Quick start (local)
 
 Backend:
@@ -56,6 +85,12 @@ make dev-front
 Open:
 - API: http://127.0.0.1:8000
 - Frontend: http://localhost:3000
+
+Production start (frontend):
+```bash
+make build-front
+make start-front
+```
 
 ---
 
@@ -80,6 +115,12 @@ Abrir:
 - API: http://127.0.0.1:8000
 - Frontend: http://localhost:3000
 
+Modo produccion (frontend):
+```bash
+make build-front
+make start-front
+```
+
 ---
 
 ## EN | Configuration notes
@@ -98,6 +139,14 @@ Reputation config loading:
   - lists: concatenated with de-duplication
   - scalars: override only when incoming value is not empty
 
+UI toggles (per config):
+- `ui.incidents_enabled` and `ui.ops_enabled` allow hiding Incidents/Ops and turning the dashboard into sentiment-only.
+
+Noise control (reputation ingestion):
+- `require_actor_sources` enforces actor presence for specific sources (e.g. news/forums).
+- Actor must appear in title/text when required.
+- Guard actors + geo allowlists drop mismatched items before they reach the cache.
+
 ---
 
 ## ES | Notas de configuracion
@@ -115,6 +164,14 @@ Carga de configuracion de reputacion:
   - diccionarios: merge profundo
   - listas: concatenadas con deduplicado
   - escalares: override solo si el valor entrante no esta vacio
+
+Toggles de UI (por config):
+- `ui.incidents_enabled` y `ui.ops_enabled` permiten ocultar Incidencias/Ops y dejar el dashboard solo con sentimiento.
+
+Control de ruido (ingesta reputacion):
+- `require_actor_sources` obliga presencia de actor en fuentes sensibles (news/forums).
+- El actor debe aparecer en titulo/texto cuando aplica.
+- Guard actors + allowlist por geo descartan items fuera de contexto antes del cache.
 
 ---
 

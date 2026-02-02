@@ -21,6 +21,10 @@
     "Austria",
     "Dinamarca"
   ],
+  "ui": {
+    "incidents_enabled": false,
+    "ops_enabled": false
+  },
   "geografias_aliases": {
     "Estados Unidos": [
       "USA",
@@ -1445,6 +1449,7 @@
   },
   "require_actor_sources": [
     "news",
+    "forums",
     "blogs",
     "gdelt",
     "newsapi",
