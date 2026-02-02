@@ -258,7 +258,6 @@
     "N26",
     "Openbank",
     "PayPal",
-    "Mercado Pago",
     "Apple Pay",
     "Google Pay"
   ],
@@ -281,7 +280,8 @@
       "HSBC",
       "Scotiabank",
       "Revolut",
-      "Wise"
+      "Wise",
+      "Mercado Pago"
     ],
     "Perú": [
       "BCP",
