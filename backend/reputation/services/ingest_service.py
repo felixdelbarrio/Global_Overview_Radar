@@ -28,7 +28,7 @@ from reputation.collectors.newsapi import NewsApiCollector
 from reputation.collectors.reddit import RedditCollector
 from reputation.collectors.trustpilot import TrustpilotCollector
 from reputation.collectors.twitter import TwitterCollector
-from reputation.collectors.utils import normalize_text
+from reputation.collectors.utils import match_keywords, normalize_text
 from reputation.collectors.youtube import YouTubeCollector
 from reputation.config import (
     compute_config_hash,
@@ -94,7 +94,10 @@ class ReputationIngestService:
         items = self._collect_items(collectors, notes)
         items = self._normalize_items(items, lookback_days)
         items = self._apply_geo_hints(cfg, items)
+        items = self._apply_appstore_actor_map(cfg, items)
+        items = self._apply_google_play_actor_map(cfg, items)
         items = self._apply_sentiment(cfg, items)
+        items = self._filter_noise_items(cfg, items, notes)
         items = self._balance_items(
             cfg,
             items,
@@ -157,6 +160,63 @@ class ReputationIngestService:
                     logger.warning("Collector %s failed: %s", collector.source_name, exc)
         return items
 
+    @classmethod
+    def _apply_appstore_actor_map(
+        cls, cfg: dict[str, Any], items: list[ReputationItem]
+    ) -> list[ReputationItem]:
+        app_cfg = _as_dict(cfg.get("appstore"))
+        mapping: dict[str, str] = {}
+        if isinstance(app_cfg, dict):
+            raw_map = app_cfg.get("app_id_to_actor")
+            if isinstance(raw_map, dict):
+                for key, value in raw_map.items():
+                    if isinstance(key, str) and isinstance(value, str) and key.strip() and value.strip():
+                        mapping[key.strip()] = value.strip()
+            # Optional: allow per-geo actor mappings in app_ids_by_geo_actor
+            raw_by_geo = app_cfg.get("app_ids_by_geo_actor")
+            if isinstance(raw_by_geo, dict):
+                for _, geo_entries in raw_by_geo.items():
+                    if isinstance(geo_entries, dict):
+                        for key, value in geo_entries.items():
+                            if isinstance(key, str) and isinstance(value, str) and key.strip() and value.strip():
+                                mapping.setdefault(key.strip(), value.strip())
+                    elif isinstance(geo_entries, list):
+                        for entry in geo_entries:
+                            if not isinstance(entry, dict):
+                                continue
+                            app_id = entry.get("id")
+                            actor = entry.get("actor")
+                            if isinstance(app_id, str) and isinstance(actor, str) and app_id.strip() and actor.strip():
+                                mapping.setdefault(app_id.strip(), actor.strip())
+        if not mapping:
+            return items
+
+        alias_map = build_actor_alias_map(cfg)
+        for item in items:
+            if item.source != "appstore":
+                continue
+            if item.actor and item.actor.strip():
+                continue
+            app_id = (item.signals or {}).get("app_id")
+            if not app_id:
+                continue
+            actor_raw = mapping.get(str(app_id))
+            if not isinstance(actor_raw, str) or not actor_raw.strip():
+                continue
+            actor = canonicalize_actor(actor_raw, alias_map) if alias_map else actor_raw.strip()
+            if not actor:
+                continue
+            item.actor = actor
+            if item.signals is not None:
+                actors = item.signals.get("actors")
+                if isinstance(actors, list):
+                    if actor not in actors:
+                        item.signals["actors"] = [actor] + [a for a in actors if a != actor]
+                else:
+                    item.signals["actors"] = [actor]
+                item.signals["actor_source"] = "app_id"
+        return items
+
     @staticmethod
     def _normalize_items(items: list[ReputationItem], lookback_days: int) -> list[ReputationItem]:
         now = datetime.now(timezone.utc)
@@ -171,6 +231,41 @@ class ReputationIngestService:
                 filtered.append(item)
 
         return filtered
+
+    @classmethod
+    def _apply_google_play_actor_map(
+        cls, cfg: dict[str, Any], items: list[ReputationItem]
+    ) -> list[ReputationItem]:
+        gp_cfg = _as_dict(cfg.get("google_play"))
+        mapping = gp_cfg.get("package_id_to_actor") if isinstance(gp_cfg, dict) else None
+        if not isinstance(mapping, dict) or not mapping:
+            return items
+
+        alias_map = build_actor_alias_map(cfg)
+        for item in items:
+            if item.source != "google_play":
+                continue
+            if item.actor and item.actor.strip():
+                continue
+            package_id = (item.signals or {}).get("package_id")
+            if not package_id:
+                continue
+            actor_raw = mapping.get(str(package_id))
+            if not isinstance(actor_raw, str) or not actor_raw.strip():
+                continue
+            actor = canonicalize_actor(actor_raw, alias_map) if alias_map else actor_raw.strip()
+            if not actor:
+                continue
+            item.actor = actor
+            if item.signals is not None:
+                actors = item.signals.get("actors")
+                if isinstance(actors, list):
+                    if actor not in actors:
+                        item.signals["actors"] = [actor] + [a for a in actors if a != actor]
+                else:
+                    item.signals["actors"] = [actor]
+                item.signals["actor_source"] = "package_id"
+        return items
 
     @classmethod
     def _apply_geo_hints(
@@ -192,7 +287,16 @@ class ReputationIngestService:
         if not geos and not source_geo_map:
             return items
 
+        actor_geo_map = cls._build_actor_geo_map(cfg)
+
         for item in items:
+            if not item.geo:
+                actor_geo = cls._infer_geo_from_actor(item, actor_geo_map)
+                if actor_geo:
+                    item.geo = actor_geo
+                    item.signals["geo_source"] = "actor"
+                    continue
+
             title_only = item.title or ""
             content_geo = cls._detect_geo_in_text(title_only, geos, geo_aliases)
             if not content_geo:
@@ -210,6 +314,50 @@ class ReputationIngestService:
                 item.signals["geo_source"] = "source"
 
         return items
+
+    @staticmethod
+    def _build_actor_geo_map(cfg: dict[str, Any]) -> dict[str, list[str]]:
+        actor_geo_map: dict[str, list[str]] = {}
+        raw = cfg.get("otros_actores_por_geografia") or {}
+        if not isinstance(raw, dict):
+            return actor_geo_map
+
+        alias_map = build_actor_alias_map(cfg)
+        for geo, actors in raw.items():
+            if not isinstance(geo, str) or not geo.strip():
+                continue
+            if not isinstance(actors, list):
+                continue
+            for actor in actors:
+                if not isinstance(actor, str) or not actor.strip():
+                    continue
+                canonical = canonicalize_actor(actor, alias_map) if alias_map else actor.strip()
+                if not canonical:
+                    continue
+                bucket = actor_geo_map.setdefault(canonical, [])
+                if geo not in bucket:
+                    bucket.append(geo)
+        return actor_geo_map
+
+    @staticmethod
+    def _infer_geo_from_actor(
+        item: ReputationItem, actor_geo_map: dict[str, list[str]]
+    ) -> str | None:
+        actor = item.actor or ""
+        if not actor:
+            signals = item.signals or {}
+            actors_signal = signals.get("actors")
+            if isinstance(actors_signal, list):
+                for value in actors_signal:
+                    if isinstance(value, str) and value.strip():
+                        actor = value
+                        break
+        if not actor:
+            return None
+        geos = actor_geo_map.get(actor)
+        if not geos or len(geos) != 1:
+            return None
+        return geos[0]
 
     @staticmethod
     def _merge_items(
@@ -263,6 +411,111 @@ class ReputationIngestService:
         cfg_local["keywords"] = keywords
         service = ReputationSentimentService(cfg_local)
         return service.analyze_items(items)
+
+    @classmethod
+    def _filter_noise_items(
+        cls,
+        cfg: dict[str, Any],
+        items: list[ReputationItem],
+        notes: list[str],
+    ) -> list[ReputationItem]:
+        require_actor_sources = cls._load_sources_list(cfg.get("require_actor_sources"))
+        noise_sources = cls._load_sources_list(cfg.get("noise_filter_sources"))
+        if not require_actor_sources:
+            require_actor_sources = _ACTOR_REQUIRED_SOURCES
+        if not noise_sources:
+            noise_sources = require_actor_sources
+
+        noise_terms = cls._load_noise_terms(cfg)
+        context_terms = cls._build_context_terms(cfg)
+        filtered: list[ReputationItem] = []
+        dropped_actor = 0
+        dropped_noise = 0
+
+        for item in items:
+            if item.source in require_actor_sources and not cls._item_has_actor(item):
+                dropped_actor += 1
+                continue
+            if noise_terms and item.source in noise_sources:
+                text = f"{item.title or ''} {item.text or ''}".strip()
+                if text and match_keywords(text, noise_terms):
+                    if not context_terms or not match_keywords(text, context_terms):
+                        dropped_noise += 1
+                        continue
+            filtered.append(item)
+
+        if dropped_actor or dropped_noise:
+            notes.append(
+                "filter: dropped %s items (missing_actor=%s, noise=%s)"
+                % (dropped_actor + dropped_noise, dropped_actor, dropped_noise)
+            )
+        return filtered
+
+    @staticmethod
+    def _item_has_actor(item: ReputationItem) -> bool:
+        if item.actor and item.actor.strip():
+            return True
+        signals = item.signals or {}
+        actors = signals.get("actors")
+        if isinstance(actors, list):
+            return any(isinstance(actor, str) and actor.strip() for actor in actors)
+        return False
+
+    @staticmethod
+    def _load_sources_list(value: object) -> set[str]:
+        if not isinstance(value, list):
+            return set()
+        sources = {
+            str(item).strip().lower()
+            for item in value
+            if isinstance(item, str) and item.strip()
+        }
+        return {source for source in sources if source}
+
+    @staticmethod
+    def _load_noise_terms(cfg: dict[str, Any]) -> list[str]:
+        raw = cfg.get("noise_terms") or []
+        if not isinstance(raw, list):
+            return []
+        return [term.strip() for term in raw if isinstance(term, str) and term.strip()]
+
+    @staticmethod
+    def _build_context_terms(cfg: dict[str, Any]) -> list[str]:
+        segment_terms = [
+            t.strip() for t in cfg.get("segment_terms", []) if isinstance(t, str) and t.strip()
+        ]
+        override_terms = [
+            t.strip() for t in cfg.get("context_terms", []) if isinstance(t, str) and t.strip()
+        ]
+        if override_terms:
+            return list(dict.fromkeys([*segment_terms, *override_terms]))
+
+        strict = bool(cfg.get("context_terms_strict"))
+        base_terms_strict = [
+            "banco",
+            "bank",
+            "banca",
+            "finanzas",
+            "financiero",
+            "financiera",
+            "cuenta",
+            "tarjeta",
+            "transferencia",
+            "credito",
+            "crédito",
+            "debito",
+            "débito",
+            "app",
+        ]
+        base_terms_relaxed = [
+            *base_terms_strict,
+            "empresa",
+            "empresas",
+            "pyme",
+            "pymes",
+        ]
+        base_terms = base_terms_strict if strict else base_terms_relaxed
+        return list(dict.fromkeys([*segment_terms, *base_terms]))
 
     @staticmethod
     def _normalize_actor(name: str, alias_map: dict[str, str]) -> str:
@@ -1790,6 +2043,14 @@ _BUSINESS_HINTS = {
     "pymes",
     "smb",
     "sme",
+}
+
+_ACTOR_REQUIRED_SOURCES = {
+    "news",
+    "blogs",
+    "gdelt",
+    "newsapi",
+    "guardian",
 }
 
 

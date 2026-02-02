@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import re
+import unicodedata
+from datetime import datetime, timezone
 from html import unescape
 from typing import Any, Iterable
 
@@ -211,6 +213,8 @@ def _map_play_review(
         return None
 
     published_at = parse_datetime(review.get("published_at")) or parse_datetime(review.get("date"))
+    if published_at is None:
+        published_at = _parse_google_play_date(review.get("date_text"), language)
 
     return ReputationItem(
         id=str(review_id or f"{package_id}:{country}:{text or ''}"),
@@ -231,3 +235,111 @@ def _map_play_review(
             "date_text": review.get("date_text"),
         },
     )
+
+
+def _normalize_month_token(value: str) -> str:
+    cleaned = value.strip().lower()
+    cleaned = unicodedata.normalize("NFKD", cleaned)
+    cleaned = "".join(ch for ch in cleaned if not unicodedata.combining(ch))
+    return cleaned
+
+
+def _parse_google_play_date(date_text: str | None, language: str | None) -> datetime | None:
+    if not date_text:
+        return None
+    text = date_text.strip().lower()
+    text = re.sub(r"[.,]", " ", text)
+    text = re.sub(r"\bde\b", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    if not text:
+        return None
+
+    months_es = {
+        "ene": 1,
+        "enero": 1,
+        "feb": 2,
+        "febrero": 2,
+        "mar": 3,
+        "marzo": 3,
+        "abr": 4,
+        "abril": 4,
+        "may": 5,
+        "mayo": 5,
+        "jun": 6,
+        "junio": 6,
+        "jul": 7,
+        "julio": 7,
+        "ago": 8,
+        "agosto": 8,
+        "sep": 9,
+        "sept": 9,
+        "set": 9,
+        "septiembre": 9,
+        "oct": 10,
+        "octubre": 10,
+        "nov": 11,
+        "noviembre": 11,
+        "dic": 12,
+        "diciembre": 12,
+    }
+    months_en = {
+        "jan": 1,
+        "january": 1,
+        "feb": 2,
+        "february": 2,
+        "mar": 3,
+        "march": 3,
+        "apr": 4,
+        "april": 4,
+        "may": 5,
+        "jun": 6,
+        "june": 6,
+        "jul": 7,
+        "july": 7,
+        "aug": 8,
+        "august": 8,
+        "sep": 9,
+        "sept": 9,
+        "september": 9,
+        "oct": 10,
+        "october": 10,
+        "nov": 11,
+        "november": 11,
+        "dec": 12,
+        "december": 12,
+    }
+
+    def parse_day_month_year(value: str) -> datetime | None:
+        match = re.match(r"^(\d{1,2})\s+([a-záéíóúñ]+)\s+(\d{4})$", value)
+        if not match:
+            return None
+        day = int(match.group(1))
+        month_token = _normalize_month_token(match.group(2))
+        year = int(match.group(3))
+        month = months_es.get(month_token) or months_en.get(month_token)
+        if not month:
+            return None
+        try:
+            return datetime(year, month, day, tzinfo=timezone.utc)
+        except ValueError:
+            return None
+
+    def parse_month_day_year(value: str) -> datetime | None:
+        match = re.match(r"^([a-záéíóúñ]+)\s+(\d{1,2})\s+(\d{4})$", value)
+        if not match:
+            return None
+        month_token = _normalize_month_token(match.group(1))
+        day = int(match.group(2))
+        year = int(match.group(3))
+        month = months_en.get(month_token) or months_es.get(month_token)
+        if not month:
+            return None
+        try:
+            return datetime(year, month, day, tzinfo=timezone.utc)
+        except ValueError:
+            return None
+
+    lang = (language or "").lower()
+    if lang.startswith("es"):
+        return parse_day_month_year(text) or parse_month_day_year(text)
+    return parse_month_day_year(text) or parse_day_month_year(text)

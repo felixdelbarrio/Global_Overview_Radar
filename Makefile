@@ -29,8 +29,8 @@ help:
 	@echo "  make ensure-backend  - Preparar entorno backend (venv + deps)"
 	@echo "  make ensure-front    - Preparar entorno frontend (deps)"
 	@echo "  make reset           - Limpieza total + instalación completa"
-	@echo "  make ingest          - Ejecutar ingesta completa (bugs + reputación)"
-	@echo "  make bugs-ingest     - Ejecutar ingestion/consolidación (backend)"
+	@echo "  make ingest          - Ejecutar ingesta completa (incidencias + reputación)"
+	@echo "  make bugs-ingest     - Ejecutar ingesta de incidencias (cuadros de mando)"
 	@echo "  make reputation-ingest - Ejecutar ingesta de reputación (backend)"
 	@echo "  make serve-back      - Iniciar API (uvicorn) en $(HOST):$(API_PORT)"
 	@echo "  make dev-back        - Atender solo backend (uvicorn --reload)"
@@ -97,7 +97,7 @@ ingest: bugs-ingest reputation-ingest
 	@echo "==> Ingesta completa finalizada."
 
 bugs-ingest:
-	@echo "==> Ejecutando ingestion/consolidación (backend)..."
+	@echo "==> Ejecutando ingesta de incidencias (cuadros de mando)..."
 	$(PY) -m bugresolutionradar.cli.main ingest
 
 reputation-ingest:

@@ -125,6 +125,40 @@ _COUNTRY_CODE_MAP = {
     "tr": "Turquía",
 }
 
+_STAR_SENTIMENT_SOURCES = {"appstore"}
+_ACTOR_TEXT_REQUIRED_SOURCES = {"news", "blogs", "gdelt", "newsapi", "guardian"}
+
+
+def _extract_star_rating(item: ReputationItem) -> float | None:
+    signals = item.signals or {}
+    raw = signals.get("rating")
+    if raw is None:
+        return None
+    value: float | None = None
+    if isinstance(raw, (int, float)):
+        value = float(raw)
+    elif isinstance(raw, str):
+        try:
+            value = float(raw.replace(",", "."))
+        except ValueError:
+            value = None
+    if value is None:
+        return None
+    if value <= 0:
+        return None
+    return min(5.0, max(0.0, value))
+
+
+def _sentiment_from_stars(stars: float) -> tuple[str, float]:
+    if stars >= 4.0:
+        label = "positive"
+    elif stars <= 2.0:
+        label = "negative"
+    else:
+        label = "neutral"
+    score = max(-1.0, min(1.0, (stars - 3.0) / 2.0))
+    return label, score
+
 
 def _norm_list(values: Iterable[str]) -> list[str]:
     return [normalize_text(value) for value in values if value]
@@ -505,6 +539,32 @@ class ReputationSentimentService:
                 if cleaned:
                     self._geo_aliases[geo] = cleaned
 
+        raw_guard = cfg.get("actor_context_guard") or []
+        self._context_guard_actors = {
+            normalize_text(actor) for actor in raw_guard if isinstance(actor, str) and actor.strip()
+        }
+        segment_terms = [
+            t.strip() for t in cfg.get("segment_terms", []) if isinstance(t, str) and t.strip()
+        ]
+        context_hints = [
+            *segment_terms,
+            "banco",
+            "bank",
+            "banca",
+            "finanzas",
+            "financiero",
+            "financiera",
+            "cuenta",
+            "tarjeta",
+            "transferencia",
+            "credito",
+            "crédito",
+            "debito",
+            "débito",
+            "app",
+        ]
+        self._context_hints = [normalize_text(value) for value in context_hints if value]
+
         models_cfg = cfg.get("models") or {}
         llm_cfg = cfg.get("llm") or {}
 
@@ -538,6 +598,29 @@ class ReputationSentimentService:
         language = item.language or self._detect_language(lowered)
         geo = item.geo or self._detect_geo(lowered, item)
         actors = self._detect_actors(lowered, geo, item.signals)
+        actors = self._filter_actors_by_context(evaluated_text, actors)
+        actors = self._filter_actors_by_text(item, evaluated_text, actors)
+
+        rating = _extract_star_rating(item)
+        if item.source in _STAR_SENTIMENT_SOURCES and rating is None:
+            item.language = language or item.language
+            item.geo = geo or item.geo
+            if actors:
+                item.actor = actors[0]
+                item.signals["actors"] = actors
+            return item
+        if item.source in _STAR_SENTIMENT_SOURCES and rating is not None:
+            label, score = _sentiment_from_stars(rating)
+            item.language = language or item.language
+            item.geo = geo or item.geo
+            if actors:
+                item.actor = actors[0]
+                item.signals["actors"] = actors
+            item.sentiment = label
+            item.signals["sentiment_score"] = score
+            item.signals["sentiment_provider"] = "stars"
+            item.signals["sentiment_scale"] = "1-5"
+            return item
 
         use_llm = self._should_use_llm()
         if not evaluated_text:
@@ -572,6 +655,46 @@ class ReputationSentimentService:
         if actors:
             item.signals["actors"] = actors
         return item
+
+    def _filter_actors_by_text(
+        self, item: ReputationItem, text: str, actors: list[str]
+    ) -> list[str]:
+        if not actors:
+            return actors
+        if item.source not in _ACTOR_TEXT_REQUIRED_SOURCES:
+            return actors
+        if not text:
+            return []
+        if isinstance(item.signals, dict) and item.signals.get("actor_source"):
+            return actors
+        kept: list[str] = []
+        for actor in actors:
+            if self._actor_in_text(actor, text):
+                kept.append(actor)
+        return kept
+
+    def _actor_in_text(self, actor: str, text: str) -> bool:
+        if match_keywords(text, [actor]):
+            return True
+        aliases = self._actor_aliases.get(actor) or []
+        for alias in aliases:
+            if match_keywords(text, [alias]):
+                return True
+        return False
+
+    def _filter_actors_by_context(self, text: str, actors: list[str]) -> list[str]:
+        if not actors or not self._context_guard_actors:
+            return actors
+        normalized_text = normalize_text(text or "")
+        has_context = any(hint and hint in normalized_text for hint in self._context_hints)
+        if has_context:
+            return actors
+        filtered: list[str] = []
+        for actor in actors:
+            if normalize_text(actor) in self._context_guard_actors:
+                continue
+            filtered.append(actor)
+        return filtered
 
     def _detect_language(self, text: str) -> str | None:
         if not text:
