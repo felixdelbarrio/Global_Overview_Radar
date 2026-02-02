@@ -1351,7 +1351,8 @@
       "Alemania": "de",
       "Austria": "at",
       "Dinamarca": "dk"
-    }
+    },
+    "app_id_to_actor": {}
   },
   "google_play": {
     "package_ids": [],
@@ -1399,7 +1400,8 @@
       "Alemania": "de",
       "Austria": "de",
       "Dinamarca": "da"
-    }
+    },
+    "package_id_to_actor": {}
   },
   "trustpilot": {
     "rss_query_templates": [

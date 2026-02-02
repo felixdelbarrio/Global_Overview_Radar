@@ -477,7 +477,8 @@
       "1361671700",
       "1438144202",
       "1406825640"
-    ]
+    ],
+    "app_id_to_actor": {}
   },
   "trustpilot": {
     "rss_query_templates": [
