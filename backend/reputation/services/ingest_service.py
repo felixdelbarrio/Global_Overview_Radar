@@ -286,7 +286,16 @@ class ReputationIngestService:
         if not geos and not source_geo_map:
             return items
 
+        actor_geo_map = cls._build_actor_geo_map(cfg)
+
         for item in items:
+            if not item.geo:
+                actor_geo = cls._infer_geo_from_actor(item, actor_geo_map)
+                if actor_geo:
+                    item.geo = actor_geo
+                    item.signals["geo_source"] = "actor"
+                    continue
+
             title_only = item.title or ""
             content_geo = cls._detect_geo_in_text(title_only, geos, geo_aliases)
             if not content_geo:
@@ -304,6 +313,50 @@ class ReputationIngestService:
                 item.signals["geo_source"] = "source"
 
         return items
+
+    @staticmethod
+    def _build_actor_geo_map(cfg: dict[str, Any]) -> dict[str, list[str]]:
+        actor_geo_map: dict[str, list[str]] = {}
+        raw = cfg.get("otros_actores_por_geografia") or {}
+        if not isinstance(raw, dict):
+            return actor_geo_map
+
+        alias_map = build_actor_alias_map(cfg)
+        for geo, actors in raw.items():
+            if not isinstance(geo, str) or not geo.strip():
+                continue
+            if not isinstance(actors, list):
+                continue
+            for actor in actors:
+                if not isinstance(actor, str) or not actor.strip():
+                    continue
+                canonical = canonicalize_actor(actor, alias_map) if alias_map else actor.strip()
+                if not canonical:
+                    continue
+                bucket = actor_geo_map.setdefault(canonical, [])
+                if geo not in bucket:
+                    bucket.append(geo)
+        return actor_geo_map
+
+    @staticmethod
+    def _infer_geo_from_actor(
+        item: ReputationItem, actor_geo_map: dict[str, list[str]]
+    ) -> str | None:
+        actor = item.actor or ""
+        if not actor:
+            signals = item.signals or {}
+            actors_signal = signals.get("actors")
+            if isinstance(actors_signal, list):
+                for value in actors_signal:
+                    if isinstance(value, str) and value.strip():
+                        actor = value
+                        break
+        if not actor:
+            return None
+        geos = actor_geo_map.get(actor)
+        if not geos or len(geos) != 1:
+            return None
+        return geos[0]
 
     @staticmethod
     def _merge_items(

@@ -4,7 +4,7 @@
  * Vista de sentimiento historico por pais / periodo / fuente.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   CartesianGrid,
   Legend,
@@ -85,9 +85,17 @@ export default function SentimientoPage() {
   const [fromDate, setFromDate] = useState(defaultFrom);
   const [toDate, setToDate] = useState(defaultTo);
   const [sentiment, setSentiment] = useState<SentimentFilter>("all");
-  const [entity, setEntity] = useState("actor_principal");
+  const entity = "actor_principal";
   const [geo, setGeo] = useState("all");
   const [actor, setActor] = useState("all");
+  const [actorMemory, setActorMemory] = useState<Record<string, string>>({});
+  const [filterMemory, setFilterMemory] = useState<
+    Record<string, { sentiment: SentimentFilter; sources: string[] }>
+  >({});
+  const [filterRestoredAt, setFilterRestoredAt] = useState<number | null>(null);
+  const lastGeoRef = useRef<string | null>(null);
+  const sentimentRef = useRef<SentimentFilter>(sentiment);
+  const sourcesRef = useRef<string[]>([]);
   const [sources, setSources] = useState<string[]>([]);
   const [overrideRefresh, setOverrideRefresh] = useState(0);
 
@@ -258,21 +266,101 @@ export default function SentimientoPage() {
     const combined = unique([...fromMeta, ...fromAvailable, ...fromItems]).filter(Boolean);
     return combined.sort((a, b) => a.localeCompare(b));
   }, [items, meta]);
+  const sortedSources = useMemo(() => [...sources].sort(), [sources]);
+  useEffect(() => {
+    sentimentRef.current = sentiment;
+  }, [sentiment]);
+  useEffect(() => {
+    sourcesRef.current = sortedSources;
+  }, [sortedSources]);
   const geoOptions = useMemo(() => {
     const fromMeta = meta?.geos ?? [];
     const fromItems = items.map((i) => i.geo).filter(Boolean) as string[];
     return unique([...fromMeta, ...fromItems]).sort((a, b) => a.localeCompare(b));
   }, [items, meta]);
-  const actorOptions = useMemo(() => {
-    const values = unique(
-      chartItems.map((i) => i.actor).filter(Boolean) as string[],
+  const availableActorSet = useMemo(() => {
+    const values = chartItems
+      .map((i) => i.actor)
+      .filter(Boolean) as string[];
+    return new Set(values.map((value) => normalizeKey(value)));
+  }, [chartItems]);
+
+  const allowedActorSet = useMemo(() => {
+    if (geo === "all") return null;
+    const fromMetaGeo = (meta?.otros_actores_por_geografia ?? {})[geo] ?? [];
+    const fromMetaGlobal = meta?.otros_actores_globales ?? [];
+    return new Set(
+      [...fromMetaGeo, ...fromMetaGlobal].map((value) => normalizeKey(value)),
     );
-    if (actor !== "all" && !values.includes(actor)) {
-      values.push(actor);
-      values.sort((a, b) => a.localeCompare(b));
+  }, [geo, meta]);
+
+  const actorOptions = useMemo(() => {
+    const fromMetaGeo = (meta?.otros_actores_por_geografia ?? {})[geo] ?? [];
+    const fromMetaGlobal = meta?.otros_actores_globales ?? [];
+    const fromItems = chartItems.map((i) => i.actor).filter(Boolean) as string[];
+    const base =
+      geo !== "all"
+        ? [...fromMetaGeo, ...fromMetaGlobal]
+        : fromItems;
+    const values = unique(base).filter(Boolean);
+    return values
+      .filter((v) => !isPrincipalName(v, principalAliasKeys))
+      .filter((v) => (allowedActorSet ? allowedActorSet.has(normalizeKey(v)) : true))
+      .filter((v) => availableActorSet.has(normalizeKey(v)))
+      .sort((a, b) => a.localeCompare(b));
+  }, [chartItems, principalAliasKeys, geo, meta, availableActorSet, allowedActorSet]);
+
+  useEffect(() => {
+    if (actor === "all") return;
+    setActorMemory((current) => ({ ...current, [geo]: actor }));
+  }, [actor, geo]);
+
+  useEffect(() => {
+    setFilterMemory((current) => ({
+      ...current,
+      [geo]: { sentiment, sources: sortedSources },
+    }));
+  }, [sentiment, sortedSources, geo]);
+
+  useEffect(() => {
+    const normalized = normalizeKey(actor);
+    const stored = actorMemory[geo];
+    if (actor !== "all" && availableActorSet.has(normalized)) {
+      return;
     }
-    return values.filter((v) => !isPrincipalName(v, principalAliasKeys));
-  }, [chartItems, actor, principalAliasKeys]);
+    if (stored && availableActorSet.has(normalizeKey(stored))) {
+      setActor(stored);
+      return;
+    }
+    if (actor !== "all") {
+      setActor("all");
+    }
+  }, [geo, actor, actorMemory, availableActorSet]);
+
+  useEffect(() => {
+    if (lastGeoRef.current === geo) return;
+    lastGeoRef.current = geo;
+    const stored = filterMemory[geo];
+    if (!stored) return;
+    let changed = false;
+    const currentSentiment = sentimentRef.current;
+    if (stored.sentiment !== currentSentiment) {
+      setSentiment(stored.sentiment);
+      changed = true;
+    }
+    const storedSources = stored.sources || [];
+    const currentSources = sourcesRef.current || [];
+    const sameSources =
+      storedSources.length === currentSources.length &&
+      storedSources.every((value) => currentSources.includes(value));
+    if (!sameSources) {
+      setSources(storedSources);
+      changed = true;
+    }
+    if (changed) {
+      setFilterRestoredAt(Date.now());
+    }
+  }, [geo, filterMemory]);
 
   const sentimentSummary = useMemo(() => summarize(items), [items]);
   const geoSummary = useMemo(() => summarizeByGeo(items), [items]);
@@ -372,6 +460,12 @@ export default function SentimientoPage() {
               <Clock className="h-3.5 w-3.5 text-[color:var(--blue)]" />
               Última actualización: {latestLabel}
             </span>
+            {filterRestoredAt && (
+              <span className="inline-flex items-center gap-2 rounded-full border border-[color:var(--aqua)]/40 bg-[color:var(--aqua)]/10 px-3 py-1 text-[color:var(--navy)] animate-rise">
+                <Sparkles className="h-3.5 w-3.5" />
+                Filtros restaurados
+              </span>
+            )}
           </div>
         </div>
       </section>
@@ -430,30 +524,9 @@ export default function SentimientoPage() {
               </select>
             </FilterField>
             <FilterField label="Entidad">
-              <select
-                value={entity}
-                onChange={(e) => {
-                  const next = e.target.value;
-                  touchItemsFilters();
-                  setEntity(next);
-                  if (next === "otros_actores" && isPrincipalName(actor, principalAliasKeys)) {
-                    setActor("all");
-                  }
-                  if (next === "all" && isPrincipalName(actor, principalAliasKeys)) {
-                    setActor("all");
-                  }
-                  if (next === "otros_actores") {
-                    setMentionsTab("actor");
-                  } else if (next === "actor_principal") {
-                    setMentionsTab("principal");
-                  }
-                }}
-                className="w-full rounded-2xl border border-white/60 bg-white/80 px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] outline-none focus:border-[color:var(--aqua)]/60 focus:ring-2 focus:ring-[color:var(--aqua)]/30"
-              >
-                <option value="actor_principal">{actorPrincipalName}</option>
-                <option value="otros_actores">Otros actores del mercado</option>
-                <option value="all">Todas</option>
-              </select>
+              <div className="w-full rounded-2xl border border-white/60 bg-white/70 px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
+                {actorPrincipalName}
+              </div>
             </FilterField>
             <FilterField label="País">
               <select
