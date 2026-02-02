@@ -146,6 +146,8 @@ Noise control (reputation ingestion):
 - `require_actor_sources` enforces actor presence for specific sources (e.g. news/forums).
 - Actor must appear in title/text when required.
 - Guard actors + geo allowlists drop mismatched items before they reach the cache.
+- `require_context_sources` forces banking context terms for sensitive sources (e.g. downdetector RSS).
+- Per-source RSS queries can be tightened with `rss_query_segment_mode`.
 
 ---
 
@@ -172,6 +174,8 @@ Control de ruido (ingesta reputacion):
 - `require_actor_sources` obliga presencia de actor en fuentes sensibles (news/forums).
 - El actor debe aparecer en titulo/texto cuando aplica.
 - Guard actors + allowlist por geo descartan items fuera de contexto antes del cache.
+- `require_context_sources` fuerza contexto bancario en fuentes sensibles (ej. RSS de downdetector).
+- Las RSS por fuente pueden endurecerse con `rss_query_segment_mode`.
 
 ---
 
