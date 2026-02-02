@@ -125,6 +125,39 @@ _COUNTRY_CODE_MAP = {
     "tr": "Turquía",
 }
 
+_STAR_SENTIMENT_SOURCES = {"appstore"}
+
+
+def _extract_star_rating(item: ReputationItem) -> float | None:
+    signals = item.signals or {}
+    raw = signals.get("rating")
+    if raw is None:
+        return None
+    value: float | None = None
+    if isinstance(raw, (int, float)):
+        value = float(raw)
+    elif isinstance(raw, str):
+        try:
+            value = float(raw.replace(",", "."))
+        except ValueError:
+            value = None
+    if value is None:
+        return None
+    if value <= 0:
+        return None
+    return min(5.0, max(0.0, value))
+
+
+def _sentiment_from_stars(stars: float) -> tuple[str, float]:
+    if stars >= 4.0:
+        label = "positive"
+    elif stars <= 2.0:
+        label = "negative"
+    else:
+        label = "neutral"
+    score = max(-1.0, min(1.0, (stars - 3.0) / 2.0))
+    return label, score
+
 
 def _norm_list(values: Iterable[str]) -> list[str]:
     return [normalize_text(value) for value in values if value]
@@ -538,6 +571,27 @@ class ReputationSentimentService:
         language = item.language or self._detect_language(lowered)
         geo = item.geo or self._detect_geo(lowered, item)
         actors = self._detect_actors(lowered, geo, item.signals)
+
+        rating = _extract_star_rating(item)
+        if item.source in _STAR_SENTIMENT_SOURCES and rating is None:
+            item.language = language or item.language
+            item.geo = geo or item.geo
+            if actors:
+                item.actor = actors[0]
+                item.signals["actors"] = actors
+            return item
+        if item.source in _STAR_SENTIMENT_SOURCES and rating is not None:
+            label, score = _sentiment_from_stars(rating)
+            item.language = language or item.language
+            item.geo = geo or item.geo
+            if actors:
+                item.actor = actors[0]
+                item.signals["actors"] = actors
+            item.sentiment = label
+            item.signals["sentiment_score"] = score
+            item.signals["sentiment_provider"] = "stars"
+            item.signals["sentiment_scale"] = "1-5"
+            return item
 
         use_llm = self._should_use_llm()
         if not evaluated_text:
