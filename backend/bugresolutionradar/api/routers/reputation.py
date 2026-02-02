@@ -374,9 +374,10 @@ def _parse_datetime(value: Any) -> datetime | None:
 def _principal_terms_from_cfg(cfg: dict[str, Any]) -> list[str]:
     terms = actor_principal_terms(cfg)
     keywords = [k.strip() for k in cfg.get("keywords", []) if isinstance(k, str) and k.strip()]
-    for term in keywords:
-        if term and term not in terms:
-            terms.append(term)
+    if terms:
+        for term in keywords:
+            if term and match_keywords(term, terms) and term not in terms:
+                terms.append(term)
     return terms
 
 
