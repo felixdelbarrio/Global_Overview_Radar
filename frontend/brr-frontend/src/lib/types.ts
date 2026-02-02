@@ -78,6 +78,7 @@ export type ActorPrincipalMeta = {
 
 export type ReputationMeta = {
   actor_principal?: ActorPrincipalMeta | null;
+  geos?: string[];
   sources_enabled?: string[];
   sources_available?: string[];
   source_counts?: Record<string, number>;

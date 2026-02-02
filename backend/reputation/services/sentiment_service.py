@@ -125,7 +125,7 @@ _COUNTRY_CODE_MAP = {
     "tr": "Turquía",
 }
 
-_STAR_SENTIMENT_SOURCES = {"appstore", "google_play"}
+_STAR_SENTIMENT_SOURCES = {"appstore"}
 
 
 def _extract_star_rating(item: ReputationItem) -> float | None:

@@ -258,10 +258,11 @@ export default function SentimientoPage() {
     const combined = unique([...fromMeta, ...fromAvailable, ...fromItems]).filter(Boolean);
     return combined.sort((a, b) => a.localeCompare(b));
   }, [items, meta]);
-  const geoOptions = useMemo(
-    () => unique(items.map((i) => i.geo).filter(Boolean) as string[]),
-    [items],
-  );
+  const geoOptions = useMemo(() => {
+    const fromMeta = meta?.geos ?? [];
+    const fromItems = items.map((i) => i.geo).filter(Boolean) as string[];
+    return unique([...fromMeta, ...fromItems]).sort((a, b) => a.localeCompare(b));
+  }, [items, meta]);
   const actorOptions = useMemo(() => {
     const values = unique(
       chartItems.map((i) => i.actor).filter(Boolean) as string[],
@@ -327,6 +328,7 @@ export default function SentimientoPage() {
     () =>
       groupedMentions.filter((item) => {
         if (isPrincipalGroup(item, principalAliasKeys)) return false;
+        if (!item.actor) return false;
         if (!selectedActorKey) return true;
         return normalizeKey(item.actor || "") === selectedActorKey;
       }),
@@ -1085,6 +1087,7 @@ function groupMentions(items: ReputationItem[]) {
   const map = new Map<string, MentionGroup>();
 
   for (const item of items) {
+    const extractedActor = extractActor(item);
     const title = cleanText(item.title || "");
     const text = cleanText(item.text || "");
     const base =
@@ -1092,7 +1095,7 @@ function groupMentions(items: ReputationItem[]) {
     const key = [
       normalizeKey(base),
       item.geo || "",
-      item.actor || "",
+      extractedActor || "",
     ].join("|");
 
     if (!map.has(key)) {
@@ -1102,7 +1105,7 @@ function groupMentions(items: ReputationItem[]) {
         title: title || text || "Sin título",
         text: text || undefined,
         geo: item.geo || undefined,
-        actor: item.actor || undefined,
+        actor: extractedActor || undefined,
         sentiment: item.sentiment || undefined,
         rating: extractRating(item),
         rating_source: extractRatingSource(item),
@@ -1131,6 +1134,10 @@ function groupMentions(items: ReputationItem[]) {
 
     if (text && (!group.text || text.length > group.text.length)) {
       group.text = text;
+    }
+
+    if (!group.actor && extractedActor) {
+      group.actor = extractedActor;
     }
 
     if (item.manual_override) {
@@ -1175,6 +1182,17 @@ function extractRating(item: ReputationItem) {
   if (typeof raw === "string") {
     const parsed = Number(raw.replace(",", "."));
     return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function extractActor(item: ReputationItem) {
+  if (item.actor && item.actor.trim()) return item.actor;
+  const signals = (item.signals || {}) as Record<string, unknown>;
+  const raw = signals.actors;
+  if (Array.isArray(raw)) {
+    const first = raw.find((value) => typeof value === "string" && value.trim());
+    if (typeof first === "string") return first;
   }
   return null;
 }

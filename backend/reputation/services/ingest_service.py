@@ -94,6 +94,7 @@ class ReputationIngestService:
         items = self._collect_items(collectors, notes)
         items = self._normalize_items(items, lookback_days)
         items = self._apply_geo_hints(cfg, items)
+        items = self._apply_google_play_actor_map(cfg, items)
         items = self._apply_sentiment(cfg, items)
         items = self._balance_items(
             cfg,
@@ -171,6 +172,41 @@ class ReputationIngestService:
                 filtered.append(item)
 
         return filtered
+
+    @classmethod
+    def _apply_google_play_actor_map(
+        cls, cfg: dict[str, Any], items: list[ReputationItem]
+    ) -> list[ReputationItem]:
+        gp_cfg = _as_dict(cfg.get("google_play"))
+        mapping = gp_cfg.get("package_id_to_actor") if isinstance(gp_cfg, dict) else None
+        if not isinstance(mapping, dict) or not mapping:
+            return items
+
+        alias_map = build_actor_alias_map(cfg)
+        for item in items:
+            if item.source != "google_play":
+                continue
+            if item.actor and item.actor.strip():
+                continue
+            package_id = (item.signals or {}).get("package_id")
+            if not package_id:
+                continue
+            actor_raw = mapping.get(str(package_id))
+            if not isinstance(actor_raw, str) or not actor_raw.strip():
+                continue
+            actor = canonicalize_actor(actor_raw, alias_map) if alias_map else actor_raw.strip()
+            if not actor:
+                continue
+            item.actor = actor
+            if item.signals is not None:
+                actors = item.signals.get("actors")
+                if isinstance(actors, list):
+                    if actor not in actors:
+                        item.signals["actors"] = [actor] + [a for a in actors if a != actor]
+                else:
+                    item.signals["actors"] = [actor]
+                item.signals["actor_source"] = "package_id"
+        return items
 
     @classmethod
     def _apply_geo_hints(
