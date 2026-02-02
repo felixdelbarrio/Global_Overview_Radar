@@ -1104,5 +1104,8 @@
       "https://news.google.com/rss/search?q=Downdetector+CaixaBank",
       "https://news.google.com/rss/search?q=Downdetector+Revolut"
     ]
-  }
+  },
+  "actor_context_guard": [
+    "Santander"
+  ]
 }

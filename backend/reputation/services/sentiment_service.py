@@ -538,6 +538,32 @@ class ReputationSentimentService:
                 if cleaned:
                     self._geo_aliases[geo] = cleaned
 
+        raw_guard = cfg.get("actor_context_guard") or []
+        self._context_guard_actors = {
+            normalize_text(actor) for actor in raw_guard if isinstance(actor, str) and actor.strip()
+        }
+        segment_terms = [
+            t.strip() for t in cfg.get("segment_terms", []) if isinstance(t, str) and t.strip()
+        ]
+        context_hints = [
+            *segment_terms,
+            "banco",
+            "bank",
+            "banca",
+            "finanzas",
+            "financiero",
+            "financiera",
+            "cuenta",
+            "tarjeta",
+            "transferencia",
+            "credito",
+            "crédito",
+            "debito",
+            "débito",
+            "app",
+        ]
+        self._context_hints = [normalize_text(value) for value in context_hints if value]
+
         models_cfg = cfg.get("models") or {}
         llm_cfg = cfg.get("llm") or {}
 
@@ -571,6 +597,7 @@ class ReputationSentimentService:
         language = item.language or self._detect_language(lowered)
         geo = item.geo or self._detect_geo(lowered, item)
         actors = self._detect_actors(lowered, geo, item.signals)
+        actors = self._filter_actors_by_context(evaluated_text, actors)
 
         rating = _extract_star_rating(item)
         if item.source in _STAR_SENTIMENT_SOURCES and rating is None:
@@ -626,6 +653,20 @@ class ReputationSentimentService:
         if actors:
             item.signals["actors"] = actors
         return item
+
+    def _filter_actors_by_context(self, text: str, actors: list[str]) -> list[str]:
+        if not actors or not self._context_guard_actors:
+            return actors
+        normalized_text = normalize_text(text or "")
+        has_context = any(hint and hint in normalized_text for hint in self._context_hints)
+        if has_context:
+            return actors
+        filtered: list[str] = []
+        for actor in actors:
+            if normalize_text(actor) in self._context_guard_actors:
+                continue
+            filtered.append(actor)
+        return filtered
 
     def _detect_language(self, text: str) -> str | None:
         if not text:
