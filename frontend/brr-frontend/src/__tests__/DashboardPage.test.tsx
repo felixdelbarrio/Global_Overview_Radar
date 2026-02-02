@@ -1,4 +1,4 @@
-/** Tests del dashboard ejecutivo. */
+/** Tests del dashboard reputacional. */
 
 import React from "react";
 import { render, screen } from "@testing-library/react";
@@ -16,10 +16,6 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/",
 }));
 
-vi.mock("next/dynamic", () => ({
-  default: () => () => <div data-testid="evolution-chart" />,
-}));
-
 vi.mock("@/lib/api", () => ({
   apiGet: vi.fn(),
 }));
@@ -29,51 +25,65 @@ import DashboardPage from "@/app/page";
 
 const apiGetMock = vi.mocked(apiGet);
 
-it("renders KPI values and chart", async () => {
+it("renders dashboard header and combined mentions", async () => {
   apiGetMock.mockImplementation((path: string) => {
-    if (path.startsWith("/kpis")) {
+    if (path.startsWith("/reputation/meta")) {
       return Promise.resolve({
-        open_total: 10,
-        open_by_severity: {
-          CRITICAL: 1,
-          HIGH: 2,
-          MEDIUM: 3,
-          LOW: 4,
-          UNKNOWN: 0,
-        },
-        new_total: 2,
-        new_by_severity: {
-          CRITICAL: 0,
-          HIGH: 1,
-          MEDIUM: 1,
-          LOW: 0,
-          UNKNOWN: 0,
-        },
-        new_masters: 1,
-        closed_total: 1,
-        closed_by_severity: {
-          CRITICAL: 0,
-          HIGH: 0,
-          MEDIUM: 1,
-          LOW: 0,
-          UNKNOWN: 0,
-        },
-        mean_resolution_days_overall: 3,
-        mean_resolution_days_by_severity: { HIGH: 3 },
-        open_over_threshold_pct: 12.3,
-        open_over_threshold_list: ["src:1"],
+        actor_principal: { canonical: "BBVA" },
+        geos: ["España"],
+        sources_enabled: ["gdelt"],
+        sources_available: ["gdelt"],
+        ui: { incidents_enabled: true, ops_enabled: true },
       });
     }
-
-    return Promise.resolve({
-      days: 60,
-      series: [{ date: "2025-01-01", open: 1, new: 1, closed: 0 }],
-    });
+    if (path.startsWith("/reputation/items")) {
+      return Promise.resolve({
+        generated_at: "2025-01-02T00:00:00Z",
+        config_hash: "hash",
+        sources_enabled: ["gdelt"],
+        items: [
+          {
+            id: "1",
+            source: "gdelt",
+            geo: "España",
+            actor: "BBVA",
+            title: "Comentario positivo",
+            text: "Excelente servicio",
+            sentiment: "positive",
+            published_at: "2025-01-01T10:00:00Z",
+            signals: { sentiment_score: 0.5 },
+          },
+        ],
+        stats: { count: 1 },
+      });
+    }
+    if (path.startsWith("/incidents")) {
+      return Promise.resolve({
+        items: [
+          {
+            global_id: "INC-1",
+            title: "Caída app",
+            status: "OPEN",
+            severity: "HIGH",
+            opened_at: "2025-01-01",
+            updated_at: "2025-01-02",
+            product: "App",
+            feature: "Login",
+          },
+        ],
+      });
+    }
+    if (path.startsWith("/evolution")) {
+      return Promise.resolve({
+        days: 10,
+        series: [{ date: "2025-01-01", open: 1, new: 1, closed: 0 }],
+      });
+    }
+    return Promise.resolve({});
   });
 
   render(<DashboardPage />);
 
-  expect(await screen.findByText("10")).toBeInTheDocument();
-  expect(screen.getByText("12.3%")).toBeInTheDocument();
-  expect(screen.getByTestId("evolution-chart")).toBeInTheDocument();
+  expect(await screen.findByText("Dashboard reputacional")).toBeInTheDocument();
+  expect(await screen.findByText("Caída app")).toBeInTheDocument();
 });
