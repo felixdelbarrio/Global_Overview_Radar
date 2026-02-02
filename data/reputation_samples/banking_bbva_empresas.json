@@ -1171,6 +1171,7 @@
   },
   "require_actor_sources": [
     "news",
+    "forums",
     "blogs",
     "gdelt",
     "newsapi",
