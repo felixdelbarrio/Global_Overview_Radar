@@ -396,7 +396,7 @@ def _parse_bool(value: Any, default: bool) -> bool:
         return value
     if isinstance(value, str):
         normalized = value.strip().lower()
-        if normalized in {"true", "1", "yes", "y", "si", "sí"}:
+        if normalized in {"true", "1", "yes", "y", "si"}:
             return True
         if normalized in {"false", "0", "no", "n"}:
             return False

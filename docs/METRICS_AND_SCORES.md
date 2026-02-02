@@ -20,8 +20,14 @@ These KPIs are exposed via `/kpis` and summarized by the frontend.
 
 ## EN | Reputation metrics (current state)
 
-Reputation currently stores normalized items plus optional sentiment tagging.
-Aggregated metrics and comparative signals are planned but not yet implemented.
+Reputation currently powers:
+- Sentiment summary (positive / neutral / negative counts, average score)
+- Sentiment by geo (table)
+- Comparative accumulated sentiment series (principal vs other actors)
+- Dashboard overlay with incident trend (if enabled)
+
+Downloads:
+- CSV export for chart series and filtered listings.
 
 ---
 
@@ -41,5 +47,11 @@ Los KPIs se exponen via `/kpis` y el frontend los resume.
 
 ## ES | Metricas de reputacion (estado actual)
 
-Reputacion almacena items normalizados y sentimiento opcional.
-Las metricas agregadas y las senales comparativas estan en roadmap.
+Reputacion ya alimenta:
+- Resumen de sentimiento (conteos + score medio)
+- Sentimiento por pais
+- Serie acumulada comparativa (actor principal vs otros)
+- Dashboard con tendencia de incidencias (si esta habilitado)
+
+Descargas:
+- Export CSV del grafico y del listado filtrado.

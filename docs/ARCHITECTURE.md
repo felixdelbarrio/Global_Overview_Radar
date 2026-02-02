@@ -20,7 +20,7 @@ Global Overview Radar runs two complementary pipelines on top of a shared API la
 2) Reputation Radar (public signals)
 - Collects public items from multiple sources (news, social, reviews, app stores).
 - Uses mergeable business configs from `data/reputation/*.json`.
-- Normalizes, enriches (geo hints + sentiment), and caches results.
+- Normalizes, enriches (geo hints + sentiment), applies noise controls, and caches results.
 - Exposes reputation items and comparison endpoints.
 
 ### End-to-end flow (BugResolutionRadar)
@@ -41,7 +41,7 @@ flowchart LR
 flowchart LR
   A[data/reputation/*.json] --> B[ReputationIngestService]
   C[Collectors: news/social/reviews/markets] --> B
-  B --> D[Normalize + geo hints + sentiment]
+  B --> D[Normalize + geo hints + sentiment + noise control]
   D --> E[data/cache/reputation_cache.json]
   E --> F[FastAPI]
   F --> G[Frontend]
@@ -54,6 +54,7 @@ flowchart LR
   - `backend/reputation/.env.reputation`
 - Reputation configs are **multi-file** by design: drop one or many JSONs in `data/reputation/`.
 - Merge rules: dicts merge deep, lists de-duplicate, scalars override when non-empty.
+- UI flags can disable Incidencias/Ops per business scope (`ui.incidents_enabled`, `ui.ops_enabled`).
 
 ---
 
@@ -69,7 +70,7 @@ Global Overview Radar ejecuta dos pipelines complementarios sobre una API compar
 2) Reputation Radar (senales publicas)
 - Recolecta items publicos desde multiples fuentes.
 - Usa configuraciones mergeables en `data/reputation/*.json`.
-- Normaliza, enriquece (geo + sentimiento) y cachea resultados.
+- Normaliza, enriquece (geo + sentimiento), aplica control de ruido y cachea resultados.
 - Expone endpoints de reputacion y comparativas.
 
 ### Flujo end-to-end (BugResolutionRadar)
@@ -90,7 +91,7 @@ flowchart LR
 flowchart LR
   A[data/reputation/*.json] --> B[ReputationIngestService]
   C[Collectors: news/social/reviews/markets] --> B
-  B --> D[Normalize + geo hints + sentimiento]
+  B --> D[Normalize + geo hints + sentimiento + control de ruido]
   D --> E[data/cache/reputation_cache.json]
   E --> F[FastAPI]
   F --> G[Frontend]
@@ -103,3 +104,4 @@ flowchart LR
   - `backend/reputation/.env.reputation`
 - Reputacion usa **multi-config**: uno o varios JSON en `data/reputation/`.
 - Reglas de merge: dicts merge profundo, listas deduplicadas, escalares override si no estan vacios.
+- Flags de UI pueden deshabilitar Incidencias/Ops por scope (`ui.incidents_enabled`, `ui.ops_enabled`).

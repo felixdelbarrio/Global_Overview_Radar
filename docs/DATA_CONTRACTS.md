@@ -57,14 +57,21 @@ Campos minimos (ver `backend/bugresolutionradar/domain/models.py`):
 - `geo`, `actor`, `language`
 - `published_at`, `collected_at`
 - `author`, `url`, `title`, `text`
-- `signals` (dict with extra metadata)
+- `signals` (dict with extra metadata, e.g. `sentiment_score`, `rating`)
 - `sentiment`, `aspects`
+- `manual_override` (geo/sentiment overrides + updated_at)
 
 ### ReputationCacheDocument
 - `generated_at`, `config_hash`
 - `sources_enabled`
 - `items` (list of ReputationItem)
 - `stats` (`count`, optional `note`)
+
+### ReputationMeta (API)
+- `actor_principal`, `geos`
+- `otros_actores_por_geografia`, `otros_actores_globales`
+- `sources_enabled`, `sources_available`, `source_counts`
+- `ui` (`incidents_enabled`, `ops_enabled`)
 
 ---
 
@@ -75,11 +82,18 @@ Campos minimos (ver `backend/bugresolutionradar/domain/models.py`):
 - `geo`, `actor`, `language`
 - `published_at`, `collected_at`
 - `author`, `url`, `title`, `text`
-- `signals` (metadatos extra)
+- `signals` (metadatos extra, ej. `sentiment_score`, `rating`)
 - `sentiment`, `aspects`
+- `manual_override` (overrides geo/sentimiento + updated_at)
 
 ### ReputationCacheDocument
 - `generated_at`, `config_hash`
 - `sources_enabled`
 - `items` (lista de ReputationItem)
 - `stats` (`count`, y `note` opcional)
+
+### ReputationMeta (API)
+- `actor_principal`, `geos`
+- `otros_actores_por_geografia`, `otros_actores_globales`
+- `sources_enabled`, `sources_available`, `source_counts`
+- `ui` (`incidents_enabled`, `ops_enabled`)
