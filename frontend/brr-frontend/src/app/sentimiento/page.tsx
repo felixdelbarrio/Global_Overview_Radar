@@ -253,17 +253,22 @@ export default function SentimientoPage() {
     };
   }, [fromDate, toDate, sentiment, geo, sources, overrideRefresh]);
 
-  const sourceCounts = useMemo(
-    () => meta?.source_counts ?? {},
-    [meta],
-  );
+  const sourceCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const item of items) {
+      if (!item.source) continue;
+      counts[item.source] = (counts[item.source] || 0) + 1;
+    }
+    return counts;
+  }, [items]);
   const sourcesOptions = useMemo(() => {
-    const fromMeta = meta?.sources_enabled ?? [];
-    const fromAvailable = meta?.sources_available ?? [];
-    const fromItems = items.map((i) => i.source);
-    const combined = unique([...fromMeta, ...fromAvailable, ...fromItems]).filter(Boolean);
-    return combined.sort((a, b) => a.localeCompare(b));
-  }, [items, meta]);
+    const fromCounts = Object.keys(sourceCounts);
+    if (fromCounts.length) {
+      return fromCounts.sort((a, b) => a.localeCompare(b));
+    }
+    const fromMeta = meta?.sources_available ?? meta?.sources_enabled ?? [];
+    return fromMeta.filter(Boolean).sort((a, b) => a.localeCompare(b));
+  }, [sourceCounts, meta]);
   const sortedSources = useMemo(() => [...sources].sort(), [sources]);
   useEffect(() => {
     sentimentRef.current = sentiment;
@@ -271,6 +276,14 @@ export default function SentimientoPage() {
   useEffect(() => {
     sourcesRef.current = sortedSources;
   }, [sortedSources]);
+  useEffect(() => {
+    if (!sources.length) return;
+    const allowed = new Set(sourcesOptions);
+    const next = sources.filter((source) => allowed.has(source));
+    if (next.length !== sources.length) {
+      setSources(next);
+    }
+  }, [sourcesOptions]);
   const geoOptions = useMemo(() => {
     const fromMeta = meta?.geos ?? [];
     const fromItems = items.map((i) => i.geo).filter(Boolean) as string[];
