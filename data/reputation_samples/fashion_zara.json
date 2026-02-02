@@ -461,7 +461,8 @@
       "585629514",
       "457876088",
       "1641486558"
-    ]
+    ],
+    "app_id_to_actor": {}
   },
   "trustpilot": {
     "rss_query_templates": [
