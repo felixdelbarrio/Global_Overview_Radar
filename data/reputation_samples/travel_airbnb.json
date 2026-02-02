@@ -433,7 +433,8 @@
       "367003839",
       "1245772818",
       "284876795"
-    ]
+    ],
+    "app_id_to_actor": {}
   },
   "trustpilot": {
     "rss_query_templates": [
