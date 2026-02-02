@@ -11,6 +11,8 @@ Back to docs index: `../README.md`
 - Configs are source-of-truth for scope and peer groups.
 - Reputation configs can be split across multiple JSON files (mergeable).
 - Log and cache artifacts are generated, not committed.
+- UI exposure can be controlled per scope via `ui.incidents_enabled` / `ui.ops_enabled`.
+- Noise control rules are enforced at ingestion time (actor presence + geo allowlists).
 
 ### Change management
 - Version `data/reputation/*.json` changes.
@@ -35,6 +37,8 @@ Back to docs index: `../README.md`
 - Las configs son la fuente de verdad del scope y peers.
 - Reputacion soporta varios JSON (mergeables).
 - Logs y caches se generan localmente y no se versionan.
+- La UI se puede modular por scope via `ui.incidents_enabled` / `ui.ops_enabled`.
+- El control de ruido se aplica en ingesta (actor obligatorio + allowlist por geo).
 
 ### Gestion de cambios
 - Versiona cambios en `data/reputation/*.json`.

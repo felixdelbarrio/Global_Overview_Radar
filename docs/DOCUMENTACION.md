@@ -25,6 +25,8 @@ Global Overview Radar is split into two operational domains:
 - Normalizes, applies geo hints, runs sentiment, caches to `data/cache/reputation_cache.json`.
 - Exposes reputation items + comparison endpoints.
 
+**Current product focus:** sentiment-first dashboard with incidents as a complementary layer (configurable).
+
 ---
 
 ## EN | Runtime flow
@@ -40,8 +42,19 @@ Global Overview Radar is split into two operational domains:
 1) Load business config (all `*.json` in `data/reputation/`).
 2) Build collectors based on `.env.reputation` toggles.
 3) Collect items, normalize, add geo hints, run sentiment.
-4) Merge + cache to `data/cache/reputation_cache.json`.
-5) FastAPI exposes `/reputation/items`, `/reputation/items/compare`, `/reputation/meta`.
+4) Apply noise control: actor presence, actor-in-text checks, guard actors, actor/geo allowlists.
+5) Merge + cache to `data/cache/reputation_cache.json`.
+6) FastAPI exposes `/reputation/items`, `/reputation/items/compare`, `/reputation/meta`.
+
+### Frontend (current navigation)
+- **Dashboard (/)**
+  - Sentiment trend + incident trend (if enabled)
+  - 20 latest mentions (sentiment + incidents)
+- **Sentimiento**
+  - Filters, full list, manual overrides
+  - CSV downloads (chart + grid)
+- **Incidencias / Ops Executive**
+  - Optional; hidden when `ui.incidents_enabled=false` or `ui.ops_enabled=false`
 
 ---
 
@@ -59,6 +72,14 @@ Global Overview Radar is split into two operational domains:
   - dicts: deep merge
   - lists: append + dedupe
   - scalars: override only if incoming value is non-empty
+
+Noise-control knobs (reputation):
+- `require_actor_sources`: list of sources that must contain an actor reference.
+- `guard_actors` / `guard_context_terms`: block items with ambiguous actor mentions.
+- `otros_actores_por_geografia` + `otros_actores_globales`: allowlist actors by geo (drops mismatched).
+
+UI flags:
+- `ui.incidents_enabled` / `ui.ops_enabled`: enable or hide incident-related views.
 
 ---
 
@@ -96,6 +117,8 @@ Global Overview Radar se divide en dos dominios:
 - Normaliza, aplica geos, calcula sentimiento, cachea.
 - Expone endpoints de reputacion y comparativas.
 
+**Foco actual del producto:** dashboard centrado en sentimiento, con incidencias como capa complementaria (configurable).
+
 ---
 
 ## ES | Flujo de ejecucion
@@ -111,8 +134,19 @@ Global Overview Radar se divide en dos dominios:
 1) Carga config (todos los `*.json` en `data/reputation/`).
 2) Construye collectors segun `.env.reputation`.
 3) Recolecta, normaliza, aplica geo, sentimiento.
-4) Merge + cache en `data/cache/reputation_cache.json`.
-5) FastAPI expone `/reputation/items`, `/reputation/items/compare`, `/reputation/meta`.
+4) Aplica control de ruido: actor obligatorio, actor en texto, guard actors, allowlist actor/geo.
+5) Merge + cache en `data/cache/reputation_cache.json`.
+6) FastAPI expone `/reputation/items`, `/reputation/items/compare`, `/reputation/meta`.
+
+### Frontend (navegacion actual)
+- **Dashboard (/)**
+  - Tendencia de sentimiento + incidencias (si estan habilitadas)
+  - 20 menciones mas recientes (sentimiento + incidencias)
+- **Sentimiento**
+  - Filtros, listado completo, overrides manuales
+  - Descargas CSV (grafico + grid)
+- **Incidencias / Ops Executive**
+  - Opcionales; se ocultan con `ui.incidents_enabled=false` o `ui.ops_enabled=false`
 
 ---
 
@@ -130,6 +164,14 @@ Global Overview Radar se divide en dos dominios:
   - dicts: merge profundo
   - listas: append + dedupe
   - escalares: override solo si el valor entrante no esta vacio
+
+Controles de ruido (reputacion):
+- `require_actor_sources`: fuentes que exigen mencionar actor.
+- `guard_actors` / `guard_context_terms`: bloquean contexto ambiguo.
+- `otros_actores_por_geografia` + `otros_actores_globales`: allowlist de actores por geo (descarta mismatches).
+
+Flags de UI:
+- `ui.incidents_enabled` / `ui.ops_enabled`: habilitan u ocultan vistas de incidencias.
 
 ---
 

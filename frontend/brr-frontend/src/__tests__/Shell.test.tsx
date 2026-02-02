@@ -34,6 +34,7 @@ describe("Shell", () => {
     );
 
     expect(screen.getByText("Dashboard")).toBeInTheDocument();
+    expect(screen.getByText("Sentimiento")).toBeInTheDocument();
     expect(screen.getByText("Incidencias")).toBeInTheDocument();
     const ops = screen.getByText("Ops Executive");
     expect(ops).toBeInTheDocument();

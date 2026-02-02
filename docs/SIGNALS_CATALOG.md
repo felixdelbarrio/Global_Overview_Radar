@@ -9,8 +9,9 @@ Back to architecture: `ARCHITECTURE.md`
 ## EN | Current status
 
 The current codebase focuses on ingestion, normalization, KPIs, and reputation item
-collection. A full signals engine (comparative triggers) is planned but not yet
-implemented. Use this catalog as target behavior for the next iteration.
+collection. The UI already uses sentiment trends and comparative series as a
+baseline, but a full signals engine (comparative triggers) is still planned.
+Use this catalog as target behavior for the next iteration.
 
 ---
 
@@ -43,7 +44,8 @@ Each signal should include:
 ## ES | Estado actual
 
 El codigo actual se centra en ingesta, normalizacion, KPIs y recoleccion de items.
-El motor de senales comparativas esta en roadmap. Este catalogo es el objetivo.
+La UI ya usa tendencia de sentimiento y series comparativas como base, pero el
+motor de senales comparativas sigue en roadmap. Este catalogo es el objetivo.
 
 ---
 

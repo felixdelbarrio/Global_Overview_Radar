@@ -25,7 +25,8 @@ Checklist:
 1) Create a collector in `backend/reputation/collectors/` (see `base.py`).
 2) Wire it in `backend/reputation/services/ingest_service.py`.
 3) Add env toggles in `backend/reputation/config.py` and `.env.reputation.example`.
-4) Update `docs` and add tests if parsing logic is complex.
+4) Review noise-control rules (`require_actor_sources`, guard actors, geo allowlists).
+5) Update `docs` and add tests if parsing logic is complex.
 
 If the source has an API + scraper fallback, follow the existing pattern in
 `appstore.py` and `google_play.py` (API enabled => API collector, else scraper).
@@ -37,6 +38,7 @@ If the source has an API + scraper fallback, follow the existing pattern in
 1) Drop a new JSON config into `data/reputation/`.
 2) Keep it focused (only the extra keywords/actors/sources you need).
 3) The loader will merge it with other configs automatically.
+4) Optional: set `ui.incidents_enabled` / `ui.ops_enabled` for non-IT scopes.
 
 Example: combine `banking_bbva_empresas.json` + `banking_bbva_retail.json`.
 
@@ -61,7 +63,8 @@ Checklist:
 1) Crea el collector en `backend/reputation/collectors/`.
 2) Conecta en `backend/reputation/services/ingest_service.py`.
 3) Anade toggles en `backend/reputation/config.py` y `.env.reputation.example`.
-4) Actualiza docs y tests si hay parsing complejo.
+4) Revisa reglas de control de ruido (`require_actor_sources`, guard actors, allowlist por geo).
+5) Actualiza docs y tests si hay parsing complejo.
 
 Si hay API + scraper, sigue el patron de `appstore.py` y `google_play.py`.
 
@@ -72,5 +75,6 @@ Si hay API + scraper, sigue el patron de `appstore.py` y `google_play.py`.
 1) Coloca un JSON nuevo en `data/reputation/`.
 2) Mantenlo pequeno y especifico.
 3) El loader lo combinara automaticamente con el resto.
+4) Opcional: define `ui.incidents_enabled` / `ui.ops_enabled` para scopes no IT.
 
 Ejemplo: `banking_bbva_empresas.json` + `banking_bbva_retail.json`.

@@ -31,6 +31,11 @@ Back to root: `../README.md`
 - `backend/reputation/services/` — ingest + sentiment + merging
 - `backend/*/logging_utils.py` — configurable logging with hot reload
 
+## EN | Frontend highlights
+
+- `frontend/brr-frontend/src/components/SentimentView.tsx` — unified Dashboard/Sentiment view
+- `frontend/brr-frontend/src/components/Shell.tsx` — navigation (configurable via reputation meta)
+
 ---
 
 ## ES | Nivel raiz
@@ -57,3 +62,8 @@ Back to root: `../README.md`
 - `backend/reputation/collectors/` — collectors por fuente
 - `backend/reputation/services/` — ingesta + sentimiento + merge
 - `backend/*/logging_utils.py` — logging configurable con hot reload
+
+## ES | Frontend (destacados)
+
+- `frontend/brr-frontend/src/components/SentimentView.tsx` — vista unificada Dashboard/Sentimiento
+- `frontend/brr-frontend/src/components/Shell.tsx` — navegacion (configurable via reputation meta)

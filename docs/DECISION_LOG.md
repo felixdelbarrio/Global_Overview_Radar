@@ -29,6 +29,16 @@ Back to architecture: `ARCHITECTURE.md`
 **Why:** Performance and noise control by default.  
 **Consequence:** `.env` files drive console vs file logging; logs go to `./logs/`.
 
+## EN | ADR-006 — Sentiment-first UI
+**Decision:** The dashboard centers on sentiment, with incidents as a secondary line and optional views.  
+**Why:** Sentiment is the core signal for most scopes; incidents are only meaningful for IT/ops actors.  
+**Consequence:** Incidents/Ops can be disabled per config (`ui.incidents_enabled`, `ui.ops_enabled`).
+
+## EN | ADR-007 — Noise-control at ingestion
+**Decision:** Apply strict actor presence checks + geo allowlists before caching reputation items.  
+**Why:** Reduce irrelevant mentions and protect end-user experience.  
+**Consequence:** Some sources require actor-in-text; mismatched actor/geo items are dropped.
+
 ---
 
 ## ES | ADR-001 — Metricas relativas
@@ -55,3 +65,13 @@ Back to architecture: `ARCHITECTURE.md`
 **Decision:** El logging es opt-in via env y opcionalmente a fichero.  
 **Por que:** control de rendimiento y ruido.  
 **Consecuencia:** `.env` gobierna consola vs fichero; logs en `./logs/`.
+
+## ES | ADR-006 — UI centrada en sentimiento
+**Decision:** El dashboard se centra en sentimiento, con incidencias como capa secundaria y opcional.  
+**Por que:** El sentimiento es la senal principal; incidencias solo aplican a actores IT/ops.  
+**Consecuencia:** Incidencias/Ops pueden deshabilitarse por config (`ui.incidents_enabled`, `ui.ops_enabled`).
+
+## ES | ADR-007 — Control de ruido en ingesta
+**Decision:** Aplicar checks estrictos de actor + allowlist por geo antes del cache.  
+**Por que:** Reducir menciones irrelevantes y proteger la experiencia del cliente.  
+**Consecuencia:** Algunas fuentes exigen actor en texto; items fuera de geo se descartan.

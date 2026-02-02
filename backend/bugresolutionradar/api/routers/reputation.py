@@ -87,6 +87,11 @@ def reputation_meta() -> dict[str, Any]:
     geos = [g for g in cfg.get("geografias", []) if isinstance(g, str) and g.strip()]
     otros_actores_por_geografia = cfg.get("otros_actores_por_geografia") or {}
     otros_actores_globales = cfg.get("otros_actores_globales") or []
+    ui_cfg = cfg.get("ui") or {}
+    ui_flags = {
+        "incidents_enabled": _parse_bool(ui_cfg.get("incidents_enabled"), True),
+        "ops_enabled": _parse_bool(ui_cfg.get("ops_enabled"), True),
+    }
     repo = ReputationCacheRepo(reputation_settings.cache_path)
     doc = repo.load()
     source_counts: dict[str, int] = {}
@@ -106,6 +111,7 @@ def reputation_meta() -> dict[str, Any]:
         "sources_enabled": sources_enabled,
         "sources_available": sources_available,
         "source_counts": source_counts,
+        "ui": ui_flags,
     }
 
 
@@ -383,6 +389,18 @@ def _parse_datetime(value: Any) -> datetime | None:
         except ValueError:
             return None
     return None
+
+
+def _parse_bool(value: Any, default: bool) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "1", "yes", "y", "si"}:
+            return True
+        if normalized in {"false", "0", "no", "n"}:
+            return False
+    return default
 
 
 def _principal_terms_from_cfg(cfg: dict[str, Any]) -> list[str]:
