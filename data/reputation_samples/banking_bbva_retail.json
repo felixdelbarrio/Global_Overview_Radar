@@ -811,6 +811,130 @@
       "347887638"
     ]
   },
+  "google_play": {
+    "package_ids": [],
+    "package_ids_by_geo": {
+      "España": [
+        "com.bbva.bbvacontigo",
+        "es.bancosantander.apps",
+        "es.lacaixa.mobile.android.newwapicon",
+        "net.inverline.bancosabadell.officelocator.android",
+        "com.bankinter.launcher",
+        "es.openbank.mobile",
+        "www.ingdirect.nativeframe",
+        "de.number26.android",
+        "com.revolut.revolut",
+        "com.transferwise.android",
+        "com.paypal.android.p2pmobile",
+        "com.bunq.android"
+      ],
+      "México": [
+        "com.bancomer.mbanking",
+        "mx.bancosantander.supermovil",
+        "org.microemu.android.model.common.VTUserApplicationBNRTMB",
+        "com.citibanamex.banamexmobile",
+        "com.banregio.hey",
+        "com.scotiabankmx.scotiamovil",
+        "com.nu.production",
+        "com.mercadopago.wallet",
+        "com.paypal.android.p2pmobile"
+      ],
+      "Perú": [
+        "com.bbva.nxt_peru",
+        "pe.com.scotiabank.blpm.android.client",
+        "com.bcp.bank.bcp",
+        "pe.com.interbank.mobilebanking",
+        "com.bcp.innovacxion.yapeapp",
+        "com.paypal.android.p2pmobile"
+      ],
+      "Colombia": [
+        "co.com.bbva.mb",
+        "eu.netinfo.colpatria.system",
+        "co.com.bancolombia.personas.superapp",
+        "com.bancodebogota.bancamovil",
+        "com.davivienda.daviviendaapp",
+        "com.davivienda.daviplataapp",
+        "com.paypal.android.p2pmobile"
+      ],
+      "Argentina": [
+        "com.bbva.nxt_argentina",
+        "ar.com.santander.rio.mbanking",
+        "com.mosync.app_Banco_Galicia",
+        "com.mercadopago.wallet",
+        "com.paypal.android.p2pmobile"
+      ],
+      "Turquía": [
+        "com.akbank.android.apps.akbank_direkt",
+        "com.ingbanktr.ingmobil",
+        "com.garanti.cepsubesi",
+        "com.pozitron.iscep",
+        "com.ykb.android",
+        "com.ziraat.ziraatmobil",
+        "com.vakifbank.mobile",
+        "com.tmobtech.halkbank"
+      ]
+    },
+    "geo_to_gl": {
+      "España": "ES",
+      "México": "MX",
+      "Perú": "PE",
+      "Colombia": "CO",
+      "Argentina": "AR",
+      "Turquía": "TR"
+    },
+    "geo_to_hl": {
+      "España": "es",
+      "México": "es-419",
+      "Perú": "es-419",
+      "Colombia": "es-419",
+      "Argentina": "es-419",
+      "Turquía": "tr"
+    },
+    "package_id_to_actor": {
+      "com.bbva.bbvacontigo": "BBVA",
+      "com.bancomer.mbanking": "BBVA",
+      "com.bbva.nxt_peru": "BBVA",
+      "co.com.bbva.mb": "BBVA",
+      "com.bbva.nxt_argentina": "BBVA",
+      "es.bancosantander.apps": "Santander",
+      "mx.bancosantander.supermovil": "Santander",
+      "ar.com.santander.rio.mbanking": "Santander",
+      "es.lacaixa.mobile.android.newwapicon": "Caixabank",
+      "net.inverline.bancosabadell.officelocator.android": "Sabadell",
+      "com.bankinter.launcher": "Bankinter",
+      "es.openbank.mobile": "Openbank",
+      "www.ingdirect.nativeframe": "ING",
+      "de.number26.android": "N26",
+      "com.revolut.revolut": "Revolut",
+      "com.transferwise.android": "Wise",
+      "com.paypal.android.p2pmobile": "PayPal",
+      "com.bunq.android": "Bunq",
+      "org.microemu.android.model.common.VTUserApplicationBNRTMB": "Banorte",
+      "com.citibanamex.banamexmobile": "Citibanamex",
+      "com.banregio.hey": "Hey",
+      "com.scotiabankmx.scotiamovil": "Scotiabank",
+      "pe.com.scotiabank.blpm.android.client": "Scotiabank",
+      "eu.netinfo.colpatria.system": "Scotiabank",
+      "com.bcp.bank.bcp": "BCP",
+      "pe.com.interbank.mobilebanking": "Interbank",
+      "com.bcp.innovacxion.yapeapp": "Yape",
+      "co.com.bancolombia.personas.superapp": "Bancolombia",
+      "com.bancodebogota.bancamovil": "Banco de Bogota",
+      "com.davivienda.daviviendaapp": "Davivienda",
+      "com.davivienda.daviplataapp": "Daviplata",
+      "com.mosync.app_Banco_Galicia": "Banco de Galicia",
+      "com.akbank.android.apps.akbank_direkt": "AKBANK",
+      "com.ingbanktr.ingmobil": "ING",
+      "com.garanti.cepsubesi": "Garanti BBVA",
+      "com.pozitron.iscep": "İşbank",
+      "com.ykb.android": "Yapı Kredi",
+      "com.ziraat.ziraatmobil": "Ziraat",
+      "com.vakifbank.mobile": "VakıfBank",
+      "com.tmobtech.halkbank": "Halkbank",
+      "com.nu.production": "Nubank",
+      "com.mercadopago.wallet": "Mercado Pago"
+    }
+  },
   "trustpilot": {
     "rss_query_templates": [
       "https://news.google.com/rss/search?q={query}&hl={hl}&gl={gl}&ceid={ceid}"

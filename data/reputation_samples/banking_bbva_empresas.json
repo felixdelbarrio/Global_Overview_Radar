@@ -988,7 +988,51 @@
   },
   "google_play": {
     "package_ids": [],
-    "package_ids_by_geo": {},
+    "package_ids_by_geo": {
+      "España": [
+        "com.bbva.GEMA.global",
+        "com.bbva.netcash",
+        "es.bancosantander.empresas",
+        "com.bankinter.empresas",
+        "es.caixabank.caixabanksign",
+        "eu.qonto.qonto",
+        "com.paypal.merchant.client",
+        "com.stripe.android.dashboard",
+        "com.adyen.ipp.mobile.companion.live"
+      ],
+      "México": [
+        "com.bbva.GEMA",
+        "mx.bancosabadell.emp.token",
+        "com.paypal.merchant.client",
+        "com.stripe.android.dashboard",
+        "com.adyen.ipp.mobile.companion.live"
+      ],
+      "Perú": [
+        "pe.bbvacontinental.netcash",
+        "com.paypal.merchant.client",
+        "com.stripe.android.dashboard",
+        "com.adyen.ipp.mobile.companion.live"
+      ],
+      "Colombia": [
+        "com.todo1.mobile.bancolombiaempresas",
+        "co.com.bancolombia.canalesmoviles.apppyme",
+        "co.com.ath.bbog.icbs",
+        "com.paypal.merchant.client",
+        "com.stripe.android.dashboard",
+        "com.adyen.ipp.mobile.companion.live"
+      ],
+      "Argentina": [
+        "com.galicia.otp",
+        "com.paypal.merchant.client",
+        "com.stripe.android.dashboard",
+        "com.adyen.ipp.mobile.companion.live"
+      ],
+      "Turquía": [
+        "com.paypal.merchant.client",
+        "com.stripe.android.dashboard",
+        "com.adyen.ipp.mobile.companion.live"
+      ]
+    },
     "geo_to_gl": {
       "España": "ES",
       "México": "MX",
@@ -1004,6 +1048,24 @@
       "Colombia": "es-419",
       "Argentina": "es-419",
       "Turquía": "tr"
+    },
+    "package_id_to_actor": {
+      "com.bbva.GEMA.global": "BBVA",
+      "com.bbva.GEMA": "BBVA",
+      "com.bbva.netcash": "BBVA",
+      "pe.bbvacontinental.netcash": "BBVA",
+      "es.bancosantander.empresas": "Santander",
+      "com.bankinter.empresas": "Bankinter",
+      "es.caixabank.caixabanksign": "Caixabank",
+      "mx.bancosabadell.emp.token": "Sabadell",
+      "com.todo1.mobile.bancolombiaempresas": "Bancolombia",
+      "co.com.bancolombia.canalesmoviles.apppyme": "Bancolombia",
+      "co.com.ath.bbog.icbs": "Banco de Bogota",
+      "com.galicia.otp": "Banco de Galicia",
+      "eu.qonto.qonto": "Qonto",
+      "com.paypal.merchant.client": "PayPal",
+      "com.stripe.android.dashboard": "Stripe",
+      "com.adyen.ipp.mobile.companion.live": "Adyen"
     }
   }
 }
