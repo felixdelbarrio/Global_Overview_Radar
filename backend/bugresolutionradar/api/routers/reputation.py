@@ -85,6 +85,8 @@ def reputation_meta() -> dict[str, Any]:
     cfg = load_business_config()
     principal = primary_actor_info(cfg)
     geos = [g for g in cfg.get("geografias", []) if isinstance(g, str) and g.strip()]
+    otros_actores_por_geografia = cfg.get("otros_actores_por_geografia") or {}
+    otros_actores_globales = cfg.get("otros_actores_globales") or []
     repo = ReputationCacheRepo(reputation_settings.cache_path)
     doc = repo.load()
     source_counts: dict[str, int] = {}
@@ -99,6 +101,8 @@ def reputation_meta() -> dict[str, Any]:
     return {
         "actor_principal": principal,
         "geos": geos,
+        "otros_actores_por_geografia": otros_actores_por_geografia,
+        "otros_actores_globales": otros_actores_globales,
         "sources_enabled": sources_enabled,
         "sources_available": sources_available,
         "source_counts": source_counts,
@@ -284,7 +288,21 @@ def _filter_items(
             item_actor = item.actor or ""
             if alias_map:
                 item_actor = alias_map.get(normalize_text(item_actor), item_actor)
-            if item_actor.lower() != actor_filter:
+            matched = item_actor.lower() == actor_filter
+            if not matched:
+                signals = item.signals or {}
+                actors_signal = signals.get("actors")
+                if isinstance(actors_signal, list):
+                    for value in actors_signal:
+                        if not isinstance(value, str) or not value.strip():
+                            continue
+                        candidate = value
+                        if alias_map:
+                            candidate = alias_map.get(normalize_text(candidate), candidate)
+                        if candidate.lower() == actor_filter:
+                            matched = True
+                            break
+            if not matched:
                 continue
         if sentiment_lc and (item.sentiment or "").lower() != sentiment_lc:
             continue
@@ -370,9 +388,10 @@ def _parse_datetime(value: Any) -> datetime | None:
 def _principal_terms_from_cfg(cfg: dict[str, Any]) -> list[str]:
     terms = actor_principal_terms(cfg)
     keywords = [k.strip() for k in cfg.get("keywords", []) if isinstance(k, str) and k.strip()]
-    for term in keywords:
-        if term and term not in terms:
-            terms.append(term)
+    if terms:
+        for term in keywords:
+            if term and match_keywords(term, terms) and term not in terms:
+                terms.append(term)
     return terms
 
 
