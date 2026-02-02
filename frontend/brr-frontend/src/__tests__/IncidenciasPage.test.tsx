@@ -27,32 +27,41 @@ import IncidenciasPage from "@/app/incidencias/page";
 const apiGetMock = vi.mocked(apiGet);
 
 it("filters incidents by search and severity", async () => {
-  apiGetMock.mockResolvedValue({
-    items: [
-      {
-        global_id: "INC-1",
-        title: "Login error",
-        status: "OPEN",
-        severity: "HIGH",
-        opened_at: "2025-01-10",
-        product: "Mobile",
-        feature: "Login",
-      },
-      {
-        global_id: "INC-2",
-        title: "Pago lento",
-        status: "CLOSED",
-        severity: "LOW",
-        opened_at: "2025-01-08",
-        product: "Payments",
-        feature: "Transfer",
-      },
-    ],
+  apiGetMock.mockImplementation((path: string) => {
+    if (path.startsWith("/evolution")) {
+      return Promise.resolve({
+        days: 90,
+        series: [{ date: "2025-01-01", open: 1, new: 1, closed: 0 }],
+      });
+    }
+    return Promise.resolve({
+      items: [
+        {
+          global_id: "INC-1",
+          title: "Login error",
+          status: "OPEN",
+          severity: "HIGH",
+          opened_at: "2025-01-10",
+          product: "Mobile",
+          feature: "Login",
+        },
+        {
+          global_id: "INC-2",
+          title: "Pago lento",
+          status: "CLOSED",
+          severity: "LOW",
+          opened_at: "2025-01-08",
+          product: "Payments",
+          feature: "Transfer",
+        },
+      ],
+    });
   });
 
   render(<IncidenciasPage />);
 
   expect(await screen.findByText("INC-1")).toBeInTheDocument();
+  expect(screen.getByText("EVOLUCIÓN TEMPORAL")).toBeInTheDocument();
   expect(screen.getByText("INC-2")).toBeInTheDocument();
 
   const search = screen.getByPlaceholderText("ID, título, producto, funcionalidad…");

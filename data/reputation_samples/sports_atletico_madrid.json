@@ -439,6 +439,7 @@
     "rss_query_templates": [
       "https://news.google.com/rss/search?q={query}&hl={hl}&gl={gl}&ceid={ceid}"
     ],
+    "rss_query_segment_mode": "strict",
     "query_terms": [
       "downdetector",
       "incidencia",
@@ -457,7 +458,8 @@
     "blogs",
     "gdelt",
     "newsapi",
-    "guardian"
+    "guardian",
+    "downdetector"
   ],
   "noise_terms": [
     "deportes",

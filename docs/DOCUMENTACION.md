@@ -77,6 +77,8 @@ Noise-control knobs (reputation):
 - `require_actor_sources`: list of sources that must contain an actor reference.
 - `guard_actors` / `guard_context_terms`: block items with ambiguous actor mentions.
 - `otros_actores_por_geografia` + `otros_actores_globales`: allowlist actors by geo (drops mismatched).
+- `require_context_sources`: enforce context terms for specific sources (e.g., downdetector).
+- `rss_query_segment_mode`: tighten RSS queries per source (e.g., set downdetector to `strict`).
 
 UI flags:
 - `ui.incidents_enabled` / `ui.ops_enabled`: enable or hide incident-related views.
@@ -169,6 +171,8 @@ Controles de ruido (reputacion):
 - `require_actor_sources`: fuentes que exigen mencionar actor.
 - `guard_actors` / `guard_context_terms`: bloquean contexto ambiguo.
 - `otros_actores_por_geografia` + `otros_actores_globales`: allowlist de actores por geo (descarta mismatches).
+- `require_context_sources`: fuerza contexto para fuentes concretas (ej. downdetector).
+- `rss_query_segment_mode`: endurece consultas RSS por fuente (ej. downdetector en `strict`).
 
 Flags de UI:
 - `ui.incidents_enabled` / `ui.ops_enabled`: habilitan u ocultan vistas de incidencias.

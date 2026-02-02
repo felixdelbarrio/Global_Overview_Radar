@@ -5,10 +5,13 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
-import { Calendar, Filter, Search, Sparkles } from "lucide-react";
+import { Calendar, Filter, Loader2, Search, Sparkles } from "lucide-react";
 import { Shell } from "@/components/Shell";
 import { apiGet } from "@/lib/api";
-import type { Severity } from "@/lib/types";
+import { EvolutionChart } from "@/components/EvolutionChart";
+import type { EvolutionPoint, Severity } from "@/lib/types";
+
+const EVOLUTION_DAYS = 90;
 
 type Incident = {
   global_id: string;
@@ -43,8 +46,12 @@ function chipStatus(st: string) {
 export default function IncidenciasPage() {
   /** Lista completa de incidencias. */
   const [items, setItems] = useState<Incident[]>([]);
+  const [itemsLoading, setItemsLoading] = useState(true);
   /** Mensaje de error si falla la API. */
   const [error, setError] = useState<string | null>(null);
+  const [evolution, setEvolution] = useState<EvolutionPoint[]>([]);
+  const [evolutionLoading, setEvolutionLoading] = useState(true);
+  const [evolutionError, setEvolutionError] = useState<string | null>(null);
 
   /** Filtros de busqueda. */
   const [q, setQ] = useState("");
@@ -52,9 +59,39 @@ export default function IncidenciasPage() {
   const [st, setSt] = useState<string>("ALL");
 
   useEffect(() => {
-    apiGet<{ items: Incident[] }>("/incidents")
-      .then((r) => setItems(r.items))
-      .catch((e) => setError(String(e)));
+    let alive = true;
+    setItemsLoading(true);
+    apiGet<{ items: Incident[] }>("/incidents?limit=5000")
+      .then((r) => {
+        if (!alive) return;
+        setItems(r.items);
+      })
+      .catch((e) => {
+        if (!alive) return;
+        setError(String(e));
+      })
+      .finally(() => {
+        if (!alive) return;
+        setItemsLoading(false);
+      });
+
+    apiGet<{ days: number; series: EvolutionPoint[] }>(`/evolution?days=${EVOLUTION_DAYS}`)
+      .then((r) => {
+        if (!alive) return;
+        setEvolution(r.series ?? []);
+      })
+      .catch((e) => {
+        if (!alive) return;
+        setEvolutionError(String(e));
+      })
+      .finally(() => {
+        if (!alive) return;
+        setEvolutionLoading(false);
+      });
+
+    return () => {
+      alive = false;
+    };
   }, []);
 
   const filtered = useMemo(() => {
@@ -76,6 +113,19 @@ export default function IncidenciasPage() {
 
   const activeFilters =
     (q ? 1 : 0) + (sev !== "ALL" ? 1 : 0) + (st !== "ALL" ? 1 : 0);
+  const hasActiveFilters = activeFilters > 0;
+  const errorMessage = error || evolutionError;
+  const filteredEvolution = useMemo(
+    () => buildEvolutionSeries(filtered, EVOLUTION_DAYS),
+    [filtered],
+  );
+  const chartData = useMemo(() => {
+    if (hasActiveFilters) {
+      return filteredEvolution;
+    }
+    return evolution.length ? evolution : filteredEvolution;
+  }, [hasActiveFilters, evolution, filteredEvolution]);
+  const chartLoading = evolutionLoading && !hasActiveFilters;
 
   return (
     <Shell>
@@ -99,11 +149,21 @@ export default function IncidenciasPage() {
           <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-black/55">
             <span className="inline-flex items-center gap-2 rounded-full bg-white/70 px-3 py-1">
               <Calendar className="h-3.5 w-3.5 text-[color:var(--blue)]" />
-              Total cargadas: {items.length}
+              Total cargadas:{" "}
+              {itemsLoading ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-[color:var(--blue)]" />
+              ) : (
+                items.length
+              )}
             </span>
             <span className="inline-flex items-center gap-2 rounded-full bg-white/70 px-3 py-1">
               <Search className="h-3.5 w-3.5 text-[color:var(--blue)]" />
-              Mostrando: {filtered.length}
+              Mostrando:{" "}
+              {itemsLoading ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-[color:var(--blue)]" />
+              ) : (
+                filtered.length
+              )}
             </span>
             <span className="inline-flex items-center gap-2 rounded-full bg-white/70 px-3 py-1">
               <Filter className="h-3.5 w-3.5 text-[color:var(--blue)]" />
@@ -113,9 +173,9 @@ export default function IncidenciasPage() {
         </div>
       </section>
 
-      {error && (
+      {errorMessage && (
         <div className="mt-4 rounded-2xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-800">
-          {error}
+          {errorMessage}
         </div>
       )}
 
@@ -173,6 +233,29 @@ export default function IncidenciasPage() {
         </div>
       </div>
 
+      {/* Evolucion */}
+      <div className="mt-6 rounded-[26px] border border-white/60 bg-[color:var(--panel)] p-5 shadow-[0_20px_50px_rgba(7,33,70,0.08)] backdrop-blur-xl animate-rise" style={{ animationDelay: "150ms" }}>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
+            EVOLUCIÓN TEMPORAL
+          </h2>
+          <span className="text-xs text-black/50">
+            Últimos {EVOLUTION_DAYS} días{hasActiveFilters ? " · filtros activos" : ""}
+          </span>
+        </div>
+        <div className="mt-4 h-72 min-h-[260px]">
+          {chartLoading ? (
+            <div className="h-full rounded-[22px] border border-white/60 bg-white/70 animate-pulse" />
+          ) : chartData.length ? (
+            <EvolutionChart data={chartData} />
+          ) : (
+            <div className="h-full grid place-items-center text-sm text-black/45">
+              Sin datos para el periodo seleccionado.
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* Tabla */}
       <div className="mt-6 rounded-[26px] border border-white/60 bg-[color:var(--panel)] shadow-[0_20px_50px_rgba(7,33,70,0.08)] backdrop-blur-xl overflow-hidden animate-rise" style={{ animationDelay: "180ms" }}>
         <div className="overflow-x-auto">
@@ -193,42 +276,46 @@ export default function IncidenciasPage() {
             </thead>
 
             <tbody>
-              {filtered.map((it, idx) => (
-                <tr
-                  key={it.global_id}
-                  className={idx % 2 === 0 ? "bg-white/70" : "bg-white/40"}
-                  style={{ borderTop: "1px solid rgba(7,33,70,0.08)" }}
-                >
-                  <td className="px-4 py-3 font-mono text-xs whitespace-nowrap">
-                    {it.global_id}
-                  </td>
-                  <td className="px-4 py-3 min-w-[360px]">
-                    <div className="font-semibold text-[color:var(--ink)]">
-                      {it.title}
-                    </div>
-                    <div className="text-xs text-black/55">
-                      {it.product ?? "—"} · {it.feature ?? "—"}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${chipStatus(it.status)}`}>
-                      {it.status}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${chipSeverity(String(it.severity))}`}>
-                      {String(it.severity)}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">{it.product ?? "—"}</td>
-                  <td className="px-4 py-3">{it.feature ?? "—"}</td>
-                  <td className="px-4 py-3 whitespace-nowrap">
-                    {it.opened_at ?? "—"}
-                  </td>
-                </tr>
-              ))}
+              {itemsLoading ? (
+                <SkeletonTableRows columns={7} rows={5} />
+              ) : (
+                filtered.map((it, idx) => (
+                  <tr
+                    key={it.global_id}
+                    className={idx % 2 === 0 ? "bg-white/70" : "bg-white/40"}
+                    style={{ borderTop: "1px solid rgba(7,33,70,0.08)" }}
+                  >
+                    <td className="px-4 py-3 font-mono text-xs whitespace-nowrap">
+                      {it.global_id}
+                    </td>
+                    <td className="px-4 py-3 min-w-[360px]">
+                      <div className="font-semibold text-[color:var(--ink)]">
+                        {it.title}
+                      </div>
+                      <div className="text-xs text-black/55">
+                        {it.product ?? "—"} · {it.feature ?? "—"}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${chipStatus(it.status)}`}>
+                        {it.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${chipSeverity(String(it.severity))}`}>
+                        {String(it.severity)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">{it.product ?? "—"}</td>
+                    <td className="px-4 py-3">{it.feature ?? "—"}</td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      {it.opened_at ?? "—"}
+                    </td>
+                  </tr>
+                ))
+              )}
 
-              {filtered.length === 0 && (
+              {!itemsLoading && filtered.length === 0 && (
                 <tr>
                   <td colSpan={7} className="px-4 py-10 text-center text-black/55">
                     No hay incidencias para mostrar con los filtros actuales.
@@ -241,4 +328,76 @@ export default function IncidenciasPage() {
       </div>
     </Shell>
   );
+}
+
+function SkeletonTableRows({ columns, rows }: { columns: number; rows: number }) {
+  return (
+    <>
+      {Array.from({ length: rows }).map((_, rowIdx) => (
+        <tr key={rowIdx} className="border-t border-white/60 animate-pulse">
+          {Array.from({ length: columns }).map((_, colIdx) => (
+            <td key={colIdx} className="px-4 py-3">
+              <div className="h-3 w-full max-w-[120px] rounded-full bg-white/70 border border-white/60" />
+            </td>
+          ))}
+        </tr>
+      ))}
+    </>
+  );
+}
+
+function buildEvolutionSeries(items: Incident[], days: number): EvolutionPoint[] {
+  if (!items.length || days <= 0) return [];
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const start = new Date(today);
+  start.setDate(start.getDate() - (days - 1));
+
+  const normalized = items
+    .map((item) => ({
+      opened: toDateOnly(item.opened_at),
+      closed: toDateOnly(item.closed_at),
+    }))
+    .filter((row) => row.opened);
+
+  const series: EvolutionPoint[] = [];
+  for (let i = 0; i < days; i += 1) {
+    const day = new Date(start);
+    day.setDate(start.getDate() + i);
+    const key = toDateKey(day);
+
+    let open = 0;
+    let fresh = 0;
+    let closed = 0;
+
+    for (const row of normalized) {
+      const opened = row.opened!;
+      const closedAt = row.closed;
+      if (toDateKey(opened) === key) {
+        fresh += 1;
+      }
+      if (closedAt && toDateKey(closedAt) === key) {
+        closed += 1;
+      }
+      if (opened <= day && (!closedAt || closedAt > day)) {
+        open += 1;
+      }
+    }
+
+    series.push({ date: key, open, new: fresh, closed });
+  }
+
+  return series;
+}
+
+function toDateOnly(value?: string | null) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  date.setHours(0, 0, 0, 0);
+  return date;
+}
+
+function toDateKey(date: Date) {
+  return date.toISOString().slice(0, 10);
 }

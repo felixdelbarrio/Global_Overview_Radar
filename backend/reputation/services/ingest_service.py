@@ -421,6 +421,7 @@ class ReputationIngestService:
         notes: list[str],
     ) -> list[ReputationItem]:
         require_actor_sources = cls._load_sources_list(cfg.get("require_actor_sources"))
+        require_context_sources = cls._load_sources_list(cfg.get("require_context_sources"))
         noise_sources = cls._load_sources_list(cfg.get("noise_filter_sources"))
         if not require_actor_sources:
             require_actor_sources = _ACTOR_REQUIRED_SOURCES
@@ -433,12 +434,26 @@ class ReputationIngestService:
         aliases_by_canonical = build_actor_aliases_by_canonical(cfg)
         guard_actors = cls._load_guard_actors(cfg, alias_map)
         allowed_by_geo, known_actors = cls._build_actor_geo_allowlist(cfg, alias_map)
+        source_context_terms: dict[str, list[str]] = {}
+        if require_context_sources:
+            for source in require_context_sources:
+                extra_terms: list[str] = []
+                raw_source_cfg = cfg.get(source) or {}
+                if isinstance(raw_source_cfg, dict):
+                    raw_terms = raw_source_cfg.get("query_terms") or []
+                    if isinstance(raw_terms, list):
+                        extra_terms = [
+                            t.strip() for t in raw_terms if isinstance(t, str) and t.strip()
+                        ]
+                combined = list(dict.fromkeys([*context_terms, *extra_terms]))
+                source_context_terms[source] = combined
         filtered: list[ReputationItem] = []
         dropped_actor = 0
         dropped_actor_text = 0
         dropped_guard = 0
         dropped_geo = 0
         dropped_noise = 0
+        dropped_context = 0
 
         for item in items:
             text = f"{item.title or ''} {item.text or ''}".strip()
@@ -450,6 +465,11 @@ class ReputationIngestService:
             ):
                 dropped_actor_text += 1
                 continue
+            if require_context_sources and item.source in require_context_sources:
+                terms = source_context_terms.get(item.source, context_terms)
+                if text and terms and not match_keywords(text, terms):
+                    dropped_context += 1
+                    continue
             if allowed_by_geo and item.geo:
                 if not cls._item_actor_allowed_for_geo(
                     item, item.geo, allowed_by_geo, known_actors, alias_map
@@ -467,16 +487,29 @@ class ReputationIngestService:
                         continue
             filtered.append(item)
 
-        if dropped_actor or dropped_actor_text or dropped_guard or dropped_geo or dropped_noise:
+        if (
+            dropped_actor
+            or dropped_actor_text
+            or dropped_guard
+            or dropped_geo
+            or dropped_noise
+            or dropped_context
+        ):
             total_dropped = (
-                dropped_actor + dropped_actor_text + dropped_guard + dropped_geo + dropped_noise
+                dropped_actor
+                + dropped_actor_text
+                + dropped_guard
+                + dropped_geo
+                + dropped_noise
+                + dropped_context
             )
             notes.append(
-                "filter: dropped %s items (missing_actor=%s, actor_text=%s, guard=%s, geo=%s, noise=%s)"
+                "filter: dropped %s items (missing_actor=%s, actor_text=%s, context=%s, guard=%s, geo=%s, noise=%s)"
                 % (
                     total_dropped,
                     dropped_actor,
                     dropped_actor_text,
+                    dropped_context,
                     dropped_guard,
                     dropped_geo,
                     dropped_noise,
@@ -1920,6 +1953,9 @@ class ReputationIngestService:
         templates = src_cfg.get("rss_query_templates") or []
         if not templates:
             return []
+        segment_mode_override = str(src_cfg.get("rss_query_segment_mode") or "").strip().lower()
+        if segment_mode_override in {"broad", "strict"}:
+            segment_mode = segment_mode_override
         prefix = source_key.upper()
         default_geo_mode = "optional"
         geo_mode = str(src_cfg.get("rss_query_geo_mode") or "").strip().lower()
@@ -2237,6 +2273,7 @@ _ACTOR_REQUIRED_SOURCES = {
     "gdelt",
     "newsapi",
     "guardian",
+    "downdetector",
 }
 
 
