@@ -24,10 +24,10 @@ def main() -> None:
     cmd = sys.argv[1]
 
     # ------------------------------------------------------------------
-    # INGEST ACTUAL (incidencias / bugs)
+    # INGEST ACTUAL (incidencias / cuadros de mando)
     # ------------------------------------------------------------------
     if cmd == "ingest":
-        logger.info("Running ingest pipeline...")
+        logger.info("Running incidents dashboard ingest...")
 
         repo = CacheRepo(settings.cache_path)
         ingest_service = IngestService(settings)
@@ -49,13 +49,16 @@ def main() -> None:
         cache_doc = consolidate_service.consolidate(observations, sources)
 
         repo.save(cache_doc)
+        print(f"Incidents: {len(cache_doc.incidents)}")
+        print(f"Observations: {len(observations)}")
+        print(f"Sources: {len(sources)}")
         logger.info("Cache written to %s", settings.cache_path)
 
     # ------------------------------------------------------------------
     # REPUTATION INGEST (Paso 1: plumbing + cache vacía)
     # ------------------------------------------------------------------
     elif cmd == "reputation-ingest":
-        logger.info("Running reputation ingest (Paso 1)...")
+        logger.info("Running reputation ingest...")
 
         # Import lazy para no romper 'ingest' si reputación no está montado
         from reputation.services import ReputationIngestService
@@ -63,6 +66,7 @@ def main() -> None:
         service = ReputationIngestService()
         doc = service.run()
 
+        print(f"Reputation items: {doc.stats.count}")
         logger.info("Reputation generated_at: %s", doc.generated_at.isoformat())
         logger.info("config_hash: %s", doc.config_hash)
         logger.info("items: %s", doc.stats.count)
