@@ -126,6 +126,7 @@ _COUNTRY_CODE_MAP = {
 }
 
 _STAR_SENTIMENT_SOURCES = {"appstore"}
+_ACTOR_TEXT_REQUIRED_SOURCES = {"news", "blogs", "gdelt", "newsapi", "guardian"}
 
 
 def _extract_star_rating(item: ReputationItem) -> float | None:
@@ -598,6 +599,7 @@ class ReputationSentimentService:
         geo = item.geo or self._detect_geo(lowered, item)
         actors = self._detect_actors(lowered, geo, item.signals)
         actors = self._filter_actors_by_context(evaluated_text, actors)
+        actors = self._filter_actors_by_text(item, evaluated_text, actors)
 
         rating = _extract_star_rating(item)
         if item.source in _STAR_SENTIMENT_SOURCES and rating is None:
@@ -653,6 +655,32 @@ class ReputationSentimentService:
         if actors:
             item.signals["actors"] = actors
         return item
+
+    def _filter_actors_by_text(
+        self, item: ReputationItem, text: str, actors: list[str]
+    ) -> list[str]:
+        if not actors:
+            return actors
+        if item.source not in _ACTOR_TEXT_REQUIRED_SOURCES:
+            return actors
+        if not text:
+            return []
+        if isinstance(item.signals, dict) and item.signals.get("actor_source"):
+            return actors
+        kept: list[str] = []
+        for actor in actors:
+            if self._actor_in_text(actor, text):
+                kept.append(actor)
+        return kept
+
+    def _actor_in_text(self, actor: str, text: str) -> bool:
+        if match_keywords(text, [actor]):
+            return True
+        aliases = self._actor_aliases.get(actor) or []
+        for alias in aliases:
+            if match_keywords(text, [alias]):
+                return True
+        return False
 
     def _filter_actors_by_context(self, text: str, actors: list[str]) -> list[str]:
         if not actors or not self._context_guard_actors:
