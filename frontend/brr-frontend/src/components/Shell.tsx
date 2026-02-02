@@ -6,6 +6,7 @@
  * Incluye topbar, sidebar y contenedor de contenido.
  */
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -16,17 +17,66 @@ import {
   Activity,
   HeartPulse,
 } from "lucide-react";
+import { apiGet } from "@/lib/api";
+import type { ReputationMeta } from "@/lib/types";
 
 export function Shell({ children }: { children: React.ReactNode }) {
   /** Ruta actual para resaltar la navegacion. */
   const pathname = usePathname();
+  const [uiFlags, setUiFlags] = useState({
+    incidents_enabled: true,
+    ops_enabled: true,
+  });
+
+  useEffect(() => {
+    if (process.env.NODE_ENV === "test") return;
+    let alive = true;
+    apiGet<ReputationMeta>("/reputation/meta")
+      .then((meta) => {
+        if (!alive) return;
+        const ui = meta.ui ?? {};
+        setUiFlags({
+          incidents_enabled: ui.incidents_enabled !== false,
+          ops_enabled: ui.ops_enabled !== false,
+        });
+      })
+      .catch(() => {
+        if (!alive) return;
+        setUiFlags({ incidents_enabled: true, ops_enabled: true });
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   /** Definicion de items de navegacion. */
   const nav = [
-    { href: "/", label: "Dashboard", icon: LayoutDashboard },
-    { href: "/incidencias", label: "Incidencias", icon: ListChecks },
-    { href: "/ops", label: "Ops Executive", icon: ShieldAlert },
-    { href: "/sentimiento", label: "Sentimiento", icon: HeartPulse },
+    {
+      href: "/",
+      label: "Dashboard",
+      icon: LayoutDashboard,
+      description: "Señales clave",
+    },
+    {
+      href: "/sentimiento",
+      label: "Sentimiento",
+      icon: HeartPulse,
+      description: "Histórico y análisis",
+    },
+    {
+      href: "/incidencias",
+      label: "Incidencias",
+      icon: ListChecks,
+      description: "Listado y filtros",
+      hidden: !uiFlags.incidents_enabled,
+    },
+    {
+      href: "/ops",
+      label: "Ops Executive",
+      icon: ShieldAlert,
+      description: "Vista operativa",
+      hidden: !uiFlags.ops_enabled,
+    },
   ];
 
   return (
@@ -81,7 +131,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
             </div>
 
             <nav className="mt-3 flex flex-col gap-2">
-              {nav.map((item) => {
+              {nav.filter((item) => !item.hidden).map((item) => {
                 const active = pathname === item.href;
                 const Icon = item.icon;
 
@@ -144,13 +194,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
                             : "text-[11px] text-black/50"
                         }
                       >
-                        {item.href === "/"
-                          ? "KPIs y tendencias"
-                          : item.href === "/incidencias"
-                          ? "Listado y filtros"
-                          : item.href === "/ops"
-                          ? "Vista operativa"
-                          : "Histórico y análisis"}
+                        {item.description}
                       </div>
                     </div>
 
