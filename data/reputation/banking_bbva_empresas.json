@@ -1169,5 +1169,8 @@
       "com.stripe.android.dashboard": "Stripe",
       "com.adyen.ipp.mobile.companion.live": "Adyen"
     }
-  }
+  },
+  "actor_context_guard": [
+    "Santander"
+  ]
 }

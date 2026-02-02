@@ -194,11 +194,9 @@ export default function SentimientoPage() {
       if (fromDate) params.set("from_date", fromDate);
       if (toDate) params.set("to_date", toDate);
       if (sentiment !== "all") params.set("sentiment", sentiment);
-      if (entity !== "all") params.set("entity", entity);
+      params.set("entity", entity);
       if (geo !== "all") params.set("geo", geo);
-      if (actor !== "all" && entity !== "actor_principal") {
-        params.set("actor", actor);
-      }
+      // entity is fixed to actor_principal; actor filter is handled in compare flow
       if (sources.length) params.set("sources", sources.join(","));
 
       try {
