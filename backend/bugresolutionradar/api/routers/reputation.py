@@ -84,6 +84,7 @@ def reputation_items(
 def reputation_meta() -> dict[str, Any]:
     cfg = load_business_config()
     principal = primary_actor_info(cfg)
+    geos = [g for g in cfg.get("geografias", []) if isinstance(g, str) and g.strip()]
     repo = ReputationCacheRepo(reputation_settings.cache_path)
     doc = repo.load()
     source_counts: dict[str, int] = {}
@@ -97,6 +98,7 @@ def reputation_meta() -> dict[str, Any]:
     sources_available = sorted([s for s, count in source_counts.items() if count > 0])
     return {
         "actor_principal": principal,
+        "geos": geos,
         "sources_enabled": sources_enabled,
         "sources_available": sources_available,
         "source_counts": source_counts,
@@ -385,6 +387,15 @@ def _item_is_principal(
         canonical = alias_map.get(normalize_text(item_actor), item_actor)
         if canonical in principal_canonicals:
             return True
+    signals = item.signals or {}
+    actors_signal = signals.get("actors")
+    if isinstance(actors_signal, list):
+        for actor in actors_signal:
+            if not isinstance(actor, str) or not actor.strip():
+                continue
+            canonical = alias_map.get(normalize_text(actor), actor)
+            if canonical in principal_canonicals:
+                return True
     haystack = f"{item.title or ''} {item.text or ''}".strip()
     if haystack and principal_terms:
         return match_keywords(haystack, principal_terms)

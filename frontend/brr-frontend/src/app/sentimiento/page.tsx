@@ -27,6 +27,7 @@ import {
   Loader2,
   MapPin,
   MessageSquare,
+  Star,
   PenSquare,
   Sparkles,
   ThumbsDown,
@@ -257,10 +258,11 @@ export default function SentimientoPage() {
     const combined = unique([...fromMeta, ...fromAvailable, ...fromItems]).filter(Boolean);
     return combined.sort((a, b) => a.localeCompare(b));
   }, [items, meta]);
-  const geoOptions = useMemo(
-    () => unique(items.map((i) => i.geo).filter(Boolean) as string[]),
-    [items],
-  );
+  const geoOptions = useMemo(() => {
+    const fromMeta = meta?.geos ?? [];
+    const fromItems = items.map((i) => i.geo).filter(Boolean) as string[];
+    return unique([...fromMeta, ...fromItems]).sort((a, b) => a.localeCompare(b));
+  }, [items, meta]);
   const actorOptions = useMemo(() => {
     const values = unique(
       chartItems.map((i) => i.actor).filter(Boolean) as string[],
@@ -326,6 +328,7 @@ export default function SentimientoPage() {
     () =>
       groupedMentions.filter((item) => {
         if (isPrincipalGroup(item, principalAliasKeys)) return false;
+        if (!item.actor) return false;
         if (!selectedActorKey) return true;
         return normalizeKey(item.actor || "") === selectedActorKey;
       }),
@@ -760,6 +763,8 @@ type MentionGroup = {
   geo?: string;
   actor?: string;
   sentiment?: string;
+  rating?: number | null;
+  rating_source?: string | null;
   published_at?: string | null;
   collected_at?: string | null;
   sources: MentionSource[];
@@ -791,6 +796,8 @@ function MentionCard({
   );
   const [saving, setSaving] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+  const ratingValue = typeof item.rating === "number" ? item.rating : null;
+  const ratingLabel = ratingValue ? ratingValue.toFixed(1) : null;
 
   useEffect(() => {
     setDraftGeo(item.geo ?? "");
@@ -857,6 +864,13 @@ function MentionCard({
           {sentimentTone.icon}
           {sentimentTone.label}
         </span>
+        {ratingValue !== null && (
+          <span className="inline-flex items-center gap-2 rounded-full border border-[color:var(--aqua)]/40 bg-[linear-gradient(120deg,rgba(0,68,129,0.12),rgba(45,204,205,0.2),rgba(255,255,255,0.85))] px-2.5 py-1 text-[11px] text-[color:var(--navy)] shadow-[0_6px_18px_rgba(7,33,70,0.12)]">
+            <StarMeter rating={ratingValue} />
+            <span className="font-semibold">{ratingLabel}</span>
+            <span className="text-[10px] uppercase tracking-[0.2em] text-black/45">/5</span>
+          </span>
+        )}
         {item.manual_override && (
           <span className="inline-flex items-center gap-1 rounded-full border border-[color:var(--aqua)]/40 bg-[color:var(--aqua)]/10 px-2.5 py-1 text-[11px] text-[color:var(--navy)]">
             <Sparkles className="h-3 w-3" />
@@ -1073,6 +1087,7 @@ function groupMentions(items: ReputationItem[]) {
   const map = new Map<string, MentionGroup>();
 
   for (const item of items) {
+    const extractedActor = extractActor(item);
     const title = cleanText(item.title || "");
     const text = cleanText(item.text || "");
     const base =
@@ -1080,7 +1095,7 @@ function groupMentions(items: ReputationItem[]) {
     const key = [
       normalizeKey(base),
       item.geo || "",
-      item.actor || "",
+      extractedActor || "",
     ].join("|");
 
     if (!map.has(key)) {
@@ -1090,8 +1105,10 @@ function groupMentions(items: ReputationItem[]) {
         title: title || text || "Sin título",
         text: text || undefined,
         geo: item.geo || undefined,
-        actor: item.actor || undefined,
+        actor: extractedActor || undefined,
         sentiment: item.sentiment || undefined,
+        rating: extractRating(item),
+        rating_source: extractRatingSource(item),
         published_at: item.published_at || null,
         collected_at: item.collected_at || null,
         sources: [],
@@ -1119,12 +1136,22 @@ function groupMentions(items: ReputationItem[]) {
       group.text = text;
     }
 
+    if (!group.actor && extractedActor) {
+      group.actor = extractedActor;
+    }
+
     if (item.manual_override) {
       const candidateOverrideAt = item.manual_override.updated_at ?? "";
       const currentOverrideAt = group.manual_override?.updated_at ?? "";
       if (!group.manual_override || candidateOverrideAt > currentOverrideAt) {
         group.manual_override = item.manual_override;
       }
+    }
+
+    const candidateRating = extractRating(item);
+    if (candidateRating !== null && (group.rating === undefined || group.rating === null)) {
+      group.rating = candidateRating;
+      group.rating_source = extractRatingSource(item);
     }
 
     if (item.source) {
@@ -1145,6 +1172,56 @@ function groupMentions(items: ReputationItem[]) {
       const db = b.published_at || b.collected_at || "";
       return db.localeCompare(da);
     });
+}
+
+function extractRating(item: ReputationItem) {
+  const signals = (item.signals || {}) as Record<string, unknown>;
+  const raw = signals.rating;
+  if (raw === null || raw === undefined) return null;
+  if (typeof raw === "number" && Number.isFinite(raw)) return raw;
+  if (typeof raw === "string") {
+    const parsed = Number(raw.replace(",", "."));
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function extractActor(item: ReputationItem) {
+  if (item.actor && item.actor.trim()) return item.actor;
+  const signals = (item.signals || {}) as Record<string, unknown>;
+  const raw = signals.actors;
+  if (Array.isArray(raw)) {
+    const first = raw.find((value) => typeof value === "string" && value.trim());
+    if (typeof first === "string") return first;
+  }
+  return null;
+}
+
+function extractRatingSource(item: ReputationItem) {
+  if (!item.source) return null;
+  return item.source;
+}
+
+function StarMeter({ rating }: { rating: number }) {
+  const safe = Math.max(0, Math.min(5, rating));
+  const width = `${(safe / 5) * 100}%`;
+  return (
+    <span className="relative inline-flex items-center">
+      <span className="flex items-center text-[color:var(--navy)]/25">
+        {Array.from({ length: 5 }).map((_, idx) => (
+          <Star key={`empty-${idx}`} className="h-3.5 w-3.5" />
+        ))}
+      </span>
+      <span
+        className="absolute left-0 top-0 flex h-full items-center overflow-hidden text-[color:var(--aqua)]"
+        style={{ width }}
+      >
+        {Array.from({ length: 5 }).map((_, idx) => (
+          <Star key={`fill-${idx}`} className="h-3.5 w-3.5 fill-current" />
+        ))}
+      </span>
+    </span>
+  );
 }
 
 function isPrincipalName(name: string, principalAliases: string[]) {
