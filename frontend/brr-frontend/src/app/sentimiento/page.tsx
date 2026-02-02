@@ -85,7 +85,6 @@ export default function SentimientoPage() {
   const [fromDate, setFromDate] = useState(defaultFrom);
   const [toDate, setToDate] = useState(defaultTo);
   const [sentiment, setSentiment] = useState<SentimentFilter>("all");
-  const entity = "actor_principal";
   const [geo, setGeo] = useState("all");
   const [actor, setActor] = useState("all");
   const [actorMemory, setActorMemory] = useState<Record<string, string>>({});
@@ -98,6 +97,10 @@ export default function SentimientoPage() {
   const sourcesRef = useRef<string[]>([]);
   const [sources, setSources] = useState<string[]>([]);
   const [overrideRefresh, setOverrideRefresh] = useState(0);
+  const entityParam = useMemo(
+    () => (actor === "all" ? "all" : "actor_principal"),
+    [actor],
+  );
 
   const touchItemsFilters = () => {
     setError(null);
@@ -156,11 +159,7 @@ export default function SentimientoPage() {
 
     // If comparing actor principal vs another actor, request both datasets and combine them.
     const fetchCombinedIfComparing = async () => {
-      if (
-        entity === "actor_principal" &&
-        actor !== "all" &&
-        !isPrincipalName(actor, principalAliasKeys)
-      ) {
+      if (actor !== "all" && !isPrincipalName(actor, principalAliasKeys)) {
         const makeFilter = (overrides: Partial<Record<string, unknown>>) => {
           const f: Record<string, unknown> = {};
           if (fromDate) f.from_date = fromDate;
@@ -194,9 +193,9 @@ export default function SentimientoPage() {
       if (fromDate) params.set("from_date", fromDate);
       if (toDate) params.set("to_date", toDate);
       if (sentiment !== "all") params.set("sentiment", sentiment);
-      params.set("entity", entity);
+      params.set("entity", entityParam);
       if (geo !== "all") params.set("geo", geo);
-      // entity is fixed to actor_principal; actor filter is handled in compare flow
+      // When actor is specific, compare flow handles filters. Otherwise use entityParam.
       if (sources.length) params.set("sources", sources.join(","));
 
       try {
@@ -218,7 +217,7 @@ export default function SentimientoPage() {
     fromDate,
     toDate,
     sentiment,
-    entity,
+    entityParam,
     geo,
     actor,
     sources,
@@ -336,6 +335,9 @@ export default function SentimientoPage() {
   useEffect(() => {
     const normalized = normalizeKey(actor);
     const stored = actorMemory[geo];
+    if (actor === "all") {
+      return;
+    }
     if (actor !== "all" && availableActorSet.has(normalized)) {
       return;
     }
@@ -385,8 +387,14 @@ export default function SentimientoPage() {
   const geoSummary = useMemo(() => summarizeByGeo(items), [items]);
   const topSources = useMemo(() => topCounts(items, (i) => i.source), [items]);
   const topActores = useMemo(
-    () => topCounts(items, (i) => i.actor || "Sin actor"),
-    [items],
+    () =>
+      topCounts(
+        items.filter(
+          (item) => !isPrincipalName(item.actor || "", principalAliasKeys),
+        ),
+        (i) => i.actor || "Sin actor",
+      ),
+    [items, principalAliasKeys],
   );
   const sentimentSeries = useMemo(
     () => buildComparativeSeries(chartItems, actor, principalAliasKeys, fromDate, toDate),
