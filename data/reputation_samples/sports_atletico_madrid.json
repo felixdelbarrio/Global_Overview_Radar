@@ -409,7 +409,8 @@
       "1107624540",
       "343196080",
       "545609647"
-    ]
+    ],
+    "app_id_to_actor": {}
   },
   "trustpilot": {
     "rss_query_templates": [

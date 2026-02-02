@@ -94,6 +94,7 @@ class ReputationIngestService:
         items = self._collect_items(collectors, notes)
         items = self._normalize_items(items, lookback_days)
         items = self._apply_geo_hints(cfg, items)
+        items = self._apply_appstore_actor_map(cfg, items)
         items = self._apply_google_play_actor_map(cfg, items)
         items = self._apply_sentiment(cfg, items)
         items = self._balance_items(
@@ -156,6 +157,63 @@ class ReputationIngestService:
                 except Exception as exc:  # pragma: no cover - defensive
                     notes.append(f"{collector.source_name}: error {exc}")
                     logger.warning("Collector %s failed: %s", collector.source_name, exc)
+        return items
+
+    @classmethod
+    def _apply_appstore_actor_map(
+        cls, cfg: dict[str, Any], items: list[ReputationItem]
+    ) -> list[ReputationItem]:
+        app_cfg = _as_dict(cfg.get("appstore"))
+        mapping: dict[str, str] = {}
+        if isinstance(app_cfg, dict):
+            raw_map = app_cfg.get("app_id_to_actor")
+            if isinstance(raw_map, dict):
+                for key, value in raw_map.items():
+                    if isinstance(key, str) and isinstance(value, str) and key.strip() and value.strip():
+                        mapping[key.strip()] = value.strip()
+            # Optional: allow per-geo actor mappings in app_ids_by_geo_actor
+            raw_by_geo = app_cfg.get("app_ids_by_geo_actor")
+            if isinstance(raw_by_geo, dict):
+                for _, geo_entries in raw_by_geo.items():
+                    if isinstance(geo_entries, dict):
+                        for key, value in geo_entries.items():
+                            if isinstance(key, str) and isinstance(value, str) and key.strip() and value.strip():
+                                mapping.setdefault(key.strip(), value.strip())
+                    elif isinstance(geo_entries, list):
+                        for entry in geo_entries:
+                            if not isinstance(entry, dict):
+                                continue
+                            app_id = entry.get("id")
+                            actor = entry.get("actor")
+                            if isinstance(app_id, str) and isinstance(actor, str) and app_id.strip() and actor.strip():
+                                mapping.setdefault(app_id.strip(), actor.strip())
+        if not mapping:
+            return items
+
+        alias_map = build_actor_alias_map(cfg)
+        for item in items:
+            if item.source != "appstore":
+                continue
+            if item.actor and item.actor.strip():
+                continue
+            app_id = (item.signals or {}).get("app_id")
+            if not app_id:
+                continue
+            actor_raw = mapping.get(str(app_id))
+            if not isinstance(actor_raw, str) or not actor_raw.strip():
+                continue
+            actor = canonicalize_actor(actor_raw, alias_map) if alias_map else actor_raw.strip()
+            if not actor:
+                continue
+            item.actor = actor
+            if item.signals is not None:
+                actors = item.signals.get("actors")
+                if isinstance(actors, list):
+                    if actor not in actors:
+                        item.signals["actors"] = [actor] + [a for a in actors if a != actor]
+                else:
+                    item.signals["actors"] = [actor]
+                item.signals["actor_source"] = "app_id"
         return items
 
     @staticmethod
