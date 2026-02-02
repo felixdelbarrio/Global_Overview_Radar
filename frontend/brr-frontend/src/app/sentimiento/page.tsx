@@ -373,6 +373,14 @@ export default function SentimientoPage() {
     }
   }, [geo, filterMemory]);
 
+  useEffect(() => {
+    if (!filterRestoredAt) return;
+    const timer = window.setTimeout(() => {
+      setFilterRestoredAt(null);
+    }, 3500);
+    return () => window.clearTimeout(timer);
+  }, [filterRestoredAt]);
+
   const sentimentSummary = useMemo(() => summarize(items), [items]);
   const geoSummary = useMemo(() => summarizeByGeo(items), [items]);
   const topSources = useMemo(() => topCounts(items, (i) => i.source), [items]);
