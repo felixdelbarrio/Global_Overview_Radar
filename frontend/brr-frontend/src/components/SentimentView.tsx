@@ -5,6 +5,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import {
   CartesianGrid,
   Legend,
@@ -33,21 +34,33 @@ import {
   ThumbsDown,
   ThumbsUp,
   Minus,
+  Triangle,
   X,
 } from "lucide-react";
 import { Shell } from "@/components/Shell";
 import { apiGet, apiPost } from "@/lib/api";
-import { INGEST_SUCCESS_EVENT, type IngestSuccessDetail } from "@/lib/events";
+import {
+  dispatchIngestStarted,
+  INGEST_SUCCESS_EVENT,
+  type IngestSuccessDetail,
+} from "@/lib/events";
 import { INCIDENTS_FEATURE_ENABLED } from "@/lib/flags";
 import type {
   ActorPrincipalMeta,
   EvolutionPoint,
+  MarketRating,
+  IngestJob,
   ReputationCacheDocument,
   ReputationItem,
   ReputationMeta,
 } from "@/lib/types";
 
 const SENTIMENTS = ["all", "positive", "neutral", "negative"] as const;
+const MANUAL_OVERRIDE_BLOCKED_SOURCES = new Set(["appstore", "googlereviews"]);
+const MANUAL_OVERRIDE_BLOCKED_LABELS: Record<string, string> = {
+  appstore: "App Store",
+  googlereviews: "Google Reviews",
+};
 
 type SentimentFilter = (typeof SENTIMENTS)[number];
 type SentimentValue = Exclude<SentimentFilter, "all">;
@@ -125,6 +138,8 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
   const [chartError, setChartError] = useState<string | null>(null);
   const [actorPrincipal, setActorPrincipal] = useState<ActorPrincipalMeta | null>(null);
   const [meta, setMeta] = useState<ReputationMeta | null>(null);
+  const [marketRatings, setMarketRatings] = useState<MarketRating[]>([]);
+  const [marketRatingsHistory, setMarketRatingsHistory] = useState<MarketRating[]>([]);
 
   const [fromDate, setFromDate] = useState(defaultFrom);
   const [toDate, setToDate] = useState(defaultTo);
@@ -144,6 +159,8 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
   const [reputationRefresh, setReputationRefresh] = useState(0);
   const [incidentsRefresh, setIncidentsRefresh] = useState(0);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
+  const [reputationIngesting, setReputationIngesting] = useState(false);
+  const [reputationIngestNote, setReputationIngestNote] = useState<string | null>(null);
   const isDashboard = mode === "dashboard";
   const effectiveSentiment = isDashboard ? "all" : sentiment;
   const effectiveActor = isDashboard ? "all" : actor;
@@ -163,6 +180,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
     INCIDENTS_FEATURE_ENABLED && incidentsAvailable && meta?.ui?.incidents_enabled !== false;
   const showIncidents = mode === "dashboard" && incidentsEnabled;
   const showDownloads = mode === "sentiment";
+  const reputationCacheMissing = meta?.cache_available === false;
   const [incidents, setIncidents] = useState<IncidentItem[]>([]);
   const [incidentsSeries, setIncidentsSeries] = useState<EvolutionPoint[]>([]);
   const [incidentsError, setIncidentsError] = useState<string | null>(null);
@@ -203,11 +221,31 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
     return () => {
       window.removeEventListener(INGEST_SUCCESS_EVENT, handler as EventListener);
     };
-  }, []);
+  }, [reputationRefresh]);
 
   const handleOverride = async (payload: OverridePayload) => {
     await apiPost<{ updated: number }>("/reputation/items/override", payload);
     setOverrideRefresh((value) => value + 1);
+  };
+
+  const handleStartReputationIngest = async () => {
+    setReputationIngestNote(null);
+    setReputationIngesting(true);
+    try {
+      const job = await apiPost<IngestJob>("/ingest/reputation", { force: false });
+      if (job?.id) {
+        dispatchIngestStarted(job);
+      }
+      setReputationIngestNote(
+        "Ingesta iniciada. Puedes seguir el progreso en el centro de ingestas.",
+      );
+    } catch {
+      setReputationIngestNote(
+        "No se pudo iniciar la ingesta. Inténtalo de nuevo.",
+      );
+    } finally {
+      setReputationIngesting(false);
+    }
   };
 
   const actorPrincipalName = useMemo(
@@ -231,11 +269,14 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
         if (!alive) return;
         setActorPrincipal(meta.actor_principal ?? null);
         setMeta(meta);
+        setMarketRatings(meta.market_ratings ?? []);
+        setMarketRatingsHistory(meta.market_ratings_history ?? []);
       })
       .catch(() => {
         if (alive) {
           setActorPrincipal(null);
           setMeta(null);
+          setMarketRatings([]);
         }
       });
     return () => {
@@ -526,6 +567,14 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
 
   const sentimentSummary = useMemo(() => summarize(items), [items]);
   const geoSummary = useMemo(() => summarizeByGeo(items), [items]);
+  const principalItems = useMemo(
+    () => items.filter((item) => isPrincipalItem(item, principalAliasKeys)),
+    [items, principalAliasKeys],
+  );
+  const geoSummaryPrincipal = useMemo(
+    () => summarizeByGeo(principalItems),
+    [principalItems],
+  );
   const topSources = useMemo(() => topCounts(items, (i) => i.source), [items]);
   const topActores = useMemo(
     () =>
@@ -612,6 +661,29 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
     () => (selectedActor ? normalizeKey(selectedActor) : null),
     [selectedActor],
   );
+  const storeSourcesEnabled = useMemo(
+    () => new Set((meta?.sources_enabled ?? []).map((src) => src.toLowerCase())),
+    [meta?.sources_enabled],
+  );
+  const appleStoreEnabled = storeSourcesEnabled.has("appstore");
+  const googlePlayEnabled = storeSourcesEnabled.has("google_play");
+  const showStoreRatings = appleStoreEnabled || googlePlayEnabled;
+  const principalStoreRatings = useMemo(
+    () => buildActorStoreRatings(marketRatings, actorPrincipalName, geo),
+    [marketRatings, actorPrincipalName, geo],
+  );
+  const actorStoreRatings = useMemo(
+    () => (selectedActor ? buildActorStoreRatings(marketRatings, selectedActor, geo) : null),
+    [marketRatings, selectedActor, geo],
+  );
+  const storeRatingVisibility = useMemo(
+    () => ({
+      showApple: appleStoreEnabled,
+      showGoogle: googlePlayEnabled,
+    }),
+    [appleStoreEnabled, googlePlayEnabled],
+  );
+  const stackSentimentSummary = isDashboard && showStoreRatings;
   const principalMentions = useMemo(
     () => groupedMentions.filter((item) => isPrincipalGroup(item, principalAliasKeys)),
     [groupedMentions, principalAliasKeys],
@@ -727,6 +799,35 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
           </div>
         </div>
       </section>
+
+      {reputationCacheMissing && (
+        <div className="mt-4 rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--panel)] px-4 py-3 text-sm text-[color:var(--text-60)] shadow-[var(--shadow-soft)]">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold text-[color:var(--ink)]">
+                Sin cache de reputación
+              </div>
+              <div className="text-xs text-[color:var(--text-55)]">
+                Aún no hay datos disponibles. Lanza una ingesta para generar el histórico.
+              </div>
+              {reputationIngestNote && (
+                <div className="mt-1 text-[10px] text-[color:var(--text-50)]">
+                  {reputationIngestNote}
+                </div>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={handleStartReputationIngest}
+              disabled={reputationIngesting}
+              className="inline-flex items-center gap-2 rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[color:var(--ink)] transition hover:shadow-[var(--shadow-soft)] disabled:opacity-70"
+            >
+              {reputationIngesting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              Iniciar ingesta
+            </button>
+          </div>
+        </div>
+      )}
 
       {errorMessage && (
         <div className="mt-4 rounded-2xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-800">
@@ -904,8 +1005,52 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
               value={sentimentSummary.avgScore.toFixed(2)}
               loading={itemsLoading}
             />
-            <SummaryCard label="Positivas" value={sentimentSummary.positive} loading={itemsLoading} />
-            <SummaryCard label="Negativas" value={sentimentSummary.negative} loading={itemsLoading} />
+            {showStoreRatings && (
+              <StoreRatingCard
+                label="Rating oficial"
+                ratings={principalStoreRatings}
+                loading={itemsLoading}
+                visibility={storeRatingVisibility}
+                history={marketRatingsHistory}
+              />
+            )}
+            {showStoreRatings && !isDashboard && (
+              <StoreRatingCard
+                label="Rating oficial competencia"
+                ratings={actorStoreRatings}
+                loading={itemsLoading}
+                visibility={storeRatingVisibility}
+                history={marketRatingsHistory}
+                emptyLabel="Selecciona actor"
+              />
+            )}
+            {stackSentimentSummary ? (
+              <div className="flex flex-col gap-3">
+                <SummaryCard
+                  label="Positivas"
+                  value={sentimentSummary.positive}
+                  loading={itemsLoading}
+                />
+                <SummaryCard
+                  label="Negativas"
+                  value={sentimentSummary.negative}
+                  loading={itemsLoading}
+                />
+              </div>
+            ) : (
+              <>
+                <SummaryCard
+                  label="Positivas"
+                  value={sentimentSummary.positive}
+                  loading={itemsLoading}
+                />
+                <SummaryCard
+                  label="Negativas"
+                  value={sentimentSummary.negative}
+                  loading={itemsLoading}
+                />
+              </>
+            )}
           </div>
           {isDashboard && showIncidents && (
             <>
@@ -985,7 +1130,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
       {!isDashboard && (
         <section className="mt-6 rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-5 shadow-[var(--shadow-md)] backdrop-blur-xl animate-rise" style={{ animationDelay: "240ms" }}>
           <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
-            SENTIMIENTO POR PAÍS
+            {`SENTIMIENTO POR PAÍS: ${actorPrincipalName}`}
           </div>
           <div className="mt-3 overflow-auto">
             <table className="min-w-full text-sm">
@@ -1003,7 +1148,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
                 {itemsLoading ? (
                   <SkeletonTableRows columns={6} rows={3} />
                 ) : (
-                  geoSummary.map((row) => (
+                  geoSummaryPrincipal.map((row) => (
                     <tr key={row.geo} className="border-t border-[color:var(--border-60)]">
                       <td className="py-2 pr-4 font-semibold text-[color:var(--ink)]">
                         {row.geo}
@@ -1016,7 +1161,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
                     </tr>
                   ))
                 )}
-                {!itemsLoading && !geoSummary.length && (
+                {!itemsLoading && !geoSummaryPrincipal.length && (
                   <tr>
                     <td className="py-3 text-sm text-[color:var(--text-45)]" colSpan={6}>
                       No hay datos para los filtros seleccionados.
@@ -1081,6 +1226,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
         </div>
       </section>
 
+
       {mode === "dashboard" ? (
         <section className="mt-6 rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-5 shadow-[var(--shadow-md)] backdrop-blur-xl animate-rise" style={{ animationDelay: "360ms" }}>
           <div className="flex items-center justify-between gap-3">
@@ -1138,10 +1284,10 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
             <button
               onClick={() => setMentionsTab("principal")}
               className={
-                "flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold transition " +
+                "group flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold transition hover:-translate-y-0.5 " +
                 (mentionsTab === "principal"
-                  ? "bg-[color:var(--surface-solid)] text-[color:var(--ink)] shadow-[var(--shadow-sm)]"
-                  : "text-[color:var(--text-50)] hover:text-[color:var(--ink)]")
+                  ? "bg-[color:var(--surface-solid)] text-[color:var(--ink)] shadow-[var(--shadow-sm)] ring-1 ring-[color:var(--aqua)]/30"
+                  : "text-[color:var(--text-50)] hover:text-[color:var(--ink)] hover:bg-[color:var(--surface-80)]")
               }
             >
               <span className="inline-block h-1.5 w-7 rounded-full bg-[#004481]" />
@@ -1149,20 +1295,28 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
               <span className="text-[10px] text-[color:var(--text-40)]">
                 {principalMentions.length} resultados
               </span>
+              <span className="flex items-center gap-1 text-[9px] uppercase tracking-[0.2em] text-[color:var(--text-40)] opacity-0 transition group-hover:opacity-100 group-focus-visible:opacity-100">
+                <ArrowUpRight className="h-3 w-3" />
+                Clic
+              </span>
             </button>
             <button
               onClick={() => setMentionsTab("actor")}
               className={
-                "flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold transition " +
+                "group flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold transition hover:-translate-y-0.5 " +
                 (mentionsTab === "actor"
-                  ? "bg-[color:var(--surface-solid)] text-[color:var(--ink)] shadow-[var(--shadow-sm)]"
-                  : "text-[color:var(--text-50)] hover:text-[color:var(--ink)]")
+                  ? "bg-[color:var(--surface-solid)] text-[color:var(--ink)] shadow-[var(--shadow-sm)] ring-1 ring-[color:var(--aqua)]/30"
+                  : "text-[color:var(--text-50)] hover:text-[color:var(--ink)] hover:bg-[color:var(--surface-80)]")
               }
             >
               <span className="inline-block h-[3px] w-7 rounded-full border-t-2 border-dashed border-[#2dcccd]" />
               {actorLabel}
               <span className="text-[10px] text-[color:var(--text-40)]">
                 {actorMentions.length} resultados
+              </span>
+              <span className="flex items-center gap-1 text-[9px] uppercase tracking-[0.2em] text-[color:var(--text-40)] opacity-0 transition group-hover:opacity-100 group-focus-visible:opacity-100">
+                <ArrowUpRight className="h-3 w-3" />
+                Clic
               </span>
             </button>
                 {showDownloads && (
@@ -1267,6 +1421,118 @@ function SummaryCard({
   );
 }
 
+function StoreRatingCard({
+  label,
+  ratings,
+  loading = false,
+  visibility,
+  emptyLabel = "—",
+  history,
+}: {
+  label: string;
+  ratings: ActorStoreRatings | null;
+  loading?: boolean;
+  visibility: { showApple: boolean; showGoogle: boolean };
+  emptyLabel?: string;
+  history?: MarketRating[];
+}) {
+  const showApple = visibility.showApple;
+  const showGoogle = visibility.showGoogle;
+  const showRows = showApple || showGoogle;
+  return (
+    <div className="relative flex h-full flex-col overflow-hidden rounded-2xl border border-[color:var(--border-70)] bg-[color:var(--surface-80)] px-4 py-3 shadow-[var(--shadow-soft)]">
+      <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-[color:var(--aqua)] via-[color:var(--blue)] to-transparent" />
+      <div className="text-[11px] uppercase tracking-[0.16em] text-[color:var(--text-45)]">
+        {label}
+      </div>
+      {loading ? (
+        <div className="mt-3 space-y-2">
+          <LoadingPill className="h-8 w-full" label={`Cargando ${label}`} />
+          <LoadingPill className="h-8 w-5/6" label={`Cargando ${label}`} />
+        </div>
+      ) : !ratings ? (
+        <div className="mt-3 text-sm text-[color:var(--text-55)]">{emptyLabel}</div>
+      ) : (
+        <div className="mt-3 mt-auto space-y-2">
+          {showRows && showApple && (
+            <StoreRatingRow
+              icon={<AppleMark className="h-5 w-5" />}
+              current={ratings.appstore ?? null}
+              history={history}
+              tone="apple"
+            />
+          )}
+          {showRows && showGoogle && (
+            <StoreRatingRow
+              icon={<AndroidMark className="h-5 w-5" />}
+              current={ratings.google_play ?? null}
+              history={history}
+              tone="google"
+            />
+          )}
+          {!showRows && (
+            <div className="text-sm text-[color:var(--text-55)]">—</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StoreRatingRow({
+  icon,
+  current,
+  history,
+  tone,
+}: {
+  icon: ReactNode;
+  current: MarketRating | null;
+  history?: MarketRating[];
+  tone: "apple" | "google";
+}) {
+  const value = current?.rating ?? null;
+  const hasValue = typeof value === "number" && Number.isFinite(value);
+  const trend = getMarketRatingTrend(current, history ?? []);
+  const trendTooltip = trend.previous
+    ? `Último registro: ${formatDate(trend.previous.collected_at)} · ${trend.previous.rating.toFixed(2)}`
+    : "Sin histórico";
+  const trendTone =
+    trend.status === "up"
+      ? "text-emerald-400"
+      : trend.status === "down"
+        ? "text-rose-400"
+        : "text-[color:var(--text-45)]";
+  return (
+    <div className="group relative grid grid-cols-[28px_1fr_auto] items-center gap-3 rounded-xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-2">
+      <div className={tone === "apple" ? "text-white" : "text-[color:var(--aqua)]"}>
+        {icon}
+      </div>
+      <div
+        className={`text-right text-lg font-display font-semibold ${
+          hasValue ? "text-[color:var(--ink)]" : "text-[color:var(--text-45)]"
+        }`}
+      >
+        {hasValue ? value.toFixed(2) : "—"}
+        {hasValue && (
+          <span className="ml-1 text-[11px] text-[color:var(--text-45)]">
+            /5
+          </span>
+        )}
+      </div>
+      <span
+        title={trendTooltip}
+        className={`inline-flex h-5 w-5 items-center justify-center rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-80)] ${trendTone}`}
+      >
+        {trend.status === "up" && <Triangle className="h-3 w-3" />}
+        {trend.status === "down" && <Triangle className="h-3 w-3 rotate-180" />}
+        {(trend.status === "flat" || trend.status === "none") && (
+          <Minus className="h-3 w-3" />
+        )}
+      </span>
+    </div>
+  );
+}
+
 function RowMeter({
   label,
   value,
@@ -1367,6 +1633,21 @@ function MentionCard({
   const [localError, setLocalError] = useState<string | null>(null);
   const ratingValue = typeof item.rating === "number" ? item.rating : null;
   const ratingLabel = ratingValue ? ratingValue.toFixed(1) : null;
+  const blockedSources = item.sources.filter((src) => isManualOverrideBlockedSource(src));
+  const ratingSourceKey = normalizeSourceKey(item.rating_source ?? "");
+  const manualOverrideBlocked =
+    blockedSources.length > 0 ||
+    (ratingSourceKey && MANUAL_OVERRIDE_BLOCKED_SOURCES.has(ratingSourceKey));
+  const blockedLabels = blockedSources.map((src) => {
+    const key = normalizeSourceKey(src.name);
+    return MANUAL_OVERRIDE_BLOCKED_LABELS[key] ?? src.name;
+  });
+  if (!blockedLabels.length && ratingSourceKey) {
+    blockedLabels.push(
+      MANUAL_OVERRIDE_BLOCKED_LABELS[ratingSourceKey] ?? item.rating_source ?? "",
+    );
+  }
+  const blockedLabel = blockedLabels.filter(Boolean).join(" / ");
 
   useEffect(() => {
     setDraftGeo(item.geo ?? "");
@@ -1468,106 +1749,108 @@ function MentionCard({
           {sanitizedText}
         </div>
       )}
-      <div className="mt-4 rounded-2xl border border-[color:var(--aqua)]/30 [background-image:var(--gradient-callout)] p-3 shadow-[inset_0_1px_0_var(--inset-highlight-strong)]">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.3em] text-[color:var(--blue)]">
-            Control manual
+      {!manualOverrideBlocked && (
+        <div className="mt-4 rounded-2xl border border-[color:var(--aqua)]/30 [background-image:var(--gradient-callout)] p-3 shadow-[inset_0_1px_0_var(--inset-highlight-strong)]">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.3em] text-[color:var(--blue)]">
+              Control manual
+            </div>
+            <button
+              onClick={() => setEditOpen((value) => !value)}
+              className="inline-flex items-center gap-2 rounded-full border border-[color:var(--border-70)] bg-[color:var(--surface-80)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--brand-ink)] shadow-[var(--shadow-pill)] transition hover:-translate-y-0.5 hover:shadow-[var(--shadow-pill-hover)]"
+            >
+              <PenSquare className="h-3.5 w-3.5" />
+              {editOpen ? "Cerrar" : "Ajustar"}
+            </button>
           </div>
-          <button
-            onClick={() => setEditOpen((value) => !value)}
-            className="inline-flex items-center gap-2 rounded-full border border-[color:var(--border-70)] bg-[color:var(--surface-80)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--brand-ink)] shadow-[var(--shadow-pill)] transition hover:-translate-y-0.5 hover:shadow-[var(--shadow-pill-hover)]"
-          >
-            <PenSquare className="h-3.5 w-3.5" />
-            {editOpen ? "Cerrar" : "Ajustar"}
-          </button>
+          {!editOpen && (
+            <div className="mt-2 text-xs text-[color:var(--text-55)]">
+              {manualUpdatedAt
+                ? `Último ajuste: ${formatDate(manualUpdatedAt)}`
+                : "Ajusta país o sentimiento si el análisis no refleja tu criterio."}
+            </div>
+          )}
+          {editOpen && (
+            <div className="mt-3 grid gap-3">
+              <div className="grid gap-1">
+                <span className="text-[10px] uppercase tracking-[0.2em] text-[color:var(--text-45)]">
+                  País
+                </span>
+                <input
+                  type="text"
+                  list={geoListId}
+                  value={draftGeo}
+                  onChange={(e) => setDraftGeo(e.target.value)}
+                  placeholder="Ej: España"
+                  className="w-full rounded-2xl border border-[color:var(--border-70)] bg-[color:var(--surface-85)] px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_var(--inset-highlight-strong)] outline-none focus:border-[color:var(--aqua)]/60 focus:ring-2 focus:ring-[color:var(--aqua)]/30"
+                />
+                <datalist id={geoListId}>
+                  {geoOptions.map((opt) => (
+                    <option key={opt} value={opt} />
+                  ))}
+                </datalist>
+              </div>
+              <div className="grid gap-2">
+                <span className="text-[10px] uppercase tracking-[0.2em] text-[color:var(--text-45)]">
+                  Sentimiento
+                </span>
+                <div className="flex flex-wrap gap-2">
+                  {(["positive", "neutral", "negative"] as const).map((value) => {
+                    const tone = getSentimentTone(value);
+                    const active = value === draftSentiment;
+                    return (
+                      <button
+                        key={value}
+                        onClick={() => setDraftSentiment(value)}
+                        className={
+                          "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition " +
+                          (active
+                            ? `${tone.className} shadow-[var(--shadow-tone)]`
+                            : "border-[color:var(--border-70)] bg-[color:var(--surface-80)] text-[color:var(--text-50)] hover:text-[color:var(--ink)]")
+                        }
+                      >
+                        {tone.icon}
+                        {tone.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              {localError && (
+                <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+                  {localError}
+                </div>
+              )}
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  onClick={handleSave}
+                  disabled={!isDirty || saving}
+                  className="inline-flex items-center gap-2 rounded-full bg-[color:var(--blue)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-white shadow-[0_12px_26px_rgba(0,68,129,0.28)] transition hover:-translate-y-0.5 hover:shadow-[0_16px_32px_rgba(0,68,129,0.32)] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {saving ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                  )}
+                  Guardar ajuste
+                </button>
+                <button
+                  onClick={() => {
+                    setEditOpen(false);
+                    setDraftGeo(currentGeo);
+                    setDraftSentiment(currentSentiment);
+                    setLocalError(null);
+                  }}
+                  className="inline-flex items-center gap-2 rounded-full border border-[color:var(--border-70)] bg-[color:var(--surface-80)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[color:var(--text-60)] transition hover:text-[color:var(--ink)]"
+                >
+                  <X className="h-3.5 w-3.5" />
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          )}
         </div>
-        {!editOpen && (
-          <div className="mt-2 text-xs text-[color:var(--text-55)]">
-            {manualUpdatedAt
-              ? `Último ajuste: ${formatDate(manualUpdatedAt)}`
-              : "Ajusta país o sentimiento si el análisis no refleja tu criterio."}
-          </div>
-        )}
-        {editOpen && (
-          <div className="mt-3 grid gap-3">
-            <div className="grid gap-1">
-              <span className="text-[10px] uppercase tracking-[0.2em] text-[color:var(--text-45)]">
-                País
-              </span>
-              <input
-                type="text"
-                list={geoListId}
-                value={draftGeo}
-                onChange={(e) => setDraftGeo(e.target.value)}
-                placeholder="Ej: España"
-                className="w-full rounded-2xl border border-[color:var(--border-70)] bg-[color:var(--surface-85)] px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_var(--inset-highlight-strong)] outline-none focus:border-[color:var(--aqua)]/60 focus:ring-2 focus:ring-[color:var(--aqua)]/30"
-              />
-              <datalist id={geoListId}>
-                {geoOptions.map((opt) => (
-                  <option key={opt} value={opt} />
-                ))}
-              </datalist>
-            </div>
-            <div className="grid gap-2">
-              <span className="text-[10px] uppercase tracking-[0.2em] text-[color:var(--text-45)]">
-                Sentimiento
-              </span>
-              <div className="flex flex-wrap gap-2">
-                {(["positive", "neutral", "negative"] as const).map((value) => {
-                  const tone = getSentimentTone(value);
-                  const active = value === draftSentiment;
-                  return (
-                    <button
-                      key={value}
-                      onClick={() => setDraftSentiment(value)}
-                      className={
-                        "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition " +
-                        (active
-                          ? `${tone.className} shadow-[var(--shadow-tone)]`
-                          : "border-[color:var(--border-70)] bg-[color:var(--surface-80)] text-[color:var(--text-50)] hover:text-[color:var(--ink)]")
-                      }
-                    >
-                      {tone.icon}
-                      {tone.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-            {localError && (
-              <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
-                {localError}
-              </div>
-            )}
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                onClick={handleSave}
-                disabled={!isDirty || saving}
-                className="inline-flex items-center gap-2 rounded-full bg-[color:var(--blue)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-white shadow-[0_12px_26px_rgba(0,68,129,0.28)] transition hover:-translate-y-0.5 hover:shadow-[0_16px_32px_rgba(0,68,129,0.32)] disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {saving ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <CheckCircle2 className="h-3.5 w-3.5" />
-                )}
-                Guardar ajuste
-              </button>
-              <button
-                onClick={() => {
-                  setEditOpen(false);
-                  setDraftGeo(currentGeo);
-                  setDraftSentiment(currentSentiment);
-                  setLocalError(null);
-                }}
-                className="inline-flex items-center gap-2 rounded-full border border-[color:var(--border-70)] bg-[color:var(--surface-80)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[color:var(--text-60)] transition hover:text-[color:var(--ink)]"
-              >
-                <X className="h-3.5 w-3.5" />
-                Cancelar
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
+      )}
       <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs text-[color:var(--text-45)]">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-[11px] uppercase tracking-[0.16em] text-[color:var(--text-40)]">
@@ -1640,6 +1923,183 @@ function normalizeKey(value: string) {
     .replace(/https?:\/\/(www\.)?/g, "")
     .replace(/[^\p{L}\p{N}]+/gu, " ")
     .trim();
+}
+
+function normalizeSourceKey(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+type ActorStoreRatings = {
+  appstore: MarketRating | null;
+  google_play: MarketRating | null;
+};
+
+function buildActorStoreRatings(
+  ratings: MarketRating[],
+  actor: string,
+  geo: string,
+): ActorStoreRatings {
+  const actorKey = normalizeKey(actor);
+  const filtered = ratings.filter(
+    (rating) => normalizeKey(rating.actor ?? "") === actorKey,
+  );
+  const appstore = pickMarketRating(filtered, geo, "appstore");
+  const googlePlay = pickMarketRating(filtered, geo, "googleplay");
+  return { appstore, google_play: googlePlay };
+}
+
+function pickMarketRating(
+  ratings: MarketRating[],
+  geo: string,
+  sourceKey: string,
+): MarketRating | null {
+  if (!ratings.length) return null;
+  const bySource = ratings.filter(
+    (rating) => normalizeSourceKey(rating.source) === sourceKey,
+  );
+  const byGeo = filterRatingsByGeo(bySource, geo);
+  return pickBestMarketRating(byGeo);
+}
+
+function filterRatingsByGeo(ratings: MarketRating[], geo: string) {
+  if (!ratings.length) return ratings;
+  const normalizedGeo = normalizeKey(geo);
+  if (geo === "all") {
+    const globals = ratings.filter((rating) => !rating.geo || normalizeKey(rating.geo) === "global");
+    return globals.length ? globals : ratings;
+  }
+  const exact = ratings.filter(
+    (rating) => normalizeKey(rating.geo ?? "") === normalizedGeo,
+  );
+  if (exact.length) return exact;
+  const globals = ratings.filter((rating) => !rating.geo || normalizeKey(rating.geo) === "global");
+  return globals.length ? globals : ratings;
+}
+
+function pickBestMarketRating(ratings: MarketRating[]) {
+  if (!ratings.length) return null;
+  return ratings.reduce<MarketRating | null>((best, current) => {
+    if (!best) return current;
+    const bestCount = best.rating_count ?? -1;
+    const currentCount = current.rating_count ?? -1;
+    if (currentCount > bestCount) return current;
+    if (currentCount < bestCount) return best;
+    const bestTime = best.collected_at ?? "";
+    const currentTime = current.collected_at ?? "";
+    return currentTime > bestTime ? current : best;
+  }, null);
+}
+
+function getMarketRatingTrend(
+  current: MarketRating | null,
+  history: MarketRating[],
+): { status: "up" | "down" | "flat" | "none"; previous: MarketRating | null } {
+  if (!current) {
+    return { status: "none", previous: null };
+  }
+  const previous = findPreviousMarketRating(current, history);
+  if (!previous) {
+    return { status: "none", previous: null };
+  }
+  const diff = current.rating - previous.rating;
+  if (diff > 0.005) return { status: "up", previous };
+  if (diff < -0.005) return { status: "down", previous };
+  return { status: "flat", previous };
+}
+
+function findPreviousMarketRating(
+  current: MarketRating,
+  history: MarketRating[],
+): MarketRating | null {
+  if (!history.length) return null;
+  const currentKey = marketRatingKey(current);
+  const currentTime = marketRatingTimestamp(current.collected_at);
+  const candidates = history
+    .filter((entry) => marketRatingKey(entry) === currentKey)
+    .sort(
+      (a, b) => marketRatingTimestamp(b.collected_at) - marketRatingTimestamp(a.collected_at),
+    );
+
+  for (const entry of candidates) {
+    const entryTime = marketRatingTimestamp(entry.collected_at);
+    if (
+      current.collected_at &&
+      entry.collected_at &&
+      entryTime === currentTime &&
+      Math.abs(entry.rating - current.rating) < 0.0001
+    ) {
+      continue;
+    }
+    return entry;
+  }
+  return null;
+}
+
+function marketRatingKey(rating: MarketRating) {
+  return [
+    normalizeSourceKey(rating.source || ""),
+    normalizeKey(rating.actor ?? ""),
+    normalizeKey(rating.geo ?? ""),
+    (rating.app_id ?? "").toLowerCase(),
+    (rating.package_id ?? "").toLowerCase(),
+  ].join("|");
+}
+
+function marketRatingTimestamp(value?: string | null) {
+  if (!value) return 0;
+  const ts = new Date(value).getTime();
+  return Number.isNaN(ts) ? 0 : ts;
+}
+
+function AppleMark({ className }: { className?: string }) {
+  return (
+    <svg
+      aria-hidden="true"
+      className={className}
+      viewBox="0 0 24 24"
+      fill="currentColor"
+    >
+      <path d="M16.365 1.43c0 1.13-.45 2.18-1.15 2.93-.73.79-1.92 1.4-3.04 1.31-.18-1.07.3-2.22 1.02-3.02.72-.8 1.95-1.39 3.17-1.22zM19.69 17.02c-.2.47-.43.91-.69 1.32-.35.56-.7 1.05-1.08 1.5-.52.6-1.08 1.17-1.78 1.19-.66.02-.88-.42-1.83-.42s-1.2.4-1.85.43c-.67.03-1.19-.57-1.7-1.17-1.43-1.67-2.52-4.7-1.05-6.76.72-1 1.87-1.62 3.15-1.64.62-.01 1.2.42 1.83.42.6 0 1.69-.52 2.86-.44.49.02 1.88.2 2.77 1.52-.07.05-1.66.97-1.64 2.9.02 2.3 2.03 3.07 2.05 3.08zM13.45 6.45c.6-.73 1.02-1.74.91-2.75-.87.04-1.92.58-2.55 1.31-.57.66-1.05 1.69-.92 2.68.98.08 1.96-.49 2.56-1.24z" />
+    </svg>
+  );
+}
+
+function AndroidMark({ className }: { className?: string }) {
+  return (
+    <svg
+      aria-hidden="true"
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M8 6L6.2 3.2" />
+      <path d="M16 6l1.8-2.8" />
+      <rect x="5" y="7" width="14" height="10" rx="2" />
+      <circle cx="9" cy="12" r="0.9" fill="currentColor" stroke="none" />
+      <circle cx="15" cy="12" r="0.9" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+function isManualOverrideBlockedSource(source: MentionSource) {
+  const key = normalizeSourceKey(source.name);
+  if (MANUAL_OVERRIDE_BLOCKED_SOURCES.has(key)) return true;
+  if (isAppleStoreUrl(source.url)) return true;
+  return false;
+}
+
+function isAppleStoreUrl(url?: string) {
+  if (!url) return false;
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return host.includes("itunes.apple.com") || host.includes("apps.apple.com");
+  } catch {
+    return false;
+  }
 }
 
 function buildPrincipalAliases(actorPrincipal: ActorPrincipalMeta | null) {

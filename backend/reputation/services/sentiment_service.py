@@ -595,6 +595,7 @@ class ReputationSentimentService:
 
         models_cfg = cfg.get("models") or {}
         llm_cfg = cfg.get("llm") or {}
+        self._llm_config_present = bool(llm_cfg)
 
         sentiment_mode = str(models_cfg.get("sentiment_model") or "").strip()
         if not sentiment_mode:
@@ -612,9 +613,7 @@ class ReputationSentimentService:
         self._llm_system_prompt = system_prompt or _DEFAULT_LLM_SYSTEM_PROMPT
 
         self._llm_provider = (
-            str(llm_cfg.get("provider") or os.getenv("LLM_PROVIDER", "openai"))
-            .strip()
-            .lower()
+            str(llm_cfg.get("provider") or os.getenv("LLM_PROVIDER", "openai")).strip().lower()
         )
         raw_providers = llm_cfg.get("providers")
         provider_cfg: dict[str, Any] = {}
@@ -628,15 +627,13 @@ class ReputationSentimentService:
                 return provider_cfg.get(key)
             return llm_cfg.get(key, default)
 
-        request_format = str(
-            _cfg_value("request_format", os.getenv("LLM_REQUEST_FORMAT", ""))
-            or ""
-        ).strip().lower()
+        request_format = (
+            str(_cfg_value("request_format", os.getenv("LLM_REQUEST_FORMAT", "")) or "")
+            .strip()
+            .lower()
+        )
         if not request_format:
-            if self._llm_provider == "gemini":
-                request_format = "gemini_content"
-            else:
-                request_format = "openai_chat"
+            request_format = "gemini_content" if self._llm_provider == "gemini" else "openai_chat"
         self._llm_request_format = request_format
 
         default_base_url = (
@@ -652,39 +649,29 @@ class ReputationSentimentService:
             if request_format == "gemini_content"
             else "/v1/chat/completions"
         )
-        endpoint = str(
-            _cfg_value("endpoint", os.getenv("LLM_ENDPOINT", ""))
-            or ""
-        ).strip()
+        endpoint = str(_cfg_value("endpoint", os.getenv("LLM_ENDPOINT", "")) or "").strip()
         self._llm_endpoint = endpoint or default_endpoint
 
         provider_default_env = "OPENAI_API_KEY"
         if self._llm_provider == "gemini":
             provider_default_env = "GEMINI_API_KEY"
         fallback_env = os.getenv("LLM_API_KEY_ENV", provider_default_env)
-        api_key_env = str(
-            _cfg_value("api_key_env", _cfg_value("openai_api_key_env", fallback_env))
-        )
+        api_key_env = str(_cfg_value("api_key_env", _cfg_value("openai_api_key_env", fallback_env)))
         self._llm_api_key_env = api_key_env
         self._llm_api_key = os.getenv(api_key_env, "").strip()
-        raw_required = _cfg_value(
-            "api_key_required", os.getenv("LLM_API_KEY_REQUIRED", "true")
-        )
+        raw_required = _cfg_value("api_key_required", os.getenv("LLM_API_KEY_REQUIRED", "true"))
         if isinstance(raw_required, bool):
             self._llm_api_key_required = raw_required
         else:
             self._llm_api_key_required = _env_bool(str(raw_required))
         self._llm_api_key_param = str(
-            _cfg_value("api_key_param", os.getenv("LLM_API_KEY_PARAM", ""))
-            or ""
+            _cfg_value("api_key_param", os.getenv("LLM_API_KEY_PARAM", "")) or ""
         ).strip()
         self._llm_api_key_header = str(
-            _cfg_value("api_key_header", os.getenv("LLM_API_KEY_HEADER", ""))
-            or ""
+            _cfg_value("api_key_header", os.getenv("LLM_API_KEY_HEADER", "")) or ""
         ).strip()
         self._llm_api_key_prefix = str(
-            _cfg_value("api_key_prefix", os.getenv("LLM_API_KEY_PREFIX", "Bearer "))
-            or "Bearer "
+            _cfg_value("api_key_prefix", os.getenv("LLM_API_KEY_PREFIX", "Bearer ")) or "Bearer "
         )
         headers_cfg = _cfg_value("headers", {})
         self._llm_extra_headers = headers_cfg if isinstance(headers_cfg, dict) else {}
@@ -733,6 +720,7 @@ class ReputationSentimentService:
             self._disable_llm(
                 "LLM: no se encontró configuración LLM para este perfil. Se aplica fallback con reglas."
             )
+        self._maybe_warn_llm_disabled()
 
     def analyze_items(self, items: Iterable[ReputationItem]) -> list[ReputationItem]:
         items_list = list(items)
@@ -740,53 +728,44 @@ class ReputationSentimentService:
             return []
 
         use_llm = self._should_use_llm()
-        prepared: list[tuple[str, ReputationItem | _ItemSentimentContext]] = []
-        llm_contexts: list[_ItemSentimentContext] = []
+        result: list[ReputationItem | None] = [None] * len(items_list)
+        pending: list[tuple[int, _ItemSentimentContext]] = []
 
-        for item in items_list:
+        for idx, item in enumerate(items_list):
             context, handled = self._prepare_item_context(item)
             if handled or context is None:
-                prepared.append(("done", item))
+                result[idx] = item
                 continue
 
             if not context.evaluated_text:
                 self._finalize_item(item, context, "neutral", 0.0, used_llm=False)
-                prepared.append(("done", item))
+                result[idx] = item
                 continue
 
             if use_llm:
-                prepared.append(("ctx", context))
-                llm_contexts.append(context)
+                pending.append((idx, context))
             else:
-                label, score = self._rule_based_sentiment(
-                    context.evaluated_text, context.language
-                )
+                label, score = self._rule_based_sentiment(context.evaluated_text, context.language)
                 self._finalize_item(item, context, label, score, used_llm=False)
-                prepared.append(("done", item))
+                result[idx] = item
 
         llm_results: dict[str, tuple[str, float]] = {}
-        if use_llm and llm_contexts:
-            llm_results = self._llm_sentiment_batch(llm_contexts)
+        if use_llm and pending:
+            llm_results = self._llm_sentiment_batch([context for _, context in pending])
 
-        result: list[ReputationItem] = []
-        for kind, payload in prepared:
-            if kind == "done":
-                result.append(payload)  # type: ignore[arg-type]
-                continue
-            context = payload  # type: ignore[assignment]
+        for idx, context in pending:
             item = context.item
             label_score = llm_results.get(item.id)
             if label_score:
                 label, score = label_score
                 used_llm = True
             else:
-                label, score = self._rule_based_sentiment(
-                    context.evaluated_text, context.language
-                )
+                label, score = self._rule_based_sentiment(context.evaluated_text, context.language)
                 used_llm = False
             self._finalize_item(item, context, label, score, used_llm=used_llm)
-            result.append(item)
-        return result
+            result[idx] = item
+
+        return [item for item in result if item is not None]
 
     def analyze_item(self, item: ReputationItem) -> ReputationItem:
         context, handled = self._prepare_item_context(item)
@@ -1092,6 +1071,26 @@ class ReputationSentimentService:
             return False
         return self._sentiment_mode not in {"rules", "heuristic", ""}
 
+    def _maybe_warn_llm_disabled(self) -> None:
+        if self.llm_warning:
+            return
+
+        sentiment_rules = self._sentiment_mode in {"rules", "heuristic", ""}
+        if not self._llm_enabled:
+            if sentiment_rules and not self._llm_config_present:
+                return
+            self._warn_llm("LLM: desactivado (LLM_ENABLED=false). Se aplica fallback con reglas.")
+            return
+
+        if sentiment_rules:
+            self._warn_llm("LLM: SENTIMENT_MODEL=rules. Se aplica fallback con reglas.")
+            return
+
+        if self._llm_api_key_required and not self._llm_api_key:
+            self._warn_llm(
+                f"LLM: falta API key en {self._llm_api_key_env}. Se aplica fallback con reglas."
+            )
+
     def _llm_sentiment_batch(
         self,
         contexts: list[_ItemSentimentContext],
@@ -1119,9 +1118,7 @@ class ReputationSentimentService:
                         "title": context.title,
                         "text": context.text,
                         "sentiment": item.sentiment,
-                        "signals": (
-                            dict(item.signals) if isinstance(item.signals, dict) else {}
-                        ),
+                        "signals": (dict(item.signals) if isinstance(item.signals, dict) else {}),
                         "actor": actor,
                         "geo": context.geo,
                         "language": context.language,
@@ -1216,13 +1213,7 @@ class ReputationSentimentService:
             "contents": [
                 {
                     "role": "user",
-                    "parts": [
-                        {
-                            "text": json.dumps(
-                                {"items": payload_items}, ensure_ascii=False
-                            )
-                        }
-                    ],
+                    "parts": [{"text": json.dumps({"items": payload_items}, ensure_ascii=False)}],
                 }
             ],
             "generationConfig": {"temperature": 0.0},
@@ -1300,6 +1291,11 @@ class ReputationSentimentService:
         if self._llm_blocked:
             return
         self._llm_blocked = True
+        self._warn_llm(message)
+
+    def _warn_llm(self, message: str) -> None:
+        if self.llm_warning:
+            return
         self.llm_warning = message
         logger.warning(message)
 
