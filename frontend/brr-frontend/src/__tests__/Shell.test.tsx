@@ -16,17 +16,28 @@ vi.mock("next/navigation", () => ({
   usePathname: vi.fn(),
 }));
 
+vi.mock("@/lib/api", () => ({
+  apiGet: vi.fn(),
+  apiPost: vi.fn(),
+}));
+
 import { usePathname } from "next/navigation";
+import { apiGet } from "@/lib/api";
 import { Shell } from "@/components/Shell";
 
 const usePathnameMock = vi.mocked(usePathname);
+const apiGetMock = vi.mocked(apiGet);
 
 describe("Shell", () => {
   beforeEach(() => {
     usePathnameMock.mockReturnValue("/ops");
+    apiGetMock.mockResolvedValue({
+      ui: { incidents_enabled: true, ops_enabled: true },
+      incidents_available: true,
+    });
   });
 
-  it("renders nav items and highlights active route", () => {
+  it("renders nav items and highlights active route", async () => {
     render(
       <Shell>
         <div>Contenido</div>
@@ -35,8 +46,8 @@ describe("Shell", () => {
 
     expect(screen.getByText("Dashboard")).toBeInTheDocument();
     expect(screen.getByText("Sentimiento")).toBeInTheDocument();
-    expect(screen.getByText("Incidencias")).toBeInTheDocument();
-    const ops = screen.getByText("Ops Executive");
+    expect(await screen.findByText("Incidencias")).toBeInTheDocument();
+    const ops = await screen.findByText("Ops Executive");
     expect(ops).toBeInTheDocument();
 
     const opsLink = ops.closest("a");

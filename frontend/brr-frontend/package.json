@@ -10,8 +10,8 @@
     "prestart": "node scripts/ensure-env.mjs",
     "start": "NODE_OPTIONS=--no-deprecation next start",
     "lint": "eslint",
-    "test": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test": "VITE_CJS_IGNORE_WARNING=1 NODE_OPTIONS=--no-warnings vitest",
+    "test:coverage": "VITE_CJS_IGNORE_WARNING=1 NODE_OPTIONS=--no-warnings vitest run --coverage"
   },
   "dependencies": {
     "lucide-react": "^0.563.0",

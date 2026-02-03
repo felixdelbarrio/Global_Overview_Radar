@@ -125,7 +125,7 @@ _COUNTRY_CODE_MAP = {
     "tr": "Turquía",
 }
 
-_STAR_SENTIMENT_SOURCES = {"appstore"}
+_STAR_SENTIMENT_SOURCES = {"appstore", "google_reviews"}
 _ACTOR_TEXT_REQUIRED_SOURCES = {"news", "blogs", "gdelt", "newsapi", "guardian"}
 
 
@@ -677,10 +677,7 @@ class ReputationSentimentService:
         if match_keywords(text, [actor]):
             return True
         aliases = self._actor_aliases.get(actor) or []
-        for alias in aliases:
-            if match_keywords(text, [alias]):
-                return True
-        return False
+        return any(match_keywords(text, [alias]) for alias in aliases)
 
     def _filter_actors_by_context(self, text: str, actors: list[str]) -> list[str]:
         if not actors or not self._context_guard_actors:
