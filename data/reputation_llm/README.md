@@ -7,7 +7,7 @@ Si tienes `data/reputation/<perfil>.json`, el LLM debe llamarse:
 `data/reputation_llm/<perfil>_llm.json`
 
 Ejemplo:
-`data/reputation/banking_bbva_empresas.json` → `data/reputation_llm/banking_bbva_empresas_llm.json`
+`data/reputation/<perfil>.json` → `data/reputation_llm/<perfil>_llm.json`
 
 **Estructura mínima**
 ```json

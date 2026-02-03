@@ -16,4 +16,4 @@ Todos mantienen la **misma estructura** que tu config actual (news/forums/blogs/
   - `NEWS_SITE_QUERY_MAX_TOTAL`, `NEWS_MAX_RSS_URLS`, `NEWS_MAX_ARTICLES`
 
 
-- `banking_bbva_retail.json` — banca retail (BBVA + países + Garanti BBVA) con foco en **app issues, fraude, comisiones, Bizum/transferencias**, reguladores y comparativa multi-geo.
+- Perfil retail bancario (banco principal + países + filial) con foco en **app issues, fraude, comisiones, Bizum/transferencias**, reguladores y comparativa multi-geo.

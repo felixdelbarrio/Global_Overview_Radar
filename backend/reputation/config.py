@@ -4,7 +4,7 @@ import hashlib
 import json
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, cast
+from typing import Any, Dict, List, Mapping, Sequence, cast
 
 from dotenv import load_dotenv
 from pydantic import Field
@@ -17,8 +17,11 @@ REPUTATION_ENV_EXAMPLE = REPO_ROOT / "backend" / "reputation" / ".env.reputation
 
 DEFAULT_CONFIG_PATH = REPO_ROOT / "data" / "reputation"
 DEFAULT_LLM_CONFIG_PATH = REPO_ROOT / "data" / "reputation_llm"
+DEFAULT_SAMPLE_CONFIG_PATH = REPO_ROOT / "data" / "reputation_samples"
+DEFAULT_SAMPLE_LLM_CONFIG_PATH = REPO_ROOT / "data" / "reputation_llm_samples"
 DEFAULT_CACHE_PATH = REPO_ROOT / "data" / "cache" / "reputation_cache.json"
 DEFAULT_OVERRIDES_PATH = REPO_ROOT / "data" / "cache" / "reputation_overrides.json"
+PROFILE_STATE_PATH = REPO_ROOT / "data" / "cache" / "reputation_profile.json"
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +49,9 @@ class ReputationSettings(BaseSettings):
         default=DEFAULT_OVERRIDES_PATH,
         alias="REPUTATION_OVERRIDES_PATH",
     )
+    # Perfil/es de negocio: por defecto carga todos los JSON del directorio.
+    # Puede ser un nombre (banking_empresas) o varios separados por coma.
+    profiles: str = Field(default="", alias="REPUTATION_PROFILE")
 
     # TTL por defecto (horas) si el config.json no define output.cache_ttl_hours
     cache_ttl_hours: int = Field(default=24, alias="REPUTATION_CACHE_TTL_HOURS")
@@ -126,6 +132,9 @@ load_dotenv(str(REPUTATION_ENV_PATH), override=False)
 
 # Singleton de settings
 settings = ReputationSettings()
+BASE_CONFIG_PATH = settings.config_path
+BASE_LLM_CONFIG_PATH = settings.llm_config_path
+_ACTIVE_PROFILE_SOURCE = "default"
 
 # Normaliza rutas relativas (si las variables de entorno usan rutas como './data/...')
 if not settings.config_path.is_absolute():
@@ -133,6 +142,9 @@ if not settings.config_path.is_absolute():
 
 if not settings.llm_config_path.is_absolute():
     settings.llm_config_path = (REPO_ROOT / settings.llm_config_path).resolve()
+
+BASE_CONFIG_PATH = settings.config_path
+BASE_LLM_CONFIG_PATH = settings.llm_config_path
 
 if not settings.cache_path.is_absolute():
     settings.cache_path = (REPO_ROOT / settings.cache_path).resolve()
@@ -147,7 +159,8 @@ def load_business_config(path: Path | None = None) -> Dict[str, Any]:
     if not cfg_path.is_absolute():
         cfg_path = (REPO_ROOT / cfg_path).resolve()
 
-    config_files = _resolve_config_files(cfg_path)
+    profiles = _parse_profile_selector(settings.profiles)
+    config_files = _resolve_config_files(cfg_path, profiles)
     if not config_files:
         raise FileNotFoundError(
             f"Reputation config files not found at {cfg_path} (searched *.json)"
@@ -180,17 +193,119 @@ def load_business_config(path: Path | None = None) -> Dict[str, Any]:
     return merged
 
 
-def _resolve_config_files(cfg_path: Path) -> list[Path]:
+def _normalize_profile_name(value: str) -> str:
+    name = value.strip()
+    if name.lower().endswith(".json"):
+        name = name[:-5]
+    return name.strip()
+
+
+def _normalize_profile_source(value: str | None) -> str:
+    if not value:
+        return "default"
+    cleaned = value.strip().lower()
+    if cleaned in {"sample", "samples", "plantillas"}:
+        return "samples"
+    return "default"
+
+
+def _parse_profile_selector(value: str | None) -> list[str]:
+    if not value:
+        return []
+    raw = value.strip()
+    if not raw or raw.lower() in {"all", "*", "todos"}:
+        return []
+    parts = [_normalize_profile_name(part) for part in raw.split(",")]
+    return [part for part in parts if part]
+
+
+def _filter_profile_files(
+    files: Sequence[Path],
+    profiles: Sequence[str] | None,
+) -> list[Path]:
+    if not profiles:
+        return list(files)
+    profile_set = {p.lower() for p in profiles}
+    selected = [file for file in files if file.stem.lower() in profile_set]
+    missing = profile_set - {file.stem.lower() for file in files}
+    if missing:
+        raise FileNotFoundError(
+            f"Reputation profile(s) not found: {', '.join(sorted(missing))}"
+        )
+    return selected
+
+
+def _resolve_config_files(cfg_path: Path, profiles: Sequence[str] | None = None) -> list[Path]:
     if cfg_path.exists():
         if cfg_path.is_dir():
-            return _sorted_config_files(cfg_path)
+            return _filter_profile_files(_sorted_config_files(cfg_path), profiles)
+        if profiles:
+            profile_set = {p.lower() for p in profiles}
+            if cfg_path.stem.lower() not in profile_set:
+                raise FileNotFoundError(
+                    f"Reputation profile(s) not found: {', '.join(sorted(profile_set))}"
+                )
         return [cfg_path]
 
     search_dir = cfg_path if cfg_path.suffix == "" else cfg_path.parent
     if search_dir.exists() and search_dir.is_dir():
-        return _sorted_config_files(search_dir)
+        return _filter_profile_files(_sorted_config_files(search_dir), profiles)
 
     return []
+
+
+def _resolve_paths_for_source(source: str) -> tuple[Path, Path]:
+    if source == "samples":
+        return (DEFAULT_SAMPLE_CONFIG_PATH, DEFAULT_SAMPLE_LLM_CONFIG_PATH)
+    return (BASE_CONFIG_PATH, BASE_LLM_CONFIG_PATH)
+
+
+def _load_profile_state() -> dict[str, Any]:
+    if not PROFILE_STATE_PATH.exists():
+        return {}
+    try:
+        data = json.loads(PROFILE_STATE_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    return data
+
+
+def _save_profile_state(source: str, profiles: Sequence[str]) -> None:
+    PROFILE_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    payload = {"source": source, "profiles": list(profiles)}
+    PROFILE_STATE_PATH.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _profile_key_from_files(files: Sequence[Path]) -> str:
+    stems = sorted({file.stem for file in files})
+    if not stems:
+        return "empty"
+    return "__".join(stems)
+
+
+def _apply_profile_cache_paths(cfg_settings: ReputationSettings) -> None:
+    profiles = _parse_profile_selector(cfg_settings.profiles)
+    config_files = _resolve_config_files(cfg_settings.config_path, profiles)
+    if not config_files:
+        return
+    profile_key = _profile_key_from_files(config_files)
+    if _ACTIVE_PROFILE_SOURCE != "default":
+        profile_key = f"{_ACTIVE_PROFILE_SOURCE}__{profile_key}"
+
+    cfg_settings.cache_path = _apply_profile_path_template(
+        cfg_settings.cache_path,
+        DEFAULT_CACHE_PATH,
+        f"reputation_cache__{profile_key}.json",
+        profile_key,
+    )
+    cfg_settings.overrides_path = _apply_profile_path_template(
+        cfg_settings.overrides_path,
+        DEFAULT_OVERRIDES_PATH,
+        f"reputation_overrides__{profile_key}.json",
+        profile_key,
+    )
 
 
 def _resolve_llm_config_files(cfg_files: list[Path], llm_path: Path) -> list[Path]:
@@ -216,6 +331,105 @@ def _sorted_config_files(directory: Path) -> list[Path]:
         return (0 if name == "config.json" else 1, name)
 
     return sorted(files, key=sort_key)
+
+
+def active_profiles() -> list[str]:
+    profiles = _parse_profile_selector(settings.profiles)
+    files = _resolve_config_files(settings.config_path, profiles)
+    return [file.stem for file in files]
+
+
+def active_profile_key() -> str:
+    profiles = _parse_profile_selector(settings.profiles)
+    files = _resolve_config_files(settings.config_path, profiles)
+    key = _profile_key_from_files(files)
+    if _ACTIVE_PROFILE_SOURCE != "default":
+        return f"{_ACTIVE_PROFILE_SOURCE}__{key}"
+    return key
+
+
+def active_profile_source() -> str:
+    return _ACTIVE_PROFILE_SOURCE
+
+
+def list_available_profiles(source: str) -> list[str]:
+    source_key = _normalize_profile_source(source)
+    cfg_path, _ = _resolve_paths_for_source(source_key)
+    if not cfg_path.exists():
+        return []
+    if cfg_path.is_file():
+        return [cfg_path.stem]
+    return [file.stem for file in _sorted_config_files(cfg_path)]
+
+
+def set_profile_state(source: str, profiles: Sequence[str] | None) -> dict[str, Any]:
+    global _ACTIVE_PROFILE_SOURCE
+    source_key = _normalize_profile_source(source)
+    cfg_path, llm_path = _resolve_paths_for_source(source_key)
+    profile_list: list[str] = []
+    if profiles:
+        for entry in profiles:
+            if isinstance(entry, str) and entry.strip():
+                profile_list.append(_normalize_profile_name(entry))
+
+    settings.config_path = cfg_path.resolve()
+    settings.llm_config_path = llm_path.resolve()
+    settings.profiles = ",".join(profile_list)
+    _ACTIVE_PROFILE_SOURCE = source_key
+
+    _resolve_config_files(settings.config_path, profile_list)
+    _apply_profile_cache_paths(settings)
+    _save_profile_state(source_key, profile_list)
+
+    return {
+        "source": _ACTIVE_PROFILE_SOURCE,
+        "profiles": active_profiles(),
+        "profile_key": active_profile_key(),
+    }
+
+
+def _apply_profile_path_template(
+    value: Path,
+    default_value: Path,
+    default_filename: str,
+    profile_key: str,
+) -> Path:
+    value_str = str(value)
+    if "{profile}" in value_str or "{profiles}" in value_str or "{profile_key}" in value_str:
+        replaced = (
+            value_str.replace("{profile}", profile_key)
+            .replace("{profiles}", profile_key)
+            .replace("{profile_key}", profile_key)
+        )
+        return Path(replaced)
+    if value == default_value:
+        return value.with_name(default_filename)
+    return value
+
+
+def _apply_profile_state(cfg_settings: ReputationSettings) -> None:
+    global _ACTIVE_PROFILE_SOURCE
+    state = _load_profile_state()
+    if not state:
+        return
+    source_key = _normalize_profile_source(state.get("source"))
+    profiles = state.get("profiles")
+    profile_list: list[str] = []
+    if isinstance(profiles, str):
+        profile_list = _parse_profile_selector(profiles)
+    elif isinstance(profiles, list):
+        for entry in profiles:
+            if isinstance(entry, str) and entry.strip():
+                profile_list.append(_normalize_profile_name(entry))
+    cfg_path, llm_path = _resolve_paths_for_source(source_key)
+    cfg_settings.config_path = cfg_path.resolve()
+    cfg_settings.llm_config_path = llm_path.resolve()
+    cfg_settings.profiles = ",".join(profile_list)
+    _ACTIVE_PROFILE_SOURCE = source_key
+
+
+_apply_profile_state(settings)
+_apply_profile_cache_paths(settings)
 
 
 def _load_config_file(path: Path) -> Dict[str, Any]:

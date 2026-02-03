@@ -15,7 +15,14 @@ from reputation.actors import (
     primary_actor_info,
 )
 from reputation.collectors.utils import match_keywords, normalize_text
-from reputation.config import load_business_config
+from reputation.config import (
+    active_profile_key,
+    active_profile_source,
+    active_profiles,
+    list_available_profiles,
+    load_business_config,
+    set_profile_state,
+)
 from reputation.config import settings as reputation_settings
 from reputation.models import (
     ReputationCacheDocument,
@@ -110,6 +117,9 @@ def reputation_meta() -> dict[str, Any]:
     cache_available = doc is not None
     market_ratings = doc.market_ratings if doc else []
     market_ratings_history = doc.market_ratings_history if doc else []
+    profiles_active = active_profiles()
+    profile_key = active_profile_key()
+    profile_source = active_profile_source()
     source_counts: dict[str, int] = {}
     if doc:
         for item in doc.items:
@@ -132,8 +142,39 @@ def reputation_meta() -> dict[str, Any]:
         "cache_available": cache_available,
         "market_ratings": market_ratings,
         "market_ratings_history": market_ratings_history,
+        "profiles_active": profiles_active,
+        "profile_key": profile_key,
+        "profile_source": profile_source,
         "ui": ui_flags,
     }
+
+
+class ProfileSelection(BaseModel):
+    source: str | None = None
+    profiles: list[str] | None = None
+
+
+@router.get("/profiles")
+def reputation_profiles() -> dict[str, Any]:
+    return {
+        "active": {
+            "source": active_profile_source(),
+            "profiles": active_profiles(),
+            "profile_key": active_profile_key(),
+        },
+        "options": {
+            "default": list_available_profiles("default"),
+            "samples": list_available_profiles("samples"),
+        },
+    }
+
+
+@router.post("/profiles")
+def reputation_profiles_set(payload: ProfileSelection) -> dict[str, Any]:
+    source = payload.source or "default"
+    profiles = payload.profiles or []
+    active = set_profile_state(source, profiles)
+    return {"active": active}
 
 
 class CompareFilter(BaseModel):
