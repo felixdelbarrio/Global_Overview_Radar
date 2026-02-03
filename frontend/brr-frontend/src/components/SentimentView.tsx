@@ -566,7 +566,6 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
   }, [filterRestoredAt]);
 
   const sentimentSummary = useMemo(() => summarize(items), [items]);
-  const geoSummary = useMemo(() => summarizeByGeo(items), [items]);
   const principalItems = useMemo(
     () => items.filter((item) => isPrincipalItem(item, principalAliasKeys)),
     [items, principalAliasKeys],
@@ -1647,7 +1646,6 @@ function MentionCard({
       MANUAL_OVERRIDE_BLOCKED_LABELS[ratingSourceKey] ?? item.rating_source ?? "",
     );
   }
-  const blockedLabel = blockedLabels.filter(Boolean).join(" / ");
 
   useEffect(() => {
     setDraftGeo(item.geo ?? "");
