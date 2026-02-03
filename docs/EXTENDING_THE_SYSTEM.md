@@ -40,7 +40,7 @@ If the source has an API + scraper fallback, follow the existing pattern in
 3) The loader will merge it with other configs automatically.
 4) Optional: set `ui.incidents_enabled` / `ui.ops_enabled` for non-IT scopes.
 
-Example: combine `banking_bbva_empresas.json` + `banking_bbva_retail.json`.
+Example: combine `banking_empresas.json` + `banking_retail.json`.
 
 ---
 
@@ -88,7 +88,7 @@ Si hay API + scraper, sigue el patron de `appstore.py` y `google_play.py`.
 3) El loader lo combinara automaticamente con el resto.
 4) Opcional: define `ui.incidents_enabled` / `ui.ops_enabled` para scopes no IT.
 
-Ejemplo: `banking_bbva_empresas.json` + `banking_bbva_retail.json`.
+Ejemplo: `banking_empresas.json` + `banking_retail.json`.
 
 ---
 
