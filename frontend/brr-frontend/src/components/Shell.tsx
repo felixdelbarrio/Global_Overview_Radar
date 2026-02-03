@@ -321,6 +321,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
                         if (typeof sources === "number") {
                           metaBits.push(`${sources} fuentes`);
                         }
+                        const warning =
+                          typeof job?.meta?.warning === "string" ? job.meta.warning : "";
                         const metaLabel = metaBits.join(" · ");
                         return (
                           <button
@@ -352,6 +354,11 @@ export function Shell({ children }: { children: React.ReactNode }) {
                                 {metaLabel && (
                                   <div className="mt-1 text-[10px] uppercase tracking-[0.18em] text-[color:var(--text-40)]">
                                     {metaLabel}
+                                  </div>
+                                )}
+                                {warning && (
+                                  <div className="mt-1 text-[10px] text-[color:var(--text-50)]">
+                                    {warning}
                                   </div>
                                 )}
                               </div>

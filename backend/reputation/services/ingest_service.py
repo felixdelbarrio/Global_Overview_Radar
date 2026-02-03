@@ -141,7 +141,7 @@ class ReputationIngestService:
         report("Mapeando App Store", 62)
         items = self._apply_google_play_actor_map(cfg, items)
         report("Mapeando Google Play", 66)
-        items = self._apply_sentiment(cfg, items)
+        items = self._apply_sentiment(cfg, items, existing.items if existing else None, notes)
         report("Analizando sentimiento", 74)
         items = self._filter_noise_items(cfg, items, notes)
         report("Filtrando ruido", 82)
@@ -482,13 +482,36 @@ class ReputationIngestService:
         return list(merged.values())
 
     def _apply_sentiment(
-        self, cfg: dict[str, Any], items: list[ReputationItem]
+        self,
+        cfg: dict[str, Any],
+        items: list[ReputationItem],
+        existing: list[ReputationItem] | None = None,
+        notes: list[str] | None = None,
     ) -> list[ReputationItem]:
         keywords = self._load_keywords(cfg)
         cfg_local = dict(cfg)
         cfg_local["keywords"] = keywords
         service = ReputationSentimentService(cfg_local)
-        return service.analyze_items(items)
+        existing_keys = (
+            {(item.source, item.id) for item in existing} if existing else set()
+        )
+        if existing_keys:
+            new_items = [
+                item
+                for item in items
+                if (item.source, item.id) not in existing_keys
+            ]
+            updated = service.analyze_items(new_items)
+            updated_map = {(item.source, item.id): item for item in updated}
+            result = [
+                updated_map.get((item.source, item.id), item) for item in items
+            ]
+        else:
+            result = service.analyze_items(items)
+
+        if service.llm_warning and notes is not None:
+            notes.append(service.llm_warning)
+        return result
 
     @classmethod
     def _filter_noise_items(
