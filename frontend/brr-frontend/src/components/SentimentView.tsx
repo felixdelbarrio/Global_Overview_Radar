@@ -1174,6 +1174,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
                         principalLabel,
                         actorLabel,
                         filename: buildDownloadName("sentimiento_listado", fromDate, toDate),
+                        activeTab: mentionsTab,
                       })
                     }
                     className="inline-flex items-center gap-2 rounded-full border border-[color:var(--border-70)] bg-[color:var(--surface-80)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--brand-ink)] shadow-[var(--shadow-pill)] transition hover:-translate-y-0.5 hover:shadow-[var(--shadow-pill-hover)]"
@@ -2400,12 +2401,14 @@ function downloadMentionsWorkbook({
   principalLabel,
   actorLabel,
   filename,
+  activeTab,
 }: {
   principalItems: MentionGroup[];
   actorItems: MentionGroup[];
   principalLabel: string;
   actorLabel: string;
   filename: string;
+  activeTab: "principal" | "actor";
 }) {
   const principalName = sanitizeSheetName(principalLabel || "Principal", "Principal");
   let actorName = sanitizeSheetName(actorLabel || "Actor", "Actor");
@@ -2414,18 +2417,17 @@ function downloadMentionsWorkbook({
     actorName = `${actorName.slice(0, Math.max(0, 31 - suffix.length))}${suffix}`;
   }
 
-  const sheets = [
-    {
-      name: principalName,
-      headers: MENTIONS_HEADERS,
-      rows: buildMentionsRows(principalItems),
-    },
-    {
-      name: actorName,
-      headers: MENTIONS_HEADERS,
-      rows: buildMentionsRows(actorItems),
-    },
-  ];
+  const principalSheet = {
+    name: principalName,
+    headers: MENTIONS_HEADERS,
+    rows: buildMentionsRows(principalItems),
+  };
+  const actorSheet = {
+    name: actorName,
+    headers: MENTIONS_HEADERS,
+    rows: buildMentionsRows(actorItems),
+  };
+  const sheets = activeTab === "actor" ? [actorSheet, principalSheet] : [principalSheet, actorSheet];
 
   const workbook = buildWorkbookXml(sheets);
   downloadWorkbook(filename, workbook);
