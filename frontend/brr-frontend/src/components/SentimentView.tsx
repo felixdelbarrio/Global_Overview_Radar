@@ -37,6 +37,7 @@ import {
 } from "lucide-react";
 import { Shell } from "@/components/Shell";
 import { apiGet, apiPost } from "@/lib/api";
+import { INCIDENTS_FEATURE_ENABLED } from "@/lib/flags";
 import type {
   ActorPrincipalMeta,
   EvolutionPoint,
@@ -136,7 +137,9 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
     () => (actor === "all" ? "all" : "actor_principal"),
     [actor],
   );
-  const incidentsEnabled = meta?.ui?.incidents_enabled !== false;
+  const incidentsAvailable = meta?.incidents_available === true;
+  const incidentsEnabled =
+    INCIDENTS_FEATURE_ENABLED && incidentsAvailable && meta?.ui?.incidents_enabled !== false;
   const showIncidents = mode === "dashboard" && incidentsEnabled;
   const showDownloads = mode === "sentiment";
   const [incidents, setIncidents] = useState<IncidentItem[]>([]);
@@ -361,7 +364,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
     if (next.length !== sources.length) {
       setSources(next);
     }
-  }, [sourcesOptions]);
+  }, [sourcesOptions, sources]);
   const geoOptions = useMemo(() => {
     const fromMeta = meta?.geos ?? [];
     const fromItems = items.map((i) => i.geo).filter(Boolean) as string[];
@@ -589,28 +592,28 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
 
   return (
     <Shell>
-      <section className="relative overflow-hidden rounded-[28px] border border-white/60 bg-[color:var(--panel-strong)] p-6 shadow-[0_30px_70px_rgba(7,33,70,0.12)] animate-rise">
+      <section className="relative overflow-hidden rounded-[28px] border border-[color:var(--border-60)] bg-[color:var(--panel-strong)] p-6 shadow-[var(--shadow-lg)] animate-rise">
         <div className="absolute inset-0 pointer-events-none">
           <div className="absolute -top-24 -right-10 h-48 w-48 rounded-full bg-[color:var(--aqua)]/15 blur-3xl" />
           <div className="absolute -bottom-16 left-10 h-40 w-40 rounded-full bg-[color:var(--blue)]/10 blur-3xl" />
         </div>
         <div className="relative">
-          <div className="inline-flex items-center gap-2 rounded-full border border-white/60 bg-white/70 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-[color:var(--blue)] shadow-sm">
+          <div className="inline-flex items-center gap-2 rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-[color:var(--blue)] shadow-sm">
             <Sparkles className="h-3.5 w-3.5" />
             {headerEyebrow}
           </div>
           <h1 className="mt-4 text-3xl sm:text-4xl font-display font-semibold text-[color:var(--ink)]">
             {headerTitle}
           </h1>
-          <p className="mt-2 max-w-2xl text-sm text-black/60">
+          <p className="mt-2 max-w-2xl text-sm text-[color:var(--text-60)]">
             {headerSubtitle}
           </p>
-          <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-black/55">
-            <span className="inline-flex items-center gap-2 rounded-full bg-white/70 px-3 py-1">
+          <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-[color:var(--text-55)]">
+            <span className="inline-flex items-center gap-2 rounded-full bg-[color:var(--surface-70)] px-3 py-1">
               <Calendar className="h-3.5 w-3.5 text-[color:var(--blue)]" />
               Rango: {rangeLabel}
             </span>
-            <span className="inline-flex items-center gap-2 rounded-full bg-white/70 px-3 py-1">
+            <span className="inline-flex items-center gap-2 rounded-full bg-[color:var(--surface-70)] px-3 py-1">
               <MessageSquare className="h-3.5 w-3.5 text-[color:var(--blue)]" />
               Menciones:{" "}
               {itemsLoading ? (
@@ -619,7 +622,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
                 items.length
               )}
             </span>
-            <span className="inline-flex items-center gap-2 rounded-full bg-white/70 px-3 py-1">
+            <span className="inline-flex items-center gap-2 rounded-full bg-[color:var(--surface-70)] px-3 py-1">
               <Clock className="h-3.5 w-3.5 text-[color:var(--blue)]" />
               Última actualización:{" "}
               {itemsLoading ? (
@@ -629,7 +632,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
               )}
             </span>
             {filterRestoredAt && (
-              <span className="inline-flex items-center gap-2 rounded-full border border-[color:var(--aqua)]/40 bg-[color:var(--aqua)]/10 px-3 py-1 text-[color:var(--navy)] animate-rise">
+              <span className="inline-flex items-center gap-2 rounded-full border border-[color:var(--aqua)]/40 bg-[color:var(--aqua)]/10 px-3 py-1 text-[color:var(--brand-ink)] animate-rise">
                 <Sparkles className="h-3.5 w-3.5" />
                 Filtros restaurados
               </span>
@@ -646,7 +649,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
 
       <div className="mt-6 grid grid-cols-1 lg:grid-cols-[1.2fr_1fr] gap-4">
         <section
-          className="rounded-[26px] border border-white/60 bg-[color:var(--panel)] p-5 shadow-[0_20px_50px_rgba(7,33,70,0.08)] backdrop-blur-xl animate-rise"
+          className="rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-5 shadow-[var(--shadow-md)] backdrop-blur-xl animate-rise"
           style={{ animationDelay: "120ms" }}
         >
           <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
@@ -661,7 +664,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
                   touchCommonFilters();
                   setFromDate(e.target.value);
                 }}
-                className="w-full rounded-2xl border border-white/60 bg-white/80 px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] outline-none focus:border-[color:var(--aqua)]/60 focus:ring-2 focus:ring-[color:var(--aqua)]/30"
+                className="w-full rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_var(--inset-highlight)] outline-none focus:border-[color:var(--aqua)]/60 focus:ring-2 focus:ring-[color:var(--aqua)]/30"
               />
             </FilterField>
             <FilterField label="Hasta">
@@ -672,7 +675,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
                   touchCommonFilters();
                   setToDate(e.target.value);
                 }}
-                className="w-full rounded-2xl border border-white/60 bg-white/80 px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] outline-none focus:border-[color:var(--aqua)]/60 focus:ring-2 focus:ring-[color:var(--aqua)]/30"
+                className="w-full rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_var(--inset-highlight)] outline-none focus:border-[color:var(--aqua)]/60 focus:ring-2 focus:ring-[color:var(--aqua)]/30"
               />
             </FilterField>
             <FilterField label="Sentimiento">
@@ -682,7 +685,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
                   touchCommonFilters();
                   setSentiment(e.target.value as SentimentFilter);
                 }}
-                className="w-full rounded-2xl border border-white/60 bg-white/80 px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] outline-none focus:border-[color:var(--aqua)]/60 focus:ring-2 focus:ring-[color:var(--aqua)]/30"
+                className="w-full rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_var(--inset-highlight)] outline-none focus:border-[color:var(--aqua)]/60 focus:ring-2 focus:ring-[color:var(--aqua)]/30"
               >
                 {SENTIMENTS.map((opt) => (
                   <option key={opt} value={opt}>
@@ -692,7 +695,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
               </select>
             </FilterField>
             <FilterField label="Entidad">
-              <div className="w-full rounded-2xl border border-white/60 bg-white/70 px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
+              <div className="w-full rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_var(--inset-highlight)]">
                 {actorPrincipalName}
               </div>
             </FilterField>
@@ -703,7 +706,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
                   touchCommonFilters();
                   setGeo(e.target.value);
                 }}
-                className="w-full rounded-2xl border border-white/60 bg-white/80 px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] outline-none focus:border-[color:var(--aqua)]/60 focus:ring-2 focus:ring-[color:var(--aqua)]/30"
+                className="w-full rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_var(--inset-highlight)] outline-none focus:border-[color:var(--aqua)]/60 focus:ring-2 focus:ring-[color:var(--aqua)]/30"
               >
                 <option value="all">Todos</option>
                 {geoOptions.map((opt) => (
@@ -720,7 +723,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
                   touchItemsFilters();
                   setActor(e.target.value);
                 }}
-                className="w-full rounded-2xl border border-white/60 bg-white/80 px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] outline-none focus:border-[color:var(--aqua)]/60 focus:ring-2 focus:ring-[color:var(--aqua)]/30 disabled:opacity-60"
+                className="w-full rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_var(--inset-highlight)] outline-none focus:border-[color:var(--aqua)]/60 focus:ring-2 focus:ring-[color:var(--aqua)]/30 disabled:opacity-60"
               >
                 <option value="all">Todos</option>
                 {actorOptions.map((opt) => (
@@ -753,7 +756,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
                       "rounded-full px-3 py-1.5 text-xs border transition shadow-sm " +
                       (active
                         ? "bg-[color:var(--blue)] text-white border-transparent"
-                        : "bg-white/80 text-[color:var(--navy)] border-white/60")
+                        : "bg-[color:var(--surface-80)] text-[color:var(--brand-ink)] border-[color:var(--border-60)]")
                     }
                   >
                     <span>{src}</span>
@@ -762,8 +765,8 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
                         className={
                           "ml-2 rounded-full px-2 py-0.5 text-[10px] font-semibold " +
                           (active
-                            ? "bg-white/15 text-white"
-                            : "bg-[color:var(--sand)] text-[color:var(--navy)]")
+                            ? "bg-[color:var(--surface-15)] text-white"
+                            : "bg-[color:var(--sand)] text-[color:var(--brand-ink)]")
                         }
                       >
                         {countLabel}
@@ -774,8 +777,8 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
                         className={
                           "ml-2 rounded-full px-2 py-0.5 text-[10px] font-semibold " +
                           (active
-                            ? "bg-white/15 text-white"
-                            : "bg-[color:var(--sand)] text-[color:var(--navy)]")
+                            ? "bg-[color:var(--surface-15)] text-white"
+                            : "bg-[color:var(--sand)] text-[color:var(--brand-ink)]")
                         }
                       >
                         <Loader2 className="h-3 w-3 animate-spin" />
@@ -785,7 +788,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
                 );
               })}
               {!sourcesOptions.length && (
-                <span className="text-xs text-black/40">
+                <span className="text-xs text-[color:var(--text-40)]">
                   Sin datos disponibles
                 </span>
               )}
@@ -794,7 +797,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
         </section>
 
         <section
-          className="rounded-[26px] border border-white/60 bg-[color:var(--panel)] p-5 shadow-[0_20px_50px_rgba(7,33,70,0.08)] backdrop-blur-xl animate-rise"
+          className="rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-5 shadow-[var(--shadow-md)] backdrop-blur-xl animate-rise"
           style={{ animationDelay: "180ms" }}
         >
           <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
@@ -841,14 +844,14 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
         </section>
       </div>
 
-      <section className="mt-6 rounded-[26px] border border-white/60 bg-[color:var(--panel)] p-5 shadow-[0_20px_50px_rgba(7,33,70,0.08)] backdrop-blur-xl animate-rise" style={{ animationDelay: "240ms" }}>
+      <section className="mt-6 rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-5 shadow-[var(--shadow-md)] backdrop-blur-xl animate-rise" style={{ animationDelay: "240ms" }}>
         <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
           SENTIMIENTO POR PAÍS
         </div>
         <div className="mt-3 overflow-auto">
           <table className="min-w-full text-sm">
             <thead>
-              <tr className="text-left text-[11px] uppercase tracking-[0.2em] text-black/45">
+              <tr className="text-left text-[11px] uppercase tracking-[0.2em] text-[color:var(--text-45)]">
                 <th className="py-2 pr-4">País</th>
                 <th className="py-2 pr-4">Menciones</th>
                 <th className="py-2 pr-4">Score medio</th>
@@ -862,7 +865,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
                 <SkeletonTableRows columns={6} rows={3} />
               ) : (
                 geoSummary.map((row) => (
-                  <tr key={row.geo} className="border-t border-white/60">
+                  <tr key={row.geo} className="border-t border-[color:var(--border-60)]">
                     <td className="py-2 pr-4 font-semibold text-[color:var(--ink)]">
                       {row.geo}
                     </td>
@@ -876,7 +879,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
               )}
               {!itemsLoading && !geoSummary.length && (
                 <tr>
-                  <td className="py-3 text-sm text-black/45" colSpan={6}>
+                  <td className="py-3 text-sm text-[color:var(--text-45)]" colSpan={6}>
                     No hay datos para los filtros seleccionados.
                   </td>
                 </tr>
@@ -886,7 +889,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
         </div>
       </section>
 
-      <section className="mt-6 rounded-[26px] border border-white/60 bg-[color:var(--panel)] p-5 shadow-[0_20px_50px_rgba(7,33,70,0.08)] backdrop-blur-xl animate-rise" style={{ animationDelay: "300ms" }}>
+      <section className="mt-6 rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-5 shadow-[var(--shadow-md)] backdrop-blur-xl animate-rise" style={{ animationDelay: "300ms" }}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
             {mode === "dashboard"
@@ -895,7 +898,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
                 : "SENTIMIENTO"
               : "ÍNDICE REPUTACIONAL ACUMULADO"}
           </div>
-          <div className="text-xs text-black/55">
+          <div className="text-xs text-[color:var(--text-55)]">
             {mode === "dashboard"
               ? `${principalLabel} · ${rangeLabel}`
               : `Comparativa ${principalLabel} vs ${actorLabel} · ${rangeLabel}`}
@@ -912,7 +915,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
                   buildDownloadName("sentimiento_grafico", fromDate, toDate),
                 )
               }
-              className="inline-flex items-center gap-2 rounded-full border border-white/70 bg-white/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--navy)] shadow-[0_6px_18px_rgba(7,33,70,0.12)] transition hover:-translate-y-0.5 hover:shadow-[0_10px_24px_rgba(7,33,70,0.16)]"
+              className="inline-flex items-center gap-2 rounded-full border border-[color:var(--border-70)] bg-[color:var(--surface-80)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--brand-ink)] shadow-[var(--shadow-pill)] transition hover:-translate-y-0.5 hover:shadow-[var(--shadow-pill-hover)]"
             >
               Descargar gráfico
             </button>
@@ -920,7 +923,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
         )}
         <div className="mt-3 h-72 min-h-[240px]">
           {chartLoading ? (
-            <div className="h-full rounded-[22px] border border-white/60 bg-white/70 animate-pulse" />
+            <div className="h-full rounded-[22px] border border-[color:var(--border-60)] bg-[color:var(--surface-70)] animate-pulse" />
           ) : mode === "dashboard" ? (
             <DashboardChart
               data={dashboardSeries}
@@ -939,12 +942,12 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
       </section>
 
       {mode === "dashboard" ? (
-        <section className="mt-6 rounded-[26px] border border-white/60 bg-[color:var(--panel)] p-5 shadow-[0_20px_50px_rgba(7,33,70,0.08)] backdrop-blur-xl animate-rise" style={{ animationDelay: "360ms" }}>
+        <section className="mt-6 rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-5 shadow-[var(--shadow-md)] backdrop-blur-xl animate-rise" style={{ animationDelay: "360ms" }}>
           <div className="flex items-center justify-between gap-3">
             <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
               ÚLTIMAS MENCIONES
             </div>
-            <div className="text-xs text-black/50">
+            <div className="text-xs text-[color:var(--text-50)]">
               {mentionsLoading ? (
                 <span className="inline-flex items-center gap-2">
                   <Loader2 className="h-3.5 w-3.5 animate-spin text-[color:var(--blue)]" />
@@ -960,7 +963,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
           </div>
           <div className="mt-4 space-y-3">
             {mentionsLoading && (
-              <div className="text-sm text-black/50">Cargando sentimiento…</div>
+              <div className="text-sm text-[color:var(--text-50)]">Cargando sentimiento…</div>
             )}
             {!mentionsLoading &&
               dashboardMentions.map((item, index) => (
@@ -972,19 +975,19 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
                 />
               ))}
             {!mentionsLoading && !dashboardMentions.length && (
-              <div className="text-sm text-black/45">
+              <div className="text-sm text-[color:var(--text-45)]">
                 No hay menciones para mostrar.
               </div>
             )}
           </div>
         </section>
       ) : (
-        <section className="mt-6 rounded-[26px] border border-white/60 bg-[color:var(--panel)] p-5 shadow-[0_20px_50px_rgba(7,33,70,0.08)] backdrop-blur-xl animate-rise" style={{ animationDelay: "360ms" }}>
+        <section className="mt-6 rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-5 shadow-[var(--shadow-md)] backdrop-blur-xl animate-rise" style={{ animationDelay: "360ms" }}>
           <div className="flex items-center justify-between gap-3">
             <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
               LISTADO COMPLETO
             </div>
-            <div className="text-xs text-black/50">
+            <div className="text-xs text-[color:var(--text-50)]">
               {mentionsLoading ? (
                 <span className="inline-flex items-center gap-2">
                   <Loader2 className="h-3.5 w-3.5 animate-spin text-[color:var(--blue)]" />
@@ -997,19 +1000,19 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
               )}
             </div>
           </div>
-          <div className="mt-3 flex flex-wrap items-center gap-2 rounded-full border border-white/70 bg-white/70 p-1 shadow-[0_10px_30px_rgba(7,33,70,0.08)]">
+          <div className="mt-3 flex flex-wrap items-center gap-2 rounded-full border border-[color:var(--border-70)] bg-[color:var(--surface-70)] p-1 shadow-[var(--shadow-soft)]">
             <button
               onClick={() => setMentionsTab("principal")}
               className={
                 "flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold transition " +
                 (mentionsTab === "principal"
-                  ? "bg-white text-[color:var(--ink)] shadow-[0_8px_18px_rgba(7,33,70,0.12)]"
-                  : "text-black/50 hover:text-[color:var(--ink)]")
+                  ? "bg-[color:var(--surface-solid)] text-[color:var(--ink)] shadow-[var(--shadow-sm)]"
+                  : "text-[color:var(--text-50)] hover:text-[color:var(--ink)]")
               }
             >
               <span className="inline-block h-1.5 w-7 rounded-full bg-[#004481]" />
               {principalLabel}
-              <span className="text-[10px] text-black/40">
+              <span className="text-[10px] text-[color:var(--text-40)]">
                 {principalMentions.length} resultados
               </span>
             </button>
@@ -1018,13 +1021,13 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
               className={
                 "flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold transition " +
                 (mentionsTab === "actor"
-                  ? "bg-white text-[color:var(--ink)] shadow-[0_8px_18px_rgba(7,33,70,0.12)]"
-                  : "text-black/50 hover:text-[color:var(--ink)]")
+                  ? "bg-[color:var(--surface-solid)] text-[color:var(--ink)] shadow-[var(--shadow-sm)]"
+                  : "text-[color:var(--text-50)] hover:text-[color:var(--ink)]")
               }
             >
               <span className="inline-block h-[3px] w-7 rounded-full border-t-2 border-dashed border-[#2dcccd]" />
               {actorLabel}
-              <span className="text-[10px] text-black/40">
+              <span className="text-[10px] text-[color:var(--text-40)]">
                 {actorMentions.length} resultados
               </span>
             </button>
@@ -1036,7 +1039,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
                     buildDownloadName("sentimiento_listado", fromDate, toDate),
                   )
                 }
-                className="inline-flex items-center gap-2 rounded-full border border-white/70 bg-white/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--navy)] shadow-[0_6px_18px_rgba(7,33,70,0.12)] transition hover:-translate-y-0.5 hover:shadow-[0_10px_24px_rgba(7,33,70,0.16)]"
+                className="inline-flex items-center gap-2 rounded-full border border-[color:var(--border-70)] bg-[color:var(--surface-80)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--brand-ink)] shadow-[var(--shadow-pill)] transition hover:-translate-y-0.5 hover:shadow-[var(--shadow-pill-hover)]"
               >
                 Descargar listado
               </button>
@@ -1044,7 +1047,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
           </div>
           <div className="mt-4 space-y-3">
             {mentionsLoading && (
-              <div className="text-sm text-black/50">Cargando sentimiento…</div>
+              <div className="text-sm text-[color:var(--text-50)]">Cargando sentimiento…</div>
             )}
             {!mentionsLoading &&
               mentionsToShow.map((item, index) => (
@@ -1058,7 +1061,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
                 />
               ))}
             {!mentionsLoading && !mentionsToShow.length && (
-              <div className="text-sm text-black/45">
+              <div className="text-sm text-[color:var(--text-45)]">
                 No hay menciones para mostrar.
               </div>
             )}
@@ -1077,7 +1080,7 @@ function FilterField({
   children: React.ReactNode;
 }) {
   return (
-    <label className="text-[11px] uppercase tracking-[0.18em] text-black/50">
+    <label className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--text-50)]">
       <span className="block mb-2">{label}</span>
       {children}
     </label>
@@ -1094,14 +1097,14 @@ function SummaryCard({
   loading?: boolean;
 }) {
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-white/70 bg-white/80 px-4 py-3 shadow-[0_10px_30px_rgba(7,33,70,0.08)]">
+    <div className="relative overflow-hidden rounded-2xl border border-[color:var(--border-70)] bg-[color:var(--surface-80)] px-4 py-3 shadow-[var(--shadow-soft)]">
       <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-[color:var(--aqua)] via-[color:var(--blue)] to-transparent" />
-      <div className="text-[11px] uppercase tracking-[0.16em] text-black/45">
+      <div className="text-[11px] uppercase tracking-[0.16em] text-[color:var(--text-45)]">
         {label}
       </div>
       <div className="mt-2 text-2xl font-display font-semibold text-[color:var(--ink)]">
         {loading ? (
-          <span className="inline-flex items-center gap-2 text-sm text-black/40">
+          <span className="inline-flex items-center gap-2 text-sm text-[color:var(--text-40)]">
             <Loader2 className="h-4 w-4 animate-spin text-[color:var(--blue)]" />
             Cargando
           </span>
@@ -1116,14 +1119,14 @@ function SummaryCard({
 function RowMeter({ label, value }: { label: string; value: number }) {
   return (
     <div className="flex items-center gap-3">
-      <div className="w-28 text-xs text-black/55 truncate">{label}</div>
-      <div className="flex-1 h-2 rounded-full bg-white/70 overflow-hidden border border-white/70">
+      <div className="w-28 text-xs text-[color:var(--text-55)] truncate">{label}</div>
+      <div className="flex-1 h-2 rounded-full bg-[color:var(--surface-70)] overflow-hidden border border-[color:var(--border-70)]">
         <div
           className="h-full rounded-full bg-gradient-to-r from-[color:var(--blue)] to-[color:var(--aqua)]"
           style={{ width: `${Math.min(100, value * 6)}%` }}
         />
       </div>
-      <div className="w-8 text-right text-xs text-black/55">{value}</div>
+      <div className="w-8 text-right text-xs text-[color:var(--text-55)]">{value}</div>
     </div>
   );
 }
@@ -1133,9 +1136,9 @@ function SkeletonRows({ count }: { count: number }) {
     <>
       {Array.from({ length: count }).map((_, idx) => (
         <div key={idx} className="flex items-center gap-3 animate-pulse">
-          <div className="h-3 w-24 rounded-full bg-white/70 border border-white/60" />
-          <div className="flex-1 h-2 rounded-full bg-white/70 border border-white/60" />
-          <div className="h-3 w-8 rounded-full bg-white/70 border border-white/60" />
+          <div className="h-3 w-24 rounded-full bg-[color:var(--surface-70)] border border-[color:var(--border-60)]" />
+          <div className="flex-1 h-2 rounded-full bg-[color:var(--surface-70)] border border-[color:var(--border-60)]" />
+          <div className="h-3 w-8 rounded-full bg-[color:var(--surface-70)] border border-[color:var(--border-60)]" />
         </div>
       ))}
     </>
@@ -1146,10 +1149,10 @@ function SkeletonTableRows({ columns, rows }: { columns: number; rows: number })
   return (
     <>
       {Array.from({ length: rows }).map((_, rowIdx) => (
-        <tr key={rowIdx} className="border-t border-white/60 animate-pulse">
+        <tr key={rowIdx} className="border-t border-[color:var(--border-60)] animate-pulse">
           {Array.from({ length: columns }).map((_, colIdx) => (
             <td key={colIdx} className="py-2 pr-4">
-              <div className="h-3 w-full max-w-[120px] rounded-full bg-white/70 border border-white/60" />
+              <div className="h-3 w-full max-w-[120px] rounded-full bg-[color:var(--surface-70)] border border-[color:var(--border-60)]" />
             </td>
           ))}
         </tr>
@@ -1248,20 +1251,20 @@ function MentionCard({
 
   return (
     <article
-      className="group relative overflow-hidden rounded-[22px] border border-white/70 bg-white/85 p-4 shadow-[0_16px_40px_rgba(7,33,70,0.12)] animate-rise"
+      className="group relative overflow-hidden rounded-[22px] border border-[color:var(--border-70)] bg-[color:var(--surface-85)] p-4 shadow-[var(--shadow-card)] animate-rise"
       style={{ animationDelay: `${Math.min(index, 8) * 60}ms` }}
     >
       <div className="absolute inset-y-0 left-0 w-1 bg-gradient-to-b from-[color:var(--aqua)] via-[color:var(--blue)] to-transparent opacity-70" />
-      <div className="flex flex-wrap items-center gap-2 text-[11px] text-black/55">
-        <span className="inline-flex items-center gap-1 rounded-full border border-white/70 bg-white/80 px-2.5 py-1">
+      <div className="flex flex-wrap items-center gap-2 text-[11px] text-[color:var(--text-55)]">
+        <span className="inline-flex items-center gap-1 rounded-full border border-[color:var(--border-70)] bg-[color:var(--surface-80)] px-2.5 py-1">
           <MapPin className="h-3.5 w-3.5 text-[color:var(--blue)]" />
           {item.geo || "Global"}
         </span>
-        <span className="inline-flex items-center gap-1 rounded-full border border-white/70 bg-white/80 px-2.5 py-1">
+        <span className="inline-flex items-center gap-1 rounded-full border border-[color:var(--border-70)] bg-[color:var(--surface-80)] px-2.5 py-1">
           <Building2 className="h-3.5 w-3.5 text-[color:var(--blue)]" />
           {item.actor || principalLabel}
         </span>
-        <span className="inline-flex items-center gap-1 rounded-full border border-white/70 bg-white/80 px-2.5 py-1">
+        <span className="inline-flex items-center gap-1 rounded-full border border-[color:var(--border-70)] bg-[color:var(--surface-80)] px-2.5 py-1">
           <Calendar className="h-3.5 w-3.5 text-[color:var(--blue)]" />
           {displayDate}
         </span>
@@ -1270,20 +1273,20 @@ function MentionCard({
           {sentimentTone.label}
         </span>
         {ratingValue !== null && (
-          <span className="inline-flex items-center gap-2 rounded-full border border-[color:var(--aqua)]/40 bg-[linear-gradient(120deg,rgba(0,68,129,0.12),rgba(45,204,205,0.2),rgba(255,255,255,0.85))] px-2.5 py-1 text-[11px] text-[color:var(--navy)] shadow-[0_6px_18px_rgba(7,33,70,0.12)]">
+          <span className="inline-flex items-center gap-2 rounded-full border border-[color:var(--aqua)]/40 [background-image:var(--gradient-chip)] px-2.5 py-1 text-[11px] text-[color:var(--brand-ink)] shadow-[var(--shadow-pill)]">
             <StarMeter rating={ratingValue} />
             <span className="font-semibold">{ratingLabel}</span>
-            <span className="text-[10px] uppercase tracking-[0.2em] text-black/45">/5</span>
+            <span className="text-[10px] uppercase tracking-[0.2em] text-[color:var(--text-45)]">/5</span>
           </span>
         )}
         {item.manual_override && (
-          <span className="inline-flex items-center gap-1 rounded-full border border-[color:var(--aqua)]/40 bg-[color:var(--aqua)]/10 px-2.5 py-1 text-[11px] text-[color:var(--navy)]">
+          <span className="inline-flex items-center gap-1 rounded-full border border-[color:var(--aqua)]/40 bg-[color:var(--aqua)]/10 px-2.5 py-1 text-[11px] text-[color:var(--brand-ink)]">
             <Sparkles className="h-3 w-3" />
             Ajuste manual
           </span>
         )}
         {item.sources.length > 1 && (
-          <span className="inline-flex items-center gap-1 rounded-full border border-white/70 bg-white/80 px-2.5 py-1 text-[11px] text-black/60">
+          <span className="inline-flex items-center gap-1 rounded-full border border-[color:var(--border-70)] bg-[color:var(--surface-80)] px-2.5 py-1 text-[11px] text-[color:var(--text-60)]">
             {item.sources.length} fuentes
           </span>
         )}
@@ -1293,7 +1296,7 @@ function MentionCard({
       </div>
       {sanitizedText && (
         <div
-          className="mt-2 text-sm text-black/70"
+          className="mt-2 text-sm text-[color:var(--text-70)]"
           style={{
             display: "-webkit-box",
             WebkitLineClamp: 2,
@@ -1304,21 +1307,21 @@ function MentionCard({
           {sanitizedText}
         </div>
       )}
-      <div className="mt-4 rounded-2xl border border-[color:var(--aqua)]/30 bg-[linear-gradient(135deg,rgba(45,204,205,0.16),rgba(0,68,129,0.08),rgba(255,255,255,0.95))] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
+      <div className="mt-4 rounded-2xl border border-[color:var(--aqua)]/30 [background-image:var(--gradient-callout)] p-3 shadow-[inset_0_1px_0_var(--inset-highlight-strong)]">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="text-[10px] font-semibold uppercase tracking-[0.3em] text-[color:var(--blue)]">
             Control manual
           </div>
           <button
             onClick={() => setEditOpen((value) => !value)}
-            className="inline-flex items-center gap-2 rounded-full border border-white/70 bg-white/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--navy)] shadow-[0_6px_18px_rgba(7,33,70,0.12)] transition hover:-translate-y-0.5 hover:shadow-[0_10px_24px_rgba(7,33,70,0.16)]"
+            className="inline-flex items-center gap-2 rounded-full border border-[color:var(--border-70)] bg-[color:var(--surface-80)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--brand-ink)] shadow-[var(--shadow-pill)] transition hover:-translate-y-0.5 hover:shadow-[var(--shadow-pill-hover)]"
           >
             <PenSquare className="h-3.5 w-3.5" />
             {editOpen ? "Cerrar" : "Ajustar"}
           </button>
         </div>
         {!editOpen && (
-          <div className="mt-2 text-xs text-black/55">
+          <div className="mt-2 text-xs text-[color:var(--text-55)]">
             {manualUpdatedAt
               ? `Último ajuste: ${formatDate(manualUpdatedAt)}`
               : "Ajusta país o sentimiento si el análisis no refleja tu criterio."}
@@ -1327,7 +1330,7 @@ function MentionCard({
         {editOpen && (
           <div className="mt-3 grid gap-3">
             <div className="grid gap-1">
-              <span className="text-[10px] uppercase tracking-[0.2em] text-black/45">
+              <span className="text-[10px] uppercase tracking-[0.2em] text-[color:var(--text-45)]">
                 País
               </span>
               <input
@@ -1336,7 +1339,7 @@ function MentionCard({
                 value={draftGeo}
                 onChange={(e) => setDraftGeo(e.target.value)}
                 placeholder="Ej: España"
-                className="w-full rounded-2xl border border-white/70 bg-white/85 px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] outline-none focus:border-[color:var(--aqua)]/60 focus:ring-2 focus:ring-[color:var(--aqua)]/30"
+                className="w-full rounded-2xl border border-[color:var(--border-70)] bg-[color:var(--surface-85)] px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_var(--inset-highlight-strong)] outline-none focus:border-[color:var(--aqua)]/60 focus:ring-2 focus:ring-[color:var(--aqua)]/30"
               />
               <datalist id={geoListId}>
                 {geoOptions.map((opt) => (
@@ -1345,7 +1348,7 @@ function MentionCard({
               </datalist>
             </div>
             <div className="grid gap-2">
-              <span className="text-[10px] uppercase tracking-[0.2em] text-black/45">
+              <span className="text-[10px] uppercase tracking-[0.2em] text-[color:var(--text-45)]">
                 Sentimiento
               </span>
               <div className="flex flex-wrap gap-2">
@@ -1359,8 +1362,8 @@ function MentionCard({
                       className={
                         "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition " +
                         (active
-                          ? `${tone.className} shadow-[0_10px_20px_rgba(7,33,70,0.12)]`
-                          : "border-white/70 bg-white/80 text-black/50 hover:text-[color:var(--ink)]")
+                          ? `${tone.className} shadow-[var(--shadow-tone)]`
+                          : "border-[color:var(--border-70)] bg-[color:var(--surface-80)] text-[color:var(--text-50)] hover:text-[color:var(--ink)]")
                       }
                     >
                       {tone.icon}
@@ -1395,7 +1398,7 @@ function MentionCard({
                   setDraftSentiment(currentSentiment);
                   setLocalError(null);
                 }}
-                className="inline-flex items-center gap-2 rounded-full border border-white/70 bg-white/80 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-black/60 transition hover:text-[color:var(--ink)]"
+                className="inline-flex items-center gap-2 rounded-full border border-[color:var(--border-70)] bg-[color:var(--surface-80)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[color:var(--text-60)] transition hover:text-[color:var(--ink)]"
               >
                 <X className="h-3.5 w-3.5" />
                 Cancelar
@@ -1404,9 +1407,9 @@ function MentionCard({
           </div>
         )}
       </div>
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs text-black/45">
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs text-[color:var(--text-45)]">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-[11px] uppercase tracking-[0.16em] text-black/40">
+          <span className="text-[11px] uppercase tracking-[0.16em] text-[color:var(--text-40)]">
             Fuentes
           </span>
           {item.sources.map((src) =>
@@ -1416,7 +1419,7 @@ function MentionCard({
                 href={src.url}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-1 rounded-full border border-white/70 bg-white/80 px-2.5 py-1 text-[11px] text-[color:var(--blue)] hover:text-[color:var(--navy)] transition"
+                className="inline-flex items-center gap-1 rounded-full border border-[color:var(--border-70)] bg-[color:var(--surface-80)] px-2.5 py-1 text-[11px] text-[color:var(--blue)] hover:text-[color:var(--brand-ink)] transition"
               >
                 {src.name}
                 <ArrowUpRight className="h-3 w-3" />
@@ -1424,7 +1427,7 @@ function MentionCard({
             ) : (
               <span
                 key={src.name}
-                className="inline-flex items-center gap-1 rounded-full border border-white/70 bg-white/80 px-2.5 py-1 text-[11px] text-[color:var(--blue)]"
+                className="inline-flex items-center gap-1 rounded-full border border-[color:var(--border-70)] bg-[color:var(--surface-80)] px-2.5 py-1 text-[11px] text-[color:var(--blue)]"
               >
                 {src.name}
               </span>
@@ -1436,7 +1439,7 @@ function MentionCard({
             href={item.sources[0].url}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex items-center gap-1 text-[color:var(--blue)] hover:text-[color:var(--navy)] transition"
+            className="inline-flex items-center gap-1 text-[color:var(--blue)] hover:text-[color:var(--brand-ink)] transition"
           >
             Ver detalle
             <ArrowUpRight className="h-3.5 w-3.5" />
@@ -1612,7 +1615,7 @@ function StarMeter({ rating }: { rating: number }) {
   const width = `${(safe / 5) * 100}%`;
   return (
     <span className="relative inline-flex items-center">
-      <span className="flex items-center text-[color:var(--navy)]/25">
+      <span className="flex items-center text-[color:var(--brand-ink)]/25">
         {Array.from({ length: 5 }).map((_, idx) => (
           <Star key={`empty-${idx}`} className="h-3.5 w-3.5" />
         ))}
@@ -1911,7 +1914,7 @@ function SentimentChart({
 
   if (!data.length) {
     return (
-      <div className="h-full grid place-items-center text-sm text-black/45">
+      <div className="h-full grid place-items-center text-sm text-[color:var(--text-45)]">
         No hay datos para el periodo seleccionado.
       </div>
     );
@@ -1920,7 +1923,7 @@ function SentimentChart({
   return (
     <ResponsiveContainer width="100%" height="100%">
       <LineChart data={data}>
-        <CartesianGrid stroke="rgba(7,33,70,0.08)" vertical={false} />
+        <CartesianGrid stroke="var(--chart-grid)" vertical={false} />
         <XAxis
           dataKey="date"
           tickFormatter={(d: string) => d.slice(5)}
@@ -1931,14 +1934,14 @@ function SentimentChart({
           fontSize={11}
           tickFormatter={(v: number) => v.toFixed(2)}
         />
-        <ReferenceLine y={0} stroke="rgba(7,33,70,0.2)" strokeDasharray="3 3" />
+        <ReferenceLine y={0} stroke="var(--chart-reference)" strokeDasharray="3 3" />
         <Tooltip
           formatter={tooltipFormatter}
           labelFormatter={(label) => `Fecha ${String(label ?? "")}`}
           contentStyle={{
             borderRadius: 16,
-            border: "1px solid rgba(7,33,70,0.08)",
-            boxShadow: "0 10px 30px rgba(7,33,70,0.12)",
+            border: "1px solid var(--border)",
+            boxShadow: "var(--shadow-tooltip)",
           }}
         />
         <Legend wrapperStyle={{ fontSize: 12 }} />
@@ -1986,7 +1989,7 @@ function DashboardChart({
 
   if (!data.length) {
     return (
-      <div className="h-full grid place-items-center text-sm text-black/45">
+      <div className="h-full grid place-items-center text-sm text-[color:var(--text-45)]">
         No hay datos para el periodo seleccionado.
       </div>
     );
@@ -1995,7 +1998,7 @@ function DashboardChart({
   return (
     <ResponsiveContainer width="100%" height="100%">
       <LineChart data={data}>
-        <CartesianGrid stroke="rgba(7,33,70,0.08)" vertical={false} />
+        <CartesianGrid stroke="var(--chart-grid)" vertical={false} />
         <XAxis dataKey="date" tickFormatter={(d: string) => d.slice(5)} fontSize={11} />
         <YAxis yAxisId="sentiment" fontSize={11} />
         {showIncidents && (
@@ -2005,8 +2008,8 @@ function DashboardChart({
           formatter={tooltipFormatter}
           contentStyle={{
             borderRadius: 16,
-            border: "1px solid rgba(7,33,70,0.08)",
-            boxShadow: "0 10px 30px rgba(7,33,70,0.12)",
+            border: "1px solid var(--border)",
+            boxShadow: "var(--shadow-tooltip)",
           }}
         />
         <Legend wrapperStyle={{ fontSize: 12 }} />
@@ -2056,20 +2059,20 @@ function DashboardMentionCard({
 
   return (
     <article
-      className="group relative overflow-hidden rounded-[22px] border border-white/70 bg-white/85 p-4 shadow-[0_16px_40px_rgba(7,33,70,0.12)] animate-rise"
+      className="group relative overflow-hidden rounded-[22px] border border-[color:var(--border-70)] bg-[color:var(--surface-85)] p-4 shadow-[var(--shadow-card)] animate-rise"
       style={{ animationDelay: `${Math.min(index, 8) * 60}ms` }}
     >
       <div className="absolute inset-y-0 left-0 w-1 bg-gradient-to-b from-[color:var(--aqua)] via-[color:var(--blue)] to-transparent opacity-70" />
-      <div className="flex flex-wrap items-center gap-2 text-[11px] text-black/55">
-        <span className="inline-flex items-center gap-1 rounded-full border border-white/70 bg-white/80 px-2.5 py-1">
+      <div className="flex flex-wrap items-center gap-2 text-[11px] text-[color:var(--text-55)]">
+        <span className="inline-flex items-center gap-1 rounded-full border border-[color:var(--border-70)] bg-[color:var(--surface-80)] px-2.5 py-1">
           <MapPin className="h-3.5 w-3.5 text-[color:var(--blue)]" />
           {item.geo || "Global"}
         </span>
-        <span className="inline-flex items-center gap-1 rounded-full border border-white/70 bg-white/80 px-2.5 py-1">
+        <span className="inline-flex items-center gap-1 rounded-full border border-[color:var(--border-70)] bg-[color:var(--surface-80)] px-2.5 py-1">
           <Building2 className="h-3.5 w-3.5 text-[color:var(--blue)]" />
           {item.actor || principalLabel}
         </span>
-        <span className="inline-flex items-center gap-1 rounded-full border border-white/70 bg-white/80 px-2.5 py-1">
+        <span className="inline-flex items-center gap-1 rounded-full border border-[color:var(--border-70)] bg-[color:var(--surface-80)] px-2.5 py-1">
           <Calendar className="h-3.5 w-3.5 text-[color:var(--blue)]" />
           {displayDate}
         </span>
@@ -2090,10 +2093,10 @@ function DashboardMentionCard({
           </span>
         )}
         {item.kind === "sentiment" && ratingValue !== null && (
-          <span className="inline-flex items-center gap-2 rounded-full border border-[color:var(--aqua)]/40 bg-[linear-gradient(120deg,rgba(0,68,129,0.12),rgba(45,204,205,0.2),rgba(255,255,255,0.85))] px-2.5 py-1 text-[11px] text-[color:var(--navy)] shadow-[0_6px_18px_rgba(7,33,70,0.12)]">
+          <span className="inline-flex items-center gap-2 rounded-full border border-[color:var(--aqua)]/40 [background-image:var(--gradient-chip)] px-2.5 py-1 text-[11px] text-[color:var(--brand-ink)] shadow-[var(--shadow-pill)]">
             <StarMeter rating={ratingValue} />
             <span className="font-semibold">{ratingValue.toFixed(1)}</span>
-            <span className="text-[10px] uppercase tracking-[0.2em] text-black/45">/5</span>
+            <span className="text-[10px] uppercase tracking-[0.2em] text-[color:var(--text-45)]">/5</span>
           </span>
         )}
       </div>
@@ -2101,7 +2104,7 @@ function DashboardMentionCard({
         {title}
       </div>
       {text && (
-        <p className="mt-2 text-sm text-black/60 line-clamp-3">{text}</p>
+        <p className="mt-2 text-sm text-[color:var(--text-60)] line-clamp-3">{text}</p>
       )}
     </article>
   );

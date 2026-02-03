@@ -4,7 +4,7 @@ import os
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
-from typing import Any, Iterable, cast
+from typing import Any, Callable, Iterable, cast
 from urllib.parse import quote_plus, urlparse
 
 from reputation.actors import (
@@ -42,6 +42,8 @@ from reputation.repositories.cache_repo import ReputationCacheRepo
 from reputation.services.sentiment_service import ReputationSentimentService
 
 logger = get_logger(__name__)
+ProgressCallback = Callable[[str, int, dict[str, Any] | None], None]
+CollectorProgress = Callable[[int, int, str], None]
 
 
 class ReputationIngestService:
@@ -51,18 +53,36 @@ class ReputationIngestService:
         self._settings = settings
         self._repo = ReputationCacheRepo(self._settings.cache_path)
 
-    def run(self, force: bool = False) -> ReputationCacheDocument:
+    def run(
+        self, force: bool = False, progress: ProgressCallback | None = None
+    ) -> ReputationCacheDocument:
+        def report(stage: str, pct: int, meta: dict[str, Any] | None = None) -> None:
+            if not progress:
+                return
+            safe_pct = max(0, min(100, int(pct)))
+            progress(stage, safe_pct, meta or {})
+
         cfg = _as_dict(load_business_config())
         cfg_hash = compute_config_hash(cfg)
         ttl_hours = effective_ttl_hours(cfg)
         sources_enabled = list(self._settings.enabled_sources())
         lookback_days = _env_int("REPUTATION_LOOKBACK_DAYS", 730)
+        report(
+            "Preparando configuración",
+            4,
+            {"sources_enabled": len(sources_enabled), "lookback_days": lookback_days},
+        )
         logger.info("Reputation ingest started (force=%s)", force)
         logger.debug("Sources enabled: %s", sources_enabled)
 
         # Feature apagada: devolvemos doc vacío, no escribimos
         if not self._settings.reputation_enabled:
             logger.info("Reputation ingest skipped: REPUTATION_ENABLED=false")
+            report(
+                "Reputación desactivada",
+                100,
+                {"note": "REPUTATION_ENABLED=false"},
+            )
             return self._build_empty_doc(
                 cfg_hash=cfg_hash,
                 sources_enabled=sources_enabled,
@@ -72,6 +92,7 @@ class ReputationIngestService:
         existing = self._repo.load()
 
         collectors, notes = self._build_collectors(cfg, sources_enabled)
+        report("Colectores listos", 12, {"collectors": len(collectors)})
 
         # Reutiliza cache si aplica y no hay collectors activos
         if (
@@ -83,6 +104,11 @@ class ReputationIngestService:
         ):
             cache_note = "; ".join(notes) if notes else "cache hit"
             logger.info("Reputation cache hit (%s items)", len(existing.items))
+            report(
+                "Cache vigente",
+                100,
+                {"items": len(existing.items), "note": cache_note},
+            )
             return ReputationCacheDocument(
                 generated_at=datetime.now(timezone.utc),
                 config_hash=cfg_hash,
@@ -91,13 +117,34 @@ class ReputationIngestService:
                 stats=ReputationCacheStats(count=len(existing.items), note=cache_note),
             )
 
-        items = self._collect_items(collectors, notes)
+        report("Recolectando señales", 20, {"collectors": len(collectors)})
+
+        def on_collector(done: int, total: int, source_name: str) -> None:
+            if total <= 0:
+                report("Recolectando señales", 35, {"collectors": 0})
+                return
+            pct = 20 + int((45 - 20) * (done / total))
+            report(
+                f"Recolectando {source_name}",
+                pct,
+                {"collector": source_name, "done": done, "total": total},
+            )
+
+        items = self._collect_items(collectors, notes, progress=on_collector)
+        report("Señales recolectadas", 45, {"items": len(items)})
+
         items = self._normalize_items(items, lookback_days)
+        report("Normalizando señales", 52, {"items": len(items)})
         items = self._apply_geo_hints(cfg, items)
+        report("Aplicando geografía", 58)
         items = self._apply_appstore_actor_map(cfg, items)
+        report("Mapeando App Store", 62)
         items = self._apply_google_play_actor_map(cfg, items)
+        report("Mapeando Google Play", 66)
         items = self._apply_sentiment(cfg, items)
+        report("Analizando sentimiento", 74)
         items = self._filter_noise_items(cfg, items, notes)
+        report("Filtrando ruido", 82)
         items = self._balance_items(
             cfg,
             items,
@@ -106,8 +153,11 @@ class ReputationIngestService:
             notes,
             sources_enabled,
         )
+        report("Balanceando señales", 90)
         merged_items = self._merge_items(existing.items if existing else [], items)
+        report("Fusionando items", 94)
         merged_items = self._filter_noise_items(cfg, merged_items, notes)
+        report("Último ajuste", 96)
         final_note: str | None = "; ".join(notes) if notes else None
 
         doc = ReputationCacheDocument(
@@ -120,6 +170,7 @@ class ReputationIngestService:
 
         self._repo.save(doc)
         logger.info("Reputation ingest finished (%s items)", len(merged_items))
+        report("Cache actualizada", 100, {"items": len(merged_items), "note": final_note})
 
         return doc
 
@@ -127,11 +178,14 @@ class ReputationIngestService:
     def _collect_items(
         collectors: Iterable[ReputationCollector],
         notes: list[str],
+        progress: CollectorProgress | None = None,
     ) -> list[ReputationItem]:
         items: list[ReputationItem] = []
         collector_list = list(collectors)
         if not collector_list:
             return items
+        total = len(collector_list)
+        done = 0
 
         workers = _env_int("REPUTATION_COLLECTOR_WORKERS", 4)
         if workers <= 1 or len(collector_list) == 1:
@@ -141,6 +195,10 @@ class ReputationIngestService:
                 except Exception as exc:  # pragma: no cover - defensive
                     notes.append(f"{collector.source_name}: error {exc}")
                     logger.warning("Collector %s failed: %s", collector.source_name, exc)
+                finally:
+                    done += 1
+                    if progress:
+                        progress(done, total, collector.source_name)
             return items
 
         max_workers = max(1, min(workers, len(collector_list)))
@@ -159,6 +217,10 @@ class ReputationIngestService:
                 except Exception as exc:  # pragma: no cover - defensive
                     notes.append(f"{collector.source_name}: error {exc}")
                     logger.warning("Collector %s failed: %s", collector.source_name, exc)
+                finally:
+                    done += 1
+                    if progress:
+                        progress(done, total, collector.source_name)
         return items
 
     @classmethod
@@ -171,7 +233,12 @@ class ReputationIngestService:
             raw_map = app_cfg.get("app_id_to_actor")
             if isinstance(raw_map, dict):
                 for key, value in raw_map.items():
-                    if isinstance(key, str) and isinstance(value, str) and key.strip() and value.strip():
+                    if (
+                        isinstance(key, str)
+                        and isinstance(value, str)
+                        and key.strip()
+                        and value.strip()
+                    ):
                         mapping[key.strip()] = value.strip()
             # Optional: allow per-geo actor mappings in app_ids_by_geo_actor
             raw_by_geo = app_cfg.get("app_ids_by_geo_actor")
@@ -179,7 +246,12 @@ class ReputationIngestService:
                 for _, geo_entries in raw_by_geo.items():
                     if isinstance(geo_entries, dict):
                         for key, value in geo_entries.items():
-                            if isinstance(key, str) and isinstance(value, str) and key.strip() and value.strip():
+                            if (
+                                isinstance(key, str)
+                                and isinstance(value, str)
+                                and key.strip()
+                                and value.strip()
+                            ):
                                 mapping.setdefault(key.strip(), value.strip())
                     elif isinstance(geo_entries, list):
                         for entry in geo_entries:
@@ -187,7 +259,12 @@ class ReputationIngestService:
                                 continue
                             app_id = entry.get("id")
                             actor = entry.get("actor")
-                            if isinstance(app_id, str) and isinstance(actor, str) and app_id.strip() and actor.strip():
+                            if (
+                                isinstance(app_id, str)
+                                and isinstance(actor, str)
+                                and app_id.strip()
+                                and actor.strip()
+                            ):
                                 mapping.setdefault(app_id.strip(), actor.strip())
         if not mapping:
             return items
@@ -470,21 +547,33 @@ class ReputationIngestService:
                 if text and terms and not match_keywords(text, terms):
                     dropped_context += 1
                     continue
-            if allowed_by_geo and item.geo:
-                if not cls._item_actor_allowed_for_geo(
+            if (
+                allowed_by_geo
+                and item.geo
+                and not cls._item_actor_allowed_for_geo(
                     item, item.geo, allowed_by_geo, known_actors, alias_map
-                ):
-                    dropped_geo += 1
-                    continue
-            if guard_actors and cls._item_has_guard_actor(item, guard_actors, alias_map):
-                if text and context_terms and not match_keywords(text, context_terms):
-                    dropped_guard += 1
-                    continue
-            if noise_terms and item.source in noise_sources:
-                if text and match_keywords(text, noise_terms):
-                    if not context_terms or not match_keywords(text, context_terms):
-                        dropped_noise += 1
-                        continue
+                )
+            ):
+                dropped_geo += 1
+                continue
+            if (
+                guard_actors
+                and cls._item_has_guard_actor(item, guard_actors, alias_map)
+                and text
+                and context_terms
+                and not match_keywords(text, context_terms)
+            ):
+                dropped_guard += 1
+                continue
+            if (
+                noise_terms
+                and item.source in noise_sources
+                and text
+                and match_keywords(text, noise_terms)
+                and (not context_terms or not match_keywords(text, context_terms))
+            ):
+                dropped_noise += 1
+                continue
             filtered.append(item)
 
         if (
@@ -566,9 +655,7 @@ class ReputationIngestService:
         return False
 
     @staticmethod
-    def _load_guard_actors(
-        cfg: dict[str, Any], alias_map: dict[str, str]
-    ) -> set[str]:
+    def _load_guard_actors(cfg: dict[str, Any], alias_map: dict[str, str]) -> set[str]:
         raw = cfg.get("actor_context_guard") or []
         if not isinstance(raw, list):
             return set()
@@ -676,18 +763,14 @@ class ReputationIngestService:
                 matched_known = True
                 if canonical in allowed:
                     return True
-        if matched_known:
-            return False
-        return True
+        return not matched_known
 
     @staticmethod
     def _load_sources_list(value: object) -> set[str]:
         if not isinstance(value, list):
             return set()
         sources = {
-            str(item).strip().lower()
-            for item in value
-            if isinstance(item, str) and item.strip()
+            str(item).strip().lower() for item in value if isinstance(item, str) and item.strip()
         }
         return {source for source in sources if source}
 
