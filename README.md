@@ -1,8 +1,14 @@
 # Global Overview Radar
 
+[![CI](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/ci.yml)
+[![Tests & Coverage](https://img.shields.io/github/actions/workflow/status/felixdelbarrio/Global_Overview_Radar/ci.yml?branch=main&label=Tests%20%26%20Coverage)](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/ci.yml)
+[![Typecheck](https://img.shields.io/github/actions/workflow/status/felixdelbarrio/Global_Overview_Radar/ci.yml?branch=main&label=Typecheck)](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/ci.yml)
+[![Sponsor](https://img.shields.io/badge/Sponsor-GitHub%20Sponsors-2ea44f.svg)](https://github.com/sponsors/felixdelbarrio)
+[![Donate](https://img.shields.io/badge/Donate-PayPal-blue.svg)](https://paypal.me/felixdelbarrio)
+
 Global Overview Radar is a full-stack system that combines:
-- a Bug Resolution Radar for incident/ops visibility
 - a Reputation Radar for public signals and market perception
+- As well, for sotfware analysis, a Bug Resolution Radar for incident/ops visibility
 
 It is designed to be configuration-driven, reproducible, and explainable by default.
 The current product focus is **sentiment-first** with incidents as a complementary layer.
@@ -12,8 +18,8 @@ The current product focus is **sentiment-first** with incidents as a complementa
 ## EN | What is inside
 
 - Backend (Python + FastAPI)
-  - `backend/bugresolutionradar`: ingestion of incidents (CSV/JSON/XLSX), consolidation, KPIs, API.
   - `backend/reputation`: multi-source collectors, normalization, sentiment, caching, API endpoints.
+  - `backend/bugresolutionradar`: ingestion of incidents (CSV/JSON/XLSX), consolidation, KPIs, API.
 - Frontend (Next.js)
   - `frontend/brr-frontend`: UI + client logging pipeline.
 - Data
@@ -26,8 +32,8 @@ The current product focus is **sentiment-first** with incidents as a complementa
 ## ES | Que contiene
 
 - Backend (Python + FastAPI)
-  - `backend/bugresolutionradar`: ingesta de incidencias (CSV/JSON/XLSX), consolidacion, KPIs, API.
   - `backend/reputation`: collectors multi-fuente, normalizacion, sentimiento, cache, endpoints.
+  - `backend/bugresolutionradar`: ingesta de incidencias (CSV/JSON/XLSX), consolidacion, KPIs, API.
 - Frontend (Next.js)
   - `frontend/brr-frontend`: UI + pipeline de logs del cliente.
 - Data
@@ -42,6 +48,7 @@ The current product focus is **sentiment-first** with incidents as a complementa
 - **Dashboard (/) = sentiment-first.** It shows sentiment trend + incident trend (when enabled) and the latest 20 mixed mentions.
 - **Sentiment tab** includes filters + full listing and CSV downloads (chart + grid).
 - **Incidencias** and **Ops Executive** remain available but can be disabled per business config for non-IT actors.
+- **Ingest Center** (top-right) can launch reputation or incidents ingests with live progress, without blocking other UI.
 - **Noise control is strict by design:** actor presence is required for selected sources, actor must appear in text, guard actors block ambiguous context, and actor/geo allowlists discard mismatched items.
 
 ## ES | Estado actual (producto)
@@ -49,6 +56,7 @@ The current product focus is **sentiment-first** with incidents as a complementa
 - **Dashboard (/) = sentimiento primero.** Muestra tendencia de sentimiento + incidencias (si estan habilitadas) y las ultimas 20 menciones mezcladas.
 - **Pestana Sentimiento** con filtros + listado completo y descargas CSV (grafico + grid).
 - **Incidencias** y **Ops Executive** siguen disponibles pero pueden deshabilitarse por config cuando el actor no es tecnologico.
+- **Centro de ingesta** (arriba a la derecha) permite lanzar ingestas de reputacion o incidencias con progreso en vivo.
 - **Control de ruido estricto:** requerimos actor para fuentes sensibles, el actor debe aparecer en el texto, usamos guard actors para evitar ambiguedad y descartamos items fuera de su geo permitido.
 
 ## EN | Rationale
@@ -141,6 +149,10 @@ Reputation config loading:
 
 UI toggles (per config):
 - `ui.incidents_enabled` and `ui.ops_enabled` allow hiding Incidents/Ops and turning the dashboard into sentiment-only.
+Frontend scope flag:
+- `NEXT_PUBLIC_INCIDENTS_ENABLED` allows hiding all incident scope (nav, ingest button, and dashboard line).
+Availability gate:
+- If `data/cache/bugresolutionradar_cache.json` is missing, incident features are hidden regardless of flags.
 
 Noise control (reputation ingestion):
 - `require_actor_sources` enforces actor presence for specific sources (e.g. news/forums).
@@ -169,6 +181,10 @@ Carga de configuracion de reputacion:
 
 Toggles de UI (por config):
 - `ui.incidents_enabled` y `ui.ops_enabled` permiten ocultar Incidencias/Ops y dejar el dashboard solo con sentimiento.
+Flag de scope en frontend:
+- `NEXT_PUBLIC_INCIDENTS_ENABLED` oculta todo el ambito de incidencias (nav, boton de ingesta y linea del dashboard).
+Regla de disponibilidad:
+- Si no existe `data/cache/bugresolutionradar_cache.json`, se oculta el ambito de incidencias aunque el flag este activo.
 
 Control de ruido (ingesta reputacion):
 - `require_actor_sources` obliga presencia de actor en fuentes sensibles (news/forums).
@@ -206,6 +222,24 @@ All log files live under `./logs/` (ignored by git).
 - Extending: `docs/EXTENDING_THE_SYSTEM.md`
 - File index: `docs/FILES.md`
 - Decision log: `docs/DECISION_LOG.md`
+
+---
+
+## EN | Support the author
+
+If this project helps you, you can support its development:
+
+[![Sponsor](https://img.shields.io/badge/Sponsor-GitHub%20Sponsors-2ea44f.svg)](https://github.com/sponsors/felixdelbarrio)
+[![Donate](https://img.shields.io/badge/Donate-PayPal-blue.svg)](https://paypal.me/felixdelbarrio)
+
+---
+
+## ES | Apoya al autor
+
+Si este proyecto te resulta util, puedes apoyar su desarrollo:
+
+[![Sponsor](https://img.shields.io/badge/Sponsor-GitHub%20Sponsors-2ea44f.svg)](https://github.com/sponsors/felixdelbarrio)
+[![Donate](https://img.shields.io/badge/Donate-PayPal-blue.svg)](https://paypal.me/felixdelbarrio)
 
 ---
 

@@ -84,8 +84,24 @@ export type ReputationMeta = {
   sources_enabled?: string[];
   sources_available?: string[];
   source_counts?: Record<string, number>;
+  incidents_available?: boolean;
   ui?: {
     incidents_enabled?: boolean;
     ops_enabled?: boolean;
   };
+};
+
+export type IngestJobKind = "reputation" | "incidents";
+export type IngestJobStatus = "queued" | "running" | "success" | "error";
+
+export type IngestJob = {
+  id: string;
+  kind: IngestJobKind;
+  status: IngestJobStatus;
+  progress: number;
+  stage?: string | null;
+  started_at?: string | null;
+  finished_at?: string | null;
+  error?: string | null;
+  meta?: Record<string, unknown> | null;
 };

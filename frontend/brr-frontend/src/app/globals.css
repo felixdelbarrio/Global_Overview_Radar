@@ -3,21 +3,182 @@
 @import "tailwindcss";
 
 :root {
+  --radius: 22px;
+}
+
+:root,
+:root[data-theme="ambient-light"] {
+  color-scheme: light;
+
   --navy: #072146;
   --blue: #004481;
   --aqua: #2dcccd;
+  --brand-ink: #072146;
   --ink: #06172c;
   --mist: #e8f3f6;
+  --sand: #f6efe6;
   --glow: rgba(45, 204, 205, 0.25);
 
   --bg: #f5f7fa;
+  --bg-fade: #ffffff;
+  --bg-grid: rgba(7, 33, 70, 0.06);
+  --bg-glow-1: rgba(45, 204, 205, 0.18);
+  --bg-glow-2: rgba(0, 68, 129, 0.16);
+  --bg-glow-3: rgba(7, 33, 70, 0.08);
+
   --panel: rgba(255, 255, 255, 0.78);
   --panel-strong: rgba(255, 255, 255, 0.92);
 
-  --border: rgba(7, 33, 70, 0.08);
-  --shadow: 0 10px 30px rgba(7, 33, 70, 0.10);
+  --surface-solid: #ffffff;
+  --surface-85: rgba(255, 255, 255, 0.85);
+  --surface-80: rgba(255, 255, 255, 0.80);
+  --surface-70: rgba(255, 255, 255, 0.70);
+  --surface-60: rgba(255, 255, 255, 0.60);
+  --surface-40: rgba(255, 255, 255, 0.40);
+  --surface-18: rgba(255, 255, 255, 0.18);
+  --surface-15: rgba(255, 255, 255, 0.15);
+  --surface-12: rgba(255, 255, 255, 0.12);
+  --surface-10: rgba(255, 255, 255, 0.10);
 
-  --radius: 22px;
+  --border: rgba(7, 33, 70, 0.08);
+  --border-70: rgba(255, 255, 255, 0.70);
+  --border-60: rgba(255, 255, 255, 0.60);
+  --border-20: rgba(255, 255, 255, 0.20);
+  --border-18: rgba(255, 255, 255, 0.18);
+  --border-15: rgba(255, 255, 255, 0.15);
+
+  --overlay-20: rgba(7, 33, 70, 0.20);
+  --overlay-10: rgba(7, 33, 70, 0.10);
+  --overlay-5: rgba(7, 33, 70, 0.05);
+
+  --text-primary: #06172c;
+  --text-70: rgba(6, 23, 44, 0.70);
+  --text-60: rgba(6, 23, 44, 0.60);
+  --text-55: rgba(6, 23, 44, 0.55);
+  --text-50: rgba(6, 23, 44, 0.50);
+  --text-45: rgba(6, 23, 44, 0.45);
+  --text-40: rgba(6, 23, 44, 0.40);
+
+  --text-inverse: #ffffff;
+  --text-inverse-80: rgba(255, 255, 255, 0.80);
+  --text-inverse-75: rgba(255, 255, 255, 0.75);
+  --text-inverse-70: rgba(255, 255, 255, 0.70);
+
+  --shadow: 0 10px 30px rgba(7, 33, 70, 0.10);
+  --shadow-header: 0 10px 30px rgba(7, 33, 70, 0.18);
+  --shadow-lg: 0 30px 70px rgba(7, 33, 70, 0.12);
+  --shadow-md: 0 20px 50px rgba(7, 33, 70, 0.08);
+  --shadow-soft: 0 10px 30px rgba(7, 33, 70, 0.08);
+  --shadow-sm: 0 8px 18px rgba(7, 33, 70, 0.12);
+  --shadow-pill: 0 6px 18px rgba(7, 33, 70, 0.12);
+  --shadow-pill-hover: 0 10px 24px rgba(7, 33, 70, 0.16);
+  --shadow-card: 0 16px 40px rgba(7, 33, 70, 0.12);
+  --shadow-tone: 0 10px 20px rgba(7, 33, 70, 0.12);
+  --shadow-tooltip: 0 10px 30px rgba(7, 33, 70, 0.12);
+
+  --inset-highlight: rgba(255, 255, 255, 0.6);
+  --inset-highlight-strong: rgba(255, 255, 255, 0.7);
+
+  --nav-gradient: linear-gradient(90deg, #072146, #004481 55%, rgba(45, 204, 205, 0.55));
+  --nav-active-gradient: linear-gradient(90deg, rgba(0, 68, 129, 0.95), rgba(7, 33, 70, 0.92));
+  --nav-active-shadow: 0 12px 22px rgba(0, 68, 129, 0.22);
+
+  --gradient-chip: linear-gradient(120deg, rgba(0, 68, 129, 0.12), rgba(45, 204, 205, 0.2), rgba(255, 255, 255, 0.85));
+  --gradient-callout: linear-gradient(135deg, rgba(45, 204, 205, 0.16), rgba(0, 68, 129, 0.08), rgba(255, 255, 255, 0.95));
+
+  --chart-grid: rgba(7, 33, 70, 0.08);
+  --chart-reference: rgba(7, 33, 70, 0.2);
+
+  --selection: rgba(45, 204, 205, 0.28);
+  --scrollbar-thumb: rgba(7, 33, 70, 0.18);
+  --scrollbar-track: transparent;
+}
+
+:root[data-theme="ambient-dark"] {
+  color-scheme: dark;
+
+  --navy: #051326;
+  --blue: #1d6fd1;
+  --aqua: #3ee6d6;
+  --brand-ink: #c3dcff;
+  --ink: #e8f1ff;
+  --mist: #0a1322;
+  --sand: rgba(255, 214, 148, 0.18);
+  --glow: rgba(62, 230, 214, 0.35);
+
+  --bg: #05070f;
+  --bg-fade: #0b1220;
+  --bg-grid: rgba(140, 190, 255, 0.08);
+  --bg-glow-1: rgba(62, 230, 214, 0.18);
+  --bg-glow-2: rgba(29, 111, 209, 0.22);
+  --bg-glow-3: rgba(9, 20, 35, 0.65);
+
+  --panel: rgba(9, 16, 30, 0.78);
+  --panel-strong: rgba(12, 20, 36, 0.92);
+
+  --surface-solid: #0d1729;
+  --surface-85: rgba(13, 23, 41, 0.85);
+  --surface-80: rgba(13, 23, 41, 0.80);
+  --surface-70: rgba(13, 23, 41, 0.70);
+  --surface-60: rgba(13, 23, 41, 0.60);
+  --surface-40: rgba(13, 23, 41, 0.40);
+  --surface-18: rgba(140, 190, 255, 0.18);
+  --surface-15: rgba(140, 190, 255, 0.15);
+  --surface-12: rgba(140, 190, 255, 0.12);
+  --surface-10: rgba(140, 190, 255, 0.10);
+
+  --border: rgba(120, 170, 230, 0.18);
+  --border-70: rgba(140, 190, 255, 0.35);
+  --border-60: rgba(140, 190, 255, 0.28);
+  --border-20: rgba(140, 190, 255, 0.20);
+  --border-18: rgba(140, 190, 255, 0.18);
+  --border-15: rgba(140, 190, 255, 0.15);
+
+  --overlay-20: rgba(255, 255, 255, 0.14);
+  --overlay-10: rgba(255, 255, 255, 0.08);
+  --overlay-5: rgba(255, 255, 255, 0.05);
+
+  --text-primary: #e8f1ff;
+  --text-70: rgba(232, 241, 255, 0.72);
+  --text-60: rgba(232, 241, 255, 0.60);
+  --text-55: rgba(232, 241, 255, 0.55);
+  --text-50: rgba(232, 241, 255, 0.50);
+  --text-45: rgba(232, 241, 255, 0.45);
+  --text-40: rgba(232, 241, 255, 0.38);
+
+  --text-inverse: #05070f;
+  --text-inverse-80: rgba(5, 7, 15, 0.80);
+  --text-inverse-75: rgba(5, 7, 15, 0.75);
+  --text-inverse-70: rgba(5, 7, 15, 0.70);
+
+  --shadow: 0 10px 30px rgba(2, 6, 14, 0.55), 0 0 30px rgba(62, 230, 214, 0.06);
+  --shadow-header: 0 10px 30px rgba(2, 6, 14, 0.65);
+  --shadow-lg: 0 30px 70px rgba(2, 6, 14, 0.6), 0 0 60px rgba(62, 230, 214, 0.12);
+  --shadow-md: 0 20px 50px rgba(2, 6, 14, 0.5), 0 0 40px rgba(29, 111, 209, 0.1);
+  --shadow-soft: 0 10px 30px rgba(2, 6, 14, 0.45);
+  --shadow-sm: 0 8px 18px rgba(2, 6, 14, 0.55);
+  --shadow-pill: 0 6px 18px rgba(2, 6, 14, 0.5);
+  --shadow-pill-hover: 0 10px 24px rgba(2, 6, 14, 0.55), 0 0 20px rgba(62, 230, 214, 0.1);
+  --shadow-card: 0 16px 40px rgba(2, 6, 14, 0.6), 0 0 40px rgba(62, 230, 214, 0.08);
+  --shadow-tone: 0 10px 20px rgba(2, 6, 14, 0.55);
+  --shadow-tooltip: 0 10px 30px rgba(2, 6, 14, 0.6), 0 0 25px rgba(62, 230, 214, 0.1);
+
+  --inset-highlight: rgba(255, 255, 255, 0.08);
+  --inset-highlight-strong: rgba(255, 255, 255, 0.14);
+
+  --nav-gradient: linear-gradient(90deg, #041024, #0b2a55 55%, rgba(62, 230, 214, 0.45));
+  --nav-active-gradient: linear-gradient(90deg, rgba(29, 111, 209, 0.9), rgba(5, 18, 40, 0.92));
+  --nav-active-shadow: 0 12px 22px rgba(29, 111, 209, 0.35);
+
+  --gradient-chip: linear-gradient(120deg, rgba(29, 111, 209, 0.25), rgba(62, 230, 214, 0.28), rgba(13, 23, 41, 0.9));
+  --gradient-callout: linear-gradient(135deg, rgba(62, 230, 214, 0.18), rgba(29, 111, 209, 0.12), rgba(13, 23, 41, 0.95));
+
+  --chart-grid: rgba(140, 190, 255, 0.12);
+  --chart-reference: rgba(140, 190, 255, 0.35);
+
+  --selection: rgba(62, 230, 214, 0.32);
+  --scrollbar-thumb: rgba(140, 190, 255, 0.28);
+  --scrollbar-track: transparent;
 }
 
 html,
@@ -28,13 +189,47 @@ body {
 body {
   font-family: var(--font-body), "Source Sans 3", sans-serif;
   background:
-    radial-gradient(900px 520px at 12% -10%, rgba(45, 204, 205, 0.18), transparent 60%),
-    radial-gradient(820px 520px at 80% -5%, rgba(0, 68, 129, 0.16), transparent 60%),
-    radial-gradient(500px 320px at 20% 90%, rgba(7, 33, 70, 0.08), transparent 60%),
-    radial-gradient(rgba(7, 33, 70, 0.06) 1px, transparent 1px),
-    linear-gradient(180deg, var(--bg), #ffffff 60%);
+    radial-gradient(900px 520px at 12% -10%, var(--bg-glow-1), transparent 60%),
+    radial-gradient(820px 520px at 80% -5%, var(--bg-glow-2), transparent 60%),
+    radial-gradient(500px 320px at 20% 90%, var(--bg-glow-3), transparent 60%),
+    radial-gradient(var(--bg-grid) 1px, transparent 1px),
+    linear-gradient(180deg, var(--bg), var(--bg-fade) 60%);
   background-size: auto, auto, auto, 28px 28px, auto;
-  color: var(--ink);
+  color: var(--text-primary);
+}
+
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+  25% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+}
+
+.shimmer {
+  position: relative;
+  overflow: hidden;
+  background: var(--surface-70);
+}
+
+.shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--surface-12),
+    transparent
+  );
+  animation: shimmer 1.6s ease-in-out infinite;
 }
 
 .font-display {
@@ -44,7 +239,7 @@ body {
 
 /* Selección “premium” */
 ::selection {
-  background: rgba(45, 204, 205, 0.28);
+  background: var(--selection);
 }
 
 /* Scrollbar suave (Webkit) */
@@ -53,11 +248,11 @@ body {
   width: 10px;
 }
 *::-webkit-scrollbar-thumb {
-  background: rgba(7, 33, 70, 0.18);
+  background: var(--scrollbar-thumb);
   border-radius: 999px;
 }
 *::-webkit-scrollbar-track {
-  background: transparent;
+  background: var(--scrollbar-track);
 }
 
 @keyframes rise-in {
