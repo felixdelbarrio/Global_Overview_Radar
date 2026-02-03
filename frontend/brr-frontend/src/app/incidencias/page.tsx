@@ -4,8 +4,9 @@
  * Vista de incidencias con filtros en cliente.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import {
+  AlertTriangle,
   ArrowUpDown,
   Calendar,
   ChevronDown,
@@ -18,7 +19,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { Shell } from "@/components/Shell";
-import { apiGet } from "@/lib/api";
+import { apiGet, apiPost } from "@/lib/api";
 import { EvolutionChart } from "@/components/EvolutionChart";
 import { INGEST_SUCCESS_EVENT, type IngestSuccessDetail } from "@/lib/events";
 import type { EvolutionPoint, Severity } from "@/lib/types";
@@ -34,6 +35,14 @@ type Incident = {
   closed_at?: string | null;
   product?: string | null;
   feature?: string | null;
+  last_seen_at?: string | null;
+  missing_in_last_ingest?: boolean;
+  manual_override?: {
+    status?: string | null;
+    severity?: string | null;
+    note?: string | null;
+    updated_at?: string | null;
+  } | null;
 };
 
 type SortKey =
@@ -47,6 +56,8 @@ type SortKey =
 type SortDir = "asc" | "desc";
 
 const SEVERITY_ORDER = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "UNKNOWN"] as const;
+const STATUS_OPTIONS = ["OPEN", "IN_PROGRESS", "BLOCKED", "CLOSED", "UNKNOWN"] as const;
+const SEVERITY_OPTIONS = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "UNKNOWN"] as const;
 
 function chipSeverity(sev: string) {
   /** Devuelve clases CSS segun severidad. */
@@ -147,9 +158,21 @@ export default function IncidenciasPage() {
   const [incidentsRefresh, setIncidentsRefresh] = useState(0);
   const [sortKey, setSortKey] = useState<SortKey>("opened_at");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [missingOnly, setMissingOnly] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draftStatus, setDraftStatus] = useState<string>("OPEN");
+  const [draftSeverity, setDraftSeverity] = useState<string>("MEDIUM");
+  const [draftNote, setDraftNote] = useState<string>("");
+  const [originalStatus, setOriginalStatus] = useState<string>("OPEN");
+  const [originalSeverity, setOriginalSeverity] = useState<string>("MEDIUM");
+  const [originalNote, setOriginalNote] = useState<string>("");
+  const [overrideSaving, setOverrideSaving] = useState(false);
+  const [overrideError, setOverrideError] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
+    setItemsLoading(true);
+    setError(null);
     apiGet<{ items: Incident[]; generated_at?: string | null }>("/incidents?limit=5000")
       .then((r) => {
         if (!alive) return;
@@ -219,10 +242,11 @@ export default function IncidenciasPage() {
 
       const okSev = sev === "ALL" || (it.severity ?? "").toString().toUpperCase() === sev;
       const okSt = st === "ALL" || (it.status ?? "").toString().toUpperCase() === st;
+      const okMissing = !missingOnly || Boolean(it.missing_in_last_ingest);
 
-      return okDate && okQ && okSev && okSt;
+      return okDate && okQ && okSev && okSt && okMissing;
     });
-  }, [items, q, sev, st, range]);
+  }, [items, q, sev, st, range, missingOnly]);
 
   const sorted = useMemo(() => {
     const arr = filtered.slice();
@@ -262,11 +286,17 @@ export default function IncidenciasPage() {
   }, [filtered, sortKey, sortDir]);
 
   const isDefaultRange = fromDate === defaultFrom && toDate === defaultTo;
+  const missingCount = useMemo(
+    () => items.reduce((acc, item) => acc + (item.missing_in_last_ingest ? 1 : 0), 0),
+    [items],
+  );
+  const hasMissing = missingCount > 0;
   const activeFilters =
     (q ? 1 : 0) +
     (sev !== "ALL" ? 1 : 0) +
     (st !== "ALL" ? 1 : 0) +
-    (!isDefaultRange ? 1 : 0);
+    (!isDefaultRange ? 1 : 0) +
+    (missingOnly ? 1 : 0);
   const hasActiveFilters = activeFilters > 0;
   const dateRangeLabel = isDefaultRange
     ? `Últimos ${EVOLUTION_DAYS} días`
@@ -286,6 +316,55 @@ export default function IncidenciasPage() {
   }, [hasActiveFilters, evolution, filteredEvolution]);
   const chartLoading = evolutionLoading && !hasActiveFilters;
   const lastUpdatedLabel = useMemo(() => formatDate(lastUpdatedAt), [lastUpdatedAt]);
+  const isDirty =
+    draftStatus !== originalStatus ||
+    draftSeverity !== originalSeverity ||
+    draftNote.trim() !== originalNote.trim();
+
+  const startEdit = (item: Incident) => {
+    setEditingId(item.global_id);
+    const nextStatus = item.status || "UNKNOWN";
+    const nextSeverity = String(item.severity || "UNKNOWN");
+    const nextNote = item.manual_override?.note ?? "";
+    setDraftStatus(nextStatus);
+    setDraftSeverity(nextSeverity);
+    setDraftNote(nextNote);
+    setOriginalStatus(nextStatus);
+    setOriginalSeverity(nextSeverity);
+    setOriginalNote(nextNote);
+    setOverrideError(null);
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setOverrideError(null);
+  };
+
+  const saveOverride = async (incidentId: string) => {
+    if (!isDirty || overrideSaving) return;
+    setOverrideSaving(true);
+    setOverrideError(null);
+    try {
+      await apiPost<{ updated: number }>("/incidents/override", {
+        ids: [incidentId],
+        status: draftStatus,
+        severity: draftSeverity,
+        note: draftNote.trim() || undefined,
+      });
+      setEditingId(null);
+      setIncidentsRefresh((value) => value + 1);
+    } catch (err) {
+      setOverrideError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setOverrideSaving(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!hasMissing && missingOnly) {
+      setMissingOnly(false);
+    }
+  }, [hasMissing, missingOnly]);
 
   const onSort = (nextKey: SortKey) => {
     setSortKey((currentKey) => {
@@ -471,6 +550,23 @@ export default function IncidenciasPage() {
             />
           </div>
         </div>
+        {hasMissing && (
+          <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
+            <button
+              type="button"
+              onClick={() => setMissingOnly((value) => !value)}
+              className={
+                "inline-flex items-center gap-2 rounded-full border px-3 py-1 font-semibold uppercase tracking-[0.18em] transition " +
+                (missingOnly
+                  ? "border-amber-300 bg-amber-100 text-amber-800 shadow-[var(--shadow-pill)]"
+                  : "border-[color:var(--border-70)] bg-[color:var(--surface-80)] text-[color:var(--text-60)] hover:text-[color:var(--ink)]")
+              }
+            >
+              <AlertTriangle className="h-3.5 w-3.5" />
+              Desaparecidas ({missingCount})
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Evolucion */}
@@ -556,38 +652,137 @@ export default function IncidenciasPage() {
                 <SkeletonTableRows columns={7} rows={5} />
               ) : (
                 sorted.map((it, idx) => (
-                  <tr
-                    key={it.global_id}
-                    className={idx % 2 === 0 ? "bg-[color:var(--surface-70)]" : "bg-[color:var(--surface-40)]"}
-                    style={{ borderTop: "1px solid var(--border)" }}
-                  >
-                    <td className="px-4 py-3 font-mono text-xs whitespace-nowrap">
-                      {it.global_id}
-                    </td>
-                    <td className="px-4 py-3 min-w-[360px]">
-                      <div className="font-semibold text-[color:var(--ink)]">
-                        {it.title}
-                      </div>
-                      <div className="text-xs text-[color:var(--text-55)]">
-                        {it.product ?? "—"} · {it.feature ?? "—"}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${chipStatus(it.status)}`}>
-                        {it.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${chipSeverity(String(it.severity))}`}>
-                        {String(it.severity)}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">{it.product ?? "—"}</td>
-                    <td className="px-4 py-3">{it.feature ?? "—"}</td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      {it.opened_at ?? "—"}
-                    </td>
-                  </tr>
+                  <Fragment key={it.global_id}>
+                    <tr
+                      className={idx % 2 === 0 ? "bg-[color:var(--surface-70)]" : "bg-[color:var(--surface-40)]"}
+                      style={{ borderTop: "1px solid var(--border)" }}
+                    >
+                      <td className="px-4 py-3 font-mono text-xs whitespace-nowrap">
+                        {it.global_id}
+                      </td>
+                      <td className="px-4 py-3 min-w-[360px]">
+                        <div className="font-semibold text-[color:var(--ink)]">
+                          {it.title}
+                        </div>
+                        <div className="text-xs text-[color:var(--text-55)]">
+                          {it.product ?? "—"} · {it.feature ?? "—"}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${chipStatus(it.status)}`}>
+                            {it.status}
+                          </span>
+                          {it.missing_in_last_ingest && (
+                            <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] font-semibold text-amber-700">
+                              <AlertTriangle className="h-3 w-3" />
+                              Desaparecida
+                            </span>
+                          )}
+                          {it.manual_override && (
+                            <span className="inline-flex items-center rounded-full border border-[color:var(--aqua)]/40 bg-[color:var(--aqua)]/10 px-2 py-1 text-[10px] font-semibold text-[color:var(--brand-ink)]">
+                              Ajuste manual
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => startEdit(it)}
+                            className="text-[10px] uppercase tracking-[0.18em] text-[color:var(--text-55)] hover:text-[color:var(--ink)]"
+                          >
+                            Editar
+                          </button>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${chipSeverity(String(it.severity))}`}>
+                          {String(it.severity)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">{it.product ?? "—"}</td>
+                      <td className="px-4 py-3">{it.feature ?? "—"}</td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {it.opened_at ?? "—"}
+                      </td>
+                    </tr>
+                    {editingId === it.global_id && (
+                      <tr className="bg-[color:var(--surface-85)]" style={{ borderTop: "1px solid var(--border)" }}>
+                        <td colSpan={7} className="px-4 py-4">
+                          <div className="flex flex-wrap items-end gap-3">
+                            <div>
+                              <div className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--text-50)] mb-2">
+                                Estado
+                              </div>
+                              <select
+                                className="rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_var(--inset-highlight)] outline-none"
+                                value={draftStatus}
+                                onChange={(e) => setDraftStatus(e.target.value)}
+                              >
+                                {STATUS_OPTIONS.map((option) => (
+                                  <option key={option} value={option}>
+                                    {option}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                            <div>
+                              <div className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--text-50)] mb-2">
+                                Criticidad
+                              </div>
+                              <select
+                                className="rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_var(--inset-highlight)] outline-none"
+                                value={draftSeverity}
+                                onChange={(e) => setDraftSeverity(e.target.value)}
+                              >
+                                {SEVERITY_OPTIONS.map((option) => (
+                                  <option key={option} value={option}>
+                                    {option}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                            <div className="flex-1 min-w-[220px]">
+                              <div className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--text-50)] mb-2">
+                                Nota (opcional)
+                              </div>
+                              <input
+                                className="w-full rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_var(--inset-highlight)] outline-none"
+                                value={draftNote}
+                                onChange={(e) => setDraftNote(e.target.value)}
+                                placeholder="Motivo o seguimiento"
+                              />
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => saveOverride(it.global_id)}
+                                disabled={!isDirty || overrideSaving}
+                                className="inline-flex items-center gap-2 rounded-full border border-[color:var(--border-70)] bg-[color:var(--surface-80)] px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--brand-ink)] shadow-[var(--shadow-pill)] transition hover:-translate-y-0.5 hover:shadow-[var(--shadow-pill-hover)] disabled:opacity-60 disabled:hover:translate-y-0"
+                              >
+                                {overrideSaving ? "Guardando..." : "Guardar"}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={cancelEdit}
+                                className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--text-55)] hover:text-[color:var(--ink)]"
+                              >
+                                Cancelar
+                              </button>
+                            </div>
+                          </div>
+                          {overrideError && (
+                            <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+                              {overrideError}
+                            </div>
+                          )}
+                          {it.manual_override?.updated_at && (
+                            <div className="mt-2 text-[11px] text-[color:var(--text-50)]">
+                              Último ajuste: {formatDate(it.manual_override.updated_at)}
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 ))
               )}
 

@@ -34,14 +34,27 @@ class ConsolidateService:
         self, observations: List[ObservedIncident], sources: List[RunSource]
     ) -> CacheDocument:
         """Consolida observaciones y genera un CacheDocument completo."""
+        return self.consolidate_incremental(None, observations, sources)
+
+    def consolidate_incremental(
+        self,
+        base: CacheDocument | None,
+        observations: List[ObservedIncident],
+        sources: List[RunSource],
+    ) -> CacheDocument:
+        """Consolida observaciones sobre un cache existente (incremental)."""
         now = datetime.now(timezone.utc).astimezone()
         run_id = now.strftime("%Y%m%dT%H%M%S%z")
 
-        doc = CacheDocument(
-            generated_at=now,
-            runs=[],
-            incidents={},
-        )
+        if base is None:
+            doc = CacheDocument(
+                generated_at=now,
+                runs=[],
+                incidents={},
+            )
+        else:
+            doc = base
+            doc.generated_at = now
 
         # registrar la ejecución
         doc.runs.append(

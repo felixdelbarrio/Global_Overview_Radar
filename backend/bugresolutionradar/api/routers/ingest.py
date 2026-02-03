@@ -180,7 +180,8 @@ def _run_incidents_job(job_id: str) -> None:
             )
             for adapter in adapters
         ]
-        cache_doc = consolidate_service.consolidate(observations, sources)
+        existing = repo.load()
+        cache_doc = consolidate_service.consolidate_incremental(existing, observations, sources)
 
         _update_job(
             job_id,
