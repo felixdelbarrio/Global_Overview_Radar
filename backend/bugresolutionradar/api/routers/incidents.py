@@ -100,7 +100,11 @@ def list_incidents(
     total = len(items)
     items = items[:limit]
 
-    return {"total": total, "items": items}
+    return {
+        "generated_at": doc.generated_at.isoformat(),
+        "total": total,
+        "items": items,
+    }
 
 
 @router.get("/{global_id}")

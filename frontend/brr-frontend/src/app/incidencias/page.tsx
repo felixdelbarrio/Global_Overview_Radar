@@ -5,10 +5,22 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
-import { Calendar, Download, Filter, Loader2, Search, Sparkles } from "lucide-react";
+import {
+  ArrowUpDown,
+  Calendar,
+  ChevronDown,
+  ChevronUp,
+  Clock,
+  Download,
+  Filter,
+  Loader2,
+  Search,
+  Sparkles,
+} from "lucide-react";
 import { Shell } from "@/components/Shell";
 import { apiGet } from "@/lib/api";
 import { EvolutionChart } from "@/components/EvolutionChart";
+import { INGEST_SUCCESS_EVENT, type IngestSuccessDetail } from "@/lib/events";
 import type { EvolutionPoint, Severity } from "@/lib/types";
 
 const EVOLUTION_DAYS = 90;
@@ -23,6 +35,18 @@ type Incident = {
   product?: string | null;
   feature?: string | null;
 };
+
+type SortKey =
+  | "global_id"
+  | "title"
+  | "status"
+  | "severity"
+  | "product"
+  | "feature"
+  | "opened_at";
+type SortDir = "asc" | "desc";
+
+const SEVERITY_ORDER = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "UNKNOWN"] as const;
 
 function chipSeverity(sev: string) {
   /** Devuelve clases CSS segun severidad. */
@@ -43,6 +67,59 @@ function chipStatus(st: string) {
   return "bg-slate-50 text-slate-600 border-slate-200";
 }
 
+function normalizeSortText(value: string | null | undefined) {
+  return (value ?? "").toString().trim();
+}
+
+function compareText(
+  a: string | null | undefined,
+  b: string | null | undefined,
+  dir: SortDir,
+) {
+  const aa = normalizeSortText(a);
+  const bb = normalizeSortText(b);
+  if (!aa && !bb) return 0;
+  if (!aa) return 1;
+  if (!bb) return -1;
+  const cmp = aa.localeCompare(bb, undefined, { sensitivity: "base", numeric: true });
+  return dir === "asc" ? cmp : -cmp;
+}
+
+function compareDate(
+  a: string | null | undefined,
+  b: string | null | undefined,
+  dir: SortDir,
+) {
+  const da = toDateOnly(a);
+  const db = toDateOnly(b);
+  if (!da && !db) return 0;
+  if (!da) return 1;
+  if (!db) return -1;
+  const cmp = da.getTime() - db.getTime();
+  return dir === "asc" ? cmp : -cmp;
+}
+
+function severityRank(value: string | null | undefined) {
+  const normalized = (value ?? "UNKNOWN").toString().toUpperCase();
+  const idx = SEVERITY_ORDER.indexOf(normalized as (typeof SEVERITY_ORDER)[number]);
+  return idx === -1 ? SEVERITY_ORDER.length : idx;
+}
+
+function compareSeverity(
+  a: string | null | undefined,
+  b: string | null | undefined,
+  dir: SortDir,
+) {
+  const cmp = severityRank(a) - severityRank(b);
+  return dir === "asc" ? cmp : -cmp;
+}
+
+function defaultSortDir(key: SortKey): SortDir {
+  if (key === "opened_at") return "desc";
+  if (key === "severity") return "asc";
+  return "asc";
+}
+
 export default function IncidenciasPage() {
   const today = useMemo(() => new Date(), []);
   const defaultTo = useMemo(() => toDateInput(today), [today]);
@@ -54,6 +131,7 @@ export default function IncidenciasPage() {
   /** Lista completa de incidencias. */
   const [items, setItems] = useState<Incident[]>([]);
   const [itemsLoading, setItemsLoading] = useState(true);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
   /** Mensaje de error si falla la API. */
   const [error, setError] = useState<string | null>(null);
   const [evolution, setEvolution] = useState<EvolutionPoint[]>([]);
@@ -66,13 +144,17 @@ export default function IncidenciasPage() {
   const [st, setSt] = useState<string>("ALL");
   const [fromDate, setFromDate] = useState(defaultFrom);
   const [toDate, setToDate] = useState(defaultTo);
+  const [incidentsRefresh, setIncidentsRefresh] = useState(0);
+  const [sortKey, setSortKey] = useState<SortKey>("opened_at");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
 
   useEffect(() => {
     let alive = true;
-    apiGet<{ items: Incident[] }>("/incidents?limit=5000")
+    apiGet<{ items: Incident[]; generated_at?: string | null }>("/incidents?limit=5000")
       .then((r) => {
         if (!alive) return;
         setItems(r.items);
+        setLastUpdatedAt(r.generated_at ?? null);
       })
       .catch((e) => {
         if (!alive) return;
@@ -99,6 +181,21 @@ export default function IncidenciasPage() {
 
     return () => {
       alive = false;
+    };
+  }, [incidentsRefresh]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<IngestSuccessDetail>).detail;
+      if (!detail) return;
+      if (detail.kind === "incidents") {
+        setIncidentsRefresh((value) => value + 1);
+      }
+    };
+    window.addEventListener(INGEST_SUCCESS_EVENT, handler as EventListener);
+    return () => {
+      window.removeEventListener(INGEST_SUCCESS_EVENT, handler as EventListener);
     };
   }, []);
 
@@ -127,6 +224,43 @@ export default function IncidenciasPage() {
     });
   }, [items, q, sev, st, range]);
 
+  const sorted = useMemo(() => {
+    const arr = filtered.slice();
+    arr.sort((a, b) => {
+      let cmp = 0;
+      switch (sortKey) {
+        case "global_id":
+          cmp = compareText(a.global_id, b.global_id, sortDir);
+          break;
+        case "title":
+          cmp = compareText(a.title, b.title, sortDir);
+          break;
+        case "status":
+          cmp = compareText(a.status, b.status, sortDir);
+          break;
+        case "severity":
+          cmp = compareSeverity(a.severity, b.severity, sortDir);
+          break;
+        case "product":
+          cmp = compareText(a.product, b.product, sortDir);
+          break;
+        case "feature":
+          cmp = compareText(a.feature, b.feature, sortDir);
+          break;
+        case "opened_at":
+          cmp = compareDate(a.opened_at, b.opened_at, sortDir);
+          break;
+        default:
+          cmp = 0;
+      }
+      if (cmp === 0) {
+        return compareText(a.global_id, b.global_id, "asc");
+      }
+      return cmp;
+    });
+    return arr;
+  }, [filtered, sortKey, sortDir]);
+
   const isDefaultRange = fromDate === defaultFrom && toDate === defaultTo;
   const activeFilters =
     (q ? 1 : 0) +
@@ -151,6 +285,56 @@ export default function IncidenciasPage() {
     return evolution.length ? evolution : filteredEvolution;
   }, [hasActiveFilters, evolution, filteredEvolution]);
   const chartLoading = evolutionLoading && !hasActiveFilters;
+  const lastUpdatedLabel = useMemo(() => formatDate(lastUpdatedAt), [lastUpdatedAt]);
+
+  const onSort = (nextKey: SortKey) => {
+    setSortKey((currentKey) => {
+      if (currentKey === nextKey) {
+        setSortDir((dir) => (dir === "asc" ? "desc" : "asc"));
+        return currentKey;
+      }
+      setSortDir(defaultSortDir(nextKey));
+      return nextKey;
+    });
+  };
+
+  const renderSortIcon = (key: SortKey) => {
+    if (sortKey !== key) {
+      return (
+        <ArrowUpDown className="h-3.5 w-3.5 text-[color:var(--text-40)] group-hover:text-[color:var(--text-60)]" />
+      );
+    }
+    const iconClass = "h-3.5 w-3.5 text-[color:var(--blue)]";
+    return sortDir === "asc" ? (
+      <ChevronUp className={iconClass} />
+    ) : (
+      <ChevronDown className={iconClass} />
+    );
+  };
+
+  const renderSortHeader = (label: string, key: SortKey) => {
+    const isActive = sortKey === key;
+    const ariaSort = isActive
+      ? sortDir === "asc"
+        ? "ascending"
+        : "descending"
+      : "none";
+    return (
+      <th key={key} className="px-4 py-3" aria-sort={ariaSort} scope="col">
+        <button
+          type="button"
+          onClick={() => onSort(key)}
+          className={
+            "group inline-flex items-center gap-2 text-left transition " +
+            (isActive ? "text-[color:var(--ink)]" : "text-[color:var(--text-45)] hover:text-[color:var(--text-70)]")
+          }
+        >
+          <span>{label}</span>
+          {renderSortIcon(key)}
+        </button>
+      </th>
+    );
+  };
 
   return (
     <Shell>
@@ -193,6 +377,15 @@ export default function IncidenciasPage() {
             <span className="inline-flex items-center gap-2 rounded-full bg-[color:var(--surface-70)] px-3 py-1">
               <Filter className="h-3.5 w-3.5 text-[color:var(--blue)]" />
               Filtros activos: {activeFilters}
+            </span>
+            <span className="inline-flex items-center gap-2 rounded-full bg-[color:var(--surface-70)] px-3 py-1">
+              <Clock className="h-3.5 w-3.5 text-[color:var(--blue)]" />
+              Última actualización:{" "}
+              {itemsLoading ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-[color:var(--blue)]" />
+              ) : (
+                lastUpdatedLabel
+              )}
             </span>
           </div>
         </div>
@@ -330,7 +523,7 @@ export default function IncidenciasPage() {
             type="button"
             onClick={() =>
               downloadIncidentsCsv(
-                filtered,
+                sorted,
                 buildDownloadName("incidencias_resultados", fromDate, toDate),
               )
             }
@@ -348,13 +541,13 @@ export default function IncidenciasPage() {
               style={{ borderColor: "var(--border)" }}
             >
               <tr className="text-left text-[11px] uppercase tracking-[0.2em] text-[color:var(--text-45)]">
-                <th className="px-4 py-3">ID</th>
-                <th className="px-4 py-3">Título</th>
-                <th className="px-4 py-3">Estado</th>
-                <th className="px-4 py-3">Criticidad</th>
-                <th className="px-4 py-3">Producto</th>
-                <th className="px-4 py-3">Funcionalidad</th>
-                <th className="px-4 py-3">Abierta</th>
+                {renderSortHeader("ID", "global_id")}
+                {renderSortHeader("Título", "title")}
+                {renderSortHeader("Estado", "status")}
+                {renderSortHeader("Criticidad", "severity")}
+                {renderSortHeader("Producto", "product")}
+                {renderSortHeader("Funcionalidad", "feature")}
+                {renderSortHeader("Abierta", "opened_at")}
               </tr>
             </thead>
 
@@ -362,7 +555,7 @@ export default function IncidenciasPage() {
               {itemsLoading ? (
                 <SkeletonTableRows columns={7} rows={5} />
               ) : (
-                filtered.map((it, idx) => (
+                sorted.map((it, idx) => (
                   <tr
                     key={it.global_id}
                     className={idx % 2 === 0 ? "bg-[color:var(--surface-70)]" : "bg-[color:var(--surface-40)]"}
@@ -498,6 +691,16 @@ function toDateInput(date: Date) {
   return new Date(date.getTime() - date.getTimezoneOffset() * 60000)
     .toISOString()
     .slice(0, 10);
+}
+
+function formatDate(value?: string | null, withTime = true) {
+  if (!value) return "Sin fecha";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  return new Intl.DateTimeFormat("es-ES", {
+    dateStyle: "medium",
+    timeStyle: withTime ? "short" : undefined,
+  }).format(d);
 }
 
 function normalizeDateRange(
