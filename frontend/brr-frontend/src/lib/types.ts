@@ -103,6 +103,9 @@ export type ReputationMeta = {
   cache_available?: boolean;
   market_ratings?: MarketRating[];
   market_ratings_history?: MarketRating[];
+  profiles_active?: string[];
+  profile_key?: string;
+  profile_source?: string;
   ui?: {
     incidents_enabled?: boolean;
     ops_enabled?: boolean;
