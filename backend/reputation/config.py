@@ -229,9 +229,7 @@ def _filter_profile_files(
     selected = [file for file in files if file.stem.lower() in profile_set]
     missing = profile_set - {file.stem.lower() for file in files}
     if missing:
-        raise FileNotFoundError(
-            f"Reputation profile(s) not found: {', '.join(sorted(missing))}"
-        )
+        raise FileNotFoundError(f"Reputation profile(s) not found: {', '.join(sorted(missing))}")
     return selected
 
 
@@ -275,7 +273,9 @@ def _load_profile_state() -> dict[str, Any]:
 def _save_profile_state(source: str, profiles: Sequence[str]) -> None:
     PROFILE_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
     payload = {"source": source, "profiles": list(profiles)}
-    PROFILE_STATE_PATH.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    PROFILE_STATE_PATH.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
 
 
 def _profile_key_from_files(files: Sequence[Path]) -> str:

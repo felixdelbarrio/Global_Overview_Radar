@@ -42,7 +42,12 @@ from reputation.config import (
     settings,
 )
 from reputation.logging_utils import get_logger
-from reputation.models import MarketRating, ReputationCacheDocument, ReputationCacheStats, ReputationItem
+from reputation.models import (
+    MarketRating,
+    ReputationCacheDocument,
+    ReputationCacheStats,
+    ReputationItem,
+)
 from reputation.repositories.cache_repo import ReputationCacheRepo
 from reputation.services.sentiment_service import ReputationSentimentService
 
@@ -376,6 +381,8 @@ class ReputationIngestService:
             return []
 
         country_by_geo = appstore_cfg.get("country_by_geo") or {}
+        if not isinstance(country_by_geo, dict):
+            country_by_geo = {}
         app_id_to_actor = appstore_cfg.get("app_id_to_actor") or {}
         if not isinstance(app_id_to_actor, dict):
             app_id_to_actor = {}
@@ -440,7 +447,11 @@ class ReputationIngestService:
             return []
 
         geo_to_gl = play_cfg.get("geo_to_gl") or {}
+        if not isinstance(geo_to_gl, dict):
+            geo_to_gl = {}
         geo_to_hl = play_cfg.get("geo_to_hl") or {}
+        if not isinstance(geo_to_hl, dict):
+            geo_to_hl = {}
         package_id_to_actor = play_cfg.get("package_id_to_actor") or {}
         if not isinstance(package_id_to_actor, dict):
             package_id_to_actor = {}
@@ -2657,8 +2668,11 @@ def _fetch_appstore_rating(
     count_value = _to_int(rating_count)
     url_value = first.get("trackViewUrl")
     name_value = first.get("trackName")
-    return rating_value, count_value, str(url_value) if isinstance(url_value, str) else None, (
-        str(name_value) if isinstance(name_value, str) else None
+    return (
+        rating_value,
+        count_value,
+        str(url_value) if isinstance(url_value, str) else None,
+        (str(name_value) if isinstance(name_value, str) else None),
     )
 
 
@@ -2668,10 +2682,7 @@ def _fetch_google_play_rating(
     hl: str,
     timeout: int,
 ) -> tuple[float | None, int | None, str | None, str | None] | None:
-    url = (
-        "https://play.google.com/store/apps/details"
-        f"?id={package_id}&hl={hl}&gl={gl}"
-    )
+    url = f"https://play.google.com/store/apps/details?id={package_id}&hl={hl}&gl={gl}"
     html = http_get_text(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=timeout)
     if not html:
         return None
@@ -2780,9 +2791,7 @@ def _market_rating_is_newer(left: MarketRating, right: MarketRating) -> bool:
 def _market_rating_is_same(left: MarketRating, right: MarketRating) -> bool:
     if abs(left.rating - right.rating) > 0.0001:
         return False
-    if left.rating_count != right.rating_count:
-        return False
-    return True
+    return left.rating_count == right.rating_count
 
 
 def _env_bool(value: str | None) -> bool:
