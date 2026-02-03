@@ -108,6 +108,13 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
     d.setFullYear(d.getFullYear() - 2);
     return toDateInput(d);
   }, [today]);
+  const DASHBOARD_DAYS = 30;
+  const dashboardTo = useMemo(() => toDateInput(today), [today]);
+  const dashboardFrom = useMemo(() => {
+    const d = new Date(today);
+    d.setDate(d.getDate() - (DASHBOARD_DAYS - 1));
+    return toDateInput(d);
+  }, [today]);
 
   const [items, setItems] = useState<ReputationItem[]>([]);
   const [itemsLoading, setItemsLoading] = useState(true);
@@ -133,9 +140,19 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
   const sourcesRef = useRef<string[]>([]);
   const [sources, setSources] = useState<string[]>([]);
   const [overrideRefresh, setOverrideRefresh] = useState(0);
+  const isDashboard = mode === "dashboard";
+  const effectiveSentiment = isDashboard ? "all" : sentiment;
+  const effectiveActor = isDashboard ? "all" : actor;
+  const effectiveFromDate = isDashboard ? dashboardFrom : fromDate;
+  const effectiveToDate = isDashboard ? dashboardTo : toDate;
   const entityParam = useMemo(
-    () => (actor === "all" ? "all" : "actor_principal"),
-    [actor],
+    () =>
+      isDashboard
+        ? "actor_principal"
+        : effectiveActor === "all"
+          ? "all"
+          : "actor_principal",
+    [isDashboard, effectiveActor],
   );
   const incidentsAvailable = meta?.incidents_available === true;
   const incidentsEnabled =
@@ -159,6 +176,12 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
     touchItemsFilters();
     touchChartFilters();
   };
+
+  useEffect(() => {
+    if (!isDashboard) return;
+    if (sentiment !== "all") setSentiment("all");
+    if (actor !== "all") setActor("all");
+  }, [isDashboard, sentiment, actor]);
 
   const handleOverride = async (payload: OverridePayload) => {
     await apiPost<{ updated: number }>("/reputation/items/override", payload);
@@ -216,7 +239,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
         if (alive) setIncidentsError(String(e));
       });
 
-    const days = computeEvolutionDays(fromDate, toDate, today);
+    const days = computeEvolutionDays(effectiveFromDate, effectiveToDate, today);
     apiGet<{ days: number; series: EvolutionPoint[] }>(`/evolution?days=${days}`)
       .then((payload) => {
         if (!alive) return;
@@ -229,7 +252,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
     return () => {
       alive = false;
     };
-  }, [showIncidents, fromDate, toDate, today]);
+  }, [showIncidents, effectiveFromDate, effectiveToDate, today]);
 
   useEffect(() => {
     let alive = true;
@@ -237,12 +260,12 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
     // If comparing actor principal vs another actor, request both datasets and combine them.
     const fetchCombinedIfComparing = async () => {
       setItemsLoading(true);
-      if (actor !== "all" && !isPrincipalName(actor, principalAliasKeys)) {
+      if (effectiveActor !== "all" && !isPrincipalName(effectiveActor, principalAliasKeys)) {
         const makeFilter = (overrides: Partial<Record<string, unknown>>) => {
           const f: Record<string, unknown> = {};
-          if (fromDate) f.from_date = fromDate;
-          if (toDate) f.to_date = toDate;
-          if (sentiment !== "all") f.sentiment = sentiment;
+          if (effectiveFromDate) f.from_date = effectiveFromDate;
+          if (effectiveToDate) f.to_date = effectiveToDate;
+          if (effectiveSentiment !== "all") f.sentiment = effectiveSentiment;
           if (geo !== "all") f.geo = geo;
           if (sources.length) f.sources = sources.join(",");
           return { ...f, ...overrides };
@@ -250,7 +273,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
 
         const payload = [
           makeFilter({ entity: "actor_principal" }),
-          makeFilter({ actor }),
+          makeFilter({ actor: effectiveActor }),
         ];
 
         try {
@@ -270,9 +293,9 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
       }
 
       const params = new URLSearchParams();
-      if (fromDate) params.set("from_date", fromDate);
-      if (toDate) params.set("to_date", toDate);
-      if (sentiment !== "all") params.set("sentiment", sentiment);
+      if (effectiveFromDate) params.set("from_date", effectiveFromDate);
+      if (effectiveToDate) params.set("to_date", effectiveToDate);
+      if (effectiveSentiment !== "all") params.set("sentiment", effectiveSentiment);
       params.set("entity", entityParam);
       if (geo !== "all") params.set("geo", geo);
       // When actor is specific, compare flow handles filters. Otherwise use entityParam.
@@ -296,12 +319,12 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
       alive = false;
     };
   }, [
-    fromDate,
-    toDate,
-    sentiment,
+    effectiveFromDate,
+    effectiveToDate,
+    effectiveSentiment,
     entityParam,
     geo,
-    actor,
+    effectiveActor,
     sources,
     principalAliasKeys,
     overrideRefresh,
@@ -310,9 +333,9 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
   useEffect(() => {
     let alive = true;
     const params = new URLSearchParams();
-    if (fromDate) params.set("from_date", fromDate);
-    if (toDate) params.set("to_date", toDate);
-    if (sentiment !== "all") params.set("sentiment", sentiment);
+    if (effectiveFromDate) params.set("from_date", effectiveFromDate);
+    if (effectiveToDate) params.set("to_date", effectiveToDate);
+    if (effectiveSentiment !== "all") params.set("sentiment", effectiveSentiment);
     if (geo !== "all") params.set("geo", geo);
     if (sources.length) params.set("sources", sources.join(","));
 
@@ -332,7 +355,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
     return () => {
       alive = false;
     };
-  }, [fromDate, toDate, sentiment, geo, sources, overrideRefresh]);
+  }, [effectiveFromDate, effectiveToDate, effectiveSentiment, geo, sources, overrideRefresh]);
 
   const sourceCounts = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -403,18 +426,19 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
   }, [chartItems, principalAliasKeys, geo, meta, availableActorSet, allowedActorSet]);
 
   useEffect(() => {
-    if (actor === "all") return;
+    if (isDashboard || actor === "all") return;
     setActorMemory((current) => ({ ...current, [geo]: actor }));
-  }, [actor, geo]);
+  }, [actor, geo, isDashboard]);
 
   useEffect(() => {
     setFilterMemory((current) => ({
       ...current,
-      [geo]: { sentiment, sources: sortedSources },
+      [geo]: { sentiment: isDashboard ? "all" : sentiment, sources: sortedSources },
     }));
-  }, [sentiment, sortedSources, geo]);
+  }, [sentiment, sortedSources, geo, isDashboard]);
 
   useEffect(() => {
+    if (isDashboard) return;
     const normalized = normalizeKey(actor);
     const stored = actorMemory[geo];
     if (actor === "all") {
@@ -430,7 +454,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
     if (actor !== "all") {
       setActor("all");
     }
-  }, [geo, actor, actorMemory, availableActorSet]);
+  }, [geo, actor, actorMemory, availableActorSet, isDashboard]);
 
   useEffect(() => {
     if (lastGeoRef.current === geo) return;
@@ -438,10 +462,12 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
     const stored = filterMemory[geo];
     if (!stored) return;
     let changed = false;
-    const currentSentiment = sentimentRef.current;
-    if (stored.sentiment !== currentSentiment) {
-      setSentiment(stored.sentiment);
-      changed = true;
+    if (!isDashboard) {
+      const currentSentiment = sentimentRef.current;
+      if (stored.sentiment !== currentSentiment) {
+        setSentiment(stored.sentiment);
+        changed = true;
+      }
     }
     const storedSources = stored.sources || [];
     const currentSources = sourcesRef.current || [];
@@ -455,7 +481,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
     if (changed) {
       setFilterRestoredAt(Date.now());
     }
-  }, [geo, filterMemory]);
+  }, [geo, filterMemory, isDashboard]);
 
   useEffect(() => {
     if (!filterRestoredAt) return;
@@ -479,24 +505,44 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
     [items, principalAliasKeys],
   );
   const sentimentSeries = useMemo(
-    () => buildComparativeSeries(chartItems, actor, principalAliasKeys, fromDate, toDate),
-    [chartItems, actor, principalAliasKeys, fromDate, toDate],
+    () =>
+      buildComparativeSeries(
+        chartItems,
+        effectiveActor,
+        principalAliasKeys,
+        effectiveFromDate,
+        effectiveToDate,
+      ),
+    [chartItems, effectiveActor, principalAliasKeys, effectiveFromDate, effectiveToDate],
   );
   const dashboardSeries = useMemo(
     () =>
       buildDashboardSeries(
         sentimentSeries,
         incidentsSeries,
-        fromDate,
-        toDate,
+        effectiveFromDate,
+        effectiveToDate,
         showIncidents,
       ),
-    [sentimentSeries, incidentsSeries, fromDate, toDate, showIncidents],
+    [sentimentSeries, incidentsSeries, effectiveFromDate, effectiveToDate, showIncidents],
   );
+  const incidentsSummary = useMemo(() => {
+    if (!showIncidents || !incidentsSeries.length) {
+      return { open: 0, newTotal: 0, closedTotal: 0 };
+    }
+    const last = incidentsSeries[incidentsSeries.length - 1];
+    return {
+      open: last?.open ?? 0,
+      newTotal: incidentsSeries.reduce((acc, row) => acc + (row.new ?? 0), 0),
+      closedTotal: incidentsSeries.reduce((acc, row) => acc + (row.closed ?? 0), 0),
+    };
+  }, [showIncidents, incidentsSeries]);
+  const incidentsSummaryLoading =
+    showIncidents && !incidentsSeries.length && !incidentsError;
   const groupedMentions = useMemo(() => groupMentions(items), [items]);
   const rangeLabel = useMemo(
-    () => buildRangeLabel(fromDate, toDate),
-    [fromDate, toDate],
+    () => buildRangeLabel(effectiveFromDate, effectiveToDate),
+    [effectiveFromDate, effectiveToDate],
   );
   const latestTimestamp = useMemo(() => getLatestDate(items), [items]);
   const latestLabel = useMemo(
@@ -510,19 +556,21 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
   const actorLabel = useMemo(
     () =>
       buildEntityLabel(
-        actor && actor !== "all" && !isPrincipalName(actor, principalAliasKeys)
-          ? actor
+        effectiveActor &&
+          effectiveActor !== "all" &&
+          !isPrincipalName(effectiveActor, principalAliasKeys)
+          ? effectiveActor
           : "Otros actores del mercado",
         geo,
       ),
-    [actor, geo, principalAliasKeys],
+    [effectiveActor, geo, principalAliasKeys],
   );
   const selectedActor = useMemo(
     () =>
-      actor !== "all" && !isPrincipalName(actor, principalAliasKeys)
-        ? actor
+      effectiveActor !== "all" && !isPrincipalName(effectiveActor, principalAliasKeys)
+        ? effectiveActor
         : null,
-    [actor, principalAliasKeys],
+    [effectiveActor, principalAliasKeys],
   );
   const selectedActorKey = useMemo(
     () => (selectedActor ? normalizeKey(selectedActor) : null),
@@ -543,7 +591,10 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
     [groupedMentions, principalAliasKeys, selectedActorKey],
   );
   const dashboardMentions = useMemo(() => {
-    const sentimentMentions = groupedMentions.map((group) => ({
+    const sentimentBase = isDashboard
+      ? groupedMentions.filter((item) => isPrincipalGroup(item, principalAliasKeys))
+      : groupedMentions;
+    const sentimentMentions = sentimentBase.map((group) => ({
       key: `sentiment:${group.key}`,
       kind: "sentiment" as const,
       title: group.title,
@@ -574,7 +625,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
         return db.localeCompare(da);
       })
       .slice(0, 20);
-  }, [groupedMentions, incidents, showIncidents]);
+  }, [groupedMentions, incidents, showIncidents, isDashboard, principalAliasKeys]);
   const [mentionsTab, setMentionsTab] = useState<"principal" | "actor">("principal");
 
   const mentionsToShow =
@@ -656,44 +707,50 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
             FILTROS PRINCIPALES
           </div>
           <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <FilterField label="Desde">
-              <input
-                type="date"
-                value={fromDate}
-                onChange={(e) => {
-                  touchCommonFilters();
-                  setFromDate(e.target.value);
-                }}
-                className="w-full rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_var(--inset-highlight)] outline-none focus:border-[color:var(--aqua)]/60 focus:ring-2 focus:ring-[color:var(--aqua)]/30"
-              />
-            </FilterField>
-            <FilterField label="Hasta">
-              <input
-                type="date"
-                value={toDate}
-                onChange={(e) => {
-                  touchCommonFilters();
-                  setToDate(e.target.value);
-                }}
-                className="w-full rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_var(--inset-highlight)] outline-none focus:border-[color:var(--aqua)]/60 focus:ring-2 focus:ring-[color:var(--aqua)]/30"
-              />
-            </FilterField>
-            <FilterField label="Sentimiento">
-              <select
-                value={sentiment}
-                onChange={(e) => {
-                  touchCommonFilters();
-                  setSentiment(e.target.value as SentimentFilter);
-                }}
-                className="w-full rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_var(--inset-highlight)] outline-none focus:border-[color:var(--aqua)]/60 focus:ring-2 focus:ring-[color:var(--aqua)]/30"
-              >
-                {SENTIMENTS.map((opt) => (
-                  <option key={opt} value={opt}>
-                    {opt === "all" ? "Todos" : opt}
-                  </option>
-                ))}
-              </select>
-            </FilterField>
+            {!isDashboard && (
+              <FilterField label="Desde">
+                <input
+                  type="date"
+                  value={fromDate}
+                  onChange={(e) => {
+                    touchCommonFilters();
+                    setFromDate(e.target.value);
+                  }}
+                  className="w-full rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_var(--inset-highlight)] outline-none focus:border-[color:var(--aqua)]/60 focus:ring-2 focus:ring-[color:var(--aqua)]/30"
+                />
+              </FilterField>
+            )}
+            {!isDashboard && (
+              <FilterField label="Hasta">
+                <input
+                  type="date"
+                  value={toDate}
+                  onChange={(e) => {
+                    touchCommonFilters();
+                    setToDate(e.target.value);
+                  }}
+                  className="w-full rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_var(--inset-highlight)] outline-none focus:border-[color:var(--aqua)]/60 focus:ring-2 focus:ring-[color:var(--aqua)]/30"
+                />
+              </FilterField>
+            )}
+            {!isDashboard && (
+              <FilterField label="Sentimiento">
+                <select
+                  value={sentiment}
+                  onChange={(e) => {
+                    touchCommonFilters();
+                    setSentiment(e.target.value as SentimentFilter);
+                  }}
+                  className="w-full rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_var(--inset-highlight)] outline-none focus:border-[color:var(--aqua)]/60 focus:ring-2 focus:ring-[color:var(--aqua)]/30"
+                >
+                  {SENTIMENTS.map((opt) => (
+                    <option key={opt} value={opt}>
+                      {opt === "all" ? "Todos" : opt}
+                    </option>
+                  ))}
+                </select>
+              </FilterField>
+            )}
             <FilterField label="Entidad">
               <div className="w-full rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_var(--inset-highlight)]">
                 {actorPrincipalName}
@@ -716,23 +773,25 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
                 ))}
               </select>
             </FilterField>
-            <FilterField label="Otros actores del mercado">
-              <select
-                value={actor}
-                onChange={(e) => {
-                  touchItemsFilters();
-                  setActor(e.target.value);
-                }}
-                className="w-full rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_var(--inset-highlight)] outline-none focus:border-[color:var(--aqua)]/60 focus:ring-2 focus:ring-[color:var(--aqua)]/30 disabled:opacity-60"
-              >
-                <option value="all">Todos</option>
-                {actorOptions.map((opt) => (
-                  <option key={opt} value={opt}>
-                    {opt}
-                  </option>
-                ))}
-              </select>
-            </FilterField>
+            {!isDashboard && (
+              <FilterField label="Otros actores del mercado">
+                <select
+                  value={actor}
+                  onChange={(e) => {
+                    touchItemsFilters();
+                    setActor(e.target.value);
+                  }}
+                  className="w-full rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_var(--inset-highlight)] outline-none focus:border-[color:var(--aqua)]/60 focus:ring-2 focus:ring-[color:var(--aqua)]/30 disabled:opacity-60"
+                >
+                  <option value="all">Todos</option>
+                  {actorOptions.map((opt) => (
+                    <option key={opt} value={opt}>
+                      {opt}
+                    </option>
+                  ))}
+                </select>
+              </FilterField>
+            )}
           </div>
 
           <div className="mt-4">
@@ -813,81 +872,127 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
             <SummaryCard label="Positivas" value={sentimentSummary.positive} loading={itemsLoading} />
             <SummaryCard label="Negativas" value={sentimentSummary.negative} loading={itemsLoading} />
           </div>
-          <div className="mt-5">
-            <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
-              TOP FUENTES
+          {isDashboard && showIncidents && (
+            <>
+              <div className="mt-4 text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
+                INCIDENCIAS · ÚLTIMOS 30 DÍAS
+              </div>
+              <div className="mt-2 grid grid-cols-2 gap-3">
+                <SummaryCard
+                  label="Abiertas"
+                  value={incidentsSummary.open}
+                  loading={incidentsSummaryLoading}
+                />
+                <SummaryCard
+                  label="Nuevas"
+                  value={incidentsSummary.newTotal}
+                  loading={incidentsSummaryLoading}
+                />
+                <SummaryCard
+                  label="Cerradas"
+                  value={incidentsSummary.closedTotal}
+                  loading={incidentsSummaryLoading}
+                />
+              </div>
+            </>
+          )}
+          {!isDashboard && (
+            <div className="mt-5">
+              <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
+                TOP FUENTES
+              </div>
+              <div className="mt-2 space-y-2">
+                {itemsLoading ? (
+                  <SkeletonRows count={4} />
+                ) : (
+                  (() => {
+                    const maxValue = Math.max(1, ...topSources.map((row) => row.count));
+                    return topSources.map((row) => (
+                      <RowMeter
+                        key={row.key}
+                        label={row.key}
+                        value={row.count}
+                        maxValue={maxValue}
+                      />
+                    ));
+                  })()
+                )}
+              </div>
             </div>
-            <div className="mt-2 space-y-2">
-              {itemsLoading ? (
-                <SkeletonRows count={4} />
-              ) : (
-                topSources.map((row) => (
-                  <RowMeter key={row.key} label={row.key} value={row.count} />
-                ))
-              )}
+          )}
+          {!isDashboard && (
+            <div className="mt-4">
+              <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
+                TOP OTROS ACTORES DEL MERCADO
+              </div>
+              <div className="mt-2 space-y-2">
+                {itemsLoading ? (
+                  <SkeletonRows count={4} />
+                ) : (
+                  (() => {
+                    const maxValue = Math.max(1, ...topActores.map((row) => row.count));
+                    return topActores.map((row) => (
+                      <RowMeter
+                        key={row.key}
+                        label={row.key}
+                        value={row.count}
+                        maxValue={maxValue}
+                      />
+                    ));
+                  })()
+                )}
+              </div>
             </div>
-          </div>
-          <div className="mt-4">
-            <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
-              TOP OTROS ACTORES DEL MERCADO
-            </div>
-            <div className="mt-2 space-y-2">
-              {itemsLoading ? (
-                <SkeletonRows count={4} />
-              ) : (
-                topActores.map((row) => (
-                  <RowMeter key={row.key} label={row.key} value={row.count} />
-                ))
-              )}
-            </div>
-          </div>
+          )}
         </section>
       </div>
 
-      <section className="mt-6 rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-5 shadow-[var(--shadow-md)] backdrop-blur-xl animate-rise" style={{ animationDelay: "240ms" }}>
-        <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
-          SENTIMIENTO POR PAÍS
-        </div>
-        <div className="mt-3 overflow-auto">
-          <table className="min-w-full text-sm">
-            <thead>
-              <tr className="text-left text-[11px] uppercase tracking-[0.2em] text-[color:var(--text-45)]">
-                <th className="py-2 pr-4">País</th>
-                <th className="py-2 pr-4">Menciones</th>
-                <th className="py-2 pr-4">Score medio</th>
-                <th className="py-2 pr-4">Positivas</th>
-                <th className="py-2 pr-4">Neutrales</th>
-                <th className="py-2">Negativas</th>
-              </tr>
-            </thead>
-            <tbody>
-              {itemsLoading ? (
-                <SkeletonTableRows columns={6} rows={3} />
-              ) : (
-                geoSummary.map((row) => (
-                  <tr key={row.geo} className="border-t border-[color:var(--border-60)]">
-                    <td className="py-2 pr-4 font-semibold text-[color:var(--ink)]">
-                      {row.geo}
-                    </td>
-                    <td className="py-2 pr-4">{row.count}</td>
-                    <td className="py-2 pr-4">{row.avgScore.toFixed(2)}</td>
-                    <td className="py-2 pr-4">{row.positive}</td>
-                    <td className="py-2 pr-4">{row.neutral}</td>
-                    <td className="py-2">{row.negative}</td>
-                  </tr>
-                ))
-              )}
-              {!itemsLoading && !geoSummary.length && (
-                <tr>
-                  <td className="py-3 text-sm text-[color:var(--text-45)]" colSpan={6}>
-                    No hay datos para los filtros seleccionados.
-                  </td>
+      {!isDashboard && (
+        <section className="mt-6 rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-5 shadow-[var(--shadow-md)] backdrop-blur-xl animate-rise" style={{ animationDelay: "240ms" }}>
+          <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
+            SENTIMIENTO POR PAÍS
+          </div>
+          <div className="mt-3 overflow-auto">
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr className="text-left text-[11px] uppercase tracking-[0.2em] text-[color:var(--text-45)]">
+                  <th className="py-2 pr-4">País</th>
+                  <th className="py-2 pr-4">Menciones</th>
+                  <th className="py-2 pr-4">Score medio</th>
+                  <th className="py-2 pr-4">Positivas</th>
+                  <th className="py-2 pr-4">Neutrales</th>
+                  <th className="py-2">Negativas</th>
                 </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
+              </thead>
+              <tbody>
+                {itemsLoading ? (
+                  <SkeletonTableRows columns={6} rows={3} />
+                ) : (
+                  geoSummary.map((row) => (
+                    <tr key={row.geo} className="border-t border-[color:var(--border-60)]">
+                      <td className="py-2 pr-4 font-semibold text-[color:var(--ink)]">
+                        {row.geo}
+                      </td>
+                      <td className="py-2 pr-4">{row.count}</td>
+                      <td className="py-2 pr-4">{row.avgScore.toFixed(2)}</td>
+                      <td className="py-2 pr-4">{row.positive}</td>
+                      <td className="py-2 pr-4">{row.neutral}</td>
+                      <td className="py-2">{row.negative}</td>
+                    </tr>
+                  ))
+                )}
+                {!itemsLoading && !geoSummary.length && (
+                  <tr>
+                    <td className="py-3 text-sm text-[color:var(--text-45)]" colSpan={6}>
+                      No hay datos para los filtros seleccionados.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
 
       <section className="mt-6 rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-5 shadow-[var(--shadow-md)] backdrop-blur-xl animate-rise" style={{ animationDelay: "300ms" }}>
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1116,14 +1221,24 @@ function SummaryCard({
   );
 }
 
-function RowMeter({ label, value }: { label: string; value: number }) {
+function RowMeter({
+  label,
+  value,
+  maxValue,
+}: {
+  label: string;
+  value: number;
+  maxValue: number;
+}) {
+  const safeMax = Math.max(1, maxValue);
+  const ratio = Math.min(1, value / safeMax);
   return (
     <div className="flex items-center gap-3">
       <div className="w-28 text-xs text-[color:var(--text-55)] truncate">{label}</div>
       <div className="flex-1 h-2 rounded-full bg-[color:var(--surface-70)] overflow-hidden border border-[color:var(--border-70)]">
         <div
           className="h-full rounded-full bg-gradient-to-r from-[color:var(--blue)] to-[color:var(--aqua)]"
-          style={{ width: `${Math.min(100, value * 6)}%` }}
+          style={{ width: `${Math.round(ratio * 100)}%` }}
         />
       </div>
       <div className="w-8 text-right text-xs text-[color:var(--text-55)]">{value}</div>

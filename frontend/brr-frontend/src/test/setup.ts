@@ -1,7 +1,39 @@
 /** Setup global de pruebas (JSDOM y mocks basicos). */
 
 import "@testing-library/jest-dom/vitest";
+import * as React from "react";
 import { vi } from "vitest";
+
+vi.mock("recharts", async () => {
+  const actual = await vi.importActual<typeof import("recharts")>("recharts");
+  return {
+    ...actual,
+    ResponsiveContainer: ({
+      width,
+      height,
+      children,
+    }: {
+      width?: number | string;
+      height?: number | string;
+      children?: React.ReactNode;
+    }) => {
+      const resolvedWidth = typeof width === "number" ? width : 800;
+      const resolvedHeight = typeof height === "number" ? height : 400;
+      return React.createElement(
+        "div",
+        { style: { width: resolvedWidth, height: resolvedHeight } },
+        React.Children.map(children, (child) =>
+          React.isValidElement(child)
+            ? React.cloneElement(child, {
+                width: resolvedWidth,
+                height: resolvedHeight,
+              })
+            : child
+        )
+      );
+    },
+  };
+});
 
 // Mock de matchMedia para componentes que dependen de media queries.
 if (!window.matchMedia) {
