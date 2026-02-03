@@ -3,15 +3,11 @@
 Todos mantienen la **misma estructura** que tu config actual (news/forums/blogs/appstore/etc).
 
 ## Cómo usar
-1) Copia el JSON que quieras a tu ruta de config (p. ej. `./data/reputation/config.json`)
-2) En `.env.reputation` apunta al archivo:
-   - `REPUTATION_CONFIG_PATH=./data/reputation/config.json`
-3) Activa fuentes (recomendado para estos samples):
-   - `REPUTATION_SOURCE_NEWS=true`
-   - `REPUTATION_SOURCE_FORUMS=true`
-   - `REPUTATION_SOURCE_BLOGS_RSS=true`
-   - (Opcional) `REPUTATION_SOURCE_TRUSTPILOT=true`
-4) Ejecuta: `brr-reputation --force`
+1. Copia el JSON que quieras a tu ruta de config (p. ej. `./data/reputation/config.json`).
+2. En `.env.reputation` apunta al archivo con `REPUTATION_CONFIG_PATH=./data/reputation/config.json`.
+3. (Opcional) Si quieres LLM, crea `data/reputation_llm/<perfil>_llm.json` (puedes copiarlo desde `data/reputation_llm_samples/`).
+4. Activa fuentes recomendadas en `.env.reputation`: `REPUTATION_SOURCE_NEWS=true`, `REPUTATION_SOURCE_FORUMS=true`, `REPUTATION_SOURCE_BLOGS_RSS=true` (opcional `REPUTATION_SOURCE_TRUSTPILOT=true`).
+5. Ejecuta: `brr-reputation --force`.
 
 ## Notas
 - Los feeds de “markets” aquí son **señales indirectas** (Google News RSS con `site:play.google.com` / `site:apps.apple.com`).

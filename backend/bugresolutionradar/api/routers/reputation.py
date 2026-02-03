@@ -32,6 +32,13 @@ from bugresolutionradar.logging_utils import get_logger
 router = APIRouter()
 logger = get_logger(__name__)
 COMPARE_BODY = Body(..., description="Lista de filtros a comparar")
+MANUAL_OVERRIDE_BLOCKED_SOURCES = {"appstore", "googlereviews"}
+
+
+def _normalize_source(value: str | None) -> str:
+    if not value:
+        return ""
+    return "".join(ch for ch in value.lower() if ch.isalnum())
 
 
 @router.get("/items")
@@ -54,6 +61,8 @@ def reputation_items(
             config_hash="empty",
             sources_enabled=[],
             items=[],
+            market_ratings=[],
+            market_ratings_history=[],
             stats=ReputationCacheStats(count=0, note="cache empty"),
         )
 
@@ -78,6 +87,8 @@ def reputation_items(
         config_hash=doc.config_hash,
         sources_enabled=doc.sources_enabled,
         items=items,
+        market_ratings=doc.market_ratings,
+        market_ratings_history=doc.market_ratings_history,
         stats=ReputationCacheStats(count=len(items), note=doc.stats.note),
     )
 
@@ -96,6 +107,9 @@ def reputation_meta() -> dict[str, Any]:
     }
     repo = ReputationCacheRepo(reputation_settings.cache_path)
     doc = repo.load()
+    cache_available = doc is not None
+    market_ratings = doc.market_ratings if doc else []
+    market_ratings_history = doc.market_ratings_history if doc else []
     source_counts: dict[str, int] = {}
     if doc:
         for item in doc.items:
@@ -115,6 +129,9 @@ def reputation_meta() -> dict[str, Any]:
         "sources_available": sources_available,
         "source_counts": source_counts,
         "incidents_available": incidents_available,
+        "cache_available": cache_available,
+        "market_ratings": market_ratings,
+        "market_ratings_history": market_ratings_history,
         "ui": ui_flags,
     }
 
@@ -157,8 +174,16 @@ def reputation_override(payload: OverrideRequest):
     overrides = overrides_repo.load()
     now = datetime.now(timezone.utc)
     now_iso = now.isoformat()
+    doc = ReputationCacheRepo(reputation_settings.cache_path).load()
+    source_by_id = {item.id: item.source for item in doc.items} if doc else {}
+    updated_ids: list[str] = []
+    skipped_ids: list[str] = []
 
     for item_id in payload.ids:
+        source = _normalize_source(source_by_id.get(item_id))
+        if source in MANUAL_OVERRIDE_BLOCKED_SOURCES:
+            skipped_ids.append(item_id)
+            continue
         entry: dict[str, Any] = overrides.get(item_id, {})
         if geo_value is not None:
             entry["geo"] = geo_value
@@ -168,9 +193,15 @@ def reputation_override(payload: OverrideRequest):
             entry["note"] = payload.note
         entry["updated_at"] = now_iso
         overrides[item_id] = entry
+        updated_ids.append(item_id)
 
     overrides_repo.save(overrides)
-    return {"updated": len(payload.ids), "ids": payload.ids, "updated_at": now_iso}
+    return {
+        "updated": len(updated_ids),
+        "ids": updated_ids,
+        "updated_at": now_iso,
+        "skipped": skipped_ids,
+    }
 
 
 @router.post("/items/compare")

@@ -116,6 +116,7 @@ def _run_reputation_job(job_id: str, force: bool) -> None:
             _update_job(job_id, stage=stage, progress=pct, meta=meta or {})
 
         doc = service.run(force=force, progress=on_progress)
+        warning = _extract_llm_warning(doc.stats.note)
         _update_job(
             job_id,
             status="success",
@@ -126,6 +127,7 @@ def _run_reputation_job(job_id: str, force: bool) -> None:
                 "items": doc.stats.count,
                 "sources": len(doc.sources_enabled),
                 "note": doc.stats.note,
+                "warning": warning,
             },
         )
     except Exception as exc:  # pragma: no cover - defensive
@@ -264,3 +266,13 @@ def ingest_job(job_id: str) -> dict[str, Any]:
 def list_jobs() -> list[dict[str, Any]]:
     with _LOCK:
         return [dict(job) for job in _JOBS.values()]
+
+
+def _extract_llm_warning(note: str | None) -> str | None:
+    if not note:
+        return None
+    for chunk in note.split(";"):
+        cleaned = chunk.strip()
+        if cleaned.lower().startswith("llm:"):
+            return cleaned
+    return None

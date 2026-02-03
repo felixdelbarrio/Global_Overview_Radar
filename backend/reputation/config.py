@@ -16,6 +16,7 @@ REPUTATION_ENV_PATH = REPO_ROOT / "backend" / "reputation" / ".env.reputation"
 REPUTATION_ENV_EXAMPLE = REPO_ROOT / "backend" / "reputation" / ".env.reputation.example"
 
 DEFAULT_CONFIG_PATH = REPO_ROOT / "data" / "reputation"
+DEFAULT_LLM_CONFIG_PATH = REPO_ROOT / "data" / "reputation_llm"
 DEFAULT_CACHE_PATH = REPO_ROOT / "data" / "cache" / "reputation_cache.json"
 DEFAULT_OVERRIDES_PATH = REPO_ROOT / "data" / "cache" / "reputation_overrides.json"
 
@@ -36,6 +37,10 @@ class ReputationSettings(BaseSettings):
 
     # Rutas
     config_path: Path = Field(default=DEFAULT_CONFIG_PATH, alias="REPUTATION_CONFIG_PATH")
+    llm_config_path: Path = Field(
+        default=DEFAULT_LLM_CONFIG_PATH,
+        alias="REPUTATION_LLM_CONFIG_PATH",
+    )
     cache_path: Path = Field(default=DEFAULT_CACHE_PATH, alias="REPUTATION_CACHE_PATH")
     overrides_path: Path = Field(
         default=DEFAULT_OVERRIDES_PATH,
@@ -126,6 +131,9 @@ settings = ReputationSettings()
 if not settings.config_path.is_absolute():
     settings.config_path = (REPO_ROOT / settings.config_path).resolve()
 
+if not settings.llm_config_path.is_absolute():
+    settings.llm_config_path = (REPO_ROOT / settings.llm_config_path).resolve()
+
 if not settings.cache_path.is_absolute():
     settings.cache_path = (REPO_ROOT / settings.cache_path).resolve()
 
@@ -150,11 +158,23 @@ def load_business_config(path: Path | None = None) -> Dict[str, Any]:
         data = _load_config_file(file_path)
         merged = _merge_configs(merged, data, file_path)
 
+    llm_files = _resolve_llm_config_files(config_files, settings.llm_config_path)
+    for file_path in llm_files:
+        data = _load_config_file(file_path)
+        merged = _merge_configs(merged, data, file_path)
+    merged["_llm_config_loaded"] = bool(llm_files) and len(llm_files) == len(config_files)
+
     if len(config_files) > 1:
         logger.info(
             "Loaded %s reputation config files: %s",
             len(config_files),
             ", ".join(str(p) for p in config_files),
+        )
+    if llm_files:
+        logger.info(
+            "Loaded %s reputation llm config files: %s",
+            len(llm_files),
+            ", ".join(str(p) for p in llm_files),
         )
 
     return merged
@@ -171,6 +191,21 @@ def _resolve_config_files(cfg_path: Path) -> list[Path]:
         return _sorted_config_files(search_dir)
 
     return []
+
+
+def _resolve_llm_config_files(cfg_files: list[Path], llm_path: Path) -> list[Path]:
+    if not llm_path.exists():
+        return []
+    if llm_path.is_file():
+        return [llm_path]
+    if not llm_path.is_dir():
+        return []
+    llm_files: list[Path] = []
+    for cfg_file in cfg_files:
+        candidate = llm_path / f"{cfg_file.stem}_llm.json"
+        if candidate.exists() and candidate.is_file():
+            llm_files.append(candidate)
+    return llm_files
 
 
 def _sorted_config_files(directory: Path) -> list[Path]:
