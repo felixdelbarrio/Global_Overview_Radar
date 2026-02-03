@@ -41,8 +41,24 @@ class ReputationCacheStats(BaseModel):
     note: str | None = None
 
 
+# Ratings oficiales de stores por app/package.
+class MarketRating(BaseModel):
+    source: str
+    actor: str | None = None
+    geo: str | None = None
+    app_id: str | None = None
+    package_id: str | None = None
+    rating: float
+    rating_count: int | None = None
+    url: str | None = None
+    name: str | None = None
+    collected_at: datetime | None = None
+
+
 # 🔑 Truco clave: tipar explícitamente el default_factory
 ReputationItemList = Annotated[list[ReputationItem], Field(default_factory=list)]
+MarketRatingList = Annotated[list[MarketRating], Field(default_factory=list)]
+MarketRatingHistoryList = Annotated[list[MarketRating], Field(default_factory=list)]
 
 
 class ReputationCacheDocument(BaseModel):
@@ -51,5 +67,7 @@ class ReputationCacheDocument(BaseModel):
     sources_enabled: list[str] = Field(default_factory=list)
 
     items: ReputationItemList
+    market_ratings: MarketRatingList
+    market_ratings_history: MarketRatingHistoryList = Field(default_factory=list)
 
     stats: ReputationCacheStats = Field(default_factory=ReputationCacheStats)

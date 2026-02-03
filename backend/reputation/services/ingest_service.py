@@ -4,7 +4,7 @@ import os
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
-from typing import Any, Callable, Iterable, cast
+from typing import Any, Callable, Iterable, Sequence, cast
 from urllib.parse import quote_plus, urlparse
 
 from reputation.actors import (
@@ -20,7 +20,10 @@ from reputation.collectors.blogs import BlogsCollector
 from reputation.collectors.downdetector import DowndetectorCollector
 from reputation.collectors.forums import ForumsCollector
 from reputation.collectors.gdelt import GdeltCollector
-from reputation.collectors.google_play import GooglePlayApiCollector, GooglePlayScraperCollector
+from reputation.collectors.google_play import (
+    GooglePlayApiCollector,
+    GooglePlayScraperCollector,
+)
 from reputation.collectors.google_reviews import GoogleReviewsCollector
 from reputation.collectors.guardian import GuardianCollector
 from reputation.collectors.news import NewsCollector
@@ -28,7 +31,12 @@ from reputation.collectors.newsapi import NewsApiCollector
 from reputation.collectors.reddit import RedditCollector
 from reputation.collectors.trustpilot import TrustpilotCollector
 from reputation.collectors.twitter import TwitterCollector
-from reputation.collectors.utils import match_keywords, normalize_text
+from reputation.collectors.utils import (
+    http_get_json,
+    http_get_text,
+    match_keywords,
+    normalize_text,
+)
 from reputation.collectors.youtube import YouTubeCollector
 from reputation.config import (
     compute_config_hash,
@@ -37,7 +45,12 @@ from reputation.config import (
     settings,
 )
 from reputation.logging_utils import get_logger
-from reputation.models import ReputationCacheDocument, ReputationCacheStats, ReputationItem
+from reputation.models import (
+    MarketRating,
+    ReputationCacheDocument,
+    ReputationCacheStats,
+    ReputationItem,
+)
 from reputation.repositories.cache_repo import ReputationCacheRepo
 from reputation.services.sentiment_service import ReputationSentimentService
 
@@ -114,6 +127,8 @@ class ReputationIngestService:
                 config_hash=cfg_hash,
                 sources_enabled=sources_enabled,
                 items=existing.items,
+                market_ratings=existing.market_ratings,
+                market_ratings_history=existing.market_ratings_history,
                 stats=ReputationCacheStats(count=len(existing.items), note=cache_note),
             )
 
@@ -141,7 +156,7 @@ class ReputationIngestService:
         report("Mapeando App Store", 62)
         items = self._apply_google_play_actor_map(cfg, items)
         report("Mapeando Google Play", 66)
-        items = self._apply_sentiment(cfg, items)
+        items = self._apply_sentiment(cfg, items, existing.items if existing else None, notes)
         report("Analizando sentimiento", 74)
         items = self._filter_noise_items(cfg, items, notes)
         report("Filtrando ruido", 82)
@@ -158,6 +173,11 @@ class ReputationIngestService:
         report("Fusionando items", 94)
         merged_items = self._filter_noise_items(cfg, merged_items, notes)
         report("Último ajuste", 96)
+        market_ratings = self._collect_market_ratings(cfg, notes, sources_enabled)
+        market_ratings_history = self._merge_market_ratings_history(
+            existing.market_ratings_history if existing else [],
+            market_ratings,
+        )
         final_note: str | None = "; ".join(notes) if notes else None
 
         doc = ReputationCacheDocument(
@@ -165,6 +185,8 @@ class ReputationIngestService:
             config_hash=cfg_hash,
             sources_enabled=sources_enabled,
             items=merged_items,
+            market_ratings=market_ratings,
+            market_ratings_history=market_ratings_history,
             stats=ReputationCacheStats(count=len(merged_items), note=final_note),
         )
 
@@ -309,6 +331,179 @@ class ReputationIngestService:
                 filtered.append(item)
 
         return filtered
+
+    def _collect_market_ratings(
+        self,
+        cfg: dict[str, Any],
+        notes: list[str],
+        sources_enabled: Sequence[str],
+    ) -> list[MarketRating]:
+        enabled = {source.lower() for source in sources_enabled}
+        ratings: list[MarketRating] = []
+        if "appstore" in enabled:
+            ratings.extend(self._collect_appstore_market_ratings(cfg, notes))
+        if "google_play" in enabled:
+            ratings.extend(self._collect_google_play_market_ratings(cfg, notes))
+        return ratings
+
+    @staticmethod
+    def _merge_market_ratings_history(
+        history: Sequence[MarketRating],
+        latest: Sequence[MarketRating],
+    ) -> list[MarketRating]:
+        merged = list(history)
+        last_by_key: dict[tuple[str, str, str, str, str], MarketRating] = {}
+
+        for entry in history:
+            key = _market_rating_key(entry)
+            current = last_by_key.get(key)
+            if current is None or _market_rating_is_newer(entry, current):
+                last_by_key[key] = entry
+
+        for entry in latest:
+            key = _market_rating_key(entry)
+            last = last_by_key.get(key)
+            if last and _market_rating_is_same(last, entry):
+                continue
+            merged.append(entry)
+            last_by_key[key] = entry
+
+        return merged
+
+    def _collect_appstore_market_ratings(
+        self,
+        cfg: dict[str, Any],
+        notes: list[str],
+    ) -> list[MarketRating]:
+        appstore_cfg = _as_dict(cfg.get("appstore"))
+        app_ids_by_geo = appstore_cfg.get("app_ids_by_geo") or {}
+        app_ids = appstore_cfg.get("app_ids") or []
+        if not app_ids_by_geo and app_ids:
+            app_ids_by_geo = {"Global": app_ids}
+        if not isinstance(app_ids_by_geo, dict):
+            return []
+
+        country_by_geo = appstore_cfg.get("country_by_geo") or {}
+        if not isinstance(country_by_geo, dict):
+            country_by_geo = {}
+        app_id_to_actor = appstore_cfg.get("app_id_to_actor") or {}
+        if not isinstance(app_id_to_actor, dict):
+            app_id_to_actor = {}
+
+        timeout = _env_int("APPSTORE_RATING_TIMEOUT", 12)
+        seen: set[tuple[str, str]] = set()
+        out: list[MarketRating] = []
+        now = datetime.now(timezone.utc)
+
+        for geo, app_ids_list in app_ids_by_geo.items():
+            if not isinstance(app_ids_list, list):
+                continue
+            country = str(country_by_geo.get(geo, "")).strip().lower()
+            if not country:
+                notes.append(f"appstore rating: missing country for geo '{geo}'")
+                continue
+            for app_id in app_ids_list:
+                if not isinstance(app_id, str) or not app_id.strip():
+                    continue
+                key = (app_id, country)
+                if key in seen:
+                    continue
+                seen.add(key)
+                try:
+                    rating_info = _fetch_appstore_rating(app_id, country, timeout)
+                except Exception as exc:  # pragma: no cover - defensive
+                    notes.append(f"appstore rating: error {app_id} {country}: {exc}")
+                    continue
+                if rating_info is None:
+                    continue
+                rating, rating_count, url, name = rating_info
+                if rating is None:
+                    continue
+                actor = app_id_to_actor.get(app_id)
+                out.append(
+                    MarketRating(
+                        source="appstore",
+                        actor=str(actor) if actor else None,
+                        geo=str(geo) if geo else None,
+                        app_id=app_id,
+                        rating=float(rating),
+                        rating_count=rating_count,
+                        url=url,
+                        name=name,
+                        collected_at=now,
+                    )
+                )
+
+        return out
+
+    def _collect_google_play_market_ratings(
+        self,
+        cfg: dict[str, Any],
+        notes: list[str],
+    ) -> list[MarketRating]:
+        play_cfg = _as_dict(cfg.get("google_play"))
+        package_ids_by_geo = play_cfg.get("package_ids_by_geo") or {}
+        package_ids = play_cfg.get("package_ids") or []
+        if not package_ids_by_geo and package_ids:
+            package_ids_by_geo = {"Global": package_ids}
+        if not isinstance(package_ids_by_geo, dict):
+            return []
+
+        geo_to_gl = play_cfg.get("geo_to_gl") or {}
+        if not isinstance(geo_to_gl, dict):
+            geo_to_gl = {}
+        geo_to_hl = play_cfg.get("geo_to_hl") or {}
+        if not isinstance(geo_to_hl, dict):
+            geo_to_hl = {}
+        package_id_to_actor = play_cfg.get("package_id_to_actor") or {}
+        if not isinstance(package_id_to_actor, dict):
+            package_id_to_actor = {}
+
+        timeout = _env_int("GOOGLE_PLAY_RATING_TIMEOUT", 12)
+        seen: set[tuple[str, str, str]] = set()
+        out: list[MarketRating] = []
+        now = datetime.now(timezone.utc)
+
+        for geo, packages in package_ids_by_geo.items():
+            if not isinstance(packages, list):
+                continue
+            gl = str(geo_to_gl.get(geo, "")).strip().upper()
+            hl = str(geo_to_hl.get(geo, "")).strip().lower()
+            if not gl or not hl:
+                notes.append(f"google_play rating: missing hl/gl for geo '{geo}'")
+                continue
+            for package_id in packages:
+                if not isinstance(package_id, str) or not package_id.strip():
+                    continue
+                key = (package_id, gl, hl)
+                if key in seen:
+                    continue
+                seen.add(key)
+                try:
+                    rating_info = _fetch_google_play_rating(package_id, gl, hl, timeout)
+                except Exception as exc:  # pragma: no cover - defensive
+                    notes.append(f"google_play rating: error {package_id} {gl}/{hl}: {exc}")
+                    continue
+                if rating_info is None:
+                    continue
+                rating, rating_count, url, name = rating_info
+                if rating is None:
+                    continue
+                actor = package_id_to_actor.get(package_id)
+                out.append(
+                    MarketRating(
+                        source="google_play",
+                        actor=str(actor) if actor else None,
+                        geo=str(geo) if geo else None,
+                        package_id=package_id,
+                        rating=float(rating),
+                        rating_count=rating_count,
+                        url=url,
+                        name=name,
+                        collected_at=now,
+                    )
+                )
+        return out
 
     @classmethod
     def _apply_google_play_actor_map(
@@ -482,13 +677,28 @@ class ReputationIngestService:
         return list(merged.values())
 
     def _apply_sentiment(
-        self, cfg: dict[str, Any], items: list[ReputationItem]
+        self,
+        cfg: dict[str, Any],
+        items: list[ReputationItem],
+        existing: list[ReputationItem] | None = None,
+        notes: list[str] | None = None,
     ) -> list[ReputationItem]:
         keywords = self._load_keywords(cfg)
         cfg_local = dict(cfg)
         cfg_local["keywords"] = keywords
         service = ReputationSentimentService(cfg_local)
-        return service.analyze_items(items)
+        existing_keys = {(item.source, item.id) for item in existing} if existing else set()
+        if existing_keys:
+            new_items = [item for item in items if (item.source, item.id) not in existing_keys]
+            updated = service.analyze_items(new_items)
+            updated_map = {(item.source, item.id): item for item in updated}
+            result = [updated_map.get((item.source, item.id), item) for item in items]
+        else:
+            result = service.analyze_items(items)
+
+        if service.llm_warning and notes is not None:
+            notes.append(service.llm_warning)
+        return result
 
     @classmethod
     def _filter_noise_items(
@@ -1081,6 +1291,8 @@ class ReputationIngestService:
             config_hash=cfg_hash,
             sources_enabled=sources_enabled,
             items=[],
+            market_ratings=[],
+            market_ratings_history=[],
             stats=ReputationCacheStats(count=0, note=note),
         )
 
@@ -2432,6 +2644,157 @@ def _get_dict_str_str(cfg: dict[str, object], key: str) -> dict[str, str]:
         if isinstance(v, str) and v.strip():
             result[str(k)] = v.strip()
     return result
+
+
+def _fetch_appstore_rating(
+    app_id: str,
+    country: str,
+    timeout: int,
+) -> tuple[float | None, int | None, str | None, str | None] | None:
+    url = f"https://itunes.apple.com/lookup?id={app_id}&country={country}"
+    data = http_get_json(url, timeout=timeout)
+    if not isinstance(data, dict):
+        return None
+    results = data.get("results")
+    if not isinstance(results, list) or not results:
+        return None
+    first = results[0]
+    if not isinstance(first, dict):
+        return None
+    rating = first.get("averageUserRating") or first.get("averageUserRatingForCurrentVersion")
+    if rating is None:
+        return None
+    rating_value = _to_float(rating)
+    if rating_value is None:
+        return None
+    rating_count = first.get("userRatingCount") or first.get("userRatingCountForCurrentVersion")
+    count_value = _to_int(rating_count)
+    url_value = first.get("trackViewUrl")
+    name_value = first.get("trackName")
+    return (
+        rating_value,
+        count_value,
+        str(url_value) if isinstance(url_value, str) else None,
+        (str(name_value) if isinstance(name_value, str) else None),
+    )
+
+
+def _fetch_google_play_rating(
+    package_id: str,
+    gl: str,
+    hl: str,
+    timeout: int,
+) -> tuple[float | None, int | None, str | None, str | None] | None:
+    url = f"https://play.google.com/store/apps/details?id={package_id}&hl={hl}&gl={gl}"
+    html = http_get_text(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=timeout)
+    if not html:
+        return None
+
+    rating_value = _extract_rating_value(html)
+    if rating_value is None:
+        return None
+    rating_count = _extract_rating_count(html)
+    name_value = _extract_google_play_name(html)
+    return rating_value, rating_count, url, name_value
+
+
+def _extract_rating_value(html: str) -> float | None:
+    patterns = [
+        r'itemprop="ratingValue" content="([0-9.,]+)"',
+        r'"ratingValue":"([0-9.,]+)"',
+        r'"ratingValue":([0-9.,]+)',
+    ]
+    return _extract_first_float(html, patterns)
+
+
+def _extract_rating_count(html: str) -> int | None:
+    patterns = [
+        r'itemprop="ratingCount" content="([0-9.,]+)"',
+        r'"ratingCount":"([0-9.,]+)"',
+        r'"ratingCount":([0-9.,]+)',
+        r'"reviewCount":"([0-9.,]+)"',
+        r'"reviewCount":([0-9.,]+)',
+    ]
+    value = _extract_first_text(html, patterns)
+    if value is None:
+        return None
+    cleaned = value.replace(".", "").replace(",", "").strip()
+    return _to_int(cleaned)
+
+
+def _extract_google_play_name(html: str) -> str | None:
+    match = re.search(r'property="og:title" content="([^"]+)"', html)
+    if not match:
+        return None
+    title = match.group(1)
+    if not title:
+        return None
+    return title.replace(" - Apps on Google Play", "").strip()
+
+
+def _extract_first_text(html: str, patterns: list[str]) -> str | None:
+    for pattern in patterns:
+        match = re.search(pattern, html)
+        if match:
+            return match.group(1)
+    return None
+
+
+def _extract_first_float(html: str, patterns: list[str]) -> float | None:
+    value = _extract_first_text(html, patterns)
+    if value is None:
+        return None
+    return _to_float(value)
+
+
+def _to_float(value: object) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value.replace(",", "."))
+        except ValueError:
+            return None
+    return None
+
+
+def _to_int(value: object) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if isinstance(value, str):
+        try:
+            return int(value)
+        except ValueError:
+            return None
+    return None
+
+
+def _market_rating_key(rating: MarketRating) -> tuple[str, str, str, str, str]:
+    return (
+        (rating.source or "").strip().lower(),
+        (rating.actor or "").strip().lower(),
+        (rating.geo or "").strip().lower(),
+        (rating.app_id or "").strip().lower(),
+        (rating.package_id or "").strip().lower(),
+    )
+
+
+def _market_rating_is_newer(left: MarketRating, right: MarketRating) -> bool:
+    left_ts = left.collected_at or datetime.min.replace(tzinfo=timezone.utc)
+    right_ts = right.collected_at or datetime.min.replace(tzinfo=timezone.utc)
+    return left_ts >= right_ts
+
+
+def _market_rating_is_same(left: MarketRating, right: MarketRating) -> bool:
+    if abs(left.rating - right.rating) > 0.0001:
+        return False
+    return left.rating_count == right.rating_count
 
 
 def _env_bool(value: str | None) -> bool:
