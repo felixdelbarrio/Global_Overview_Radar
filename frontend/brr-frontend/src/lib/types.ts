@@ -64,10 +64,25 @@ export type ReputationCacheDocument = {
   config_hash: string;
   sources_enabled: string[];
   items: ReputationItem[];
+  market_ratings?: MarketRating[];
+  market_ratings_history?: MarketRating[];
   stats: {
     count: number;
     note?: string | null;
   };
+};
+
+export type MarketRating = {
+  source: string;
+  actor?: string | null;
+  geo?: string | null;
+  app_id?: string | null;
+  package_id?: string | null;
+  rating: number;
+  rating_count?: number | null;
+  url?: string | null;
+  name?: string | null;
+  collected_at?: string | null;
 };
 
 export type ActorPrincipalMeta = {
@@ -85,6 +100,9 @@ export type ReputationMeta = {
   sources_available?: string[];
   source_counts?: Record<string, number>;
   incidents_available?: boolean;
+  cache_available?: boolean;
+  market_ratings?: MarketRating[];
+  market_ratings_history?: MarketRating[];
   ui?: {
     incidents_enabled?: boolean;
     ops_enabled?: boolean;

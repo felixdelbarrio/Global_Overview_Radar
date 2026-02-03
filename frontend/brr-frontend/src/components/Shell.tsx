@@ -22,7 +22,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { apiGet, apiPost } from "@/lib/api";
-import { dispatchIngestSuccess } from "@/lib/events";
+import { dispatchIngestSuccess, INGEST_STARTED_EVENT } from "@/lib/events";
 import { INCIDENTS_FEATURE_ENABLED } from "@/lib/flags";
 import type { IngestJob, IngestJobKind, ReputationMeta } from "@/lib/types";
 
@@ -111,6 +111,20 @@ export function Shell({ children }: { children: React.ReactNode }) {
     ingestJobsRef.current = ingestJobs;
   }, [ingestJobs]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<IngestJob>).detail;
+      if (!detail) return;
+      setIngestJobs((prev) => ({ ...prev, [detail.kind]: detail }));
+      setIngestOpen(true);
+    };
+    window.addEventListener(INGEST_STARTED_EVENT, handler as EventListener);
+    return () => {
+      window.removeEventListener(INGEST_STARTED_EVENT, handler as EventListener);
+    };
+  }, []);
+
   const toggleTheme = () => {
     const nextTheme = theme === "ambient-light" ? "ambient-dark" : "ambient-light";
     setTheme(nextTheme);
@@ -184,6 +198,11 @@ export function Shell({ children }: { children: React.ReactNode }) {
   }, [ingestJobs]);
 
   const incidentsScopeEnabled = INCIDENTS_FEATURE_ENABLED && incidentsAvailable;
+  const incidentsIngestEnabled =
+    INCIDENTS_FEATURE_ENABLED &&
+    incidentsAvailable &&
+    uiFlags.incidents_enabled !== false;
+  const showIngestCenter = true;
   const showIncidentsNav = incidentsScopeEnabled && uiFlags.incidents_enabled;
   const showOpsNav = incidentsScopeEnabled && uiFlags.ops_enabled;
 
@@ -243,7 +262,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
           </div>
 
           <div className="ml-auto flex items-center gap-3 text-xs text-[color:var(--text-inverse-80)]">
-            {incidentsScopeEnabled && (
+            {showIngestCenter && (
               <div className="relative">
                 <button
                   type="button"
@@ -288,7 +307,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
                         )}
                       </div>
 
-                      {(["reputation", "incidents"] as IngestJobKind[]).map((kind) => {
+                      {(["reputation", "incidents"] as IngestJobKind[])
+                        .filter((kind) => kind === "reputation" || incidentsIngestEnabled)
+                        .map((kind) => {
                         const job = ingestJobs[kind];
                         const busy =
                           ingestBusy[kind] ||
