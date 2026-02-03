@@ -125,7 +125,7 @@ _COUNTRY_CODE_MAP = {
     "tr": "Turquía",
 }
 
-_STAR_SENTIMENT_SOURCES = {"appstore"}
+_STAR_SENTIMENT_SOURCES = {"appstore", "google_reviews"}
 _ACTOR_TEXT_REQUIRED_SOURCES = {"news", "blogs", "gdelt", "newsapi", "guardian"}
 
 

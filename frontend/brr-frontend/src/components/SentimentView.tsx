@@ -37,6 +37,7 @@ import {
 } from "lucide-react";
 import { Shell } from "@/components/Shell";
 import { apiGet, apiPost } from "@/lib/api";
+import { INGEST_SUCCESS_EVENT, type IngestSuccessDetail } from "@/lib/events";
 import { INCIDENTS_FEATURE_ENABLED } from "@/lib/flags";
 import type {
   ActorPrincipalMeta,
@@ -140,6 +141,9 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
   const sourcesRef = useRef<string[]>([]);
   const [sources, setSources] = useState<string[]>([]);
   const [overrideRefresh, setOverrideRefresh] = useState(0);
+  const [reputationRefresh, setReputationRefresh] = useState(0);
+  const [incidentsRefresh, setIncidentsRefresh] = useState(0);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
   const isDashboard = mode === "dashboard";
   const effectiveSentiment = isDashboard ? "all" : sentiment;
   const effectiveActor = isDashboard ? "all" : actor;
@@ -182,6 +186,24 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
     if (sentiment !== "all") setSentiment("all");
     if (actor !== "all") setActor("all");
   }, [isDashboard, sentiment, actor]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<IngestSuccessDetail>).detail;
+      if (!detail) return;
+      if (detail.kind === "reputation") {
+        setReputationRefresh((value) => value + 1);
+      }
+      if (detail.kind === "incidents") {
+        setIncidentsRefresh((value) => value + 1);
+      }
+    };
+    window.addEventListener(INGEST_SUCCESS_EVENT, handler as EventListener);
+    return () => {
+      window.removeEventListener(INGEST_SUCCESS_EVENT, handler as EventListener);
+    };
+  }, []);
 
   const handleOverride = async (payload: OverridePayload) => {
     await apiPost<{ updated: number }>("/reputation/items/override", payload);
@@ -252,7 +274,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
     return () => {
       alive = false;
     };
-  }, [showIncidents, effectiveFromDate, effectiveToDate, today]);
+  }, [showIncidents, effectiveFromDate, effectiveToDate, today, incidentsRefresh]);
 
   useEffect(() => {
     let alive = true;
@@ -305,6 +327,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
         const doc = await apiGet<ReputationCacheDocument>(`/reputation/items?${params.toString()}`);
         if (!alive) return;
         setItems(doc.items ?? []);
+        setLastUpdatedAt(doc.generated_at ?? null);
         setError(null);
       } catch (e) {
         if (alive) setError(String(e));
@@ -328,6 +351,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
     sources,
     principalAliasKeys,
     overrideRefresh,
+    reputationRefresh,
   ]);
 
   useEffect(() => {
@@ -343,6 +367,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
       .then((doc) => {
         if (!alive) return;
         setChartItems(doc.items ?? []);
+        setLastUpdatedAt(doc.generated_at ?? null);
         setChartError(null);
       })
       .catch((e) => {
@@ -355,7 +380,15 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
     return () => {
       alive = false;
     };
-  }, [effectiveFromDate, effectiveToDate, effectiveSentiment, geo, sources, overrideRefresh]);
+  }, [
+    effectiveFromDate,
+    effectiveToDate,
+    effectiveSentiment,
+    geo,
+    sources,
+    overrideRefresh,
+    reputationRefresh,
+  ]);
 
   const sourceCounts = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -544,7 +577,10 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
     () => buildRangeLabel(effectiveFromDate, effectiveToDate),
     [effectiveFromDate, effectiveToDate],
   );
-  const latestTimestamp = useMemo(() => getLatestDate(items), [items]);
+  const latestTimestamp = useMemo(
+    () => lastUpdatedAt || getLatestDate(items),
+    [lastUpdatedAt, items],
+  );
   const latestLabel = useMemo(
     () => formatDate(latestTimestamp),
     [latestTimestamp],
@@ -668,7 +704,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
               <MessageSquare className="h-3.5 w-3.5 text-[color:var(--blue)]" />
               Menciones:{" "}
               {itemsLoading ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin text-[color:var(--blue)]" />
+                <LoadingPill className="h-2 w-12" label="Cargando menciones" />
               ) : (
                 items.length
               )}
@@ -677,7 +713,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
               <Clock className="h-3.5 w-3.5 text-[color:var(--blue)]" />
               Última actualización:{" "}
               {itemsLoading ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin text-[color:var(--blue)]" />
+                <LoadingPill className="h-2 w-16" label="Cargando fecha" />
               ) : (
                 latestLabel
               )}
@@ -832,16 +868,15 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
                       </span>
                     )}
                     {itemsLoading && (
-                      <span
+                      <LoadingPill
                         className={
-                          "ml-2 rounded-full px-2 py-0.5 text-[10px] font-semibold " +
+                          "ml-2 h-2 w-6 " +
                           (active
-                            ? "bg-[color:var(--surface-15)] text-white"
-                            : "bg-[color:var(--sand)] text-[color:var(--brand-ink)]")
+                            ? "border-[color:var(--surface-15)]"
+                            : "border-[color:var(--border-60)]")
                         }
-                      >
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                      </span>
+                        label={`Cargando ${src}`}
+                      />
                     )}
                   </button>
                 );
@@ -1054,10 +1089,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
             </div>
             <div className="text-xs text-[color:var(--text-50)]">
               {mentionsLoading ? (
-                <span className="inline-flex items-center gap-2">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin text-[color:var(--blue)]" />
-                  Cargando menciones
-                </span>
+                <LoadingPill className="h-2 w-24" label="Cargando menciones" />
               ) : (
                 <>
                   Mostrando {dashboardMentions.length} recientes ·{" "}
@@ -1094,10 +1126,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
             </div>
             <div className="text-xs text-[color:var(--text-50)]">
               {mentionsLoading ? (
-                <span className="inline-flex items-center gap-2">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin text-[color:var(--blue)]" />
-                  Cargando resultados
-                </span>
+                <LoadingPill className="h-2 w-24" label="Cargando resultados" />
               ) : (
                 <>
                   Mostrando {mentionsToShow.length} resultados · {mentionsLabel}
@@ -1136,17 +1165,20 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
                 {actorMentions.length} resultados
               </span>
             </button>
-            {showDownloads && (
-              <button
-                onClick={() =>
-                  downloadMentionsCsv(
-                    mentionsToShow,
-                    buildDownloadName("sentimiento_listado", fromDate, toDate),
-                  )
-                }
-                className="inline-flex items-center gap-2 rounded-full border border-[color:var(--border-70)] bg-[color:var(--surface-80)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--brand-ink)] shadow-[var(--shadow-pill)] transition hover:-translate-y-0.5 hover:shadow-[var(--shadow-pill-hover)]"
-              >
-                Descargar listado
+                {showDownloads && (
+                  <button
+                    onClick={() =>
+                      downloadMentionsWorkbook({
+                        principalItems: principalMentions,
+                        actorItems: actorMentions,
+                        principalLabel,
+                        actorLabel,
+                        filename: buildDownloadName("sentimiento_listado", fromDate, toDate),
+                      })
+                    }
+                    className="inline-flex items-center gap-2 rounded-full border border-[color:var(--border-70)] bg-[color:var(--surface-80)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--brand-ink)] shadow-[var(--shadow-pill)] transition hover:-translate-y-0.5 hover:shadow-[var(--shadow-pill-hover)]"
+                  >
+                    Descargar listado
               </button>
             )}
           </div>
@@ -1192,6 +1224,22 @@ function FilterField({
   );
 }
 
+function LoadingPill({
+  className = "",
+  label = "Cargando",
+}: {
+  className?: string;
+  label?: string;
+}) {
+  return (
+    <span
+      className={`shimmer inline-block rounded-full border border-[color:var(--border-60)] ${className}`}
+    >
+      <span className="sr-only">{label}</span>
+    </span>
+  );
+}
+
 function SummaryCard({
   label,
   value,
@@ -1209,10 +1257,7 @@ function SummaryCard({
       </div>
       <div className="mt-2 text-2xl font-display font-semibold text-[color:var(--ink)]">
         {loading ? (
-          <span className="inline-flex items-center gap-2 text-sm text-[color:var(--text-40)]">
-            <Loader2 className="h-4 w-4 animate-spin text-[color:var(--blue)]" />
-            Cargando
-          </span>
+          <LoadingPill className="h-6 w-24" label={`Cargando ${label}`} />
         ) : (
           value
         )}
@@ -2310,22 +2355,23 @@ function downloadChartCsv(
   downloadCsv(filename, headers, rows);
 }
 
-function downloadMentionsCsv(items: MentionGroup[], filename: string) {
-  const headers = [
-    "ids",
-    "titulo",
-    "texto",
-    "pais",
-    "actor",
-    "sentimiento",
-    "rating",
-    "fecha_publicada",
-    "fecha_recolectada",
-    "fuentes",
-    "conteo",
-    "ajuste_manual",
-  ];
-  const rows = items.map((item) => [
+const MENTIONS_HEADERS = [
+  "ids",
+  "titulo",
+  "texto",
+  "pais",
+  "actor",
+  "sentimiento",
+  "rating",
+  "fecha_publicada",
+  "fecha_recolectada",
+  "fuentes",
+  "conteo",
+  "ajuste_manual",
+];
+
+function buildMentionsRows(items: MentionGroup[]) {
+  return items.map((item) => [
     item.ids.join("|"),
     item.title,
     item.text ?? "",
@@ -2339,7 +2385,6 @@ function downloadMentionsCsv(items: MentionGroup[], filename: string) {
     item.count,
     item.manual_override ? "si" : "",
   ]);
-  downloadCsv(filename, headers, rows);
 }
 
 function buildDownloadName(prefix: string, fromDate?: string, toDate?: string) {
@@ -2349,7 +2394,48 @@ function buildDownloadName(prefix: string, fromDate?: string, toDate?: string) {
   return `${safePrefix}_${rangeFrom}_${rangeTo}`;
 }
 
-function downloadCsv(filename: string, headers: string[], rows: (string | number | null | undefined)[][]) {
+function downloadMentionsWorkbook({
+  principalItems,
+  actorItems,
+  principalLabel,
+  actorLabel,
+  filename,
+}: {
+  principalItems: MentionGroup[];
+  actorItems: MentionGroup[];
+  principalLabel: string;
+  actorLabel: string;
+  filename: string;
+}) {
+  const principalName = sanitizeSheetName(principalLabel || "Principal", "Principal");
+  let actorName = sanitizeSheetName(actorLabel || "Actor", "Actor");
+  if (actorName === principalName) {
+    const suffix = " (2)";
+    actorName = `${actorName.slice(0, Math.max(0, 31 - suffix.length))}${suffix}`;
+  }
+
+  const sheets = [
+    {
+      name: principalName,
+      headers: MENTIONS_HEADERS,
+      rows: buildMentionsRows(principalItems),
+    },
+    {
+      name: actorName,
+      headers: MENTIONS_HEADERS,
+      rows: buildMentionsRows(actorItems),
+    },
+  ];
+
+  const workbook = buildWorkbookXml(sheets);
+  downloadWorkbook(filename, workbook);
+}
+
+function downloadCsv(
+  filename: string,
+  headers: string[],
+  rows: (string | number | null | undefined)[][],
+) {
   const csvRows = [headers, ...rows].map((row) =>
     row.map((cell) => escapeCsvCell(cell)).join(","),
   );
@@ -2372,6 +2458,81 @@ function escapeCsvCell(value: string | number | null | undefined) {
     return `"${str.replace(/"/g, "\"\"")}"`;
   }
   return str;
+}
+
+function downloadWorkbook(filename: string, xml: string) {
+  const blob = new Blob([xml], { type: "application/vnd.ms-excel" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename.endsWith(".xls") ? filename : `${filename}.xls`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function sanitizeSheetName(value: string, fallback: string) {
+  const cleaned = value.replace(/[\\/?*\\[\\]:]/g, " ").replace(/\s+/g, " ").trim();
+  const name = cleaned || fallback;
+  return name.slice(0, 31);
+}
+
+function buildWorkbookXml(
+  sheets: {
+    name: string;
+    headers: string[];
+    rows: (string | number | null | undefined)[][];
+  }[],
+) {
+  const xmlSheets = sheets
+    .map((sheet) => buildWorksheetXml(sheet.name, sheet.headers, sheet.rows))
+    .join("");
+
+  return [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<?mso-application progid="Excel.Sheet"?>',
+    '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"',
+    ' xmlns:o="urn:schemas-microsoft-com:office:office"',
+    ' xmlns:x="urn:schemas-microsoft-com:office:excel"',
+    ' xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"',
+    ' xmlns:html="http://www.w3.org/TR/REC-html40">',
+    xmlSheets,
+    "</Workbook>",
+  ].join("");
+}
+
+function buildWorksheetXml(
+  name: string,
+  headers: string[],
+  rows: (string | number | null | undefined)[][],
+) {
+  const allRows = [headers, ...rows];
+  const rowsXml = allRows
+    .map(
+      (row) =>
+        `<Row>${row.map((cell) => buildCellXml(cell)).join("")}</Row>`,
+    )
+    .join("");
+  return `<Worksheet ss:Name="${escapeXml(name)}"><Table>${rowsXml}</Table></Worksheet>`;
+}
+
+function buildCellXml(value: string | number | null | undefined) {
+  if (value === null || value === undefined) {
+    return '<Cell><Data ss:Type="String"></Data></Cell>';
+  }
+  const type =
+    typeof value === "number" && Number.isFinite(value) ? "Number" : "String";
+  return `<Cell><Data ss:Type="${type}">${escapeXml(String(value))}</Data></Cell>`;
+}
+
+function escapeXml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
 }
 
 function getIncidentSeverityTone(severity?: string | null) {

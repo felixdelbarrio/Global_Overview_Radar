@@ -22,6 +22,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { apiGet, apiPost } from "@/lib/api";
+import { dispatchIngestSuccess } from "@/lib/events";
 import { INCIDENTS_FEATURE_ENABLED } from "@/lib/flags";
 import type { IngestJob, IngestJobKind, ReputationMeta } from "@/lib/types";
 
@@ -150,6 +151,13 @@ export function Shell({ children }: { children: React.ReactNode }) {
         apiGet<IngestJob>(`/ingest/jobs/${job.id}`)
           .then((updated) => {
             if (!alive) return;
+            const previous = ingestJobsRef.current[updated.kind];
+            if (updated.status === "success" && previous?.status !== "success") {
+              dispatchIngestSuccess({
+                kind: updated.kind,
+                finished_at: updated.finished_at ?? null,
+              });
+            }
             setIngestJobs((prev) => ({ ...prev, [updated.kind]: updated }));
           })
           .catch((err) => {

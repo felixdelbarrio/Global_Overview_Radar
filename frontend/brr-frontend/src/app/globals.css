@@ -198,6 +198,40 @@ body {
   color: var(--text-primary);
 }
 
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+  25% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+}
+
+.shimmer {
+  position: relative;
+  overflow: hidden;
+  background: var(--surface-70);
+}
+
+.shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--surface-12),
+    transparent
+  );
+  animation: shimmer 1.6s ease-in-out infinite;
+}
+
 .font-display {
   font-family: var(--font-display), "Space Grotesk", sans-serif;
   letter-spacing: -0.02em;
