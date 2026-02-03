@@ -56,6 +56,10 @@ class Settings(BaseSettings):
     cache_path: str = Field(
         default="./data/cache/bugresolutionradar_cache.json", validation_alias="CACHE_PATH"
     )
+    incidents_overrides_path: str = Field(
+        default="./data/cache/bugresolutionradar_incidents_overrides.json",
+        validation_alias="INCIDENTS_OVERRIDES_PATH",
+    )
 
     ########################################
     # Ingest sources

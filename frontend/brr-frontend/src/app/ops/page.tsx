@@ -12,6 +12,9 @@ import {
   ChevronLeft,
   ChevronRight,
   AlertTriangle,
+  ArrowUpDown,
+  ChevronDown,
+  ChevronUp,
   Zap,
   Archive,
   Hourglass,
@@ -31,12 +34,98 @@ type Incident = {
   product?: string | null;
   feature?: string | null;
   clients_affected?: number | null;
+  missing_in_last_ingest?: boolean;
 };
 
 const PAGE_SIZE = 8;
 
-type SortBy = "opened_at" | "severity";
+type SortBy = "global_id" | "title" | "status" | "severity" | "opened_at" | "clients_affected";
 type SortDir = "asc" | "desc";
+const SEVERITY_ORDER = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "UNKNOWN"] as const;
+const STATUS_ORDER = ["OPEN", "IN_PROGRESS", "BLOCKED", "CLOSED", "UNKNOWN"] as const;
+
+function normalizeSortText(value: string | null | undefined) {
+  return (value ?? "").toString().trim();
+}
+
+function compareText(
+  a: string | null | undefined,
+  b: string | null | undefined,
+  dir: SortDir,
+) {
+  const aa = normalizeSortText(a);
+  const bb = normalizeSortText(b);
+  if (!aa && !bb) return 0;
+  if (!aa) return 1;
+  if (!bb) return -1;
+  const cmp = aa.localeCompare(bb, undefined, { sensitivity: "base", numeric: true });
+  return dir === "asc" ? cmp : -cmp;
+}
+
+function compareDate(
+  a: string | null | undefined,
+  b: string | null | undefined,
+  dir: SortDir,
+) {
+  const da = a ?? "";
+  const db = b ?? "";
+  if (!da && !db) return 0;
+  if (!da) return 1;
+  if (!db) return -1;
+  const cmp = da.localeCompare(db);
+  return dir === "asc" ? cmp : -cmp;
+}
+
+function compareNumber(
+  a: number | null | undefined,
+  b: number | null | undefined,
+  dir: SortDir,
+) {
+  const aa = typeof a === "number" && Number.isFinite(a) ? a : null;
+  const bb = typeof b === "number" && Number.isFinite(b) ? b : null;
+  if (aa === null && bb === null) return 0;
+  if (aa === null) return 1;
+  if (bb === null) return -1;
+  const cmp = aa - bb;
+  return dir === "asc" ? cmp : -cmp;
+}
+
+function severityRank(value: string | null | undefined) {
+  const normalized = (value ?? "UNKNOWN").toString().toUpperCase();
+  const idx = SEVERITY_ORDER.indexOf(normalized as (typeof SEVERITY_ORDER)[number]);
+  return idx === -1 ? SEVERITY_ORDER.length : idx;
+}
+
+function statusRank(value: string | null | undefined) {
+  const normalized = (value ?? "UNKNOWN").toString().toUpperCase();
+  const idx = STATUS_ORDER.indexOf(normalized as (typeof STATUS_ORDER)[number]);
+  return idx === -1 ? STATUS_ORDER.length : idx;
+}
+
+function compareSeverity(
+  a: string | null | undefined,
+  b: string | null | undefined,
+  dir: SortDir,
+) {
+  const cmp = severityRank(a) - severityRank(b);
+  return dir === "asc" ? cmp : -cmp;
+}
+
+function compareStatus(
+  a: string | null | undefined,
+  b: string | null | undefined,
+  dir: SortDir,
+) {
+  const cmp = statusRank(a) - statusRank(b);
+  return dir === "asc" ? cmp : -cmp;
+}
+
+function defaultSortDir(key: SortBy): SortDir {
+  if (key === "opened_at") return "desc";
+  if (key === "severity") return "asc";
+  if (key === "clients_affected") return "desc";
+  return "asc";
+}
 
 export default function OpsPage() {
   /** Incidencias cargadas desde la API. */
@@ -53,6 +142,7 @@ export default function OpsPage() {
   const [page, setPage] = useState(1);
   const [sortBy, setSortBy] = useState<SortBy>("opened_at");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [missingOnly, setMissingOnly] = useState(false);
 
   // Helpers: resetear pagina solo en acciones del usuario (sin setState en effects)
   const resetPage = () => setPage(1);
@@ -74,12 +164,14 @@ export default function OpsPage() {
     setSevFilter(null);
     setStatusFilter(null);
     setQ("");
+    setMissingOnly(false);
     resetPage();
   };
 
   /** Cambia el criterio de ordenacion. */
   const onSortByChange = (next: SortBy) => {
     setSortBy(next);
+    setSortDir(defaultSortDir(next));
     resetPage();
   };
 
@@ -87,6 +179,62 @@ export default function OpsPage() {
   const toggleSortDir = () => {
     setSortDir((s) => (s === "asc" ? "desc" : "asc"));
     resetPage();
+  };
+
+  const onSort = (next: SortBy) => {
+    setSortBy((current) => {
+      if (current === next) {
+        setSortDir((dir) => (dir === "asc" ? "desc" : "asc"));
+        return current;
+      }
+      setSortDir(defaultSortDir(next));
+      return next;
+    });
+    resetPage();
+  };
+
+  const renderSortIcon = (key: SortBy) => {
+    if (sortBy !== key) {
+      return (
+        <ArrowUpDown className="h-3.5 w-3.5 text-[color:var(--text-40)] group-hover:text-[color:var(--text-60)]" />
+      );
+    }
+    const iconClass = "h-3.5 w-3.5 text-[color:var(--blue)]";
+    return sortDir === "asc" ? (
+      <ChevronUp className={iconClass} />
+    ) : (
+      <ChevronDown className={iconClass} />
+    );
+  };
+
+  const renderSortHeader = (label: string, key: SortBy, align: "left" | "center" = "left") => {
+    const isActive = sortBy === key;
+    const ariaSort = isActive
+      ? sortDir === "asc"
+        ? "ascending"
+        : "descending"
+      : "none";
+    return (
+      <th
+        key={key}
+        className={`px-3 py-3 ${align === "center" ? "text-center" : ""}`}
+        aria-sort={ariaSort}
+        scope="col"
+      >
+        <button
+          type="button"
+          onClick={() => onSort(key)}
+          className={
+            "group inline-flex items-center gap-2 transition " +
+            (align === "center" ? "justify-center w-full " : "") +
+            (isActive ? "text-[color:var(--ink)]" : "text-[color:var(--text-45)] hover:text-[color:var(--text-70)]")
+          }
+        >
+          <span>{label}</span>
+          {renderSortIcon(key)}
+        </button>
+      </th>
+    );
   };
 
   useEffect(() => {
@@ -104,6 +252,13 @@ export default function OpsPage() {
       alive = false;
     };
   }, []);
+
+  const missingCount = useMemo(
+    () => items.reduce((acc, item) => acc + (item.missing_in_last_ingest ? 1 : 0), 0),
+    [items],
+  );
+  const hasMissing = missingCount > 0;
+  const effectiveMissingOnly = hasMissing && missingOnly;
 
   // Derivado: filtrado + ordenado
   const filtered = useMemo(() => {
@@ -125,22 +280,42 @@ export default function OpsPage() {
           (it.feature ?? "").toLowerCase().includes(qq)
       );
     }
+    if (effectiveMissingOnly) {
+      arr = arr.filter((it) => Boolean(it.missing_in_last_ingest));
+    }
 
     arr.sort((a, b) => {
-      if (sortBy === "opened_at") {
-        const da = a.opened_at ?? "";
-        const db = b.opened_at ?? "";
-        return sortDir === "asc" ? da.localeCompare(db) : db.localeCompare(da);
+      let cmp = 0;
+      switch (sortBy) {
+        case "global_id":
+          cmp = compareText(a.global_id, b.global_id, sortDir);
+          break;
+        case "title":
+          cmp = compareText(a.title, b.title, sortDir);
+          break;
+        case "status":
+          cmp = compareStatus(a.status, b.status, sortDir);
+          break;
+        case "severity":
+          cmp = compareSeverity(a.severity, b.severity, sortDir);
+          break;
+        case "opened_at":
+          cmp = compareDate(a.opened_at, b.opened_at, sortDir);
+          break;
+        case "clients_affected":
+          cmp = compareNumber(a.clients_affected, b.clients_affected, sortDir);
+          break;
+        default:
+          cmp = 0;
       }
-      // Orden de severidad: CRITICAL > HIGH > MEDIUM > LOW > UNKNOWN
-      const order = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "UNKNOWN"] as const;
-      const ia = order.indexOf(a.severity ?? "UNKNOWN");
-      const ib = order.indexOf(b.severity ?? "UNKNOWN");
-      return sortDir === "asc" ? ia - ib : ib - ia;
+      if (cmp === 0) {
+        return compareText(a.global_id, b.global_id, "asc");
+      }
+      return cmp;
     });
 
     return arr;
-  }, [items, q, sevFilter, statusFilter, sortBy, sortDir]);
+  }, [items, q, sevFilter, statusFilter, sortBy, sortDir, effectiveMissingOnly]);
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   // NOTE: do not set state inside an effect — compute a clamped "safePage" derived value
@@ -170,31 +345,31 @@ export default function OpsPage() {
 
   return (
     <Shell>
-      <section className="relative overflow-hidden rounded-[28px] border border-white/60 bg-[color:var(--panel-strong)] p-6 shadow-[0_30px_70px_rgba(7,33,70,0.12)] animate-rise">
+      <section className="relative overflow-hidden rounded-[28px] border border-[color:var(--border-60)] bg-[color:var(--panel-strong)] p-6 shadow-[var(--shadow-lg)] animate-rise">
         <div className="absolute inset-0 pointer-events-none">
           <div className="absolute -top-24 -right-10 h-48 w-48 rounded-full bg-[color:var(--aqua)]/15 blur-3xl" />
           <div className="absolute -bottom-16 left-10 h-40 w-40 rounded-full bg-[color:var(--blue)]/10 blur-3xl" />
         </div>
         <div className="relative">
-          <div className="inline-flex items-center gap-2 rounded-full border border-white/60 bg-white/70 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-[color:var(--blue)] shadow-sm">
+          <div className="inline-flex items-center gap-2 rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-[color:var(--blue)] shadow-sm">
             <Sparkles className="h-3.5 w-3.5" />
             Ops Executive
           </div>
           <h1 className="mt-4 text-3xl sm:text-4xl font-display font-semibold text-[color:var(--ink)]">
             Ops Executive
           </h1>
-          <p className="mt-2 max-w-2xl text-sm text-black/60">
+          <p className="mt-2 max-w-2xl text-sm text-[color:var(--text-60)]">
             Panel operativo: filtra, prioriza y actúa con contexto inmediato.
           </p>
-          <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-black/55">
-            <span className="inline-flex items-center gap-2 rounded-full bg-white/70 px-3 py-1">
+          <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-[color:var(--text-55)]">
+            <span className="inline-flex items-center gap-2 rounded-full bg-[color:var(--surface-70)] px-3 py-1">
               <Activity className="h-3.5 w-3.5 text-[color:var(--blue)]" />
               Open: {kpis?.open_total ?? "—"}
             </span>
-            <span className="inline-flex items-center gap-2 rounded-full bg-white/70 px-3 py-1">
+            <span className="inline-flex items-center gap-2 rounded-full bg-[color:var(--surface-70)] px-3 py-1">
               Critical: {executiveSummary?.critical ?? 0}
             </span>
-            <span className="inline-flex items-center gap-2 rounded-full bg-white/70 px-3 py-1">
+            <span className="inline-flex items-center gap-2 rounded-full bg-[color:var(--surface-70)] px-3 py-1">
               Stale &gt; X días:{" "}
               {executiveSummary ? `${executiveSummary.stalePct.toFixed(1)}%` : "—"}
             </span>
@@ -206,20 +381,20 @@ export default function OpsPage() {
         {/* Izquierda: filtros + tabla */}
         <div className="space-y-4">
           {/* Filtros */}
-          <div className="rounded-[26px] border border-white/60 bg-[color:var(--panel)] p-5 shadow-[0_20px_50px_rgba(7,33,70,0.08)] backdrop-blur-xl animate-rise" style={{ animationDelay: "120ms" }}>
+          <div className="rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-5 shadow-[var(--shadow-md)] backdrop-blur-xl animate-rise" style={{ animationDelay: "120ms" }}>
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
                   FILTROS
                 </div>
-                <div className="text-xs text-black/50">Refina y prioriza incidencias</div>
+                <div className="text-xs text-[color:var(--text-50)]">Refina y prioriza incidencias</div>
               </div>
               <Filter className="h-4 w-4 text-[color:var(--blue)]" />
             </div>
 
             <div className="mt-4 flex flex-col xl:flex-row xl:items-center gap-3">
               <div className="flex-1">
-                <div className="flex items-center gap-2 rounded-2xl border border-white/60 bg-white/80 px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
+                <div className="flex items-center gap-2 rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_var(--inset-highlight)]">
                   <Search className="h-4 w-4 text-[color:var(--blue)]" />
                   <input
                     className="w-full bg-transparent outline-none"
@@ -255,8 +430,23 @@ export default function OpsPage() {
                   onClick={() => toggleSev("LOW")}
                   tone="low"
                 />
+                {hasMissing && (
+                  <button
+                    type="button"
+                    onClick={() => setMissingOnly((value) => !value)}
+                    className={
+                      "inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] transition " +
+                      (effectiveMissingOnly
+                        ? "border-amber-300 bg-amber-100 text-amber-800 shadow-[var(--shadow-pill)]"
+                        : "border-[color:var(--border-70)] bg-[color:var(--surface-80)] text-[color:var(--text-60)] hover:text-[color:var(--text-primary)]")
+                    }
+                  >
+                    <AlertTriangle className="h-3.5 w-3.5" />
+                    Desaparecidas ({missingCount})
+                  </button>
+                )}
                 <button
-                  className="ml-1 text-xs text-black/60 hover:text-black"
+                  className="ml-1 text-xs text-[color:var(--text-60)] hover:text-[color:var(--text-primary)]"
                   onClick={onResetFilters}
                 >
                   Reset
@@ -265,16 +455,17 @@ export default function OpsPage() {
 
               <div className="flex items-center gap-2">
                 <select
-                  className="text-sm rounded-2xl border border-white/60 bg-white/80 px-3 py-2 text-[color:var(--ink)] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] outline-none"
+                  className="text-sm rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-3 py-2 text-[color:var(--ink)] shadow-[inset_0_1px_0_var(--inset-highlight)] outline-none"
                   value={sortBy}
                   onChange={(e) => onSortByChange(e.target.value as SortBy)}
                 >
                   <option value="opened_at">Orden por apertura</option>
                   <option value="severity">Orden por criticidad</option>
+                  <option value="clients_affected">Orden por clientes</option>
                 </select>
 
                 <button
-                  className="rounded-2xl border border-white/60 bg-white/80 px-3 py-2 text-sm text-black/60 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] hover:text-black"
+                  className="rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-3 py-2 text-sm text-[color:var(--text-60)] shadow-[inset_0_1px_0_var(--inset-highlight)] hover:text-[color:var(--text-primary)]"
                   onClick={toggleSortDir}
                 >
                   {sortDir === "asc" ? "asc" : "desc"}
@@ -284,22 +475,22 @@ export default function OpsPage() {
           </div>
 
           {/* Tabla */}
-          <div className="rounded-[26px] border border-white/60 bg-[color:var(--panel)] shadow-[0_20px_50px_rgba(7,33,70,0.08)] backdrop-blur-xl overflow-hidden animate-rise" style={{ animationDelay: "180ms" }}>
+          <div className="rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] shadow-[var(--shadow-md)] backdrop-blur-xl overflow-hidden animate-rise" style={{ animationDelay: "180ms" }}>
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
-                <thead className="bg-white/80 backdrop-blur border-b" style={{ borderColor: "rgba(7,33,70,0.08)" }}>
-                  <tr className="text-left text-[11px] uppercase tracking-[0.2em] text-black/45">
-                    <th className="px-3 py-3">ID</th>
-                    <th className="px-3 py-3">Título</th>
-                    <th className="px-3 py-3 text-center">Estado</th>
-                    <th className="px-3 py-3 text-center">Criticidad</th>
-                    <th className="px-3 py-3 text-center">Abierta</th>
-                    <th className="px-3 py-3 text-center">Clientes</th>
+                <thead className="bg-[color:var(--surface-80)] backdrop-blur border-b" style={{ borderColor: "var(--border)" }}>
+                  <tr className="text-left text-[11px] uppercase tracking-[0.2em] text-[color:var(--text-45)]">
+                    {renderSortHeader("ID", "global_id")}
+                    {renderSortHeader("Título", "title")}
+                    {renderSortHeader("Estado", "status", "center")}
+                    {renderSortHeader("Criticidad", "severity", "center")}
+                    {renderSortHeader("Abierta", "opened_at", "center")}
+                    {renderSortHeader("Clientes", "clients_affected", "center")}
                   </tr>
                 </thead>
                 <tbody>
                   {pageItems.map((it, idx) => (
-                    <tr key={it.global_id} className={idx % 2 === 0 ? "bg-white/70" : "bg-white/40"} style={{ borderTop: "1px solid rgba(7,33,70,0.08)" }}>
+                    <tr key={it.global_id} className={idx % 2 === 0 ? "bg-[color:var(--surface-70)]" : "bg-[color:var(--surface-40)]"} style={{ borderTop: "1px solid var(--border)" }}>
                       <td className="px-3 py-3 font-mono text-xs">{it.global_id}</td>
                       <td className="px-3 py-3">{it.title}</td>
                       <td className="px-3 py-3 text-center">
@@ -315,7 +506,7 @@ export default function OpsPage() {
 
                   {pageItems.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="px-3 py-6 text-center text-black/50">
+                      <td colSpan={6} className="px-3 py-6 text-center text-[color:var(--text-50)]">
                         No hay incidencias para mostrar
                       </td>
                     </tr>
@@ -325,10 +516,10 @@ export default function OpsPage() {
 
               {/* Paginacion */}
               <div className="p-3 flex items-center justify-between text-sm">
-                <div className="text-black/60">{filtered.length} resultados</div>
+                <div className="text-[color:var(--text-60)]">{filtered.length} resultados</div>
                 <div className="flex items-center gap-2">
                   <button
-                    className="rounded-full p-1 border border-white/60 bg-white/80 shadow-sm"
+                    className="rounded-full p-1 border border-[color:var(--border-60)] bg-[color:var(--surface-80)] shadow-sm"
                     onClick={() => setPage((p) => Math.max(1, p - 1))}
                     disabled={safePage === 1}
                   >
@@ -338,7 +529,7 @@ export default function OpsPage() {
                     {safePage} / {pageCount}
                   </div>
                   <button
-                    className="rounded-full p-1 border border-white/60 bg-white/80 shadow-sm"
+                    className="rounded-full p-1 border border-[color:var(--border-60)] bg-[color:var(--surface-80)] shadow-sm"
                     onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
                     disabled={safePage === pageCount}
                   >
@@ -353,13 +544,13 @@ export default function OpsPage() {
         {/* Columna derecha: paneles */}
         <div className="space-y-4">
           {/* Resumen ejecutivo */}
-          <div className="rounded-[26px] border border-white/60 bg-[color:var(--panel)] p-5 shadow-[0_20px_50px_rgba(7,33,70,0.08)] backdrop-blur-xl animate-rise" style={{ animationDelay: "200ms" }}>
+          <div className="rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-5 shadow-[var(--shadow-md)] backdrop-blur-xl animate-rise" style={{ animationDelay: "200ms" }}>
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
                   EXECUTIVE SUMMARY
                 </div>
-                <div className="text-xs text-black/60">Recomendaciones rápidas</div>
+                <div className="text-xs text-[color:var(--text-60)]">Recomendaciones rápidas</div>
               </div>
               <Zap className="h-5 w-5 text-[color:var(--blue)]" />
             </div>
@@ -372,7 +563,7 @@ export default function OpsPage() {
               <div>
                 <b>{executiveSummary?.high ?? 0}</b> HIGH abiertos — asignar recursos.
               </div>
-              <div className="text-xs text-black/60">
+              <div className="text-xs text-[color:var(--text-60)]">
                 {executiveSummary
                   ? `Total open: ${executiveSummary.open} · ${executiveSummary.stalePct.toFixed(
                       1
@@ -383,29 +574,29 @@ export default function OpsPage() {
           </div>
 
           {/* Top stale */}
-          <div className="rounded-[26px] border border-white/60 bg-[color:var(--panel)] p-5 shadow-[0_20px_50px_rgba(7,33,70,0.08)] backdrop-blur-xl animate-rise" style={{ animationDelay: "240ms" }}>
+          <div className="rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-5 shadow-[var(--shadow-md)] backdrop-blur-xl animate-rise" style={{ animationDelay: "240ms" }}>
             <div className="flex items-center justify-between">
               <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
                 TOP STALE INCIDENTS
               </div>
-              <Hourglass className="h-4 w-4 text-black/50" />
+              <Hourglass className="h-4 w-4 text-[color:var(--text-50)]" />
             </div>
 
             <div className="mt-3 space-y-2">
               {staleList.length === 0 && (
-                <div className="text-sm text-black/60">No stale incidents detected</div>
+                <div className="text-sm text-[color:var(--text-60)]">No stale incidents detected</div>
               )}
               {staleList.slice(0, 6).map((gid) => (
                 <div key={gid} className="flex items-center gap-2 justify-between">
                   <div className="text-sm font-mono text-[color:var(--ink)]">{gid}</div>
-                  <div className="text-xs text-black/60">open</div>
+                  <div className="text-xs text-[color:var(--text-60)]">open</div>
                 </div>
               ))}
             </div>
           </div>
 
           {/* Acciones rapidas */}
-          <div className="rounded-[26px] border border-white/60 bg-[color:var(--panel)] p-5 shadow-[0_20px_50px_rgba(7,33,70,0.08)] backdrop-blur-xl animate-rise" style={{ animationDelay: "280ms" }}>
+          <div className="rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-5 shadow-[var(--shadow-md)] backdrop-blur-xl animate-rise" style={{ animationDelay: "280ms" }}>
             <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
               QUICK ACTIONS
             </div>
@@ -453,7 +644,7 @@ function FilterChip({
     high: "bg-amber-500 text-white",
     medium: "bg-blue-500 text-white",
     low: "bg-emerald-500 text-white",
-    default: "bg-black/10 text-black/70",
+    default: "bg-[color:var(--overlay-10)] text-[color:var(--text-70)]",
   };
   const activeClass = toneMap[tone] ?? toneMap.default;
   return (
@@ -463,7 +654,7 @@ function FilterChip({
         "px-3 py-1 text-xs rounded-full border transition shadow-sm " +
         (active
           ? `${activeClass} border-transparent`
-          : "bg-white/80 text-black/60 border-white/60")
+          : "bg-[color:var(--surface-80)] text-[color:var(--text-60)] border-[color:var(--border-60)]")
       }
       style={{ minWidth: 72 }}
     >
@@ -519,10 +710,10 @@ function ActionBtn({
   return (
     <button
       onClick={onClick}
-      className="flex items-center gap-3 rounded-2xl border border-white/60 bg-white/80 px-3 py-2 text-sm text-[color:var(--ink)] shadow-sm hover:bg-white"
+      className="flex items-center gap-3 rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-3 py-2 text-sm text-[color:var(--ink)] shadow-sm hover:bg-[color:var(--surface-solid)]"
     >
       <div
-        className="h-8 w-8 rounded-2xl grid place-items-center border border-white/70 bg-white/80"
+        className="h-8 w-8 rounded-2xl grid place-items-center border border-[color:var(--border-70)] bg-[color:var(--surface-80)]"
       >
         {icon}
       </div>

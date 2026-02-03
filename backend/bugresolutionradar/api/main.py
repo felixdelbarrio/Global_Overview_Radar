@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from bugresolutionradar.api.routers.evolution import router as evolution_router
 from bugresolutionradar.api.routers.incidents import router as incidents_router
+from bugresolutionradar.api.routers.ingest import router as ingest_router
 from bugresolutionradar.api.routers.kpis import router as kpis_router
 from bugresolutionradar.api.routers.reputation import router as reputation_router
 from bugresolutionradar.config import settings
@@ -49,6 +50,7 @@ def create_app() -> FastAPI:
     app.include_router(incidents_router, prefix="/incidents", tags=["incidents"])
     app.include_router(evolution_router, prefix="/evolution", tags=["evolution"])
     app.include_router(reputation_router, prefix="/reputation", tags=["reputation"])
+    app.include_router(ingest_router, prefix="/ingest", tags=["ingest"])
 
     logger.debug("FastAPI app created with cache at %s", settings.cache_path)
 

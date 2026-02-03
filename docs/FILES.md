@@ -27,6 +27,7 @@ Back to root: `../README.md`
 - `backend/bugresolutionradar/adapters/` — CSV/JSON/XLSX connectors
 - `backend/bugresolutionradar/services/` — ingest + consolidate + reporting
 - `backend/bugresolutionradar/api/` — FastAPI routers
+- `backend/bugresolutionradar/api/routers/ingest.py` — background ingest triggers + job progress
 - `backend/reputation/collectors/` — per-source collectors
 - `backend/reputation/services/` — ingest + sentiment + merging
 - `backend/*/logging_utils.py` — configurable logging with hot reload
@@ -35,6 +36,7 @@ Back to root: `../README.md`
 
 - `frontend/brr-frontend/src/components/SentimentView.tsx` — unified Dashboard/Sentiment view
 - `frontend/brr-frontend/src/components/Shell.tsx` — navigation (configurable via reputation meta)
+- `frontend/brr-frontend/src/lib/flags.ts` — feature flags from env
 
 ---
 
@@ -59,6 +61,7 @@ Back to root: `../README.md`
 - `backend/bugresolutionradar/adapters/` — conectores CSV/JSON/XLSX
 - `backend/bugresolutionradar/services/` — ingesta + consolidacion + reporting
 - `backend/bugresolutionradar/api/` — routers FastAPI
+- `backend/bugresolutionradar/api/routers/ingest.py` — disparo de ingestas en background + progreso
 - `backend/reputation/collectors/` — collectors por fuente
 - `backend/reputation/services/` — ingesta + sentimiento + merge
 - `backend/*/logging_utils.py` — logging configurable con hot reload
@@ -67,3 +70,4 @@ Back to root: `../README.md`
 
 - `frontend/brr-frontend/src/components/SentimentView.tsx` — vista unificada Dashboard/Sentimiento
 - `frontend/brr-frontend/src/components/Shell.tsx` — navegacion (configurable via reputation meta)
+- `frontend/brr-frontend/src/lib/flags.ts` — flags de features desde env

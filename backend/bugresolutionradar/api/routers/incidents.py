@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request
+from pydantic import BaseModel
 
+from bugresolutionradar.config import settings
 from bugresolutionradar.domain.enums import Severity, Status
+from bugresolutionradar.repositories.incidents_overrides_repo import IncidentsOverridesRepo
 
 router = APIRouter()
 
@@ -41,6 +45,8 @@ def list_incidents(
     """Lista incidencias con filtros, orden y limite."""
     repo = request.app.state.cache_repo
     doc = repo.load()
+    overrides = _load_overrides()
+    latest_run_at = _latest_run_at(doc)
 
     items: List[Dict[str, Any]] = []
     for gid, rec in doc.incidents.items():
@@ -73,6 +79,16 @@ def list_incidents(
             "history_events": len(rec.history),
         }
 
+        last_seen_at = _last_seen_at(rec)
+        if last_seen_at:
+            row["last_seen_at"] = last_seen_at.isoformat()
+        if latest_run_at:
+            row["missing_in_last_ingest"] = bool(last_seen_at and last_seen_at < latest_run_at)
+
+        override = overrides.get(gid)
+        if override:
+            _apply_override_to_row(row, override)
+
         if q and not _matches_q(row, q):
             continue
 
@@ -100,7 +116,11 @@ def list_incidents(
     total = len(items)
     items = items[:limit]
 
-    return {"total": total, "items": items}
+    return {
+        "generated_at": doc.generated_at.isoformat(),
+        "total": total,
+        "items": items,
+    }
 
 
 @router.get("/{global_id}")
@@ -111,9 +131,13 @@ def get_incident(request: Request, global_id: str) -> Dict[str, Any]:
     rec = doc.incidents.get(global_id)
     if rec is None:
         raise HTTPException(status_code=404, detail="Incident not found")
+    overrides = _load_overrides()
+    override = overrides.get(global_id)
+    latest_run_at = _latest_run_at(doc)
+    last_seen_at = _last_seen_at(rec)
 
     cur = rec.current
-    return {
+    payload: Dict[str, Any] = {
         "global_id": rec.global_id,
         "current": {
             "title": cur.title,
@@ -146,3 +170,94 @@ def get_incident(request: Request, global_id: str) -> Dict[str, Any]:
             for h in rec.history
         ],
     }
+    if last_seen_at:
+        payload["last_seen_at"] = last_seen_at.isoformat()
+    if latest_run_at:
+        payload["missing_in_last_ingest"] = bool(last_seen_at and last_seen_at < latest_run_at)
+    if override:
+        _apply_override_to_detail(payload, override)
+    return payload
+
+
+class IncidentOverrideRequest(BaseModel):
+    ids: List[str]
+    status: Status | None = None
+    severity: Severity | None = None
+    note: str | None = None
+
+
+@router.post("/override")
+def incident_override(payload: IncidentOverrideRequest) -> Dict[str, Any]:
+    if not payload.ids:
+        raise HTTPException(status_code=400, detail="ids is required")
+    if payload.status is None and payload.severity is None and payload.note is None:
+        raise HTTPException(status_code=400, detail="status, severity or note is required")
+
+    repo = IncidentsOverridesRepo(Path(settings.incidents_overrides_path))
+    overrides = repo.load()
+    now = datetime.now(timezone.utc).isoformat()
+
+    for incident_id in payload.ids:
+        entry: Dict[str, Any] = overrides.get(incident_id, {})
+        if payload.status is not None:
+            entry["status"] = payload.status.value
+        if payload.severity is not None:
+            entry["severity"] = payload.severity.value
+        if payload.note is not None:
+            entry["note"] = payload.note
+        entry["updated_at"] = now
+        overrides[incident_id] = entry
+
+    repo.save(overrides)
+    return {"updated": len(payload.ids)}
+
+
+def _load_overrides() -> Dict[str, Dict[str, Any]]:
+    repo = IncidentsOverridesRepo(Path(settings.incidents_overrides_path))
+    return repo.load()
+
+
+def _apply_override_to_row(row: Dict[str, Any], override: Dict[str, Any]) -> None:
+    status = override.get("status")
+    severity = override.get("severity")
+    if isinstance(status, str) and status:
+        row["status"] = status
+    if isinstance(severity, str) and severity:
+        row["severity"] = severity
+    row["manual_override"] = override
+
+
+def _apply_override_to_detail(payload: Dict[str, Any], override: Dict[str, Any]) -> None:
+    current = payload.get("current")
+    if isinstance(current, dict):
+        status = override.get("status")
+        severity = override.get("severity")
+        if isinstance(status, str) and status:
+            current["status"] = status
+        if isinstance(severity, str) and severity:
+            current["severity"] = severity
+    payload["manual_override"] = override
+
+
+def _latest_run_at(doc: Any) -> datetime | None:
+    runs = getattr(doc, "runs", None)
+    if not runs:
+        return None
+    latest: datetime | None = None
+    for run in runs:
+        ts = getattr(run, "started_at", None)
+        if ts and (latest is None or ts > latest):
+            latest = ts
+    return latest
+
+
+def _last_seen_at(rec: Any) -> datetime | None:
+    provenance = getattr(rec, "provenance", None)
+    if not provenance:
+        return None
+    latest: datetime | None = None
+    for ref in provenance:
+        ts = getattr(ref, "last_seen_at", None)
+        if ts and (latest is None or ts > latest):
+            latest = ts
+    return latest

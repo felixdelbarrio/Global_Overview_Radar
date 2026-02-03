@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any, Iterable, List
 
 from fastapi import APIRouter, Body, HTTPException, Query
@@ -25,6 +26,7 @@ from reputation.models import (
 from reputation.repositories.cache_repo import ReputationCacheRepo
 from reputation.repositories.overrides_repo import ReputationOverridesRepo
 
+from bugresolutionradar.config import settings as brr_settings
 from bugresolutionradar.logging_utils import get_logger
 
 router = APIRouter()
@@ -103,6 +105,7 @@ def reputation_meta() -> dict[str, Any]:
     for source in sources_enabled:
         source_counts.setdefault(source, 0)
     sources_available = sorted([s for s, count in source_counts.items() if count > 0])
+    incidents_available = Path(brr_settings.cache_path).exists()
     return {
         "actor_principal": principal,
         "geos": geos,
@@ -111,6 +114,7 @@ def reputation_meta() -> dict[str, Any]:
         "sources_enabled": sources_enabled,
         "sources_available": sources_available,
         "source_counts": source_counts,
+        "incidents_available": incidents_available,
         "ui": ui_flags,
     }
 

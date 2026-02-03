@@ -71,7 +71,16 @@ Campos minimos (ver `backend/bugresolutionradar/domain/models.py`):
 - `actor_principal`, `geos`
 - `otros_actores_por_geografia`, `otros_actores_globales`
 - `sources_enabled`, `sources_available`, `source_counts`
+- `incidents_available` (bool, derived from cache existence)
 - `ui` (`incidents_enabled`, `ops_enabled`)
+
+### IngestJob (API)
+Used by `/ingest/*`:
+- `id`, `kind` (`reputation|incidents`)
+- `status` (`queued|running|success|error`)
+- `progress` (0..100), `stage`
+- `started_at`, `finished_at`, `error`
+- `meta` (optional metrics like items/incidents/sources)
 
 ---
 
@@ -96,4 +105,13 @@ Campos minimos (ver `backend/bugresolutionradar/domain/models.py`):
 - `actor_principal`, `geos`
 - `otros_actores_por_geografia`, `otros_actores_globales`
 - `sources_enabled`, `sources_available`, `source_counts`
+- `incidents_available` (bool, si existe cache de incidencias)
 - `ui` (`incidents_enabled`, `ops_enabled`)
+
+### IngestJob (API)
+Usado por `/ingest/*`:
+- `id`, `kind` (`reputation|incidents`)
+- `status` (`queued|running|success|error`)
+- `progress` (0..100), `stage`
+- `started_at`, `finished_at`, `error`
+- `meta` (metricas opcionales: items/incidencias/fuentes)

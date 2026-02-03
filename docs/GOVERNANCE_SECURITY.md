@@ -12,6 +12,8 @@ Back to docs index: `../README.md`
 - Reputation configs can be split across multiple JSON files (mergeable).
 - Log and cache artifacts are generated, not committed.
 - UI exposure can be controlled per scope via `ui.incidents_enabled` / `ui.ops_enabled`.
+- Frontend can also hide the incident scope via `NEXT_PUBLIC_INCIDENTS_ENABLED`.
+- If `data/cache/bugresolutionradar_cache.json` is missing, incident scope is hidden regardless of flags.
 - Noise control rules are enforced at ingestion time (actor presence + geo allowlists).
 
 ### Change management
@@ -38,6 +40,8 @@ Back to docs index: `../README.md`
 - Reputacion soporta varios JSON (mergeables).
 - Logs y caches se generan localmente y no se versionan.
 - La UI se puede modular por scope via `ui.incidents_enabled` / `ui.ops_enabled`.
+- El frontend tambien puede ocultar incidencias via `NEXT_PUBLIC_INCIDENTS_ENABLED`.
+- Si falta `data/cache/bugresolutionradar_cache.json`, el ambito de incidencias se oculta.
 - El control de ruido se aplica en ingesta (actor obligatorio + allowlist por geo).
 
 ### Gestion de cambios

@@ -4,11 +4,24 @@
  * Vista de incidencias con filtros en cliente.
  */
 
-import { useEffect, useMemo, useState } from "react";
-import { Calendar, Filter, Loader2, Search, Sparkles } from "lucide-react";
+import { Fragment, useEffect, useMemo, useState } from "react";
+import {
+  AlertTriangle,
+  ArrowUpDown,
+  Calendar,
+  ChevronDown,
+  ChevronUp,
+  Clock,
+  Download,
+  Filter,
+  Loader2,
+  Search,
+  Sparkles,
+} from "lucide-react";
 import { Shell } from "@/components/Shell";
-import { apiGet } from "@/lib/api";
+import { apiGet, apiPost } from "@/lib/api";
 import { EvolutionChart } from "@/components/EvolutionChart";
+import { INGEST_SUCCESS_EVENT, type IngestSuccessDetail } from "@/lib/events";
 import type { EvolutionPoint, Severity } from "@/lib/types";
 
 const EVOLUTION_DAYS = 90;
@@ -22,7 +35,29 @@ type Incident = {
   closed_at?: string | null;
   product?: string | null;
   feature?: string | null;
+  last_seen_at?: string | null;
+  missing_in_last_ingest?: boolean;
+  manual_override?: {
+    status?: string | null;
+    severity?: string | null;
+    note?: string | null;
+    updated_at?: string | null;
+  } | null;
 };
+
+type SortKey =
+  | "global_id"
+  | "title"
+  | "status"
+  | "severity"
+  | "product"
+  | "feature"
+  | "opened_at";
+type SortDir = "asc" | "desc";
+
+const SEVERITY_ORDER = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "UNKNOWN"] as const;
+const STATUS_OPTIONS = ["OPEN", "IN_PROGRESS", "BLOCKED", "CLOSED", "UNKNOWN"] as const;
+const SEVERITY_OPTIONS = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "UNKNOWN"] as const;
 
 function chipSeverity(sev: string) {
   /** Devuelve clases CSS segun severidad. */
@@ -43,10 +78,71 @@ function chipStatus(st: string) {
   return "bg-slate-50 text-slate-600 border-slate-200";
 }
 
+function normalizeSortText(value: string | null | undefined) {
+  return (value ?? "").toString().trim();
+}
+
+function compareText(
+  a: string | null | undefined,
+  b: string | null | undefined,
+  dir: SortDir,
+) {
+  const aa = normalizeSortText(a);
+  const bb = normalizeSortText(b);
+  if (!aa && !bb) return 0;
+  if (!aa) return 1;
+  if (!bb) return -1;
+  const cmp = aa.localeCompare(bb, undefined, { sensitivity: "base", numeric: true });
+  return dir === "asc" ? cmp : -cmp;
+}
+
+function compareDate(
+  a: string | null | undefined,
+  b: string | null | undefined,
+  dir: SortDir,
+) {
+  const da = toDateOnly(a);
+  const db = toDateOnly(b);
+  if (!da && !db) return 0;
+  if (!da) return 1;
+  if (!db) return -1;
+  const cmp = da.getTime() - db.getTime();
+  return dir === "asc" ? cmp : -cmp;
+}
+
+function severityRank(value: string | null | undefined) {
+  const normalized = (value ?? "UNKNOWN").toString().toUpperCase();
+  const idx = SEVERITY_ORDER.indexOf(normalized as (typeof SEVERITY_ORDER)[number]);
+  return idx === -1 ? SEVERITY_ORDER.length : idx;
+}
+
+function compareSeverity(
+  a: string | null | undefined,
+  b: string | null | undefined,
+  dir: SortDir,
+) {
+  const cmp = severityRank(a) - severityRank(b);
+  return dir === "asc" ? cmp : -cmp;
+}
+
+function defaultSortDir(key: SortKey): SortDir {
+  if (key === "opened_at") return "desc";
+  if (key === "severity") return "asc";
+  return "asc";
+}
+
 export default function IncidenciasPage() {
+  const today = useMemo(() => new Date(), []);
+  const defaultTo = useMemo(() => toDateInput(today), [today]);
+  const defaultFrom = useMemo(() => {
+    const d = new Date(today);
+    d.setDate(d.getDate() - (EVOLUTION_DAYS - 1));
+    return toDateInput(d);
+  }, [today]);
   /** Lista completa de incidencias. */
   const [items, setItems] = useState<Incident[]>([]);
   const [itemsLoading, setItemsLoading] = useState(true);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
   /** Mensaje de error si falla la API. */
   const [error, setError] = useState<string | null>(null);
   const [evolution, setEvolution] = useState<EvolutionPoint[]>([]);
@@ -57,14 +153,31 @@ export default function IncidenciasPage() {
   const [q, setQ] = useState("");
   const [sev, setSev] = useState<string>("ALL");
   const [st, setSt] = useState<string>("ALL");
+  const [fromDate, setFromDate] = useState(defaultFrom);
+  const [toDate, setToDate] = useState(defaultTo);
+  const [incidentsRefresh, setIncidentsRefresh] = useState(0);
+  const [sortKey, setSortKey] = useState<SortKey>("opened_at");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [missingOnly, setMissingOnly] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draftStatus, setDraftStatus] = useState<string>("OPEN");
+  const [draftSeverity, setDraftSeverity] = useState<string>("MEDIUM");
+  const [draftNote, setDraftNote] = useState<string>("");
+  const [originalStatus, setOriginalStatus] = useState<string>("OPEN");
+  const [originalSeverity, setOriginalSeverity] = useState<string>("MEDIUM");
+  const [originalNote, setOriginalNote] = useState<string>("");
+  const [overrideSaving, setOverrideSaving] = useState(false);
+  const [overrideError, setOverrideError] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
     setItemsLoading(true);
-    apiGet<{ items: Incident[] }>("/incidents?limit=5000")
+    setError(null);
+    apiGet<{ items: Incident[]; generated_at?: string | null }>("/incidents?limit=5000")
       .then((r) => {
         if (!alive) return;
         setItems(r.items);
+        setLastUpdatedAt(r.generated_at ?? null);
       })
       .catch((e) => {
         if (!alive) return;
@@ -92,11 +205,34 @@ export default function IncidenciasPage() {
     return () => {
       alive = false;
     };
+  }, [incidentsRefresh]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<IngestSuccessDetail>).detail;
+      if (!detail) return;
+      if (detail.kind === "incidents") {
+        setIncidentsRefresh((value) => value + 1);
+      }
+    };
+    window.addEventListener(INGEST_SUCCESS_EVENT, handler as EventListener);
+    return () => {
+      window.removeEventListener(INGEST_SUCCESS_EVENT, handler as EventListener);
+    };
   }, []);
 
+  const range = useMemo(
+    () => normalizeDateRange(fromDate, toDate),
+    [fromDate, toDate],
+  );
   const filtered = useMemo(() => {
     const qq = q.trim().toLowerCase();
     return items.filter((it) => {
+      const itemDate = toDateOnly(it.opened_at ?? it.closed_at);
+      const okDate =
+        (!range.start || (itemDate && itemDate >= range.start)) &&
+        (!range.end || (itemDate && itemDate <= range.end));
       const okQ =
         !qq ||
         it.global_id.toLowerCase().includes(qq) ||
@@ -106,18 +242,71 @@ export default function IncidenciasPage() {
 
       const okSev = sev === "ALL" || (it.severity ?? "").toString().toUpperCase() === sev;
       const okSt = st === "ALL" || (it.status ?? "").toString().toUpperCase() === st;
+      const okMissing = !missingOnly || Boolean(it.missing_in_last_ingest);
 
-      return okQ && okSev && okSt;
+      return okDate && okQ && okSev && okSt && okMissing;
     });
-  }, [items, q, sev, st]);
+  }, [items, q, sev, st, range, missingOnly]);
 
+  const sorted = useMemo(() => {
+    const arr = filtered.slice();
+    arr.sort((a, b) => {
+      let cmp = 0;
+      switch (sortKey) {
+        case "global_id":
+          cmp = compareText(a.global_id, b.global_id, sortDir);
+          break;
+        case "title":
+          cmp = compareText(a.title, b.title, sortDir);
+          break;
+        case "status":
+          cmp = compareText(a.status, b.status, sortDir);
+          break;
+        case "severity":
+          cmp = compareSeverity(a.severity, b.severity, sortDir);
+          break;
+        case "product":
+          cmp = compareText(a.product, b.product, sortDir);
+          break;
+        case "feature":
+          cmp = compareText(a.feature, b.feature, sortDir);
+          break;
+        case "opened_at":
+          cmp = compareDate(a.opened_at, b.opened_at, sortDir);
+          break;
+        default:
+          cmp = 0;
+      }
+      if (cmp === 0) {
+        return compareText(a.global_id, b.global_id, "asc");
+      }
+      return cmp;
+    });
+    return arr;
+  }, [filtered, sortKey, sortDir]);
+
+  const isDefaultRange = fromDate === defaultFrom && toDate === defaultTo;
+  const missingCount = useMemo(
+    () => items.reduce((acc, item) => acc + (item.missing_in_last_ingest ? 1 : 0), 0),
+    [items],
+  );
+  const hasMissing = missingCount > 0;
   const activeFilters =
-    (q ? 1 : 0) + (sev !== "ALL" ? 1 : 0) + (st !== "ALL" ? 1 : 0);
+    (q ? 1 : 0) +
+    (sev !== "ALL" ? 1 : 0) +
+    (st !== "ALL" ? 1 : 0) +
+    (!isDefaultRange ? 1 : 0) +
+    (missingOnly ? 1 : 0);
   const hasActiveFilters = activeFilters > 0;
+  const dateRangeLabel = isDefaultRange
+    ? `Últimos ${EVOLUTION_DAYS} días`
+    : `${range.start ? toDateKey(range.start) : "—"} → ${
+        range.end ? toDateKey(range.end) : "—"
+      }`;
   const errorMessage = error || evolutionError;
   const filteredEvolution = useMemo(
-    () => buildEvolutionSeries(filtered, EVOLUTION_DAYS),
-    [filtered],
+    () => buildEvolutionSeries(filtered, EVOLUTION_DAYS, fromDate, toDate),
+    [filtered, fromDate, toDate],
   );
   const chartData = useMemo(() => {
     if (hasActiveFilters) {
@@ -126,28 +315,127 @@ export default function IncidenciasPage() {
     return evolution.length ? evolution : filteredEvolution;
   }, [hasActiveFilters, evolution, filteredEvolution]);
   const chartLoading = evolutionLoading && !hasActiveFilters;
+  const lastUpdatedLabel = useMemo(() => formatDate(lastUpdatedAt), [lastUpdatedAt]);
+  const isDirty =
+    draftStatus !== originalStatus ||
+    draftSeverity !== originalSeverity ||
+    draftNote.trim() !== originalNote.trim();
+
+  const startEdit = (item: Incident) => {
+    setEditingId(item.global_id);
+    const nextStatus = item.status || "UNKNOWN";
+    const nextSeverity = String(item.severity || "UNKNOWN");
+    const nextNote = item.manual_override?.note ?? "";
+    setDraftStatus(nextStatus);
+    setDraftSeverity(nextSeverity);
+    setDraftNote(nextNote);
+    setOriginalStatus(nextStatus);
+    setOriginalSeverity(nextSeverity);
+    setOriginalNote(nextNote);
+    setOverrideError(null);
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setOverrideError(null);
+  };
+
+  const saveOverride = async (incidentId: string) => {
+    if (!isDirty || overrideSaving) return;
+    setOverrideSaving(true);
+    setOverrideError(null);
+    try {
+      await apiPost<{ updated: number }>("/incidents/override", {
+        ids: [incidentId],
+        status: draftStatus,
+        severity: draftSeverity,
+        note: draftNote.trim() || undefined,
+      });
+      setEditingId(null);
+      setIncidentsRefresh((value) => value + 1);
+    } catch (err) {
+      setOverrideError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setOverrideSaving(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!hasMissing && missingOnly) {
+      setMissingOnly(false);
+    }
+  }, [hasMissing, missingOnly]);
+
+  const onSort = (nextKey: SortKey) => {
+    setSortKey((currentKey) => {
+      if (currentKey === nextKey) {
+        setSortDir((dir) => (dir === "asc" ? "desc" : "asc"));
+        return currentKey;
+      }
+      setSortDir(defaultSortDir(nextKey));
+      return nextKey;
+    });
+  };
+
+  const renderSortIcon = (key: SortKey) => {
+    if (sortKey !== key) {
+      return (
+        <ArrowUpDown className="h-3.5 w-3.5 text-[color:var(--text-40)] group-hover:text-[color:var(--text-60)]" />
+      );
+    }
+    const iconClass = "h-3.5 w-3.5 text-[color:var(--blue)]";
+    return sortDir === "asc" ? (
+      <ChevronUp className={iconClass} />
+    ) : (
+      <ChevronDown className={iconClass} />
+    );
+  };
+
+  const renderSortHeader = (label: string, key: SortKey) => {
+    const isActive = sortKey === key;
+    const ariaSort = isActive
+      ? sortDir === "asc"
+        ? "ascending"
+        : "descending"
+      : "none";
+    return (
+      <th key={key} className="px-4 py-3" aria-sort={ariaSort} scope="col">
+        <button
+          type="button"
+          onClick={() => onSort(key)}
+          className={
+            "group inline-flex items-center gap-2 text-left transition " +
+            (isActive ? "text-[color:var(--ink)]" : "text-[color:var(--text-45)] hover:text-[color:var(--text-70)]")
+          }
+        >
+          <span>{label}</span>
+          {renderSortIcon(key)}
+        </button>
+      </th>
+    );
+  };
 
   return (
     <Shell>
-      <section className="relative overflow-hidden rounded-[28px] border border-white/60 bg-[color:var(--panel-strong)] p-6 shadow-[0_30px_70px_rgba(7,33,70,0.12)] animate-rise">
+      <section className="relative overflow-hidden rounded-[28px] border border-[color:var(--border-60)] bg-[color:var(--panel-strong)] p-6 shadow-[var(--shadow-lg)] animate-rise">
         <div className="absolute inset-0 pointer-events-none">
           <div className="absolute -top-24 -right-10 h-48 w-48 rounded-full bg-[color:var(--aqua)]/15 blur-3xl" />
           <div className="absolute -bottom-16 left-10 h-40 w-40 rounded-full bg-[color:var(--blue)]/10 blur-3xl" />
         </div>
         <div className="relative">
-          <div className="inline-flex items-center gap-2 rounded-full border border-white/60 bg-white/70 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-[color:var(--blue)] shadow-sm">
+          <div className="inline-flex items-center gap-2 rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-[color:var(--blue)] shadow-sm">
             <Sparkles className="h-3.5 w-3.5" />
             Incidencias críticas
           </div>
           <h1 className="mt-4 text-3xl sm:text-4xl font-display font-semibold text-[color:var(--ink)]">
             Incidencias
           </h1>
-          <p className="mt-2 max-w-2xl text-sm text-black/60">
+          <p className="mt-2 max-w-2xl text-sm text-[color:var(--text-60)]">
             Listado consolidado desde los distintos orígenes para seguimiento y
             priorización.
           </p>
-          <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-black/55">
-            <span className="inline-flex items-center gap-2 rounded-full bg-white/70 px-3 py-1">
+          <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-[color:var(--text-55)]">
+            <span className="inline-flex items-center gap-2 rounded-full bg-[color:var(--surface-70)] px-3 py-1">
               <Calendar className="h-3.5 w-3.5 text-[color:var(--blue)]" />
               Total cargadas:{" "}
               {itemsLoading ? (
@@ -156,7 +444,7 @@ export default function IncidenciasPage() {
                 items.length
               )}
             </span>
-            <span className="inline-flex items-center gap-2 rounded-full bg-white/70 px-3 py-1">
+            <span className="inline-flex items-center gap-2 rounded-full bg-[color:var(--surface-70)] px-3 py-1">
               <Search className="h-3.5 w-3.5 text-[color:var(--blue)]" />
               Mostrando:{" "}
               {itemsLoading ? (
@@ -165,9 +453,18 @@ export default function IncidenciasPage() {
                 filtered.length
               )}
             </span>
-            <span className="inline-flex items-center gap-2 rounded-full bg-white/70 px-3 py-1">
+            <span className="inline-flex items-center gap-2 rounded-full bg-[color:var(--surface-70)] px-3 py-1">
               <Filter className="h-3.5 w-3.5 text-[color:var(--blue)]" />
               Filtros activos: {activeFilters}
+            </span>
+            <span className="inline-flex items-center gap-2 rounded-full bg-[color:var(--surface-70)] px-3 py-1">
+              <Clock className="h-3.5 w-3.5 text-[color:var(--blue)]" />
+              Última actualización:{" "}
+              {itemsLoading ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-[color:var(--blue)]" />
+              ) : (
+                lastUpdatedLabel
+              )}
             </span>
           </div>
         </div>
@@ -180,13 +477,13 @@ export default function IncidenciasPage() {
       )}
 
       {/* Filtros */}
-      <div className="mt-6 rounded-[26px] border border-white/60 bg-[color:var(--panel)] p-5 shadow-[0_20px_50px_rgba(7,33,70,0.08)] backdrop-blur-xl animate-rise" style={{ animationDelay: "120ms" }}>
-        <div className="grid grid-cols-1 md:grid-cols-[1fr_180px_180px] gap-3">
+      <div className="mt-6 rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-5 shadow-[var(--shadow-md)] backdrop-blur-xl animate-rise" style={{ animationDelay: "120ms" }}>
+        <div className="grid grid-cols-1 md:grid-cols-[1fr_180px_180px_180px_180px] gap-3">
           <div>
-            <div className="text-[11px] uppercase tracking-[0.18em] text-black/50 mb-2">
+            <div className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--text-50)] mb-2">
               Buscar
             </div>
-            <div className="flex items-center gap-2 rounded-2xl border border-white/60 bg-white/80 px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
+            <div className="flex items-center gap-2 rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_var(--inset-highlight)]">
               <Search className="h-4 w-4 text-[color:var(--blue)]" />
               <input
                 className="w-full bg-transparent outline-none"
@@ -198,11 +495,11 @@ export default function IncidenciasPage() {
           </div>
 
           <div>
-            <div className="text-[11px] uppercase tracking-[0.18em] text-black/50 mb-2">
+            <div className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--text-50)] mb-2">
               Criticidad
             </div>
             <select
-              className="w-full rounded-2xl border border-white/60 bg-white/80 px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] outline-none focus:border-[color:var(--aqua)]/60 focus:ring-2 focus:ring-[color:var(--aqua)]/30"
+              className="w-full rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_var(--inset-highlight)] outline-none focus:border-[color:var(--aqua)]/60 focus:ring-2 focus:ring-[color:var(--aqua)]/30"
               value={sev}
               onChange={(e) => setSev(e.target.value)}
             >
@@ -216,11 +513,11 @@ export default function IncidenciasPage() {
           </div>
 
           <div>
-            <div className="text-[11px] uppercase tracking-[0.18em] text-black/50 mb-2">
+            <div className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--text-50)] mb-2">
               Estado
             </div>
             <select
-              className="w-full rounded-2xl border border-white/60 bg-white/80 px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] outline-none focus:border-[color:var(--aqua)]/60 focus:ring-2 focus:ring-[color:var(--aqua)]/30"
+              className="w-full rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_var(--inset-highlight)] outline-none focus:border-[color:var(--aqua)]/60 focus:ring-2 focus:ring-[color:var(--aqua)]/30"
               value={st}
               onChange={(e) => setSt(e.target.value)}
             >
@@ -230,26 +527,82 @@ export default function IncidenciasPage() {
               <option value="CLOSED">CLOSED</option>
             </select>
           </div>
+          <div>
+            <div className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--text-50)] mb-2">
+              Desde
+            </div>
+            <input
+              type="date"
+              value={fromDate}
+              onChange={(e) => setFromDate(e.target.value)}
+              className="w-full rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_var(--inset-highlight)] outline-none focus:border-[color:var(--aqua)]/60 focus:ring-2 focus:ring-[color:var(--aqua)]/30"
+            />
+          </div>
+          <div>
+            <div className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--text-50)] mb-2">
+              Hasta
+            </div>
+            <input
+              type="date"
+              value={toDate}
+              onChange={(e) => setToDate(e.target.value)}
+              className="w-full rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_var(--inset-highlight)] outline-none focus:border-[color:var(--aqua)]/60 focus:ring-2 focus:ring-[color:var(--aqua)]/30"
+            />
+          </div>
         </div>
+        {hasMissing && (
+          <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
+            <button
+              type="button"
+              onClick={() => setMissingOnly((value) => !value)}
+              className={
+                "inline-flex items-center gap-2 rounded-full border px-3 py-1 font-semibold uppercase tracking-[0.18em] transition " +
+                (missingOnly
+                  ? "border-amber-300 bg-amber-100 text-amber-800 shadow-[var(--shadow-pill)]"
+                  : "border-[color:var(--border-70)] bg-[color:var(--surface-80)] text-[color:var(--text-60)] hover:text-[color:var(--ink)]")
+              }
+            >
+              <AlertTriangle className="h-3.5 w-3.5" />
+              Desaparecidas ({missingCount})
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Evolucion */}
-      <div className="mt-6 rounded-[26px] border border-white/60 bg-[color:var(--panel)] p-5 shadow-[0_20px_50px_rgba(7,33,70,0.08)] backdrop-blur-xl animate-rise" style={{ animationDelay: "150ms" }}>
+      <div className="mt-6 rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-5 shadow-[var(--shadow-md)] backdrop-blur-xl animate-rise" style={{ animationDelay: "150ms" }}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
             EVOLUCIÓN TEMPORAL
           </h2>
-          <span className="text-xs text-black/50">
-            Últimos {EVOLUTION_DAYS} días{hasActiveFilters ? " · filtros activos" : ""}
-          </span>
+          <div className="flex flex-wrap items-center gap-2 text-xs text-[color:var(--text-50)]">
+            <span>
+              {dateRangeLabel}
+              {hasActiveFilters ? " · filtros activos" : ""}
+            </span>
+            <button
+              type="button"
+              onClick={() =>
+                downloadEvolutionCsv(
+                  chartData,
+                  buildDownloadName("incidencias_evolucion", fromDate, toDate),
+                )
+              }
+              disabled={chartLoading || chartData.length === 0}
+              className="inline-flex items-center gap-2 rounded-full border border-[color:var(--border-70)] bg-[color:var(--surface-80)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--brand-ink)] shadow-[var(--shadow-pill)] transition hover:-translate-y-0.5 hover:shadow-[var(--shadow-pill-hover)] disabled:opacity-60 disabled:hover:translate-y-0 disabled:hover:shadow-[var(--shadow-pill)]"
+            >
+              <Download className="h-3.5 w-3.5" />
+              Descargar gráfico
+            </button>
+          </div>
         </div>
         <div className="mt-4 h-72 min-h-[260px]">
           {chartLoading ? (
-            <div className="h-full rounded-[22px] border border-white/60 bg-white/70 animate-pulse" />
+            <div className="h-full rounded-[22px] border border-[color:var(--border-60)] bg-[color:var(--surface-70)] animate-pulse" />
           ) : chartData.length ? (
             <EvolutionChart data={chartData} />
           ) : (
-            <div className="h-full grid place-items-center text-sm text-black/45">
+            <div className="h-full grid place-items-center text-sm text-[color:var(--text-45)]">
               Sin datos para el periodo seleccionado.
             </div>
           )}
@@ -257,21 +610,40 @@ export default function IncidenciasPage() {
       </div>
 
       {/* Tabla */}
-      <div className="mt-6 rounded-[26px] border border-white/60 bg-[color:var(--panel)] shadow-[0_20px_50px_rgba(7,33,70,0.08)] backdrop-blur-xl overflow-hidden animate-rise" style={{ animationDelay: "180ms" }}>
+      <div className="mt-6 rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] shadow-[var(--shadow-md)] backdrop-blur-xl overflow-hidden animate-rise" style={{ animationDelay: "180ms" }}>
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[color:var(--border-60)] px-5 py-4">
+          <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
+            RESULTADOS
+          </div>
+          <button
+            type="button"
+            onClick={() =>
+              downloadIncidentsCsv(
+                sorted,
+                buildDownloadName("incidencias_resultados", fromDate, toDate),
+              )
+            }
+            disabled={itemsLoading || filtered.length === 0}
+            className="inline-flex items-center gap-2 rounded-full border border-[color:var(--border-70)] bg-[color:var(--surface-80)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--brand-ink)] shadow-[var(--shadow-pill)] transition hover:-translate-y-0.5 hover:shadow-[var(--shadow-pill-hover)] disabled:opacity-60 disabled:hover:translate-y-0 disabled:hover:shadow-[var(--shadow-pill)]"
+          >
+            <Download className="h-3.5 w-3.5" />
+            Descargar resultados
+          </button>
+        </div>
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm">
             <thead
-              className="sticky top-0 bg-white/80 backdrop-blur border-b"
-              style={{ borderColor: "rgba(7,33,70,0.08)" }}
+              className="sticky top-0 bg-[color:var(--surface-80)] backdrop-blur border-b"
+              style={{ borderColor: "var(--border)" }}
             >
-              <tr className="text-left text-[11px] uppercase tracking-[0.2em] text-black/45">
-                <th className="px-4 py-3">ID</th>
-                <th className="px-4 py-3">Título</th>
-                <th className="px-4 py-3">Estado</th>
-                <th className="px-4 py-3">Criticidad</th>
-                <th className="px-4 py-3">Producto</th>
-                <th className="px-4 py-3">Funcionalidad</th>
-                <th className="px-4 py-3">Abierta</th>
+              <tr className="text-left text-[11px] uppercase tracking-[0.2em] text-[color:var(--text-45)]">
+                {renderSortHeader("ID", "global_id")}
+                {renderSortHeader("Título", "title")}
+                {renderSortHeader("Estado", "status")}
+                {renderSortHeader("Criticidad", "severity")}
+                {renderSortHeader("Producto", "product")}
+                {renderSortHeader("Funcionalidad", "feature")}
+                {renderSortHeader("Abierta", "opened_at")}
               </tr>
             </thead>
 
@@ -279,45 +651,144 @@ export default function IncidenciasPage() {
               {itemsLoading ? (
                 <SkeletonTableRows columns={7} rows={5} />
               ) : (
-                filtered.map((it, idx) => (
-                  <tr
-                    key={it.global_id}
-                    className={idx % 2 === 0 ? "bg-white/70" : "bg-white/40"}
-                    style={{ borderTop: "1px solid rgba(7,33,70,0.08)" }}
-                  >
-                    <td className="px-4 py-3 font-mono text-xs whitespace-nowrap">
-                      {it.global_id}
-                    </td>
-                    <td className="px-4 py-3 min-w-[360px]">
-                      <div className="font-semibold text-[color:var(--ink)]">
-                        {it.title}
-                      </div>
-                      <div className="text-xs text-black/55">
-                        {it.product ?? "—"} · {it.feature ?? "—"}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${chipStatus(it.status)}`}>
-                        {it.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${chipSeverity(String(it.severity))}`}>
-                        {String(it.severity)}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">{it.product ?? "—"}</td>
-                    <td className="px-4 py-3">{it.feature ?? "—"}</td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      {it.opened_at ?? "—"}
-                    </td>
-                  </tr>
+                sorted.map((it, idx) => (
+                  <Fragment key={it.global_id}>
+                    <tr
+                      className={idx % 2 === 0 ? "bg-[color:var(--surface-70)]" : "bg-[color:var(--surface-40)]"}
+                      style={{ borderTop: "1px solid var(--border)" }}
+                    >
+                      <td className="px-4 py-3 font-mono text-xs whitespace-nowrap">
+                        {it.global_id}
+                      </td>
+                      <td className="px-4 py-3 min-w-[360px]">
+                        <div className="font-semibold text-[color:var(--ink)]">
+                          {it.title}
+                        </div>
+                        <div className="text-xs text-[color:var(--text-55)]">
+                          {it.product ?? "—"} · {it.feature ?? "—"}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${chipStatus(it.status)}`}>
+                            {it.status}
+                          </span>
+                          {it.missing_in_last_ingest && (
+                            <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] font-semibold text-amber-700">
+                              <AlertTriangle className="h-3 w-3" />
+                              Desaparecida
+                            </span>
+                          )}
+                          {it.manual_override && (
+                            <span className="inline-flex items-center rounded-full border border-[color:var(--aqua)]/40 bg-[color:var(--aqua)]/10 px-2 py-1 text-[10px] font-semibold text-[color:var(--brand-ink)]">
+                              Ajuste manual
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => startEdit(it)}
+                            className="text-[10px] uppercase tracking-[0.18em] text-[color:var(--text-55)] hover:text-[color:var(--ink)]"
+                          >
+                            Editar
+                          </button>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${chipSeverity(String(it.severity))}`}>
+                          {String(it.severity)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">{it.product ?? "—"}</td>
+                      <td className="px-4 py-3">{it.feature ?? "—"}</td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {it.opened_at ?? "—"}
+                      </td>
+                    </tr>
+                    {editingId === it.global_id && (
+                      <tr className="bg-[color:var(--surface-85)]" style={{ borderTop: "1px solid var(--border)" }}>
+                        <td colSpan={7} className="px-4 py-4">
+                          <div className="flex flex-wrap items-end gap-3">
+                            <div>
+                              <div className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--text-50)] mb-2">
+                                Estado
+                              </div>
+                              <select
+                                className="rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_var(--inset-highlight)] outline-none"
+                                value={draftStatus}
+                                onChange={(e) => setDraftStatus(e.target.value)}
+                              >
+                                {STATUS_OPTIONS.map((option) => (
+                                  <option key={option} value={option}>
+                                    {option}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                            <div>
+                              <div className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--text-50)] mb-2">
+                                Criticidad
+                              </div>
+                              <select
+                                className="rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_var(--inset-highlight)] outline-none"
+                                value={draftSeverity}
+                                onChange={(e) => setDraftSeverity(e.target.value)}
+                              >
+                                {SEVERITY_OPTIONS.map((option) => (
+                                  <option key={option} value={option}>
+                                    {option}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                            <div className="flex-1 min-w-[220px]">
+                              <div className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--text-50)] mb-2">
+                                Nota (opcional)
+                              </div>
+                              <input
+                                className="w-full rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_var(--inset-highlight)] outline-none"
+                                value={draftNote}
+                                onChange={(e) => setDraftNote(e.target.value)}
+                                placeholder="Motivo o seguimiento"
+                              />
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => saveOverride(it.global_id)}
+                                disabled={!isDirty || overrideSaving}
+                                className="inline-flex items-center gap-2 rounded-full border border-[color:var(--border-70)] bg-[color:var(--surface-80)] px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--brand-ink)] shadow-[var(--shadow-pill)] transition hover:-translate-y-0.5 hover:shadow-[var(--shadow-pill-hover)] disabled:opacity-60 disabled:hover:translate-y-0"
+                              >
+                                {overrideSaving ? "Guardando..." : "Guardar"}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={cancelEdit}
+                                className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--text-55)] hover:text-[color:var(--ink)]"
+                              >
+                                Cancelar
+                              </button>
+                            </div>
+                          </div>
+                          {overrideError && (
+                            <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+                              {overrideError}
+                            </div>
+                          )}
+                          {it.manual_override?.updated_at && (
+                            <div className="mt-2 text-[11px] text-[color:var(--text-50)]">
+                              Último ajuste: {formatDate(it.manual_override.updated_at)}
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 ))
               )}
 
               {!itemsLoading && filtered.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-10 text-center text-black/55">
+                  <td colSpan={7} className="px-4 py-10 text-center text-[color:var(--text-55)]">
                     No hay incidencias para mostrar con los filtros actuales.
                   </td>
                 </tr>
@@ -334,10 +805,10 @@ function SkeletonTableRows({ columns, rows }: { columns: number; rows: number })
   return (
     <>
       {Array.from({ length: rows }).map((_, rowIdx) => (
-        <tr key={rowIdx} className="border-t border-white/60 animate-pulse">
+        <tr key={rowIdx} className="border-t border-[color:var(--border-60)] animate-pulse">
           {Array.from({ length: columns }).map((_, colIdx) => (
             <td key={colIdx} className="px-4 py-3">
-              <div className="h-3 w-full max-w-[120px] rounded-full bg-white/70 border border-white/60" />
+              <div className="h-3 w-full max-w-[120px] rounded-full bg-[color:var(--surface-70)] border border-[color:var(--border-60)]" />
             </td>
           ))}
         </tr>
@@ -346,12 +817,21 @@ function SkeletonTableRows({ columns, rows }: { columns: number; rows: number })
   );
 }
 
-function buildEvolutionSeries(items: Incident[], days: number): EvolutionPoint[] {
+function buildEvolutionSeries(
+  items: Incident[],
+  days: number,
+  fromDate?: string,
+  toDate?: string,
+): EvolutionPoint[] {
   if (!items.length || days <= 0) return [];
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const start = new Date(today);
-  start.setDate(start.getDate() - (days - 1));
+  const range = normalizeDateRange(fromDate, toDate, today, days);
+  const start = range.start;
+  const end = range.end;
+  const totalDays =
+    Math.max(0, Math.floor((end.getTime() - start.getTime()) / 86_400_000)) + 1;
+  if (totalDays <= 0) return [];
 
   const normalized = items
     .map((item) => ({
@@ -361,7 +841,7 @@ function buildEvolutionSeries(items: Incident[], days: number): EvolutionPoint[]
     .filter((row) => row.opened);
 
   const series: EvolutionPoint[] = [];
-  for (let i = 0; i < days; i += 1) {
+  for (let i = 0; i < totalDays; i += 1) {
     const day = new Date(start);
     day.setDate(start.getDate() + i);
     const key = toDateKey(day);
@@ -400,4 +880,112 @@ function toDateOnly(value?: string | null) {
 
 function toDateKey(date: Date) {
   return date.toISOString().slice(0, 10);
+}
+
+function toDateInput(date: Date) {
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60000)
+    .toISOString()
+    .slice(0, 10);
+}
+
+function formatDate(value?: string | null, withTime = true) {
+  if (!value) return "Sin fecha";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  return new Intl.DateTimeFormat("es-ES", {
+    dateStyle: "medium",
+    timeStyle: withTime ? "short" : undefined,
+  }).format(d);
+}
+
+function normalizeDateRange(
+  fromDate?: string,
+  toDate?: string,
+  todayOverride?: Date,
+  fallbackDays = EVOLUTION_DAYS,
+) {
+  const today = todayOverride ? new Date(todayOverride) : new Date();
+  today.setHours(0, 0, 0, 0);
+  let start = toDateOnly(fromDate);
+  let end = toDateOnly(toDate);
+  if (start && end && start > end) {
+    const temp = start;
+    start = end;
+    end = temp;
+  }
+  if (!end) {
+    end = today;
+  }
+  if (!start) {
+    start = new Date(end);
+    start.setDate(end.getDate() - (fallbackDays - 1));
+  }
+  return { start, end };
+}
+
+function buildDownloadName(prefix: string, fromDate?: string, toDate?: string) {
+  const safePrefix = prefix.replace(/[^a-zA-Z0-9_-]+/g, "_");
+  const range = normalizeDateRange(fromDate, toDate);
+  const rangeFrom = range.start ? toDateKey(range.start) : "inicio";
+  const rangeTo = range.end ? toDateKey(range.end) : "hoy";
+  return `${safePrefix}_${rangeFrom}_${rangeTo}`;
+}
+
+function downloadEvolutionCsv(data: EvolutionPoint[], filename: string) {
+  const headers = ["Fecha", "Abiertas", "Nuevas", "Cerradas"];
+  const rows = data.map((row) => [row.date, row.open, row.new, row.closed]);
+  downloadCsv(filename, headers, rows);
+}
+
+function downloadIncidentsCsv(items: Incident[], filename: string) {
+  const headers = [
+    "id",
+    "titulo",
+    "estado",
+    "criticidad",
+    "producto",
+    "funcionalidad",
+    "abierta",
+    "cerrada",
+  ];
+  const rows = items.map((item) => [
+    item.global_id,
+    item.title ?? "",
+    item.status ?? "",
+    item.severity ?? "",
+    item.product ?? "",
+    item.feature ?? "",
+    item.opened_at ?? "",
+    item.closed_at ?? "",
+  ]);
+  downloadCsv(filename, headers, rows);
+}
+
+function downloadCsv(
+  filename: string,
+  headers: string[],
+  rows: (string | number | null | undefined)[][],
+) {
+  const csvRows = [headers, ...rows].map((row) =>
+    row.map((cell) => escapeCsvCell(cell)).join(","),
+  );
+  const content = `\uFEFF${csvRows.join("\n")}`;
+  const blob = new Blob([content], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename.endsWith(".csv") ? filename : `${filename}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function escapeCsvCell(value: string | number | null | undefined) {
+  if (value === null || value === undefined) return "";
+  const str = String(value);
+  if (/["\n,]/.test(str)) {
+    return `"${str.replace(/"/g, "\"\"")}"`;
+  }
+  return str;
 }

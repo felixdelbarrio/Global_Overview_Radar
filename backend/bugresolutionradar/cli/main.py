@@ -46,7 +46,8 @@ def main() -> None:
             for adapter in ingest_service.build_adapters()
         ]
 
-        cache_doc = consolidate_service.consolidate(observations, sources)
+        existing = repo.load()
+        cache_doc = consolidate_service.consolidate_incremental(existing, observations, sources)
 
         repo.save(cache_doc)
         print(f"Incidents: {len(cache_doc.incidents)}")

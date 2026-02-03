@@ -33,6 +33,7 @@ it("renders dashboard header and combined mentions", async () => {
         geos: ["España"],
         sources_enabled: ["gdelt"],
         sources_available: ["gdelt"],
+        incidents_available: true,
         ui: { incidents_enabled: true, ops_enabled: true },
       });
     }
