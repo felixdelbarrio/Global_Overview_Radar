@@ -3,6 +3,7 @@
 import "./globals.css";
 import type { ReactNode } from "react";
 import { Space_Grotesk, Source_Sans_3 } from "next/font/google";
+import Script from "next/script";
 
 const display = Space_Grotesk({
   subsets: ["latin"],
@@ -27,8 +28,17 @@ export const metadata = {
 /** Envoltorio principal de HTML y body. */
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="es" className={`${body.variable} ${display.variable}`}>
-      <body>{children}</body>
+    <html
+      lang="es"
+      data-theme="ambient-light"
+      className={`${body.variable} ${display.variable}`}
+    >
+      <body>
+        <Script id="theme-init" strategy="beforeInteractive">
+          {`(function(){try{var t=localStorage.getItem('gor-theme');if(t==='ambient-dark'||t==='ambient-light'){document.documentElement.dataset.theme=t;}}catch(e){}})();`}
+        </Script>
+        {children}
+      </body>
     </html>
   );
 }

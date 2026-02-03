@@ -170,31 +170,31 @@ export default function OpsPage() {
 
   return (
     <Shell>
-      <section className="relative overflow-hidden rounded-[28px] border border-white/60 bg-[color:var(--panel-strong)] p-6 shadow-[0_30px_70px_rgba(7,33,70,0.12)] animate-rise">
+      <section className="relative overflow-hidden rounded-[28px] border border-[color:var(--border-60)] bg-[color:var(--panel-strong)] p-6 shadow-[var(--shadow-lg)] animate-rise">
         <div className="absolute inset-0 pointer-events-none">
           <div className="absolute -top-24 -right-10 h-48 w-48 rounded-full bg-[color:var(--aqua)]/15 blur-3xl" />
           <div className="absolute -bottom-16 left-10 h-40 w-40 rounded-full bg-[color:var(--blue)]/10 blur-3xl" />
         </div>
         <div className="relative">
-          <div className="inline-flex items-center gap-2 rounded-full border border-white/60 bg-white/70 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-[color:var(--blue)] shadow-sm">
+          <div className="inline-flex items-center gap-2 rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-[color:var(--blue)] shadow-sm">
             <Sparkles className="h-3.5 w-3.5" />
             Ops Executive
           </div>
           <h1 className="mt-4 text-3xl sm:text-4xl font-display font-semibold text-[color:var(--ink)]">
             Ops Executive
           </h1>
-          <p className="mt-2 max-w-2xl text-sm text-black/60">
+          <p className="mt-2 max-w-2xl text-sm text-[color:var(--text-60)]">
             Panel operativo: filtra, prioriza y actúa con contexto inmediato.
           </p>
-          <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-black/55">
-            <span className="inline-flex items-center gap-2 rounded-full bg-white/70 px-3 py-1">
+          <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-[color:var(--text-55)]">
+            <span className="inline-flex items-center gap-2 rounded-full bg-[color:var(--surface-70)] px-3 py-1">
               <Activity className="h-3.5 w-3.5 text-[color:var(--blue)]" />
               Open: {kpis?.open_total ?? "—"}
             </span>
-            <span className="inline-flex items-center gap-2 rounded-full bg-white/70 px-3 py-1">
+            <span className="inline-flex items-center gap-2 rounded-full bg-[color:var(--surface-70)] px-3 py-1">
               Critical: {executiveSummary?.critical ?? 0}
             </span>
-            <span className="inline-flex items-center gap-2 rounded-full bg-white/70 px-3 py-1">
+            <span className="inline-flex items-center gap-2 rounded-full bg-[color:var(--surface-70)] px-3 py-1">
               Stale &gt; X días:{" "}
               {executiveSummary ? `${executiveSummary.stalePct.toFixed(1)}%` : "—"}
             </span>
@@ -206,20 +206,20 @@ export default function OpsPage() {
         {/* Izquierda: filtros + tabla */}
         <div className="space-y-4">
           {/* Filtros */}
-          <div className="rounded-[26px] border border-white/60 bg-[color:var(--panel)] p-5 shadow-[0_20px_50px_rgba(7,33,70,0.08)] backdrop-blur-xl animate-rise" style={{ animationDelay: "120ms" }}>
+          <div className="rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-5 shadow-[var(--shadow-md)] backdrop-blur-xl animate-rise" style={{ animationDelay: "120ms" }}>
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
                   FILTROS
                 </div>
-                <div className="text-xs text-black/50">Refina y prioriza incidencias</div>
+                <div className="text-xs text-[color:var(--text-50)]">Refina y prioriza incidencias</div>
               </div>
               <Filter className="h-4 w-4 text-[color:var(--blue)]" />
             </div>
 
             <div className="mt-4 flex flex-col xl:flex-row xl:items-center gap-3">
               <div className="flex-1">
-                <div className="flex items-center gap-2 rounded-2xl border border-white/60 bg-white/80 px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
+                <div className="flex items-center gap-2 rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_var(--inset-highlight)]">
                   <Search className="h-4 w-4 text-[color:var(--blue)]" />
                   <input
                     className="w-full bg-transparent outline-none"
@@ -256,7 +256,7 @@ export default function OpsPage() {
                   tone="low"
                 />
                 <button
-                  className="ml-1 text-xs text-black/60 hover:text-black"
+                  className="ml-1 text-xs text-[color:var(--text-60)] hover:text-[color:var(--text-primary)]"
                   onClick={onResetFilters}
                 >
                   Reset
@@ -265,7 +265,7 @@ export default function OpsPage() {
 
               <div className="flex items-center gap-2">
                 <select
-                  className="text-sm rounded-2xl border border-white/60 bg-white/80 px-3 py-2 text-[color:var(--ink)] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] outline-none"
+                  className="text-sm rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-3 py-2 text-[color:var(--ink)] shadow-[inset_0_1px_0_var(--inset-highlight)] outline-none"
                   value={sortBy}
                   onChange={(e) => onSortByChange(e.target.value as SortBy)}
                 >
@@ -274,7 +274,7 @@ export default function OpsPage() {
                 </select>
 
                 <button
-                  className="rounded-2xl border border-white/60 bg-white/80 px-3 py-2 text-sm text-black/60 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] hover:text-black"
+                  className="rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-3 py-2 text-sm text-[color:var(--text-60)] shadow-[inset_0_1px_0_var(--inset-highlight)] hover:text-[color:var(--text-primary)]"
                   onClick={toggleSortDir}
                 >
                   {sortDir === "asc" ? "asc" : "desc"}
@@ -284,11 +284,11 @@ export default function OpsPage() {
           </div>
 
           {/* Tabla */}
-          <div className="rounded-[26px] border border-white/60 bg-[color:var(--panel)] shadow-[0_20px_50px_rgba(7,33,70,0.08)] backdrop-blur-xl overflow-hidden animate-rise" style={{ animationDelay: "180ms" }}>
+          <div className="rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] shadow-[var(--shadow-md)] backdrop-blur-xl overflow-hidden animate-rise" style={{ animationDelay: "180ms" }}>
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
-                <thead className="bg-white/80 backdrop-blur border-b" style={{ borderColor: "rgba(7,33,70,0.08)" }}>
-                  <tr className="text-left text-[11px] uppercase tracking-[0.2em] text-black/45">
+                <thead className="bg-[color:var(--surface-80)] backdrop-blur border-b" style={{ borderColor: "var(--border)" }}>
+                  <tr className="text-left text-[11px] uppercase tracking-[0.2em] text-[color:var(--text-45)]">
                     <th className="px-3 py-3">ID</th>
                     <th className="px-3 py-3">Título</th>
                     <th className="px-3 py-3 text-center">Estado</th>
@@ -299,7 +299,7 @@ export default function OpsPage() {
                 </thead>
                 <tbody>
                   {pageItems.map((it, idx) => (
-                    <tr key={it.global_id} className={idx % 2 === 0 ? "bg-white/70" : "bg-white/40"} style={{ borderTop: "1px solid rgba(7,33,70,0.08)" }}>
+                    <tr key={it.global_id} className={idx % 2 === 0 ? "bg-[color:var(--surface-70)]" : "bg-[color:var(--surface-40)]"} style={{ borderTop: "1px solid var(--border)" }}>
                       <td className="px-3 py-3 font-mono text-xs">{it.global_id}</td>
                       <td className="px-3 py-3">{it.title}</td>
                       <td className="px-3 py-3 text-center">
@@ -315,7 +315,7 @@ export default function OpsPage() {
 
                   {pageItems.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="px-3 py-6 text-center text-black/50">
+                      <td colSpan={6} className="px-3 py-6 text-center text-[color:var(--text-50)]">
                         No hay incidencias para mostrar
                       </td>
                     </tr>
@@ -325,10 +325,10 @@ export default function OpsPage() {
 
               {/* Paginacion */}
               <div className="p-3 flex items-center justify-between text-sm">
-                <div className="text-black/60">{filtered.length} resultados</div>
+                <div className="text-[color:var(--text-60)]">{filtered.length} resultados</div>
                 <div className="flex items-center gap-2">
                   <button
-                    className="rounded-full p-1 border border-white/60 bg-white/80 shadow-sm"
+                    className="rounded-full p-1 border border-[color:var(--border-60)] bg-[color:var(--surface-80)] shadow-sm"
                     onClick={() => setPage((p) => Math.max(1, p - 1))}
                     disabled={safePage === 1}
                   >
@@ -338,7 +338,7 @@ export default function OpsPage() {
                     {safePage} / {pageCount}
                   </div>
                   <button
-                    className="rounded-full p-1 border border-white/60 bg-white/80 shadow-sm"
+                    className="rounded-full p-1 border border-[color:var(--border-60)] bg-[color:var(--surface-80)] shadow-sm"
                     onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
                     disabled={safePage === pageCount}
                   >
@@ -353,13 +353,13 @@ export default function OpsPage() {
         {/* Columna derecha: paneles */}
         <div className="space-y-4">
           {/* Resumen ejecutivo */}
-          <div className="rounded-[26px] border border-white/60 bg-[color:var(--panel)] p-5 shadow-[0_20px_50px_rgba(7,33,70,0.08)] backdrop-blur-xl animate-rise" style={{ animationDelay: "200ms" }}>
+          <div className="rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-5 shadow-[var(--shadow-md)] backdrop-blur-xl animate-rise" style={{ animationDelay: "200ms" }}>
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
                   EXECUTIVE SUMMARY
                 </div>
-                <div className="text-xs text-black/60">Recomendaciones rápidas</div>
+                <div className="text-xs text-[color:var(--text-60)]">Recomendaciones rápidas</div>
               </div>
               <Zap className="h-5 w-5 text-[color:var(--blue)]" />
             </div>
@@ -372,7 +372,7 @@ export default function OpsPage() {
               <div>
                 <b>{executiveSummary?.high ?? 0}</b> HIGH abiertos — asignar recursos.
               </div>
-              <div className="text-xs text-black/60">
+              <div className="text-xs text-[color:var(--text-60)]">
                 {executiveSummary
                   ? `Total open: ${executiveSummary.open} · ${executiveSummary.stalePct.toFixed(
                       1
@@ -383,29 +383,29 @@ export default function OpsPage() {
           </div>
 
           {/* Top stale */}
-          <div className="rounded-[26px] border border-white/60 bg-[color:var(--panel)] p-5 shadow-[0_20px_50px_rgba(7,33,70,0.08)] backdrop-blur-xl animate-rise" style={{ animationDelay: "240ms" }}>
+          <div className="rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-5 shadow-[var(--shadow-md)] backdrop-blur-xl animate-rise" style={{ animationDelay: "240ms" }}>
             <div className="flex items-center justify-between">
               <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
                 TOP STALE INCIDENTS
               </div>
-              <Hourglass className="h-4 w-4 text-black/50" />
+              <Hourglass className="h-4 w-4 text-[color:var(--text-50)]" />
             </div>
 
             <div className="mt-3 space-y-2">
               {staleList.length === 0 && (
-                <div className="text-sm text-black/60">No stale incidents detected</div>
+                <div className="text-sm text-[color:var(--text-60)]">No stale incidents detected</div>
               )}
               {staleList.slice(0, 6).map((gid) => (
                 <div key={gid} className="flex items-center gap-2 justify-between">
                   <div className="text-sm font-mono text-[color:var(--ink)]">{gid}</div>
-                  <div className="text-xs text-black/60">open</div>
+                  <div className="text-xs text-[color:var(--text-60)]">open</div>
                 </div>
               ))}
             </div>
           </div>
 
           {/* Acciones rapidas */}
-          <div className="rounded-[26px] border border-white/60 bg-[color:var(--panel)] p-5 shadow-[0_20px_50px_rgba(7,33,70,0.08)] backdrop-blur-xl animate-rise" style={{ animationDelay: "280ms" }}>
+          <div className="rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-5 shadow-[var(--shadow-md)] backdrop-blur-xl animate-rise" style={{ animationDelay: "280ms" }}>
             <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
               QUICK ACTIONS
             </div>
@@ -453,7 +453,7 @@ function FilterChip({
     high: "bg-amber-500 text-white",
     medium: "bg-blue-500 text-white",
     low: "bg-emerald-500 text-white",
-    default: "bg-black/10 text-black/70",
+    default: "bg-[color:var(--overlay-10)] text-[color:var(--text-70)]",
   };
   const activeClass = toneMap[tone] ?? toneMap.default;
   return (
@@ -463,7 +463,7 @@ function FilterChip({
         "px-3 py-1 text-xs rounded-full border transition shadow-sm " +
         (active
           ? `${activeClass} border-transparent`
-          : "bg-white/80 text-black/60 border-white/60")
+          : "bg-[color:var(--surface-80)] text-[color:var(--text-60)] border-[color:var(--border-60)]")
       }
       style={{ minWidth: 72 }}
     >
@@ -519,10 +519,10 @@ function ActionBtn({
   return (
     <button
       onClick={onClick}
-      className="flex items-center gap-3 rounded-2xl border border-white/60 bg-white/80 px-3 py-2 text-sm text-[color:var(--ink)] shadow-sm hover:bg-white"
+      className="flex items-center gap-3 rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-3 py-2 text-sm text-[color:var(--ink)] shadow-sm hover:bg-[color:var(--surface-solid)]"
     >
       <div
-        className="h-8 w-8 rounded-2xl grid place-items-center border border-white/70 bg-white/80"
+        className="h-8 w-8 rounded-2xl grid place-items-center border border-[color:var(--border-70)] bg-[color:var(--surface-80)]"
       >
         {icon}
       </div>

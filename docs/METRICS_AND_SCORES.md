@@ -25,6 +25,7 @@ Reputation currently powers:
 - Sentiment by geo (table)
 - Comparative accumulated sentiment series (principal vs other actors)
 - Dashboard overlay with incident trend (if enabled)
+  - Requires incident scope enabled and cache available
 
 Downloads:
 - CSV export for chart series and filtered listings.
@@ -52,6 +53,7 @@ Reputacion ya alimenta:
 - Sentimiento por pais
 - Serie acumulada comparativa (actor principal vs otros)
 - Dashboard con tendencia de incidencias (si esta habilitado)
+  - Requiere ambito de incidencias activo y cache disponible
 
 Descargas:
 - Export CSV del grafico y del listado filtrado.

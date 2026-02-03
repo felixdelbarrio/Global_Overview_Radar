@@ -44,6 +44,17 @@ Example: combine `banking_bbva_empresas.json` + `banking_bbva_retail.json`.
 
 ---
 
+## EN | Add a new ingest action
+
+1) Implement the pipeline (service + cache write).
+2) Expose it in `backend/bugresolutionradar/api/routers/ingest.py`.
+3) Return progress updates (`stage`, `progress`, `meta`) for a great UX.
+4) Wire a button in `frontend/brr-frontend/src/components/Shell.tsx`.
+
+Tip: keep it non-blocking and idempotent.
+
+---
+
 ## ES | Anadir un adapter de BugResolutionRadar
 
 1) Implementa un adapter en `backend/bugresolutionradar/adapters/`.
@@ -78,3 +89,14 @@ Si hay API + scraper, sigue el patron de `appstore.py` y `google_play.py`.
 4) Opcional: define `ui.incidents_enabled` / `ui.ops_enabled` para scopes no IT.
 
 Ejemplo: `banking_bbva_empresas.json` + `banking_bbva_retail.json`.
+
+---
+
+## ES | Anadir una nueva accion de ingesta
+
+1) Implementa el pipeline (service + escritura de cache).
+2) Expone en `backend/bugresolutionradar/api/routers/ingest.py`.
+3) Devuelve progreso (`stage`, `progress`, `meta`) para una UX impecable.
+4) Conecta un boton en `frontend/brr-frontend/src/components/Shell.tsx`.
+
+Consejo: que sea no bloqueante e idempotente.

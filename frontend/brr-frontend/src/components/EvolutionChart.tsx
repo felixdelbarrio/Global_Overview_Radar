@@ -37,7 +37,7 @@ export function EvolutionChart({ data }: { data: EvolutionPoint[] }) {
             <stop offset="100%" stopColor="#99a4b3" stopOpacity={0.02} />
           </linearGradient>
         </defs>
-        <CartesianGrid stroke="rgba(7,33,70,0.08)" vertical={false} />
+        <CartesianGrid stroke="var(--chart-grid)" vertical={false} />
         <XAxis
           dataKey="date"
           tickFormatter={(d: string) => d.slice(5)}
@@ -47,8 +47,8 @@ export function EvolutionChart({ data }: { data: EvolutionPoint[] }) {
         <Tooltip
           contentStyle={{
             borderRadius: 16,
-            border: "1px solid rgba(7,33,70,0.08)",
-            boxShadow: "0 10px 30px rgba(7,33,70,0.12)",
+            border: "1px solid var(--border)",
+            boxShadow: "var(--shadow-tooltip)",
           }}
         />
         <Legend wrapperStyle={{ fontSize: 12 }} />

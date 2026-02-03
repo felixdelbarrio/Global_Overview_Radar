@@ -60,7 +60,6 @@ export default function IncidenciasPage() {
 
   useEffect(() => {
     let alive = true;
-    setItemsLoading(true);
     apiGet<{ items: Incident[] }>("/incidents?limit=5000")
       .then((r) => {
         if (!alive) return;
@@ -129,25 +128,25 @@ export default function IncidenciasPage() {
 
   return (
     <Shell>
-      <section className="relative overflow-hidden rounded-[28px] border border-white/60 bg-[color:var(--panel-strong)] p-6 shadow-[0_30px_70px_rgba(7,33,70,0.12)] animate-rise">
+      <section className="relative overflow-hidden rounded-[28px] border border-[color:var(--border-60)] bg-[color:var(--panel-strong)] p-6 shadow-[var(--shadow-lg)] animate-rise">
         <div className="absolute inset-0 pointer-events-none">
           <div className="absolute -top-24 -right-10 h-48 w-48 rounded-full bg-[color:var(--aqua)]/15 blur-3xl" />
           <div className="absolute -bottom-16 left-10 h-40 w-40 rounded-full bg-[color:var(--blue)]/10 blur-3xl" />
         </div>
         <div className="relative">
-          <div className="inline-flex items-center gap-2 rounded-full border border-white/60 bg-white/70 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-[color:var(--blue)] shadow-sm">
+          <div className="inline-flex items-center gap-2 rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-[color:var(--blue)] shadow-sm">
             <Sparkles className="h-3.5 w-3.5" />
             Incidencias críticas
           </div>
           <h1 className="mt-4 text-3xl sm:text-4xl font-display font-semibold text-[color:var(--ink)]">
             Incidencias
           </h1>
-          <p className="mt-2 max-w-2xl text-sm text-black/60">
+          <p className="mt-2 max-w-2xl text-sm text-[color:var(--text-60)]">
             Listado consolidado desde los distintos orígenes para seguimiento y
             priorización.
           </p>
-          <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-black/55">
-            <span className="inline-flex items-center gap-2 rounded-full bg-white/70 px-3 py-1">
+          <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-[color:var(--text-55)]">
+            <span className="inline-flex items-center gap-2 rounded-full bg-[color:var(--surface-70)] px-3 py-1">
               <Calendar className="h-3.5 w-3.5 text-[color:var(--blue)]" />
               Total cargadas:{" "}
               {itemsLoading ? (
@@ -156,7 +155,7 @@ export default function IncidenciasPage() {
                 items.length
               )}
             </span>
-            <span className="inline-flex items-center gap-2 rounded-full bg-white/70 px-3 py-1">
+            <span className="inline-flex items-center gap-2 rounded-full bg-[color:var(--surface-70)] px-3 py-1">
               <Search className="h-3.5 w-3.5 text-[color:var(--blue)]" />
               Mostrando:{" "}
               {itemsLoading ? (
@@ -165,7 +164,7 @@ export default function IncidenciasPage() {
                 filtered.length
               )}
             </span>
-            <span className="inline-flex items-center gap-2 rounded-full bg-white/70 px-3 py-1">
+            <span className="inline-flex items-center gap-2 rounded-full bg-[color:var(--surface-70)] px-3 py-1">
               <Filter className="h-3.5 w-3.5 text-[color:var(--blue)]" />
               Filtros activos: {activeFilters}
             </span>
@@ -180,13 +179,13 @@ export default function IncidenciasPage() {
       )}
 
       {/* Filtros */}
-      <div className="mt-6 rounded-[26px] border border-white/60 bg-[color:var(--panel)] p-5 shadow-[0_20px_50px_rgba(7,33,70,0.08)] backdrop-blur-xl animate-rise" style={{ animationDelay: "120ms" }}>
+      <div className="mt-6 rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-5 shadow-[var(--shadow-md)] backdrop-blur-xl animate-rise" style={{ animationDelay: "120ms" }}>
         <div className="grid grid-cols-1 md:grid-cols-[1fr_180px_180px] gap-3">
           <div>
-            <div className="text-[11px] uppercase tracking-[0.18em] text-black/50 mb-2">
+            <div className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--text-50)] mb-2">
               Buscar
             </div>
-            <div className="flex items-center gap-2 rounded-2xl border border-white/60 bg-white/80 px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]">
+            <div className="flex items-center gap-2 rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_var(--inset-highlight)]">
               <Search className="h-4 w-4 text-[color:var(--blue)]" />
               <input
                 className="w-full bg-transparent outline-none"
@@ -198,11 +197,11 @@ export default function IncidenciasPage() {
           </div>
 
           <div>
-            <div className="text-[11px] uppercase tracking-[0.18em] text-black/50 mb-2">
+            <div className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--text-50)] mb-2">
               Criticidad
             </div>
             <select
-              className="w-full rounded-2xl border border-white/60 bg-white/80 px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] outline-none focus:border-[color:var(--aqua)]/60 focus:ring-2 focus:ring-[color:var(--aqua)]/30"
+              className="w-full rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_var(--inset-highlight)] outline-none focus:border-[color:var(--aqua)]/60 focus:ring-2 focus:ring-[color:var(--aqua)]/30"
               value={sev}
               onChange={(e) => setSev(e.target.value)}
             >
@@ -216,11 +215,11 @@ export default function IncidenciasPage() {
           </div>
 
           <div>
-            <div className="text-[11px] uppercase tracking-[0.18em] text-black/50 mb-2">
+            <div className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--text-50)] mb-2">
               Estado
             </div>
             <select
-              className="w-full rounded-2xl border border-white/60 bg-white/80 px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] outline-none focus:border-[color:var(--aqua)]/60 focus:ring-2 focus:ring-[color:var(--aqua)]/30"
+              className="w-full rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_var(--inset-highlight)] outline-none focus:border-[color:var(--aqua)]/60 focus:ring-2 focus:ring-[color:var(--aqua)]/30"
               value={st}
               onChange={(e) => setSt(e.target.value)}
             >
@@ -234,22 +233,22 @@ export default function IncidenciasPage() {
       </div>
 
       {/* Evolucion */}
-      <div className="mt-6 rounded-[26px] border border-white/60 bg-[color:var(--panel)] p-5 shadow-[0_20px_50px_rgba(7,33,70,0.08)] backdrop-blur-xl animate-rise" style={{ animationDelay: "150ms" }}>
+      <div className="mt-6 rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-5 shadow-[var(--shadow-md)] backdrop-blur-xl animate-rise" style={{ animationDelay: "150ms" }}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
             EVOLUCIÓN TEMPORAL
           </h2>
-          <span className="text-xs text-black/50">
+          <span className="text-xs text-[color:var(--text-50)]">
             Últimos {EVOLUTION_DAYS} días{hasActiveFilters ? " · filtros activos" : ""}
           </span>
         </div>
         <div className="mt-4 h-72 min-h-[260px]">
           {chartLoading ? (
-            <div className="h-full rounded-[22px] border border-white/60 bg-white/70 animate-pulse" />
+            <div className="h-full rounded-[22px] border border-[color:var(--border-60)] bg-[color:var(--surface-70)] animate-pulse" />
           ) : chartData.length ? (
             <EvolutionChart data={chartData} />
           ) : (
-            <div className="h-full grid place-items-center text-sm text-black/45">
+            <div className="h-full grid place-items-center text-sm text-[color:var(--text-45)]">
               Sin datos para el periodo seleccionado.
             </div>
           )}
@@ -257,14 +256,14 @@ export default function IncidenciasPage() {
       </div>
 
       {/* Tabla */}
-      <div className="mt-6 rounded-[26px] border border-white/60 bg-[color:var(--panel)] shadow-[0_20px_50px_rgba(7,33,70,0.08)] backdrop-blur-xl overflow-hidden animate-rise" style={{ animationDelay: "180ms" }}>
+      <div className="mt-6 rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] shadow-[var(--shadow-md)] backdrop-blur-xl overflow-hidden animate-rise" style={{ animationDelay: "180ms" }}>
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm">
             <thead
-              className="sticky top-0 bg-white/80 backdrop-blur border-b"
-              style={{ borderColor: "rgba(7,33,70,0.08)" }}
+              className="sticky top-0 bg-[color:var(--surface-80)] backdrop-blur border-b"
+              style={{ borderColor: "var(--border)" }}
             >
-              <tr className="text-left text-[11px] uppercase tracking-[0.2em] text-black/45">
+              <tr className="text-left text-[11px] uppercase tracking-[0.2em] text-[color:var(--text-45)]">
                 <th className="px-4 py-3">ID</th>
                 <th className="px-4 py-3">Título</th>
                 <th className="px-4 py-3">Estado</th>
@@ -282,8 +281,8 @@ export default function IncidenciasPage() {
                 filtered.map((it, idx) => (
                   <tr
                     key={it.global_id}
-                    className={idx % 2 === 0 ? "bg-white/70" : "bg-white/40"}
-                    style={{ borderTop: "1px solid rgba(7,33,70,0.08)" }}
+                    className={idx % 2 === 0 ? "bg-[color:var(--surface-70)]" : "bg-[color:var(--surface-40)]"}
+                    style={{ borderTop: "1px solid var(--border)" }}
                   >
                     <td className="px-4 py-3 font-mono text-xs whitespace-nowrap">
                       {it.global_id}
@@ -292,7 +291,7 @@ export default function IncidenciasPage() {
                       <div className="font-semibold text-[color:var(--ink)]">
                         {it.title}
                       </div>
-                      <div className="text-xs text-black/55">
+                      <div className="text-xs text-[color:var(--text-55)]">
                         {it.product ?? "—"} · {it.feature ?? "—"}
                       </div>
                     </td>
@@ -317,7 +316,7 @@ export default function IncidenciasPage() {
 
               {!itemsLoading && filtered.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-10 text-center text-black/55">
+                  <td colSpan={7} className="px-4 py-10 text-center text-[color:var(--text-55)]">
                     No hay incidencias para mostrar con los filtros actuales.
                   </td>
                 </tr>
@@ -334,10 +333,10 @@ function SkeletonTableRows({ columns, rows }: { columns: number; rows: number })
   return (
     <>
       {Array.from({ length: rows }).map((_, rowIdx) => (
-        <tr key={rowIdx} className="border-t border-white/60 animate-pulse">
+        <tr key={rowIdx} className="border-t border-[color:var(--border-60)] animate-pulse">
           {Array.from({ length: columns }).map((_, colIdx) => (
             <td key={colIdx} className="px-4 py-3">
-              <div className="h-3 w-full max-w-[120px] rounded-full bg-white/70 border border-white/60" />
+              <div className="h-3 w-full max-w-[120px] rounded-full bg-[color:var(--surface-70)] border border-[color:var(--border-60)]" />
             </td>
           ))}
         </tr>

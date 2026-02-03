@@ -39,6 +39,16 @@ Back to architecture: `ARCHITECTURE.md`
 **Why:** Reduce irrelevant mentions and protect end-user experience.  
 **Consequence:** Some sources require actor-in-text; mismatched actor/geo items are dropped.
 
+## EN | ADR-008 — Incident scope gated by env + cache
+**Decision:** Incident features are shown only when the frontend flag allows it and the incidents cache exists.  
+**Why:** Incidents are contextual, and the UX should not expose empty scopes.  
+**Consequence:** `NEXT_PUBLIC_INCIDENTS_ENABLED` + cache presence (`bugresolutionradar_cache.json`) jointly control visibility.
+
+## EN | ADR-009 — Ingest triggered from UI with progress
+**Decision:** Ingest can be launched from the UI via `/ingest/*`, with background jobs and progress.  
+**Why:** Keeps workflows fast without blocking the rest of the dashboard.  
+**Consequence:** Jobs are in-memory and reset on restart (unless persisted later).
+
 ---
 
 ## ES | ADR-001 — Metricas relativas
@@ -75,3 +85,13 @@ Back to architecture: `ARCHITECTURE.md`
 **Decision:** Aplicar checks estrictos de actor + allowlist por geo antes del cache.  
 **Por que:** Reducir menciones irrelevantes y proteger la experiencia del cliente.  
 **Consecuencia:** Algunas fuentes exigen actor en texto; items fuera de geo se descartan.
+
+## ES | ADR-008 — Ambito de incidencias por env + cache
+**Decision:** El ambito de incidencias solo se muestra si el flag de frontend lo permite y existe el cache.  
+**Por que:** Incidencias son contextuales y no deben mostrarse sin datos.  
+**Consecuencia:** `NEXT_PUBLIC_INCIDENTS_ENABLED` + presencia de `bugresolutionradar_cache.json` controlan visibilidad.
+
+## ES | ADR-009 — Ingesta disparada desde UI con progreso
+**Decision:** La ingesta se puede lanzar desde UI via `/ingest/*` con jobs en background y progreso.  
+**Por que:** Mantiene fluidez sin bloquear el dashboard.  
+**Consecuencia:** Los jobs son in-memory y se reinician al reiniciar el backend.

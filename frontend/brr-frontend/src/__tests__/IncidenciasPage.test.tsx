@@ -19,6 +19,7 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@/lib/api", () => ({
   apiGet: vi.fn(),
+  apiPost: vi.fn(),
 }));
 
 import { apiGet } from "@/lib/api";

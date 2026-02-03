@@ -47,6 +47,16 @@ flowchart LR
   F --> G[Frontend]
 ```
 
+### Ingest trigger flow (optional)
+
+```mermaid
+flowchart LR
+  A[Frontend Ingest Center] --> B[/ingest/* API]
+  B --> C[Background job + progress]
+  C --> D[Cache update]
+  D --> E[Frontend refresh]
+```
+
 ### Configuration at a glance
 
 - Backend env files live in:
@@ -55,6 +65,8 @@ flowchart LR
 - Reputation configs are **multi-file** by design: drop one or many JSONs in `data/reputation/`.
 - Merge rules: dicts merge deep, lists de-duplicate, scalars override when non-empty.
 - UI flags can disable Incidencias/Ops per business scope (`ui.incidents_enabled`, `ui.ops_enabled`).
+- Frontend scope flag can hide the whole incidents domain (`NEXT_PUBLIC_INCIDENTS_ENABLED`).
+- Incident scope also depends on the existence of `data/cache/bugresolutionradar_cache.json`.
 
 ---
 
@@ -97,6 +109,16 @@ flowchart LR
   F --> G[Frontend]
 ```
 
+### Flujo de disparo de ingesta (opcional)
+
+```mermaid
+flowchart LR
+  A[Frontend Centro de Ingesta] --> B[/ingest/* API]
+  B --> C[Job en background + progreso]
+  C --> D[Actualizacion de cache]
+  D --> E[Frontend refresca]
+```
+
 ### Configuracion
 
 - .env backend:
@@ -105,3 +127,5 @@ flowchart LR
 - Reputacion usa **multi-config**: uno o varios JSON en `data/reputation/`.
 - Reglas de merge: dicts merge profundo, listas deduplicadas, escalares override si no estan vacios.
 - Flags de UI pueden deshabilitar Incidencias/Ops por scope (`ui.incidents_enabled`, `ui.ops_enabled`).
+- Flag de frontend puede ocultar todo el ambito de incidencias (`NEXT_PUBLIC_INCIDENTS_ENABLED`).
+- El ambito de incidencias tambien depende de `data/cache/bugresolutionradar_cache.json`.

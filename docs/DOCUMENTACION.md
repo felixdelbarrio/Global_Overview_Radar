@@ -26,6 +26,8 @@ Global Overview Radar is split into two operational domains:
 - Exposes reputation items + comparison endpoints.
 
 **Current product focus:** sentiment-first dashboard with incidents as a complementary layer (configurable).
+Incidents are additionally gated by a frontend scope flag and the presence of the
+incidents cache file.
 
 ---
 
@@ -37,6 +39,7 @@ Global Overview Radar is split into two operational domains:
 3) `ConsolidateService` merges into `IncidentRecord` and writes cache.
 4) `ReportingService` computes KPIs from cache.
 5) FastAPI exposes `/kpis`, `/incidents`, `/evolution`.
+6) Optional: `/ingest/incidents` can trigger ingestion in the background.
 
 ### Reputation Radar
 1) Load business config (all `*.json` in `data/reputation/`).
@@ -45,6 +48,7 @@ Global Overview Radar is split into two operational domains:
 4) Apply noise control: actor presence, actor-in-text checks, guard actors, actor/geo allowlists.
 5) Merge + cache to `data/cache/reputation_cache.json`.
 6) FastAPI exposes `/reputation/items`, `/reputation/items/compare`, `/reputation/meta`.
+7) Optional: `/ingest/reputation` can trigger ingestion in the background.
 
 ### Frontend (current navigation)
 - **Dashboard (/)**
@@ -55,6 +59,8 @@ Global Overview Radar is split into two operational domains:
   - CSV downloads (chart + grid)
 - **Incidencias / Ops Executive**
   - Optional; hidden when `ui.incidents_enabled=false` or `ui.ops_enabled=false`
+- **Ingest Center**
+  - Top-right control that can launch reputation or incident ingests with live progress.
 
 ---
 
@@ -82,6 +88,10 @@ Noise-control knobs (reputation):
 
 UI flags:
 - `ui.incidents_enabled` / `ui.ops_enabled`: enable or hide incident-related views.
+Frontend scope flag:
+- `NEXT_PUBLIC_INCIDENTS_ENABLED`: hide all incident scope (nav, ingest button, dashboard line).
+Availability gate:
+- If `data/cache/bugresolutionradar_cache.json` is missing, incident features are hidden regardless of flags.
 
 ---
 
@@ -120,6 +130,7 @@ Global Overview Radar se divide en dos dominios:
 - Expone endpoints de reputacion y comparativas.
 
 **Foco actual del producto:** dashboard centrado en sentimiento, con incidencias como capa complementaria (configurable).
+Las incidencias ademas dependen del flag del frontend y de la existencia del cache.
 
 ---
 
@@ -131,6 +142,7 @@ Global Overview Radar se divide en dos dominios:
 3) `ConsolidateService` genera `IncidentRecord` y escribe cache.
 4) `ReportingService` calcula KPIs.
 5) FastAPI expone `/kpis`, `/incidents`, `/evolution`.
+6) Opcional: `/ingest/incidents` dispara la ingesta en segundo plano.
 
 ### Reputation Radar
 1) Carga config (todos los `*.json` en `data/reputation/`).
@@ -139,6 +151,7 @@ Global Overview Radar se divide en dos dominios:
 4) Aplica control de ruido: actor obligatorio, actor en texto, guard actors, allowlist actor/geo.
 5) Merge + cache en `data/cache/reputation_cache.json`.
 6) FastAPI expone `/reputation/items`, `/reputation/items/compare`, `/reputation/meta`.
+7) Opcional: `/ingest/reputation` dispara la ingesta en segundo plano.
 
 ### Frontend (navegacion actual)
 - **Dashboard (/)**
@@ -149,6 +162,8 @@ Global Overview Radar se divide en dos dominios:
   - Descargas CSV (grafico + grid)
 - **Incidencias / Ops Executive**
   - Opcionales; se ocultan con `ui.incidents_enabled=false` o `ui.ops_enabled=false`
+- **Centro de ingesta**
+  - Control arriba a la derecha para lanzar ingestas con progreso en vivo.
 
 ---
 
@@ -176,6 +191,10 @@ Controles de ruido (reputacion):
 
 Flags de UI:
 - `ui.incidents_enabled` / `ui.ops_enabled`: habilitan u ocultan vistas de incidencias.
+Flag de scope en frontend:
+- `NEXT_PUBLIC_INCIDENTS_ENABLED`: oculta todo el ambito de incidencias (nav, boton de ingesta y linea del dashboard).
+Regla de disponibilidad:
+- Si no existe `data/cache/bugresolutionradar_cache.json`, se oculta el ambito de incidencias aunque el flag este activo.
 
 ---
 
