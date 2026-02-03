@@ -198,6 +198,22 @@ body {
   color: var(--text-primary);
 }
 
+/* Feedback visual consistente para elementos clicables */
+:is(a, button, [role="button"], .cursor-pointer) {
+  cursor: pointer;
+  transition: filter 0.16s ease, box-shadow 0.16s ease;
+}
+
+:is(a, button, [role="button"], .cursor-pointer):hover {
+  filter: brightness(1.04);
+}
+
+:is(a, button, [role="button"], .cursor-pointer):disabled,
+:is(a, button, [role="button"], .cursor-pointer)[aria-disabled="true"] {
+  cursor: not-allowed;
+  filter: none;
+}
+
 @keyframes shimmer {
   0% {
     transform: translateX(-100%);
