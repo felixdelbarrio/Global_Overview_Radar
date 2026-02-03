@@ -5,7 +5,7 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
-import { Calendar, Filter, Loader2, Search, Sparkles } from "lucide-react";
+import { Calendar, Download, Filter, Loader2, Search, Sparkles } from "lucide-react";
 import { Shell } from "@/components/Shell";
 import { apiGet } from "@/lib/api";
 import { EvolutionChart } from "@/components/EvolutionChart";
@@ -44,6 +44,13 @@ function chipStatus(st: string) {
 }
 
 export default function IncidenciasPage() {
+  const today = useMemo(() => new Date(), []);
+  const defaultTo = useMemo(() => toDateInput(today), [today]);
+  const defaultFrom = useMemo(() => {
+    const d = new Date(today);
+    d.setDate(d.getDate() - (EVOLUTION_DAYS - 1));
+    return toDateInput(d);
+  }, [today]);
   /** Lista completa de incidencias. */
   const [items, setItems] = useState<Incident[]>([]);
   const [itemsLoading, setItemsLoading] = useState(true);
@@ -57,6 +64,8 @@ export default function IncidenciasPage() {
   const [q, setQ] = useState("");
   const [sev, setSev] = useState<string>("ALL");
   const [st, setSt] = useState<string>("ALL");
+  const [fromDate, setFromDate] = useState(defaultFrom);
+  const [toDate, setToDate] = useState(defaultTo);
 
   useEffect(() => {
     let alive = true;
@@ -93,9 +102,17 @@ export default function IncidenciasPage() {
     };
   }, []);
 
+  const range = useMemo(
+    () => normalizeDateRange(fromDate, toDate),
+    [fromDate, toDate],
+  );
   const filtered = useMemo(() => {
     const qq = q.trim().toLowerCase();
     return items.filter((it) => {
+      const itemDate = toDateOnly(it.opened_at ?? it.closed_at);
+      const okDate =
+        (!range.start || (itemDate && itemDate >= range.start)) &&
+        (!range.end || (itemDate && itemDate <= range.end));
       const okQ =
         !qq ||
         it.global_id.toLowerCase().includes(qq) ||
@@ -106,17 +123,26 @@ export default function IncidenciasPage() {
       const okSev = sev === "ALL" || (it.severity ?? "").toString().toUpperCase() === sev;
       const okSt = st === "ALL" || (it.status ?? "").toString().toUpperCase() === st;
 
-      return okQ && okSev && okSt;
+      return okDate && okQ && okSev && okSt;
     });
-  }, [items, q, sev, st]);
+  }, [items, q, sev, st, range]);
 
+  const isDefaultRange = fromDate === defaultFrom && toDate === defaultTo;
   const activeFilters =
-    (q ? 1 : 0) + (sev !== "ALL" ? 1 : 0) + (st !== "ALL" ? 1 : 0);
+    (q ? 1 : 0) +
+    (sev !== "ALL" ? 1 : 0) +
+    (st !== "ALL" ? 1 : 0) +
+    (!isDefaultRange ? 1 : 0);
   const hasActiveFilters = activeFilters > 0;
+  const dateRangeLabel = isDefaultRange
+    ? `Últimos ${EVOLUTION_DAYS} días`
+    : `${range.start ? toDateKey(range.start) : "—"} → ${
+        range.end ? toDateKey(range.end) : "—"
+      }`;
   const errorMessage = error || evolutionError;
   const filteredEvolution = useMemo(
-    () => buildEvolutionSeries(filtered, EVOLUTION_DAYS),
-    [filtered],
+    () => buildEvolutionSeries(filtered, EVOLUTION_DAYS, fromDate, toDate),
+    [filtered, fromDate, toDate],
   );
   const chartData = useMemo(() => {
     if (hasActiveFilters) {
@@ -180,7 +206,7 @@ export default function IncidenciasPage() {
 
       {/* Filtros */}
       <div className="mt-6 rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-5 shadow-[var(--shadow-md)] backdrop-blur-xl animate-rise" style={{ animationDelay: "120ms" }}>
-        <div className="grid grid-cols-1 md:grid-cols-[1fr_180px_180px] gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-[1fr_180px_180px_180px_180px] gap-3">
           <div>
             <div className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--text-50)] mb-2">
               Buscar
@@ -229,6 +255,28 @@ export default function IncidenciasPage() {
               <option value="CLOSED">CLOSED</option>
             </select>
           </div>
+          <div>
+            <div className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--text-50)] mb-2">
+              Desde
+            </div>
+            <input
+              type="date"
+              value={fromDate}
+              onChange={(e) => setFromDate(e.target.value)}
+              className="w-full rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_var(--inset-highlight)] outline-none focus:border-[color:var(--aqua)]/60 focus:ring-2 focus:ring-[color:var(--aqua)]/30"
+            />
+          </div>
+          <div>
+            <div className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--text-50)] mb-2">
+              Hasta
+            </div>
+            <input
+              type="date"
+              value={toDate}
+              onChange={(e) => setToDate(e.target.value)}
+              className="w-full rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_var(--inset-highlight)] outline-none focus:border-[color:var(--aqua)]/60 focus:ring-2 focus:ring-[color:var(--aqua)]/30"
+            />
+          </div>
         </div>
       </div>
 
@@ -238,9 +286,26 @@ export default function IncidenciasPage() {
           <h2 className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
             EVOLUCIÓN TEMPORAL
           </h2>
-          <span className="text-xs text-[color:var(--text-50)]">
-            Últimos {EVOLUTION_DAYS} días{hasActiveFilters ? " · filtros activos" : ""}
-          </span>
+          <div className="flex flex-wrap items-center gap-2 text-xs text-[color:var(--text-50)]">
+            <span>
+              {dateRangeLabel}
+              {hasActiveFilters ? " · filtros activos" : ""}
+            </span>
+            <button
+              type="button"
+              onClick={() =>
+                downloadEvolutionCsv(
+                  chartData,
+                  buildDownloadName("incidencias_evolucion", fromDate, toDate),
+                )
+              }
+              disabled={chartLoading || chartData.length === 0}
+              className="inline-flex items-center gap-2 rounded-full border border-[color:var(--border-70)] bg-[color:var(--surface-80)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--brand-ink)] shadow-[var(--shadow-pill)] transition hover:-translate-y-0.5 hover:shadow-[var(--shadow-pill-hover)] disabled:opacity-60 disabled:hover:translate-y-0 disabled:hover:shadow-[var(--shadow-pill)]"
+            >
+              <Download className="h-3.5 w-3.5" />
+              Descargar gráfico
+            </button>
+          </div>
         </div>
         <div className="mt-4 h-72 min-h-[260px]">
           {chartLoading ? (
@@ -257,6 +322,25 @@ export default function IncidenciasPage() {
 
       {/* Tabla */}
       <div className="mt-6 rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] shadow-[var(--shadow-md)] backdrop-blur-xl overflow-hidden animate-rise" style={{ animationDelay: "180ms" }}>
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[color:var(--border-60)] px-5 py-4">
+          <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
+            RESULTADOS
+          </div>
+          <button
+            type="button"
+            onClick={() =>
+              downloadIncidentsCsv(
+                filtered,
+                buildDownloadName("incidencias_resultados", fromDate, toDate),
+              )
+            }
+            disabled={itemsLoading || filtered.length === 0}
+            className="inline-flex items-center gap-2 rounded-full border border-[color:var(--border-70)] bg-[color:var(--surface-80)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--brand-ink)] shadow-[var(--shadow-pill)] transition hover:-translate-y-0.5 hover:shadow-[var(--shadow-pill-hover)] disabled:opacity-60 disabled:hover:translate-y-0 disabled:hover:shadow-[var(--shadow-pill)]"
+          >
+            <Download className="h-3.5 w-3.5" />
+            Descargar resultados
+          </button>
+        </div>
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm">
             <thead
@@ -345,12 +429,21 @@ function SkeletonTableRows({ columns, rows }: { columns: number; rows: number })
   );
 }
 
-function buildEvolutionSeries(items: Incident[], days: number): EvolutionPoint[] {
+function buildEvolutionSeries(
+  items: Incident[],
+  days: number,
+  fromDate?: string,
+  toDate?: string,
+): EvolutionPoint[] {
   if (!items.length || days <= 0) return [];
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const start = new Date(today);
-  start.setDate(start.getDate() - (days - 1));
+  const range = normalizeDateRange(fromDate, toDate, today, days);
+  const start = range.start;
+  const end = range.end;
+  const totalDays =
+    Math.max(0, Math.floor((end.getTime() - start.getTime()) / 86_400_000)) + 1;
+  if (totalDays <= 0) return [];
 
   const normalized = items
     .map((item) => ({
@@ -360,7 +453,7 @@ function buildEvolutionSeries(items: Incident[], days: number): EvolutionPoint[]
     .filter((row) => row.opened);
 
   const series: EvolutionPoint[] = [];
-  for (let i = 0; i < days; i += 1) {
+  for (let i = 0; i < totalDays; i += 1) {
     const day = new Date(start);
     day.setDate(start.getDate() + i);
     const key = toDateKey(day);
@@ -399,4 +492,102 @@ function toDateOnly(value?: string | null) {
 
 function toDateKey(date: Date) {
   return date.toISOString().slice(0, 10);
+}
+
+function toDateInput(date: Date) {
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60000)
+    .toISOString()
+    .slice(0, 10);
+}
+
+function normalizeDateRange(
+  fromDate?: string,
+  toDate?: string,
+  todayOverride?: Date,
+  fallbackDays = EVOLUTION_DAYS,
+) {
+  const today = todayOverride ? new Date(todayOverride) : new Date();
+  today.setHours(0, 0, 0, 0);
+  let start = toDateOnly(fromDate);
+  let end = toDateOnly(toDate);
+  if (start && end && start > end) {
+    const temp = start;
+    start = end;
+    end = temp;
+  }
+  if (!end) {
+    end = today;
+  }
+  if (!start) {
+    start = new Date(end);
+    start.setDate(end.getDate() - (fallbackDays - 1));
+  }
+  return { start, end };
+}
+
+function buildDownloadName(prefix: string, fromDate?: string, toDate?: string) {
+  const safePrefix = prefix.replace(/[^a-zA-Z0-9_-]+/g, "_");
+  const range = normalizeDateRange(fromDate, toDate);
+  const rangeFrom = range.start ? toDateKey(range.start) : "inicio";
+  const rangeTo = range.end ? toDateKey(range.end) : "hoy";
+  return `${safePrefix}_${rangeFrom}_${rangeTo}`;
+}
+
+function downloadEvolutionCsv(data: EvolutionPoint[], filename: string) {
+  const headers = ["Fecha", "Abiertas", "Nuevas", "Cerradas"];
+  const rows = data.map((row) => [row.date, row.open, row.new, row.closed]);
+  downloadCsv(filename, headers, rows);
+}
+
+function downloadIncidentsCsv(items: Incident[], filename: string) {
+  const headers = [
+    "id",
+    "titulo",
+    "estado",
+    "criticidad",
+    "producto",
+    "funcionalidad",
+    "abierta",
+    "cerrada",
+  ];
+  const rows = items.map((item) => [
+    item.global_id,
+    item.title ?? "",
+    item.status ?? "",
+    item.severity ?? "",
+    item.product ?? "",
+    item.feature ?? "",
+    item.opened_at ?? "",
+    item.closed_at ?? "",
+  ]);
+  downloadCsv(filename, headers, rows);
+}
+
+function downloadCsv(
+  filename: string,
+  headers: string[],
+  rows: (string | number | null | undefined)[][],
+) {
+  const csvRows = [headers, ...rows].map((row) =>
+    row.map((cell) => escapeCsvCell(cell)).join(","),
+  );
+  const content = `\uFEFF${csvRows.join("\n")}`;
+  const blob = new Blob([content], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename.endsWith(".csv") ? filename : `${filename}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function escapeCsvCell(value: string | number | null | undefined) {
+  if (value === null || value === undefined) return "";
+  const str = String(value);
+  if (/["\n,]/.test(str)) {
+    return `"${str.replace(/"/g, "\"\"")}"`;
+  }
+  return str;
 }

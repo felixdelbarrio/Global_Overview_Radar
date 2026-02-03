@@ -28,6 +28,8 @@ import IncidenciasPage from "@/app/incidencias/page";
 const apiGetMock = vi.mocked(apiGet);
 
 it("filters incidents by search and severity", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2025-02-01T00:00:00Z"));
   apiGetMock.mockImplementation((path: string) => {
     if (path.startsWith("/evolution")) {
       return Promise.resolve({
@@ -59,25 +61,30 @@ it("filters incidents by search and severity", async () => {
     });
   });
 
-  render(<IncidenciasPage />);
+  const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+  try {
+    render(<IncidenciasPage />);
 
-  expect(await screen.findByText("INC-1")).toBeInTheDocument();
-  expect(screen.getByText("EVOLUCIÓN TEMPORAL")).toBeInTheDocument();
-  expect(screen.getByText("INC-2")).toBeInTheDocument();
+    expect(await screen.findByText("INC-1")).toBeInTheDocument();
+    expect(screen.getByText("EVOLUCIÓN TEMPORAL")).toBeInTheDocument();
+    expect(screen.getByText("INC-2")).toBeInTheDocument();
 
-  const search = screen.getByPlaceholderText("ID, título, producto, funcionalidad…");
-  await userEvent.type(search, "login");
-  expect(screen.getByText("INC-1")).toBeInTheDocument();
-  expect(screen.queryByText("INC-2")).not.toBeInTheDocument();
+    const search = screen.getByPlaceholderText("ID, título, producto, funcionalidad…");
+    await user.type(search, "login");
+    expect(screen.getByText("INC-1")).toBeInTheDocument();
+    expect(screen.queryByText("INC-2")).not.toBeInTheDocument();
 
-  await userEvent.clear(search);
-  const severity = screen.getByDisplayValue("Todas");
-  await userEvent.selectOptions(severity, "LOW");
-  expect(screen.getByText("INC-2")).toBeInTheDocument();
-  expect(screen.queryByText("INC-1")).not.toBeInTheDocument();
+    await user.clear(search);
+    const severity = screen.getByDisplayValue("Todas");
+    await user.selectOptions(severity, "LOW");
+    expect(screen.getByText("INC-2")).toBeInTheDocument();
+    expect(screen.queryByText("INC-1")).not.toBeInTheDocument();
 
-  await userEvent.type(search, "no-match");
-  expect(
-    screen.getByText("No hay incidencias para mostrar con los filtros actuales.")
-  ).toBeInTheDocument();
+    await user.type(search, "no-match");
+    expect(
+      screen.getByText("No hay incidencias para mostrar con los filtros actuales.")
+    ).toBeInTheDocument();
+  } finally {
+    vi.useRealTimers();
+  }
 });
