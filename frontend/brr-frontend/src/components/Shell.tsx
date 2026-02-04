@@ -181,15 +181,17 @@ export function Shell({ children }: { children: React.ReactNode }) {
   }, [settingsGroups]);
 
   useEffect(() => {
-    const stored = readStoredTheme();
-    if (stored && stored !== theme) {
-      setTheme(stored);
-    } else {
+    setTheme((prev) => {
+      const stored = readStoredTheme();
+      if (stored && stored !== prev) {
+        return stored;
+      }
       const domTheme = document.documentElement.dataset.theme;
       if (domTheme === "ambient-dark" || domTheme === "ambient-light") {
-        setTheme(domTheme);
+        return domTheme;
       }
-    }
+      return prev;
+    });
     setThemeReady(true);
   }, []);
 

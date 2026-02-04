@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from typing import Any
 
 import pytest
@@ -88,7 +87,7 @@ def test_job_helpers_and_warning(monkeypatch: pytest.MonkeyPatch) -> None:
     assert ingest_router._find_active("reputation") is None
     ingest_router._update_job("missing", progress=10)
 
-    first = ingest_router._create_job("reputation")
+    ingest_router._create_job("reputation")
     second = ingest_router._create_job("reputation")
     assert len(ingest_router._JOBS) == 1
     assert ingest_router._find_active("reputation")
@@ -110,7 +109,9 @@ def test_job_helpers_and_warning(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_run_reputation_job(monkeypatch: pytest.MonkeyPatch) -> None:
     job = ingest_router._create_job("reputation")
     doc = DummyDoc(count=4, note="LLM: disabled")
-    monkeypatch.setattr(ingest_router, "ReputationIngestService", lambda: DummyService(doc))
+    monkeypatch.setattr(
+        ingest_router, "ReputationIngestService", lambda: DummyService(doc)
+    )
 
     ingest_router._run_reputation_job(job["id"], force=True)
     stored = ingest_router._get_job(job["id"])
@@ -125,7 +126,9 @@ def test_run_incidents_job(monkeypatch: pytest.MonkeyPatch) -> None:
     repo = DummyCacheRepo()
     monkeypatch.setattr(ingest_router, "CacheRepo", lambda *_: repo)
     monkeypatch.setattr(ingest_router, "IngestService", lambda *_: DummyIngestService())
-    monkeypatch.setattr(ingest_router, "ConsolidateService", lambda: DummyConsolidateService())
+    monkeypatch.setattr(
+        ingest_router, "ConsolidateService", lambda: DummyConsolidateService()
+    )
 
     ingest_router._run_incidents_job(job["id"])
     stored = ingest_router._get_job(job["id"])
@@ -149,7 +152,9 @@ def test_ingest_job_endpoints() -> None:
     assert exc.value.status_code == 404
 
 
-def test_start_reputation_ingest_returns_active(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_start_reputation_ingest_returns_active(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     job = ingest_router._create_job("reputation")
     ingest_router._update_job(job["id"], status="running")
 
@@ -163,7 +168,9 @@ def test_start_reputation_ingest_returns_active(monkeypatch: pytest.MonkeyPatch)
 
 def test_ingest_reputation_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
     doc = DummyDoc(count=1)
-    monkeypatch.setattr(ingest_router, "ReputationIngestService", lambda: DummyService(doc))
+    monkeypatch.setattr(
+        ingest_router, "ReputationIngestService", lambda: DummyService(doc)
+    )
 
     class DummyThread:
         def __init__(self, target: Any, args: tuple[Any, ...], daemon: bool) -> None:

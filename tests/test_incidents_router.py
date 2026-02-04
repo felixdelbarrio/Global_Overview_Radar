@@ -145,7 +145,9 @@ def test_incidents_query_and_limit() -> None:
     assert len(res_limit.json()["items"]) == 1
 
 
-def test_incidents_override_flow(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_incidents_override_flow(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     overrides_path = tmp_path / "overrides.json"
     monkeypatch.setattr(
         "bugresolutionradar.api.routers.incidents.settings.incidents_overrides_path",
@@ -168,7 +170,9 @@ def test_incidents_override_flow(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 
     res_list = client.get("/incidents")
     assert res_list.status_code == 200
-    row = next(item for item in res_list.json()["items"] if item["global_id"] == "src:1")
+    row = next(
+        item for item in res_list.json()["items"] if item["global_id"] == "src:1"
+    )
     assert row["manual_override"]["status"] == "BLOCKED"
 
     res_detail = client.get("/incidents/src:1")

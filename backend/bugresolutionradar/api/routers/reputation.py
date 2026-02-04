@@ -8,10 +8,6 @@ from typing import Any, Iterable, List
 
 from fastapi import APIRouter, Body, HTTPException, Query
 from pydantic import BaseModel
-
-from bugresolutionradar.api.routers.ingest import start_reputation_ingest
-from bugresolutionradar.config import settings as brr_settings
-from bugresolutionradar.logging_utils import get_logger
 from reputation.actors import (
     actor_principal_canonicals,
     actor_principal_terms,
@@ -28,6 +24,8 @@ from reputation.config import (
     load_business_config,
     normalize_profile_source,
     set_profile_state,
+)
+from reputation.config import (
     settings as reputation_settings,
 )
 from reputation.models import (
@@ -43,6 +41,10 @@ from reputation.user_settings import (
     reset_user_settings_to_example,
     update_user_settings,
 )
+
+from bugresolutionradar.api.routers.ingest import start_reputation_ingest
+from bugresolutionradar.config import settings as brr_settings
+from bugresolutionradar.logging_utils import get_logger
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -60,9 +62,16 @@ def _enabled_sources_set() -> set[str]:
     return {_normalize_source(source) for source in reputation_settings.enabled_sources()}
 
 
-def _is_source_enabled(source: str | None, enabled_sources: set[str]) -> bool:
-    if not enabled_sources:
-        return False
+def _resolve_enabled_sources(doc: ReputationCacheDocument | None) -> set[str] | None:
+    if doc is not None and not doc.sources_enabled:
+        return None
+    enabled = _enabled_sources_set()
+    return enabled or None
+
+
+def _is_source_enabled(source: str | None, enabled_sources: set[str] | None) -> bool:
+    if enabled_sources is None:
+        return True
     if not source:
         return False
     return _normalize_source(source) in enabled_sources
@@ -95,7 +104,7 @@ def reputation_items(
         )
 
     overrides = _load_overrides()
-    enabled_sources = _enabled_sources_set()
+    enabled_sources = _resolve_enabled_sources(doc)
     base_items = [
         item
         for item in _apply_overrides(doc.items, overrides)
@@ -172,7 +181,7 @@ def reputation_meta() -> dict[str, Any]:
     doc = repo.load()
     cache_available = doc is not None
     sources_enabled = list(reputation_settings.enabled_sources())
-    enabled_sources = _enabled_sources_set()
+    enabled_sources = _resolve_enabled_sources(doc)
     market_ratings = [
         rating
         for rating in (doc.market_ratings if doc else [])
@@ -371,7 +380,7 @@ def reputation_compare(filters: List[CompareFilter] = COMPARE_BODY):
         }
 
     overrides = _load_overrides()
-    enabled_sources = _enabled_sources_set()
+    enabled_sources = _resolve_enabled_sources(doc)
     base_items = [
         item
         for item in _apply_overrides(doc.items, overrides)
