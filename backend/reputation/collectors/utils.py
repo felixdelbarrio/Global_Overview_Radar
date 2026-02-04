@@ -23,6 +23,11 @@ _HTTP_CACHE: "OrderedDict[str, tuple[float, str]]" = OrderedDict()
 _HTTP_CACHE_LOCK = Lock()
 _HTTP_BLOCKED: dict[str, float] = {}
 
+DEFAULT_HTTP_CACHE_TTL_SEC = 120
+DEFAULT_HTTP_CACHE_MAX_ENTRIES = 500
+DEFAULT_HTTP_RETRIES = 1
+DEFAULT_HTTP_BLOCK_TTL_SEC = 90
+
 
 def _env_int(name: str, default: int) -> int:
     raw = os.getenv(name, "").strip()
@@ -52,7 +57,7 @@ def _http_cache_key(url: str, headers: dict[str, str]) -> str:
 
 
 def _http_cache_get(key: str) -> str | None:
-    ttl = _env_int("REPUTATION_HTTP_CACHE_TTL_SEC", 0)
+    ttl = _env_int("REPUTATION_HTTP_CACHE_TTL_SEC", DEFAULT_HTTP_CACHE_TTL_SEC)
     if ttl <= 0:
         return None
     now = time.time()
@@ -69,21 +74,21 @@ def _http_cache_get(key: str) -> str | None:
 
 
 def _http_cache_set(key: str, value: str) -> None:
-    ttl = _env_int("REPUTATION_HTTP_CACHE_TTL_SEC", 0)
+    ttl = _env_int("REPUTATION_HTTP_CACHE_TTL_SEC", DEFAULT_HTTP_CACHE_TTL_SEC)
     if ttl <= 0:
         return
     expires_at = time.time() + ttl
     with _HTTP_CACHE_LOCK:
         _HTTP_CACHE[key] = (expires_at, value)
         _HTTP_CACHE.move_to_end(key)
-        max_entries = _env_int("REPUTATION_HTTP_CACHE_MAX_ENTRIES", 0)
+        max_entries = _env_int("REPUTATION_HTTP_CACHE_MAX_ENTRIES", DEFAULT_HTTP_CACHE_MAX_ENTRIES)
         if max_entries > 0:
             while len(_HTTP_CACHE) > max_entries:
                 _HTTP_CACHE.popitem(last=False)
 
 
 def _is_blocked(url: str) -> bool:
-    ttl = _env_int("REPUTATION_HTTP_BLOCK_TTL_SEC", 0)
+    ttl = _env_int("REPUTATION_HTTP_BLOCK_TTL_SEC", DEFAULT_HTTP_BLOCK_TTL_SEC)
     if ttl <= 0:
         return False
     host = urlparse(url).netloc
@@ -100,7 +105,7 @@ def _is_blocked(url: str) -> bool:
 
 
 def _block_host(url: str) -> None:
-    ttl = _env_int("REPUTATION_HTTP_BLOCK_TTL_SEC", 0)
+    ttl = _env_int("REPUTATION_HTTP_BLOCK_TTL_SEC", DEFAULT_HTTP_BLOCK_TTL_SEC)
     if ttl <= 0:
         return
     host = urlparse(url).netloc
@@ -120,7 +125,7 @@ def http_get_text(url: str, headers: dict[str, str] | None = None, timeout: int 
     if cached is not None:
         return cached
 
-    retries = max(0, _env_int("REPUTATION_HTTP_RETRIES", 0))
+    retries = max(0, _env_int("REPUTATION_HTTP_RETRIES", DEFAULT_HTTP_RETRIES))
     backoff = max(0.0, _env_float("REPUTATION_HTTP_RETRY_BACKOFF_SEC", 0.4))
     attempt = 0
     context = _ssl_context()
