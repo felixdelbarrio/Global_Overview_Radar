@@ -42,6 +42,7 @@ import { apiGet, apiPost } from "@/lib/api";
 import {
   dispatchIngestStarted,
   INGEST_SUCCESS_EVENT,
+  PROFILE_CHANGED_EVENT,
   type IngestSuccessDetail,
 } from "@/lib/events";
 import { INCIDENTS_FEATURE_ENABLED } from "@/lib/flags";
@@ -157,10 +158,12 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
   const [sources, setSources] = useState<string[]>([]);
   const [overrideRefresh, setOverrideRefresh] = useState(0);
   const [reputationRefresh, setReputationRefresh] = useState(0);
+  const [profileRefresh, setProfileRefresh] = useState(0);
   const [incidentsRefresh, setIncidentsRefresh] = useState(0);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
   const [reputationIngesting, setReputationIngesting] = useState(false);
   const [reputationIngestNote, setReputationIngestNote] = useState<string | null>(null);
+  const [cacheNoticeDismissed, setCacheNoticeDismissed] = useState(false);
   const isDashboard = mode === "dashboard";
   const effectiveSentiment = isDashboard ? "all" : sentiment;
   const effectiveActor = isDashboard ? "all" : actor;
@@ -181,6 +184,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
   const showIncidents = mode === "dashboard" && incidentsEnabled;
   const showDownloads = mode === "sentiment";
   const reputationCacheMissing = meta?.cache_available === false;
+  const showCacheNotice = reputationCacheMissing && !cacheNoticeDismissed;
   const [incidents, setIncidents] = useState<IncidentItem[]>([]);
   const [incidentsSeries, setIncidentsSeries] = useState<EvolutionPoint[]>([]);
   const [incidentsError, setIncidentsError] = useState<string | null>(null);
@@ -223,12 +227,25 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
     };
   }, [reputationRefresh]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    const handler = () => {
+      setProfileRefresh((value) => value + 1);
+      setReputationRefresh((value) => value + 1);
+    };
+    window.addEventListener(PROFILE_CHANGED_EVENT, handler as EventListener);
+    return () => {
+      window.removeEventListener(PROFILE_CHANGED_EVENT, handler as EventListener);
+    };
+  }, []);
+
   const handleOverride = async (payload: OverridePayload) => {
     await apiPost<{ updated: number }>("/reputation/items/override", payload);
     setOverrideRefresh((value) => value + 1);
   };
 
   const handleStartReputationIngest = async () => {
+    setCacheNoticeDismissed(true);
     setReputationIngestNote(null);
     setReputationIngesting(true);
     try {
@@ -247,6 +264,16 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
       setReputationIngesting(false);
     }
   };
+
+  useEffect(() => {
+    if (!reputationCacheMissing) {
+      setCacheNoticeDismissed(false);
+    }
+  }, [reputationCacheMissing]);
+
+  useEffect(() => {
+    setCacheNoticeDismissed(false);
+  }, [profileRefresh]);
 
   const actorPrincipalName = useMemo(
     () => actorPrincipal?.canonical || "Actor principal",
@@ -282,7 +309,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [profileRefresh]);
 
   useEffect(() => {
     if (!showIncidents) {
@@ -799,7 +826,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
         </div>
       </section>
 
-      {reputationCacheMissing && (
+      {showCacheNotice && (
         <div className="mt-4 rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--panel)] px-4 py-3 text-sm text-[color:var(--text-60)] shadow-[var(--shadow-soft)]">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>

@@ -8,6 +8,10 @@ from typing import Any, Iterable, List
 
 from fastapi import APIRouter, Body, HTTPException, Query
 from pydantic import BaseModel
+
+from bugresolutionradar.api.routers.ingest import start_reputation_ingest
+from bugresolutionradar.config import settings as brr_settings
+from bugresolutionradar.logging_utils import get_logger
 from reputation.actors import (
     actor_principal_canonicals,
     actor_principal_terms,
@@ -19,8 +23,10 @@ from reputation.config import (
     active_profile_key,
     active_profile_source,
     active_profiles,
+    apply_sample_profiles_to_default,
     list_available_profiles,
     load_business_config,
+    normalize_profile_source,
     set_profile_state,
 )
 from reputation.config import settings as reputation_settings
@@ -32,9 +38,6 @@ from reputation.models import (
 )
 from reputation.repositories.cache_repo import ReputationCacheRepo
 from reputation.repositories.overrides_repo import ReputationOverridesRepo
-
-from bugresolutionradar.config import settings as brr_settings
-from bugresolutionradar.logging_utils import get_logger
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -173,8 +176,32 @@ def reputation_profiles() -> dict[str, Any]:
 def reputation_profiles_set(payload: ProfileSelection) -> dict[str, Any]:
     source = payload.source or "default"
     profiles = payload.profiles or []
+    if normalize_profile_source(source) == "samples":
+        try:
+            result = apply_sample_profiles_to_default(profiles)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        auto_ingest = _maybe_start_auto_ingest()
+        result["auto_ingest"] = auto_ingest
+        return result
     active = set_profile_state(source, profiles)
-    return {"active": active}
+    auto_ingest = _maybe_start_auto_ingest()
+    return {"active": active, "auto_ingest": auto_ingest}
+
+
+def _maybe_start_auto_ingest() -> dict[str, Any]:
+    repo = ReputationCacheRepo(reputation_settings.cache_path)
+    doc = repo.load()
+    cache_empty = True
+    if doc is not None:
+        try:
+            cache_empty = len(doc.items) == 0
+        except Exception:
+            cache_empty = True
+    if not cache_empty:
+        return {"started": False, "reason": "cache_not_empty"}
+    job = start_reputation_ingest(force=True)
+    return {"started": True, "reason": "cache_empty", "job": job}
 
 
 class CompareFilter(BaseModel):
