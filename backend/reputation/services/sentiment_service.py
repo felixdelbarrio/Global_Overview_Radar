@@ -494,6 +494,32 @@ Si es claramente de otro dominio no bancario → no relevante.
 SALIDA FINAL
 Devuelve solo JSON válido (sin texto extra) cuando estés en modo evaluación de items."""
 
+_DEFAULT_TRANSLATION_SYSTEM_PROMPT = """ROL
+Eres un traductor profesional.
+
+OBJETIVO
+Traduce title y text al idioma objetivo indicado: {target_language}.
+
+ENTRADA
+Recibirás un JSON con una lista de items.
+Procesa cada item de forma independiente (no mezcles información entre items).
+
+SALIDA (estricta)
+Devuelve EXACTAMENTE el mismo JSON con los mismos campos y estructura, sin reordenar items.
+Solo puedes actualizar:
+- item.title
+- item.text
+- item.language (debe ser el idioma objetivo)
+
+REGLAS
+- No inventes contenido.
+- Conserva nombres propios, marcas, URLs y términos técnicos.
+- Si title o text están vacíos, deja "".
+- Si el contenido ya está en el idioma objetivo, puedes devolverlo igual.
+
+SALIDA FINAL
+Devuelve solo JSON válido (sin texto extra)."""
+
 
 @dataclass
 class SentimentResult:
@@ -1063,13 +1089,18 @@ class ReputationSentimentService:
         return "neutral"
 
     def _should_use_llm(self) -> bool:
+        if not self._can_use_llm():
+            return False
+        return self._sentiment_mode not in {"rules", "heuristic", ""}
+
+    def _can_use_llm(self) -> bool:
         if self._llm_blocked:
             return False
         if not self._llm_enabled:
             return False
         if self._llm_api_key_required and not self._llm_api_key:
             return False
-        return self._sentiment_mode not in {"rules", "heuristic", ""}
+        return True
 
     def _maybe_warn_llm_disabled(self) -> None:
         if self.llm_warning:
@@ -1160,23 +1191,183 @@ class ReputationSentimentService:
 
         return results
 
-    def _send_llm_request(self, payload_items: list[dict[str, Any]]) -> str | None:
+    def translate_items(
+        self,
+        items: Iterable[ReputationItem],
+        target_language: str,
+    ) -> list[ReputationItem]:
+        items_list = list(items)
+        target = _normalize_lang_code(target_language)
+        if not items_list or not target:
+            return items_list
+        use_llm = self._can_use_llm()
+        pending_llm: list[ReputationItem] = []
+        pending_fallback: list[tuple[ReputationItem, str]] = []
+
+        for item in items_list:
+            if not (item.title or item.text):
+                continue
+            current_lang = self._extract_item_language(item)
+            detected_lang = "" if current_lang else self._detect_item_language(item)
+
+            if current_lang and current_lang == target:
+                continue
+            if not current_lang and detected_lang and detected_lang == target:
+                continue
+
+            if use_llm:
+                pending_llm.append(item)
+            else:
+                source_lang = current_lang or detected_lang
+                if source_lang and source_lang != target:
+                    pending_fallback.append((item, source_lang))
+
+        if use_llm and pending_llm:
+            self._translate_items_with_llm(pending_llm, target)
+            return items_list
+
+        if pending_fallback:
+            self._translate_items_with_argos(pending_fallback, target)
+
+        return items_list
+
+    def _translate_items_with_llm(self, items: list[ReputationItem], target: str) -> None:
+        translations: dict[str, dict[str, str]] = {}
+        system_prompt = _DEFAULT_TRANSLATION_SYSTEM_PROMPT.format(target_language=target)
+
+        for chunk in _chunked(items, self._llm_batch_size):
+            payload_items: list[dict[str, Any]] = []
+            for item in chunk:
+                payload_items.append(
+                    {
+                        "id": item.id,
+                        "title": item.title or "",
+                        "text": item.text or "",
+                        "language": item.language or "",
+                    }
+                )
+
+            content = self._send_llm_request(payload_items, system_prompt_override=system_prompt)
+            if not content:
+                continue
+
+            parsed = _extract_json(content)
+            parsed_items = _extract_items(parsed)
+            for entry in parsed_items:
+                if not isinstance(entry, dict):
+                    continue
+                item_id = entry.get("id") or entry.get("item_id")
+                if not isinstance(item_id, str):
+                    continue
+                title = entry.get("title")
+                text = entry.get("text")
+                if isinstance(title, str) or isinstance(text, str):
+                    translations[item_id] = {
+                        "title": title if isinstance(title, str) else None,
+                        "text": text if isinstance(text, str) else None,
+                    }
+
+        if not translations:
+            return
+
+        for item in items:
+            translated = translations.get(item.id)
+            if not translated:
+                continue
+            translated_title = translated.get("title")
+            translated_text = translated.get("text")
+            if isinstance(translated_title, str):
+                item.title = translated_title
+            if isinstance(translated_text, str):
+                item.text = translated_text
+            item.language = target
+
+    def _translate_items_with_argos(
+        self,
+        items: list[tuple[ReputationItem, str]],
+        target: str,
+    ) -> None:
+        try:
+            from argostranslate import translate as argos_translate  # type: ignore
+        except Exception:
+            return
+
+        installed = argos_translate.get_installed_languages()
+        if not installed:
+            return
+        by_code = {lang.code: lang for lang in installed if getattr(lang, "code", None)}
+        target_lang = by_code.get(target)
+        if not target_lang:
+            return
+
+        translation_cache: dict[tuple[str, str], Any] = {}
+        for item, source in items:
+            source_lang = by_code.get(source)
+            if not source_lang or source_lang.code == target_lang.code:
+                continue
+            cache_key = (source_lang.code, target_lang.code)
+            translation = translation_cache.get(cache_key)
+            if translation is None:
+                try:
+                    translation = source_lang.get_translation(target_lang)
+                except Exception:
+                    translation = None
+                translation_cache[cache_key] = translation
+            if not translation:
+                continue
+            try:
+                if item.title:
+                    item.title = translation.translate(item.title)
+                if item.text:
+                    item.text = translation.translate(item.text)
+                item.language = target
+            except Exception:
+                continue
+
+    def _extract_item_language(self, item: ReputationItem) -> str:
+        current_lang = _normalize_lang_code(item.language)
+        if not current_lang and isinstance(item.signals, dict):
+            for key in ("language", "lang", "locale"):
+                raw = item.signals.get(key)
+                if isinstance(raw, str) and raw.strip():
+                    current_lang = _normalize_lang_code(raw)
+                    break
+        return current_lang
+
+    def _detect_item_language(self, item: ReputationItem) -> str:
+        sanitized_title = _sanitize_text(item.title or "")
+        sanitized_text = _sanitize_text(item.text or "")
+        evaluated_text = _build_evaluated_text(sanitized_title, sanitized_text)
+        if not evaluated_text:
+            return ""
+        return _normalize_lang_code(self._detect_language(evaluated_text.lower()))
+
+    def _send_llm_request(
+        self,
+        payload_items: list[dict[str, Any]],
+        system_prompt_override: str | None = None,
+    ) -> str | None:
         if self._llm_request_format == "openai_chat":
-            return self._send_openai_chat(payload_items)
+            return self._send_openai_chat(payload_items, system_prompt_override)
         if self._llm_request_format == "gemini_content":
-            return self._send_gemini_content(payload_items)
+            return self._send_gemini_content(payload_items, system_prompt_override)
 
         self._disable_llm(f"LLM: formato no soportado ({self._llm_request_format}).")
         return None
 
-    def _send_openai_chat(self, payload_items: list[dict[str, Any]]) -> str | None:
+    def _send_openai_chat(
+        self,
+        payload_items: list[dict[str, Any]],
+        system_prompt_override: str | None = None,
+    ) -> str | None:
         url = self._build_llm_url()
         headers = self._build_llm_headers()
+        system_prompt = system_prompt_override or self._llm_system_prompt
         body = {
             "model": self._llm_model,
             "temperature": 0.0,
             "messages": [
-                {"role": "developer", "content": self._llm_system_prompt},
+                {"role": "developer", "content": system_prompt},
                 {
                     "role": "user",
                     "content": json.dumps({"items": payload_items}, ensure_ascii=False),
@@ -1202,14 +1393,19 @@ class ReputationSentimentService:
             logger.warning("LLM request error: %s", exc)
             return None
 
-    def _send_gemini_content(self, payload_items: list[dict[str, Any]]) -> str | None:
+    def _send_gemini_content(
+        self,
+        payload_items: list[dict[str, Any]],
+        system_prompt_override: str | None = None,
+    ) -> str | None:
         url = self._build_llm_url()
         headers = self._build_llm_headers()
+        system_prompt = system_prompt_override or self._llm_system_prompt
         params: dict[str, str] = {}
         if self._llm_api_key_param and self._llm_api_key:
             params[self._llm_api_key_param] = self._llm_api_key
         body = {
-            "systemInstruction": {"parts": [{"text": self._llm_system_prompt}]},
+            "systemInstruction": {"parts": [{"text": system_prompt}]},
             "contents": [
                 {
                     "role": "user",
@@ -1393,6 +1589,18 @@ def _env_bool(value: str | None) -> bool:
     if value is None:
         return False
     return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
+def _normalize_lang_code(value: str | None) -> str:
+    if not value:
+        return ""
+    cleaned = str(value).strip().lower()
+    if not cleaned:
+        return ""
+    for sep in ("-", "_"):
+        if sep in cleaned:
+            cleaned = cleaned.split(sep)[0].strip()
+    return cleaned
 
 
 def _sanitize_text(value: str) -> str:

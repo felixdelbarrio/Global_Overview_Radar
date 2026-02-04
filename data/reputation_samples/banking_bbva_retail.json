@@ -409,8 +409,117 @@
   "appstore": {
     "app_ids": [
       "325813155",
-      "374824226"
-    ]
+      "374824226",
+      "408043474",
+      "356160865",
+      "318806094",
+      "347887638",
+      "774858627",
+      "1217874244",
+      "956857223",
+      "932493382",
+      "612261027"
+    ],
+    "app_ids_by_geo": {
+      "España": [
+        "325813155",
+        "408043474",
+        "356160865",
+        "318806094",
+        "347887638",
+        "774858627",
+        "1217874244",
+        "956857223",
+        "932493382",
+        "612261027"
+      ],
+      "México": [
+        "374824226"
+      ],
+      "Global": [
+        "325813155",
+        "374824226",
+        "408043474"
+      ]
+    },
+    "country_by_geo": {
+      "España": "es",
+      "México": "mx",
+      "Global": "us"
+    },
+    "app_id_to_actor": {
+      "325813155": "BBVA",
+      "374824226": "BBVA",
+      "408043474": "Santander",
+      "356160865": "Bankinter",
+      "318806094": "CaixaBank",
+      "347887638": "Sabadell",
+      "774858627": "ING",
+      "1217874244": "Openbank",
+      "956857223": "N26",
+      "932493382": "Revolut",
+      "612261027": "Wise"
+    }
+  },
+  "google_play": {
+    "package_ids": [
+      "com.bbva.bbvacontigo",
+      "com.bancomer.mbanking",
+      "es.bancosantander.apps",
+      "com.bankinter.launcher",
+      "es.lacaixa.mobile.android.newwapicon",
+      "net.inverline.bancosabadell.officelocator.android",
+      "www.ingdirect.nativeframe",
+      "es.openbank.mobile",
+      "de.number26.android",
+      "com.revolut.revolut",
+      "com.transferwise.android"
+    ],
+    "package_ids_by_geo": {
+      "España": [
+        "com.bbva.bbvacontigo",
+        "es.bancosantander.apps",
+        "com.bankinter.launcher",
+        "es.lacaixa.mobile.android.newwapicon",
+        "net.inverline.bancosabadell.officelocator.android",
+        "www.ingdirect.nativeframe",
+        "es.openbank.mobile",
+        "de.number26.android",
+        "com.revolut.revolut",
+        "com.transferwise.android"
+      ],
+      "México": [
+        "com.bancomer.mbanking"
+      ],
+      "Global": [
+        "com.bbva.bbvacontigo",
+        "com.bancomer.mbanking",
+        "es.bancosantander.apps"
+      ]
+    },
+    "geo_to_gl": {
+      "España": "ES",
+      "México": "MX",
+      "Global": "US"
+    },
+    "geo_to_hl": {
+      "España": "es",
+      "México": "es-419",
+      "Global": "en"
+    },
+    "package_id_to_actor": {
+      "com.bbva.bbvacontigo": "BBVA",
+      "com.bancomer.mbanking": "BBVA",
+      "es.bancosantander.apps": "Santander",
+      "com.bankinter.launcher": "Bankinter",
+      "es.lacaixa.mobile.android.newwapicon": "CaixaBank",
+      "net.inverline.bancosabadell.officelocator.android": "Sabadell",
+      "www.ingdirect.nativeframe": "ING",
+      "es.openbank.mobile": "Openbank",
+      "de.number26.android": "N26",
+      "com.revolut.revolut": "Revolut",
+      "com.transferwise.android": "Wise"
+    }
   },
   "trustpilot": {
     "rss_urls": [
