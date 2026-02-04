@@ -29,6 +29,29 @@ def _list_str(value: object) -> list[str]:
 
 
 def test_compare_endpoint_normalizes_and_combines(monkeypatch, tmp_path: Path) -> None:
+    import reputation.config as rep_config
+
+    config_file = tmp_path / "profile.json"
+    config_file.write_text(
+        """
+{
+  "actor_principal": {
+    "Acme Bank": ["Acme"]
+  },
+  "actor_principal_aliases": {
+    "Acme Bank": ["Acme Corp"]
+  },
+  "otros_actores_aliases": {
+    "Beta Bank": ["Beta"]
+  },
+  "geografias": ["Global"]
+}
+""".strip(),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(rep_config.settings, "config_path", config_file)
+    monkeypatch.setattr(rep_config.settings, "profiles", "")
+
     cfg = load_business_config()
     principal = primary_actor_info(cfg)
     assert principal is not None
@@ -76,8 +99,6 @@ def test_compare_endpoint_normalizes_and_combines(monkeypatch, tmp_path: Path) -
 
     # point the reputation settings cache_path to our temp file so the real
     # ReputationCacheRepo.load() (which performs normalization) is used.
-    import reputation.config as rep_config
-
     monkeypatch.setattr(rep_config.settings, "cache_path", cache_file)
 
     app = create_app()
