@@ -20,4 +20,3 @@ certifi>=2024.2.2
 
 #Reputation
 praw>=7.7
-argostranslate>=1.9
