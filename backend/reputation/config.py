@@ -23,6 +23,7 @@ DEFAULT_SAMPLE_LLM_CONFIG_PATH = REPO_ROOT / "data" / "reputation_llm_samples"
 DEFAULT_CACHE_PATH = REPO_ROOT / "data" / "cache" / "reputation_cache.json"
 DEFAULT_OVERRIDES_PATH = REPO_ROOT / "data" / "cache" / "reputation_overrides.json"
 PROFILE_STATE_PATH = REPO_ROOT / "data" / "cache" / "reputation_profile.json"
+DEFAULT_CACHE_TTL_HOURS = 24
 
 logger = logging.getLogger(__name__)
 
@@ -35,9 +36,6 @@ class ReputationSettings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
     )
-
-    # Feature toggle general
-    reputation_enabled: bool = Field(default=False, alias="REPUTATION_ENABLED")
 
     # Rutas
     config_path: Path = Field(default=DEFAULT_CONFIG_PATH, alias="REPUTATION_CONFIG_PATH")
@@ -53,9 +51,6 @@ class ReputationSettings(BaseSettings):
     # Perfil/es de negocio: por defecto carga todos los JSON del directorio.
     # Puede ser un nombre (banking_empresas) o varios separados por coma.
     profiles: str = Field(default="", alias="REPUTATION_PROFILE")
-
-    # TTL por defecto (horas) si el config.json no define output.cache_ttl_hours
-    cache_ttl_hours: int = Field(default=24, alias="REPUTATION_CACHE_TTL_HOURS")
 
     # Logging
     log_enabled: bool = Field(default=False, alias="REPUTATION_LOG_ENABLED")
@@ -293,7 +288,11 @@ def _profile_key_from_files(files: Sequence[Path]) -> str:
 
 def _apply_profile_cache_paths(cfg_settings: ReputationSettings) -> None:
     profiles = _parse_profile_selector(cfg_settings.profiles)
-    config_files = _resolve_config_files(cfg_settings.config_path, profiles)
+    try:
+        config_files = _resolve_config_files(cfg_settings.config_path, profiles)
+    except FileNotFoundError as exc:
+        logger.warning("Profile cache paths skipped: %s", exc)
+        return
     if not config_files:
         return
     profile_key = _profile_key_from_files(config_files)
@@ -355,13 +354,19 @@ def _sorted_config_files(directory: Path) -> list[Path]:
 
 def active_profiles() -> list[str]:
     profiles = _parse_profile_selector(settings.profiles)
-    files = _resolve_config_files(settings.config_path, profiles)
+    try:
+        files = _resolve_config_files(settings.config_path, profiles)
+    except FileNotFoundError:
+        return []
     return [file.stem for file in files]
 
 
 def active_profile_key() -> str:
     profiles = _parse_profile_selector(settings.profiles)
-    files = _resolve_config_files(settings.config_path, profiles)
+    try:
+        files = _resolve_config_files(settings.config_path, profiles)
+    except FileNotFoundError:
+        files = []
     key = _profile_key_from_files(files)
     if _ACTIVE_PROFILE_SOURCE != "default":
         return f"{_ACTIVE_PROFILE_SOURCE}__{key}"
@@ -532,6 +537,30 @@ _apply_profile_state(settings)
 _apply_profile_cache_paths(settings)
 
 
+def reload_reputation_settings() -> None:
+    """Recarga settings desde .env.reputation y aplica normalizaciones."""
+    global BASE_CONFIG_PATH, BASE_LLM_CONFIG_PATH
+    new_settings = ReputationSettings()
+
+    for field_name in settings.model_fields:
+        setattr(settings, field_name, getattr(new_settings, field_name))
+
+    if not settings.config_path.is_absolute():
+        settings.config_path = (REPO_ROOT / settings.config_path).resolve()
+    if not settings.llm_config_path.is_absolute():
+        settings.llm_config_path = (REPO_ROOT / settings.llm_config_path).resolve()
+    if not settings.cache_path.is_absolute():
+        settings.cache_path = (REPO_ROOT / settings.cache_path).resolve()
+    if not settings.overrides_path.is_absolute():
+        settings.overrides_path = (REPO_ROOT / settings.overrides_path).resolve()
+
+    BASE_CONFIG_PATH = settings.config_path
+    BASE_LLM_CONFIG_PATH = settings.llm_config_path
+
+    _apply_profile_state(settings)
+    _apply_profile_cache_paths(settings)
+
+
 def _load_config_file(path: Path) -> Dict[str, Any]:
     with path.open("r", encoding="utf-8") as f:
         data = json.load(f)
@@ -629,7 +658,7 @@ def compute_config_hash(cfg: Mapping[str, Any]) -> str:
 
 
 def effective_ttl_hours(cfg: Mapping[str, Any]) -> int:
-    """TTL efectivo: output.cache_ttl_hours del config si existe; si no, settings.
+    """TTL efectivo: output.cache_ttl_hours del config si existe; si no, fallback interno.
 
     Nota: Pylance tiende a marcar 'dict' sin parametrizar como Unknown.
     Por eso hacemos cast explícito a dict[str, Any] tras el isinstance.
@@ -643,4 +672,4 @@ def effective_ttl_hours(cfg: Mapping[str, Any]) -> int:
         if isinstance(ttl_value, int) and ttl_value > 0:
             return ttl_value
 
-    return settings.cache_ttl_hours
+    return DEFAULT_CACHE_TTL_HOURS

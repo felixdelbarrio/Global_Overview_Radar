@@ -23,12 +23,14 @@ import {
   Sun,
   Sparkles,
   X,
+  SlidersHorizontal,
 } from "lucide-react";
 import { apiGet, apiPost } from "@/lib/api";
 import {
   dispatchIngestStarted,
   dispatchIngestSuccess,
   dispatchProfileChanged,
+  dispatchSettingsChanged,
   INGEST_STARTED_EVENT,
 } from "@/lib/events";
 import { INCIDENTS_FEATURE_ENABLED } from "@/lib/flags";
@@ -46,7 +48,52 @@ type ProfileOptionsResponse = {
   };
 };
 
+type ReputationSettingsField = {
+  key: string;
+  label: string;
+  description?: string | null;
+  type: "boolean" | "string" | "secret" | "number" | "select";
+  value: string | number | boolean;
+  options?: string[] | null;
+  placeholder?: string | null;
+};
+
+type ReputationSettingsGroup = {
+  id: string;
+  label: string;
+  description?: string | null;
+  fields: ReputationSettingsField[];
+};
+
+type ReputationSettingsResponse = {
+  groups: ReputationSettingsGroup[];
+  updated_at?: string | null;
+  advanced_options?: string[];
+};
+
 const EMPTY_PROFILES: string[] = [];
+const LANGUAGE_LABELS: Record<string, string> = {
+  es: "Español",
+  en: "Inglés",
+  fr: "Francés",
+  de: "Alemán",
+  it: "Italiano",
+  pt: "Portugués",
+  ar: "Árabe",
+  ru: "Ruso",
+  zh: "Chino",
+  nl: "Neerlandés",
+  no: "Noruego",
+  sv: "Sueco",
+  he: "Hebreo",
+  ud: "Urdu",
+};
+const ADVANCED_LOG_KEYS = new Set([
+  "advanced.log_enabled",
+  "advanced.log_to_file",
+  "advanced.log_file_name",
+  "advanced.log_debug",
+]);
 
 export function Shell({ children }: { children: React.ReactNode }) {
   const profileAppliedKey = "gor-profile-applied";
@@ -73,16 +120,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const [theme, setTheme] = useState<"ambient-light" | "ambient-dark">(() => {
-    if (typeof window === "undefined") return "ambient-light";
-    const stored = readStoredTheme();
-    if (stored) return stored;
-    const domTheme = document.documentElement.dataset.theme;
-    if (domTheme === "ambient-dark" || domTheme === "ambient-light") {
-      return domTheme;
-    }
-    return "ambient-light";
-  });
+  const [theme, setTheme] = useState<"ambient-light" | "ambient-dark">("ambient-light");
+  const [themeReady, setThemeReady] = useState(false);
 
   /** Ruta actual para resaltar la navegacion. */
   const pathname = usePathname();
@@ -112,6 +151,49 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [profileAppliedNote, setProfileAppliedNote] = useState(false);
   const [autoIngestNote, setAutoIngestNote] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsGroups, setSettingsGroups] = useState<ReputationSettingsGroup[] | null>(
+    null,
+  );
+  const [settingsDraft, setSettingsDraft] = useState<Record<string, string | number | boolean>>(
+    {},
+  );
+  const [settingsBase, setSettingsBase] = useState<Record<string, string | number | boolean>>(
+    {},
+  );
+  const [settingsBusy, setSettingsBusy] = useState(false);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
+  const [settingsSaved, setSettingsSaved] = useState(false);
+  const [advancedKey, setAdvancedKey] = useState("");
+  const [advancedValue, setAdvancedValue] = useState("");
+  const [advancedError, setAdvancedError] = useState<string | null>(null);
+  const [advancedOptions, setAdvancedOptions] = useState<string[]>([]);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+
+  const settingsFieldMap = useMemo(() => {
+    const map = new Map<string, ReputationSettingsField>();
+    settingsGroups?.forEach((group) => {
+      group.fields.forEach((field) => {
+        map.set(field.key, field);
+      });
+    });
+    return map;
+  }, [settingsGroups]);
+
+  useEffect(() => {
+    setTheme((prev) => {
+      const stored = readStoredTheme();
+      if (stored && stored !== prev) {
+        return stored;
+      }
+      const domTheme = document.documentElement.dataset.theme;
+      if (domTheme === "ambient-dark" || domTheme === "ambient-light") {
+        return domTheme;
+      }
+      return prev;
+    });
+    setThemeReady(true);
+  }, []);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -195,11 +277,46 @@ export function Shell({ children }: { children: React.ReactNode }) {
     setSectorFocus("all");
   }, [profilesOpen, templatesOpen]);
 
+  useEffect(() => {
+    if (!settingsOpen) return;
+    let alive = true;
+    setSettingsError(null);
+    apiGet<ReputationSettingsResponse>("/reputation/settings")
+      .then((data) => {
+        if (!alive) return;
+        setSettingsGroups(data.groups);
+        const nextBase: Record<string, string | number | boolean> = {};
+        data.groups.forEach((group) => {
+          group.fields.forEach((field) => {
+            nextBase[field.key] = field.value;
+          });
+        });
+        setSettingsBase(nextBase);
+        setSettingsDraft(nextBase);
+        setAdvancedOptions(data.advanced_options ?? []);
+        setAdvancedOpen(false);
+        setAdvancedKey("");
+        setAdvancedValue("");
+        setAdvancedError(null);
+      })
+      .catch((err) => {
+        if (!alive) return;
+        setSettingsGroups(null);
+        setSettingsError(err instanceof Error ? err.message : "No se pudo cargar la configuración");
+        setAdvancedError(null);
+        setAdvancedOptions([]);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [settingsOpen]);
+
   const ingestJobsRef = useRef(ingestJobs);
 
   useEffect(() => {
     ingestJobsRef.current = ingestJobs;
   }, [ingestJobs]);
+  const ingestWasActiveRef = useRef(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return undefined;
@@ -255,14 +372,86 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const activeCount = activeProfiles.length;
   const applyDisabled = profileBusy || (templatesOpen && selectedCount === 0);
   const emptySelectionHint = templatesOpen && selectedCount === 0;
-  const profilesToRender = filteredProfiles;
   const selectionBadge = templatesOpen
     ? selectedCount
       ? `${selectedCount} seleccionados`
-      : "Sin selección"
+      : "Plantillas"
     : activeCount
       ? `${activeCount} activo${activeCount > 1 ? "s" : ""}`
       : "Sin perfil";
+  const settingsDirty = useMemo(() => {
+    const keys = new Set([...Object.keys(settingsBase), ...Object.keys(settingsDraft)]);
+    for (const key of keys) {
+      if (settingsBase[key] !== settingsDraft[key]) return true;
+    }
+    return false;
+  }, [settingsBase, settingsDraft]);
+
+  const credentialSourceRows = useMemo(
+    () => [
+      {
+        id: "newsapi",
+        toggleKey: "sources.newsapi",
+        keyKeys: ["keys.newsapi"],
+      },
+      {
+        id: "guardian",
+        toggleKey: "sources.guardian",
+        keyKeys: ["keys.guardian"],
+      },
+      {
+        id: "reddit",
+        toggleKey: "sources.reddit",
+        keyKeys: ["keys.reddit_id", "keys.reddit_secret"],
+      },
+      {
+        id: "twitter",
+        toggleKey: "sources.twitter",
+        keyKeys: ["keys.twitter_bearer"],
+      },
+      {
+        id: "google_reviews",
+        toggleKey: "sources.google_reviews",
+        keyKeys: ["keys.google_places"],
+      },
+      {
+        id: "youtube",
+        toggleKey: "sources.youtube",
+        keyKeys: ["keys.youtube"],
+      },
+    ],
+    []
+  );
+
+  const credentialIssues = useMemo(() => {
+    const issues: { id: string; label: string; missing: string[] }[] = [];
+    credentialSourceRows.forEach((row) => {
+      const toggleValue = Boolean(settingsDraft[row.toggleKey]);
+      if (!toggleValue) return;
+      const missing = row.keyKeys.filter((key) => {
+        const value = settingsDraft[key];
+        return !String(value ?? "").trim();
+      });
+      if (missing.length) {
+        const labelField = settingsFieldMap.get(row.toggleKey);
+        const label = labelField?.label ?? row.id;
+        issues.push({ id: row.id, label, missing });
+      }
+    });
+    return issues;
+  }, [credentialSourceRows, settingsDraft, settingsFieldMap]);
+
+  const hasCredentialIssues = credentialIssues.length > 0;
+  const advancedLogEnabled = Boolean(settingsDraft["advanced.log_enabled"]);
+  const advancedLocked = !advancedLogEnabled;
+  const availableAdvancedOptions = useMemo(() => {
+    const used = new Set(
+      Object.keys(settingsDraft)
+        .filter((key) => key.startsWith("advanced."))
+        .map((key) => key.replace(/^advanced\./, ""))
+    );
+    return advancedOptions.filter((option) => !used.has(option));
+  }, [advancedOptions, settingsDraft]);
 
   const categoryKey = (value: string) => value.split("_")[0]?.toLowerCase() || "custom";
   const categoryMetaByKey = (key: string) => {
@@ -317,6 +506,39 @@ export function Shell({ children }: { children: React.ReactNode }) {
     });
     return sorted.map((key) => ({ key, ...categoryMetaByKey(key) }));
   }, [availableProfiles]);
+
+  const profilesToRender = useMemo(() => {
+    if (!templatesOpen || !activeSectorKey) return filteredProfiles;
+    return filteredProfiles.filter((profile) => categoryKey(profile) === activeSectorKey);
+  }, [filteredProfiles, activeSectorKey, templatesOpen]);
+
+  const primaryActiveProfile = activeProfiles[0] ?? "";
+  const primaryActiveLabel = primaryActiveProfile
+    ? formatProfileLabel(primaryActiveProfile)
+    : "Sin perfil activo";
+  const primaryActiveMeta = primaryActiveProfile
+    ? categoryMeta(primaryActiveProfile)
+    : null;
+  const extraActiveCount = activeProfiles.length > 1 ? activeProfiles.length - 1 : 0;
+
+  const resetProfileTemplateState = () => {
+    setProfileSelection([]);
+    setProfileQuery("");
+    setSectorFocus("all");
+    setProfileCategoryWarning(null);
+  };
+
+  const toggleProfileTemplates = () => {
+    if (profilesOpen && templatesOpen) {
+      setProfilesOpen(false);
+      return;
+    }
+    if (!profilesOpen) {
+      setProfilesOpen(true);
+    }
+    setTemplatesOpen(true);
+    resetProfileTemplateState();
+  };
 
 
   const toggleProfileSelection = (name: string) => {
@@ -395,6 +617,129 @@ export function Shell({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const updateSettingValue = (key: string, value: string | number | boolean) => {
+    setSettingsDraft((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const resetSettingsDraft = () => {
+    setSettingsDraft(settingsBase);
+    setSettingsError(null);
+  };
+
+  const resetSettingsToDefault = async () => {
+    if (typeof window !== "undefined") {
+      const confirmed = window.confirm(
+        "¿Restablecer la configuración a los valores por defecto?"
+      );
+      if (!confirmed) return;
+    }
+    setSettingsOpen(false);
+    setSettingsBusy(true);
+    setSettingsError(null);
+    try {
+      const response = await apiPost<ReputationSettingsResponse>(
+        "/reputation/settings/reset",
+        {}
+      );
+      setSettingsGroups(response.groups);
+      const nextBase: Record<string, string | number | boolean> = {};
+      response.groups.forEach((group) => {
+        group.fields.forEach((field) => {
+          nextBase[field.key] = field.value;
+        });
+      });
+      setSettingsBase(nextBase);
+      setSettingsDraft(nextBase);
+      setAdvancedOptions(response.advanced_options ?? []);
+      dispatchSettingsChanged({ updated_at: response.updated_at ?? null });
+      setSettingsSaved(true);
+      if (typeof window !== "undefined") {
+        window.setTimeout(() => setSettingsSaved(false), 2600);
+      }
+    } catch (err) {
+      setSettingsError(
+        err instanceof Error ? err.message : "No se pudo restablecer la configuración"
+      );
+      setSettingsOpen(true);
+    } finally {
+      setSettingsBusy(false);
+    }
+  };
+
+  const addAdvancedSetting = () => {
+    setAdvancedError(null);
+    const rawKey = advancedKey.trim();
+    if (!rawKey) {
+      setAdvancedError("Selecciona una variable.");
+      return;
+    }
+    const settingsKey = `advanced.${rawKey}`;
+    if (settingsDraft[settingsKey] !== undefined) {
+      setAdvancedError("Esa variable ya existe.");
+      return;
+    }
+    setSettingsDraft((prev) => ({ ...prev, [settingsKey]: advancedValue }));
+    setSettingsGroups((prev) => {
+      if (!prev) return prev;
+      return prev.map((group) => {
+        if (group.id !== "advanced") return group;
+        return {
+          ...group,
+          fields: [
+            ...group.fields,
+            {
+              key: settingsKey,
+              label: rawKey,
+              description: "Variable avanzada",
+              type: "string",
+              value: advancedValue,
+            },
+          ],
+        };
+      });
+    });
+    setAdvancedKey("");
+    setAdvancedValue("");
+  };
+
+  const saveSettings = async () => {
+    if (!settingsDirty || hasCredentialIssues) return;
+    setSettingsOpen(false);
+    setSettingsBusy(true);
+    setSettingsError(null);
+    try {
+      const updates: Record<string, string | number | boolean> = {};
+      Object.keys(settingsDraft).forEach((key) => {
+        if (settingsDraft[key] !== settingsBase[key]) {
+          updates[key] = settingsDraft[key];
+        }
+      });
+      const response = await apiPost<ReputationSettingsResponse>("/reputation/settings", {
+        values: updates,
+      });
+      setSettingsGroups(response.groups);
+      const nextBase: Record<string, string | number | boolean> = {};
+      response.groups.forEach((group) => {
+        group.fields.forEach((field) => {
+          nextBase[field.key] = field.value;
+        });
+      });
+      setSettingsBase(nextBase);
+      setSettingsDraft(nextBase);
+      setAdvancedOptions(response.advanced_options ?? []);
+      dispatchSettingsChanged({ updated_at: response.updated_at ?? null });
+      setSettingsSaved(true);
+      if (typeof window !== "undefined") {
+        window.setTimeout(() => setSettingsSaved(false), 2600);
+      }
+    } catch (err) {
+      setSettingsError(err instanceof Error ? err.message : "No se pudo guardar la configuración");
+      setSettingsOpen(true);
+    } finally {
+      setSettingsBusy(false);
+    }
+  };
+
   const ingestActive = useMemo(
     () =>
       Object.values(ingestJobs).some(
@@ -402,6 +747,19 @@ export function Shell({ children }: { children: React.ReactNode }) {
       ),
     [ingestJobs]
   );
+  useEffect(() => {
+    const wasActive = ingestWasActiveRef.current;
+    ingestWasActiveRef.current = ingestActive;
+    if (!wasActive || ingestActive || !ingestOpen) return undefined;
+    const hasSuccess = Object.values(ingestJobs).some(
+      (job) => job && job.status === "success"
+    );
+    if (!hasSuccess) return undefined;
+    const timeout = window.setTimeout(() => {
+      setIngestOpen(false);
+    }, 1200);
+    return () => window.clearTimeout(timeout);
+  }, [ingestActive, ingestJobs, ingestOpen]);
 
   useEffect(() => {
     if (!ingestActive) return;
@@ -695,18 +1053,68 @@ export function Shell({ children }: { children: React.ReactNode }) {
               </div>
             )}
             <div className="relative">
-              <button
-                type="button"
-                onClick={() => setProfilesOpen((prev) => !prev)}
-                aria-label="Cambiar perfil"
-                title="Cambiar perfil"
-                className="h-9 px-3 rounded-full flex items-center gap-2 border border-[color:var(--border-15)] bg-[color:var(--surface-10)] text-[color:var(--text-inverse-80)] transition hover:bg-[color:var(--surface-15)] hover:text-white"
-              >
-                <Layers className="h-4 w-4" />
-                <span className="text-xs">Perfil</span>
-              </button>
+              <div className="group relative flex items-center gap-3 rounded-full border border-[color:var(--border-15)] bg-[color:var(--surface-10)] px-2 py-1 pr-1 text-[color:var(--text-inverse-80)] shadow-[var(--shadow-pill)] backdrop-blur-sm">
+                <div
+                  className="absolute inset-0 opacity-0 transition group-hover:opacity-100"
+                  style={{
+                    background:
+                      "radial-gradient(160px 80px at 0% 50%, rgba(45,204,205,0.22), transparent 65%)",
+                  }}
+                />
+                <div className="relative flex items-center gap-3 min-w-0">
+                  <div className="h-8 w-8 rounded-full border border-[color:var(--border-15)] bg-[color:var(--surface-15)] grid place-items-center">
+                    <Layers className="h-4 w-4 text-white" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-[9px] uppercase tracking-[0.32em] text-[color:var(--text-inverse-60)]">
+                      Perfil activo
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="text-xs font-semibold text-white truncate max-w-[120px] sm:max-w-[160px] lg:max-w-[220px]"
+                        title={primaryActiveLabel}
+                      >
+                        {primaryActiveLabel}
+                      </span>
+                      {extraActiveCount > 0 && (
+                        <span className="rounded-full border border-[color:var(--border-15)] bg-[color:var(--surface-20)] px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] text-white/80">
+                          +{extraActiveCount}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                {primaryActiveMeta ? (
+                  <span
+                    className="relative rounded-full border px-2.5 py-0.5 text-[10px] uppercase tracking-[0.18em]"
+                    style={{
+                      color: primaryActiveMeta.tone,
+                      borderColor: primaryActiveMeta.tone,
+                    }}
+                  >
+                    {primaryActiveMeta.label}
+                  </span>
+                ) : (
+                  <span className="relative rounded-full border border-[color:var(--border-15)] px-2.5 py-0.5 text-[10px] uppercase tracking-[0.18em] text-[color:var(--text-inverse-60)]">
+                    Sin perfil
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={toggleProfileTemplates}
+                  aria-label="Cambiar perfil"
+                  title="Cambiar perfil"
+                  className="relative rounded-full border border-[color:var(--border-15)] px-3 py-1 text-[10px] uppercase tracking-[0.24em] text-white transition hover:border-[color:var(--aqua)] hover:text-white active:scale-95"
+                  style={{
+                    background:
+                      "linear-gradient(120deg, rgba(45, 204, 205, 0.3), rgba(0, 68, 129, 0.35))",
+                  }}
+                >
+                  Cambiar perfil
+                </button>
+              </div>
               {profileAppliedNote && (
-                <span className="absolute right-0 -bottom-6 rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-10)] px-3 py-1 text-[10px] uppercase tracking-[0.18em] text-[color:var(--text-inverse-80)]">
+                <span className="absolute right-2 -bottom-6 rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-10)] px-3 py-1 text-[10px] uppercase tracking-[0.18em] text-[color:var(--text-inverse-80)]">
                   {autoIngestNote
                     ? "Perfil aplicado · Ingesta automática"
                     : "Perfil aplicado"}
@@ -717,84 +1125,33 @@ export function Shell({ children }: { children: React.ReactNode }) {
                   <div className="absolute -top-10 right-6 h-24 w-24 rounded-full bg-[color:var(--aqua)]/20 blur-3xl" />
                   <div className="absolute -bottom-16 left-6 h-32 w-32 rounded-full bg-[color:var(--blue)]/20 blur-3xl" />
                   <div className="relative p-4">
-                    <div className="flex items-start gap-3">
-                      <div className="h-10 w-10 rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] grid place-items-center">
-                        <Layers className="h-5 w-5 text-[color:var(--blue)]" />
-                      </div>
-                      <div className="flex-1">
-                        <div className="text-[11px] font-semibold tracking-[0.35em] text-[color:var(--blue)]">
-                          PERFIL
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-start gap-3">
+                        <div className="h-10 w-10 rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] grid place-items-center">
+                          <Layers className="h-5 w-5 text-[color:var(--blue)]" />
                         </div>
-                        <div className="mt-1 text-sm text-[color:var(--text-60)]">
-                          Elige el universo que quieres analizar.
-                        </div>
-                      </div>
-                      <span className="rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] text-[color:var(--text-60)]">
-                        {selectionBadge}
-                      </span>
-                    </div>
-                    <div className="mt-4 rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] p-3">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <div className="text-[10px] uppercase tracking-[0.3em] text-[color:var(--text-55)]">
-                            Perfil activo
+                        <div className="flex-1">
+                          <div className="text-[11px] font-semibold tracking-[0.35em] text-[color:var(--blue)]">
+                            PERFIL
                           </div>
                           <div className="mt-1 text-sm text-[color:var(--text-60)]">
-                            {activeProfiles.length
-                              ? "Tu universo actual, listo para analizar."
-                              : "Aún no hay un perfil activo configurado."}
+                            Elige el universo que quieres analizar.
                           </div>
                         </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] text-[color:var(--text-60)]">
+                          {selectionBadge}
+                        </span>
                         <button
                           type="button"
-                          onClick={() => {
-                            if (templatesOpen) {
-                              setTemplatesOpen(false);
-                              return;
-                            }
-                            setTemplatesOpen(true);
-                            setProfileSelection([]);
-                            setProfileQuery("");
-                            setSectorFocus("all");
-                            setProfileCategoryWarning(null);
-                          }}
-                          className="rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-[color:var(--text-60)] transition hover:border-[color:var(--aqua)] hover:text-[color:var(--ink)]"
+                          onClick={() => setProfilesOpen(false)}
+                          aria-label="Cerrar perfiles"
+                          title="Cerrar"
+                          className="h-7 w-7 rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-70)] text-[color:var(--text-55)] transition hover:text-[color:var(--ink)] hover:border-[color:var(--aqua)]"
                         >
-                          {templatesOpen ? "Cerrar" : "Cambiar perfil"}
+                          <X className="mx-auto h-3.5 w-3.5" />
                         </button>
-                      </div>
-
-                      <div className="mt-3 space-y-2">
-                        {activeProfiles.length ? (
-                          activeProfiles.map((profile) => {
-                            const category = categoryMeta(profile);
-                            return (
-                              <div
-                                key={profile}
-                                className="flex items-center justify-between gap-3 rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-2"
-                              >
-                                <div className="min-w-0">
-                                  <div className="truncate text-sm font-semibold text-[color:var(--ink)]">
-                                    {formatProfileLabel(profile)}
-                                  </div>
-                                  <div className="truncate text-[10px] uppercase tracking-[0.2em] text-[color:var(--text-55)]">
-                                    {profile}
-                                  </div>
-                                </div>
-                                <span
-                                  className="rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-[0.18em]"
-                                  style={{ color: category.tone, borderColor: category.tone }}
-                                >
-                                  {category.label}
-                                </span>
-                              </div>
-                            );
-                          })
-                        ) : (
-                          <div className="rounded-2xl border border-dashed border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-3 text-center text-xs text-[color:var(--text-60)]">
-                            No hay perfil activo configurado.
-                          </div>
-                        )}
                       </div>
                     </div>
 
@@ -981,6 +1338,546 @@ export function Shell({ children }: { children: React.ReactNode }) {
                 </div>
               )}
             </div>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setSettingsOpen((prev) => !prev)}
+                aria-label="Configuración"
+                title="Configuración"
+                className="h-9 px-3 rounded-full flex items-center gap-2 border border-[color:var(--border-15)] bg-[color:var(--surface-10)] text-[color:var(--text-inverse-80)] transition hover:bg-[color:var(--surface-15)] hover:text-white"
+              >
+                <SlidersHorizontal className="h-4 w-4" />
+                <span className="text-xs">Config</span>
+              </button>
+              {settingsOpen && (
+                <div className="absolute right-0 mt-3 w-[420px] rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel-strong)] shadow-[var(--shadow-lg)] backdrop-blur-xl overflow-hidden z-50">
+                  <div className="absolute -top-12 right-6 h-28 w-28 rounded-full bg-[color:var(--aqua)]/20 blur-3xl" />
+                  <div className="absolute -bottom-16 left-10 h-32 w-32 rounded-full bg-[color:var(--blue)]/15 blur-3xl" />
+                  <div className="relative p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-start gap-3">
+                        <div className="h-10 w-10 rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] grid place-items-center">
+                          <SlidersHorizontal className="h-5 w-5 text-[color:var(--blue)]" />
+                        </div>
+                        <div>
+                          <div className="text-[11px] font-semibold tracking-[0.32em] text-[color:var(--blue)]">
+                            CONFIGURACIÓN
+                          </div>
+                          <div className="mt-1 text-sm text-[color:var(--text-60)]">
+                            Personaliza las fuentes y credenciales del análisis.
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {settingsDirty && (
+                          <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] text-amber-700">
+                            Sin guardar
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setSettingsOpen(false)}
+                          aria-label="Cerrar configuración"
+                          className="h-7 w-7 rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-70)] text-[color:var(--text-55)] transition hover:text-[color:var(--ink)] hover:border-[color:var(--aqua)]"
+                        >
+                          <X className="mx-auto h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="max-h-[60vh] overflow-auto px-4 pb-4 space-y-3">
+                    {settingsGroups ? (
+                      settingsGroups.map((group) => {
+                        const isAdvanced = group.id === "advanced";
+                        const advancedLogFields = isAdvanced
+                          ? group.fields.filter((field) => ADVANCED_LOG_KEYS.has(field.key))
+                          : [];
+                        const advancedLogField = advancedLogFields.find(
+                          (field) => field.key === "advanced.log_enabled",
+                        );
+                        const advancedLogControls = advancedLogFields.filter(
+                          (field) => field.key !== "advanced.log_enabled",
+                        );
+                        const advancedExtraFields = isAdvanced
+                          ? group.fields.filter((field) => !ADVANCED_LOG_KEYS.has(field.key))
+                          : group.fields;
+                        const fieldsToRender =
+                          group.id === "sources_credentials"
+                            ? []
+                            : isAdvanced
+                              ? advancedOpen
+                                ? advancedExtraFields
+                                : []
+                              : group.fields;
+                        return (
+                          <div
+                            key={group.id}
+                            className="rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] p-3"
+                          >
+                            <div className="text-[10px] uppercase tracking-[0.28em] text-[color:var(--text-55)]">
+                              {group.label}
+                            </div>
+                            {group.description && (
+                              <div className="mt-1 text-[11px] text-[color:var(--text-60)]">
+                                {group.description}
+                              </div>
+                            )}
+                            {isAdvanced && advancedLogField && (
+                              <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-2">
+                                <div className="min-w-0">
+                                  <div className="text-xs font-semibold text-[color:var(--ink)]">
+                                    {advancedLogField.label}
+                                  </div>
+                                  {advancedLogField.description && (
+                                    <div className="text-[10px] text-[color:var(--text-55)]">
+                                      {advancedLogField.description}
+                                    </div>
+                                  )}
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    updateSettingValue(
+                                      advancedLogField.key,
+                                      !Boolean(settingsDraft[advancedLogField.key])
+                                    )
+                                  }
+                                  className={`relative inline-flex h-6 w-11 items-center rounded-full border transition ${
+                                    settingsDraft[advancedLogField.key]
+                                      ? "border-[color:var(--aqua)] bg-[color:var(--gradient-chip)]"
+                                      : "border-[color:var(--border-60)] bg-[color:var(--surface-60)]"
+                                  }`}
+                                >
+                                  <span
+                                    className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition ${
+                                      settingsDraft[advancedLogField.key]
+                                        ? "translate-x-5"
+                                        : "translate-x-1"
+                                    }`}
+                                  />
+                                </button>
+                              </div>
+                            )}
+                            {isAdvanced && advancedLogControls.length > 0 && (
+                              <div className="mt-3 space-y-3">
+                                {advancedLogControls.map((field) => {
+                                  const fieldValue = settingsDraft[field.key];
+                                  return (
+                                    <div
+                                      key={field.key}
+                                      className="flex items-center justify-between gap-3 rounded-xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-2"
+                                    >
+                                      <div className="min-w-0">
+                                        <div className="text-xs font-semibold text-[color:var(--ink)]">
+                                          {field.label}
+                                        </div>
+                                        {field.description && (
+                                          <div className="text-[10px] text-[color:var(--text-55)]">
+                                            {field.description}
+                                          </div>
+                                        )}
+                                      </div>
+                                      {field.type === "boolean" && (
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            updateSettingValue(field.key, !Boolean(fieldValue))
+                                          }
+                                          disabled={advancedLocked}
+                                          className={`relative inline-flex h-6 w-11 items-center rounded-full border transition ${
+                                            fieldValue
+                                              ? "border-[color:var(--aqua)] bg-[color:var(--gradient-chip)]"
+                                              : "border-[color:var(--border-60)] bg-[color:var(--surface-60)]"
+                                          }`}
+                                        >
+                                          <span
+                                            className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition ${
+                                              fieldValue ? "translate-x-5" : "translate-x-1"
+                                            }`}
+                                          />
+                                        </button>
+                                      )}
+                                      {(field.type === "string" ||
+                                        field.type === "secret" ||
+                                        field.type === "number") && (
+                                        <input
+                                          type={
+                                            field.type === "secret"
+                                              ? "password"
+                                              : field.type === "number"
+                                                ? "number"
+                                                : "text"
+                                          }
+                                          value={String(fieldValue ?? "")}
+                                          onChange={(event) => {
+                                            const rawValue = event.target.value;
+                                            if (field.type === "number") {
+                                              const parsed = Number(rawValue);
+                                              updateSettingValue(
+                                                field.key,
+                                                Number.isNaN(parsed) ? 0 : parsed
+                                              );
+                                              return;
+                                            }
+                                            updateSettingValue(field.key, rawValue);
+                                          }}
+                                          placeholder={field.placeholder ?? ""}
+                                          disabled={advancedLocked}
+                                          className="w-40 rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-60)] px-3 py-1 text-xs text-[color:var(--ink)] disabled:opacity-50"
+                                        />
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                            {isAdvanced && (
+                              <div className="mt-3 flex items-center justify-between rounded-xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-2">
+                                <div className="text-[11px] text-[color:var(--text-60)]">
+                                  Mostrar opciones avanzadas
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => setAdvancedOpen((prev) => !prev)}
+                                  className={`relative inline-flex h-6 w-11 items-center rounded-full border transition ${
+                                    advancedOpen
+                                      ? "border-[color:var(--aqua)] bg-[color:var(--gradient-chip)]"
+                                      : "border-[color:var(--border-60)] bg-[color:var(--surface-60)]"
+                                  }`}
+                                >
+                                  <span
+                                    className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition ${
+                                      advancedOpen ? "translate-x-5" : "translate-x-1"
+                                    }`}
+                                  />
+                                </button>
+                              </div>
+                            )}
+                            {group.id === "sources_credentials" && (
+                              <div className="mt-3 space-y-3">
+                                {credentialSourceRows.map((row) => {
+                                  const toggleField = settingsFieldMap.get(row.toggleKey);
+                                  if (!toggleField) return null;
+                                  const enabled = Boolean(settingsDraft[row.toggleKey]);
+                                  const missing = row.keyKeys.filter((key) => {
+                                    const value = settingsDraft[key];
+                                    return !String(value ?? "").trim();
+                                  });
+                                  return (
+                                    <div
+                                      key={row.id}
+                                      className="rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-2"
+                                    >
+                                      <div className="flex items-center justify-between gap-3">
+                                        <div className="min-w-0">
+                                          <div className="text-xs font-semibold text-[color:var(--ink)]">
+                                            {toggleField.label}
+                                          </div>
+                                          {toggleField.description && (
+                                            <div className="text-[10px] text-[color:var(--text-55)]">
+                                              {toggleField.description}
+                                            </div>
+                                          )}
+                                        </div>
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            updateSettingValue(row.toggleKey, !enabled)
+                                          }
+                                          className={`relative inline-flex h-6 w-11 items-center rounded-full border transition ${
+                                            enabled
+                                              ? "border-[color:var(--aqua)] bg-[color:var(--gradient-chip)]"
+                                              : "border-[color:var(--border-60)] bg-[color:var(--surface-60)]"
+                                          }`}
+                                        >
+                                          <span
+                                            className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition ${
+                                              enabled ? "translate-x-5" : "translate-x-1"
+                                            }`}
+                                          />
+                                        </button>
+                                      </div>
+                                      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                                        {row.keyKeys.map((key) => {
+                                          const field = settingsFieldMap.get(key);
+                                          if (!field) return null;
+                                          return (
+                                            <input
+                                              key={key}
+                                              type={field.type === "secret" ? "password" : "text"}
+                                              value={String(settingsDraft[key] ?? "")}
+                                              onChange={(event) =>
+                                                updateSettingValue(key, event.target.value)
+                                              }
+                                              placeholder={field.placeholder ?? field.label}
+                                              className="w-full rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-60)] px-3 py-1 text-xs text-[color:var(--ink)]"
+                                            />
+                                          );
+                                        })}
+                                      </div>
+                                      {enabled && missing.length > 0 && (
+                                        <div className="mt-2 text-[10px] text-rose-500">
+                                          Añade la API Key o desactiva la fuente para continuar.
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                                {credentialSourceRows.length === 0 && (
+                                  <div className="text-[11px] text-[color:var(--text-55)]">
+                                    No hay fuentes con credenciales configuradas.
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                            {isAdvanced && advancedOpen && (
+                              <div className="mt-3 rounded-xl border border-dashed border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-2">
+                                <div className="text-[10px] uppercase tracking-[0.2em] text-[color:var(--text-55)]">
+                                  Añadir variable
+                                </div>
+                                <div className="mt-2 flex flex-wrap items-center gap-2">
+                                  <select
+                                    value={advancedKey}
+                                    onChange={(event) => setAdvancedKey(event.target.value)}
+                                    disabled={advancedLocked}
+                                    className="flex-1 min-w-[180px] rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-60)] px-3 py-1 text-xs text-[color:var(--ink)] disabled:opacity-50"
+                                  >
+                                    <option value="">Selecciona variable</option>
+                                    {availableAdvancedOptions.map((option) => (
+                                      <option key={option} value={option}>
+                                        {option}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  <input
+                                    type="text"
+                                    value={advancedValue}
+                                    onChange={(event) => setAdvancedValue(event.target.value)}
+                                    placeholder="valor"
+                                    disabled={advancedLocked}
+                                    className="flex-1 min-w-[140px] rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-60)] px-3 py-1 text-xs text-[color:var(--ink)] disabled:opacity-50"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={addAdvancedSetting}
+                                    disabled={advancedLocked}
+                                    className="rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-solid)] px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-[color:var(--ink)] disabled:opacity-50"
+                                  >
+                                    Añadir
+                                  </button>
+                                </div>
+                                {availableAdvancedOptions.length > 0 && (
+                                  <div className="mt-2 text-[10px] text-[color:var(--text-55)]">
+                                    {availableAdvancedOptions.length} variables disponibles.
+                                  </div>
+                                )}
+                                {advancedLocked && (
+                                  <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[color:var(--border-60)] bg-[color:var(--surface-60)] px-3 py-2 text-[10px] text-[color:var(--text-55)]">
+                                    <span>Activa los logs para editar variables avanzadas.</span>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        updateSettingValue("advanced.log_enabled", true)
+                                      }
+                                      className="rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-solid)] px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-[color:var(--ink)]"
+                                    >
+                                      Activar logs
+                                    </button>
+                                  </div>
+                                )}
+                                {!availableAdvancedOptions.length && (
+                                  <div className="mt-2 text-[10px] text-[color:var(--text-55)]">
+                                    No hay variables adicionales disponibles.
+                                  </div>
+                                )}
+                                {advancedError && (
+                                  <div className="mt-2 text-[10px] text-rose-500">
+                                    {advancedError}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                            <div className="mt-3 space-y-3">
+                              {fieldsToRender.map((field) => {
+                                const fieldValue = settingsDraft[field.key];
+                                const fieldDisabled =
+                                  isAdvanced &&
+                                  field.key !== "advanced.log_enabled" &&
+                                  advancedLocked;
+                                return (
+                                  <div
+                                    key={field.key}
+                                    className="flex items-center justify-between gap-3 rounded-xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-2"
+                                  >
+                                    <div className="min-w-0">
+                                      <div className="text-xs font-semibold text-[color:var(--ink)]">
+                                        {field.label}
+                                      </div>
+                                      {field.description && (
+                                        <div className="text-[10px] text-[color:var(--text-55)]">
+                                          {field.description}
+                                        </div>
+                                      )}
+                                    </div>
+                                    {field.type === "boolean" && (
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          updateSettingValue(field.key, !Boolean(fieldValue))
+                                        }
+                                        disabled={fieldDisabled}
+                                        className={`relative inline-flex h-6 w-11 items-center rounded-full border transition ${
+                                          fieldValue
+                                            ? "border-[color:var(--aqua)] bg-[color:var(--gradient-chip)]"
+                                            : "border-[color:var(--border-60)] bg-[color:var(--surface-60)]"
+                                        }`}
+                                      >
+                                        <span
+                                          className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition ${
+                                            fieldValue ? "translate-x-5" : "translate-x-1"
+                                          }`}
+                                        />
+                                      </button>
+                                    )}
+                                    {field.type === "select" && (
+                                      <select
+                                        value={String(fieldValue ?? "")}
+                                        onChange={(event) =>
+                                          updateSettingValue(field.key, event.target.value)
+                                        }
+                                        disabled={fieldDisabled}
+                                        className="rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-60)] px-3 py-1 text-xs text-[color:var(--ink)]"
+                                      >
+                                        {(field.options ?? []).map((option) => {
+                                          const isLanguage = field.key === "language.preference";
+                                          const label = isLanguage
+                                            ? LANGUAGE_LABELS[option] ?? option
+                                            : option;
+                                          return (
+                                            <option key={option} value={option}>
+                                              {label}
+                                            </option>
+                                          );
+                                        })}
+                                      </select>
+                                    )}
+                                    {(field.type === "string" ||
+                                      field.type === "secret" ||
+                                      field.type === "number") && (
+                                      <div className="flex items-center gap-2">
+                                        <input
+                                          type={
+                                            field.type === "secret"
+                                              ? "password"
+                                              : field.type === "number"
+                                                ? "number"
+                                                : "text"
+                                          }
+                                          value={String(fieldValue ?? "")}
+                                          onChange={(event) => {
+                                            const rawValue = event.target.value;
+                                            if (field.type === "number") {
+                                              const parsed = Number(rawValue);
+                                              updateSettingValue(
+                                                field.key,
+                                                Number.isNaN(parsed) ? 0 : parsed
+                                              );
+                                              return;
+                                            }
+                                            updateSettingValue(field.key, rawValue);
+                                          }}
+                                          placeholder={field.placeholder ?? ""}
+                                          disabled={fieldDisabled}
+                                          className="w-40 rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-60)] px-3 py-1 text-xs text-[color:var(--ink)] disabled:opacity-50"
+                                        />
+                                        {isAdvanced && (
+                                          <button
+                                            type="button"
+                                            onClick={() => updateSettingValue(field.key, "")}
+                                            disabled={fieldDisabled}
+                                            className="text-[10px] uppercase tracking-[0.2em] text-[color:var(--text-55)] hover:text-rose-500"
+                                          >
+                                            Quitar
+                                          </button>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                              {isAdvanced &&
+                                advancedOpen &&
+                                advancedExtraFields.length === 0 && (
+                                <div className="text-[11px] text-[color:var(--text-55)]">
+                                  No hay variables avanzadas configuradas.
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="rounded-2xl border border-dashed border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-3 py-6 text-center text-xs text-[color:var(--text-55)]">
+                        {settingsError ? settingsError : "Cargando configuración..."}
+                      </div>
+                    )}
+                  </div>
+                  {settingsError && settingsGroups && (
+                    <div className="px-4 pb-4">
+                      <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+                        {settingsError}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="border-t border-[color:var(--border-60)] p-4 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={resetSettingsDraft}
+                        disabled={!settingsDirty || settingsBusy}
+                        className="text-xs uppercase tracking-[0.2em] text-[color:var(--text-55)] disabled:opacity-50"
+                      >
+                        Deshacer cambios
+                      </button>
+                      <button
+                        type="button"
+                        onClick={resetSettingsToDefault}
+                        disabled={settingsBusy}
+                        className="text-xs uppercase tracking-[0.2em] text-[color:var(--text-55)] hover:text-[color:var(--ink)]"
+                      >
+                        Volver a valores por defecto
+                      </button>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {hasCredentialIssues && (
+                        <span className="text-[11px] text-rose-500">
+                          Completa credenciales o desactiva la fuente.
+                        </span>
+                      )}
+                      {settingsSaved && (
+                        <span className="text-[11px] text-[color:var(--text-60)]">
+                          Guardado
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={saveSettings}
+                        disabled={settingsBusy || !settingsDirty || hasCredentialIssues}
+                        className="rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-solid)] px-4 py-1.5 text-xs font-semibold text-[color:var(--ink)] shadow-[var(--shadow-pill)] transition hover:shadow-[var(--shadow-pill-hover)] disabled:opacity-60"
+                        style={{
+                          background:
+                            "linear-gradient(120deg, rgba(45, 204, 205, 0.22), rgba(0, 68, 129, 0.18), rgba(255, 255, 255, 0.95))",
+                        }}
+                      >
+                        {settingsBusy ? "Guardando..." : "Guardar"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
             <button
               type="button"
               onClick={toggleTheme}
@@ -995,8 +1892,11 @@ export function Shell({ children }: { children: React.ReactNode }) {
                   : "Ambient light"
               }
               className="h-9 w-9 rounded-full grid place-items-center border border-[color:var(--border-15)] bg-[color:var(--surface-10)] text-[color:var(--text-inverse-80)] transition hover:bg-[color:var(--surface-15)] hover:text-white active:scale-95"
+              suppressHydrationWarning
             >
-              {theme === "ambient-light" ? (
+              {!themeReady ? (
+                <Moon className="h-4 w-4" />
+              ) : theme === "ambient-light" ? (
                 <Moon className="h-4 w-4" />
               ) : (
                 <Sun className="h-4 w-4" />

@@ -937,7 +937,17 @@
       "1214811644",
       "1436969262",
       "612261027",
-      "1021178150"
+      "1021178150",
+      "318806094",
+      "347887638",
+      "774858627",
+      "956857223",
+      "1217874244",
+      "1100731780",
+      "1075378688",
+      "1335704361",
+      "814456780",
+      "374817863"
     ],
     "app_ids_by_geo": {
       "España": [
@@ -946,7 +956,15 @@
         "976662821",
         "1209986220",
         "1328811481",
-        "1589126967"
+        "1589126967",
+        "318806094",
+        "347887638",
+        "774858627",
+        "956857223",
+        "1217874244",
+        "1436969262",
+        "612261027",
+        "1021178150"
       ],
       "México": [
         "1459550683",
@@ -955,7 +973,10 @@
         "1558937311",
         "1088404293",
         "1255229181",
-        "925436649"
+        "925436649",
+        "374817863",
+        "1335704361",
+        "814456780"
       ],
       "Perú": [
         "1590189082",
@@ -969,7 +990,9 @@
         "1590189082",
         "1110912115",
         "6447528295",
-        "1609083736"
+        "1609083736",
+        "1100731780",
+        "1075378688"
       ],
       "Argentina": [
         "1590189082",
@@ -1044,7 +1067,17 @@
       "1214811644": "Qonto",
       "1436969262": "Revolut",
       "612261027": "Wise",
-      "1021178150": "Bunq"
+      "1021178150": "Bunq",
+      "318806094": "Caixabank",
+      "347887638": "Sabadell",
+      "774858627": "ING",
+      "956857223": "N26",
+      "1217874244": "Openbank",
+      "1100731780": "Daviplata",
+      "1075378688": "Nequi",
+      "1335704361": "Hey",
+      "814456780": "Nubank",
+      "374817863": "Banorte"
     }
   },
   "trustpilot": {
@@ -1099,20 +1132,38 @@
         "eu.qonto.qonto",
         "com.paypal.merchant.client",
         "com.stripe.android.dashboard",
-        "com.adyen.ipp.mobile.companion.live"
+        "com.adyen.ipp.mobile.companion.live",
+        "com.bunq.android",
+        "de.number26.android",
+        "es.openbank.mobile",
+        "com.revolut.revolut",
+        "com.transferwise.android",
+        "com.bankinter.launcher",
+        "es.lacaixa.mobile.android.newwapicon",
+        "net.inverline.bancosabadell.officelocator.android",
+        "www.ingdirect.nativeframe"
       ],
       "México": [
         "com.bbva.GEMA",
         "mx.bancosabadell.emp.token",
         "com.paypal.merchant.client",
         "com.stripe.android.dashboard",
-        "com.adyen.ipp.mobile.companion.live"
+        "com.adyen.ipp.mobile.companion.live",
+        "org.microemu.android.model.common.VTUserApplicationBNRTMB",
+        "com.banorte.bem.movil",
+        "com.citibanamex.bnemobile",
+        "com.banregio.hey",
+        "com.nu.production",
+        "com.mercadopago.wallet"
       ],
       "Perú": [
         "pe.bbvacontinental.netcash",
         "com.paypal.merchant.client",
         "com.stripe.android.dashboard",
-        "com.adyen.ipp.mobile.companion.live"
+        "com.adyen.ipp.mobile.companion.live",
+        "com.bcp.bank.bcp",
+        "pe.com.interbank.mobilebanking",
+        "pe.com.scotiabank.blpm.android.client"
       ],
       "Colombia": [
         "com.todo1.mobile.bancolombiaempresas",
@@ -1120,13 +1171,17 @@
         "co.com.ath.bbog.icbs",
         "com.paypal.merchant.client",
         "com.stripe.android.dashboard",
-        "com.adyen.ipp.mobile.companion.live"
+        "com.adyen.ipp.mobile.companion.live",
+        "com.davivienda.daviviendaapp",
+        "com.davivienda.daviplataapp",
+        "com.nequi.MobileApp"
       ],
       "Argentina": [
         "com.galicia.otp",
         "com.paypal.merchant.client",
         "com.stripe.android.dashboard",
-        "com.adyen.ipp.mobile.companion.live"
+        "com.adyen.ipp.mobile.companion.live",
+        "com.mercadopago.wallet"
       ],
       "Turquía": [
         "com.paypal.merchant.client",
@@ -1166,7 +1221,28 @@
       "eu.qonto.qonto": "Qonto",
       "com.paypal.merchant.client": "PayPal",
       "com.stripe.android.dashboard": "Stripe",
-      "com.adyen.ipp.mobile.companion.live": "Adyen"
+      "com.adyen.ipp.mobile.companion.live": "Adyen",
+      "com.bunq.android": "Bunq",
+      "de.number26.android": "N26",
+      "es.openbank.mobile": "Openbank",
+      "com.revolut.revolut": "Revolut",
+      "com.transferwise.android": "Wise",
+      "com.bankinter.launcher": "Bankinter",
+      "es.lacaixa.mobile.android.newwapicon": "Caixabank",
+      "net.inverline.bancosabadell.officelocator.android": "Sabadell",
+      "www.ingdirect.nativeframe": "ING",
+      "org.microemu.android.model.common.VTUserApplicationBNRTMB": "Banorte",
+      "com.banorte.bem.movil": "Banorte",
+      "com.citibanamex.bnemobile": "Citibanamex",
+      "com.banregio.hey": "Hey",
+      "com.nu.production": "Nubank",
+      "com.mercadopago.wallet": "Mercado Pago",
+      "com.davivienda.daviviendaapp": "Davivienda",
+      "com.davivienda.daviplataapp": "Daviplata",
+      "com.nequi.MobileApp": "Nequi",
+      "com.bcp.bank.bcp": "BCP",
+      "pe.com.interbank.mobilebanking": "Interbank",
+      "pe.com.scotiabank.blpm.android.client": "Scotiabank"
     }
   },
   "require_actor_sources": [
