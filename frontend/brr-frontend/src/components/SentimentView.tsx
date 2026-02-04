@@ -43,6 +43,7 @@ import {
   dispatchIngestStarted,
   INGEST_SUCCESS_EVENT,
   PROFILE_CHANGED_EVENT,
+  SETTINGS_CHANGED_EVENT,
   type IngestSuccessDetail,
 } from "@/lib/events";
 import { INCIDENTS_FEATURE_ENABLED } from "@/lib/flags";
@@ -236,6 +237,18 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
     window.addEventListener(PROFILE_CHANGED_EVENT, handler as EventListener);
     return () => {
       window.removeEventListener(PROFILE_CHANGED_EVENT, handler as EventListener);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    const handler = () => {
+      setProfileRefresh((value) => value + 1);
+      setReputationRefresh((value) => value + 1);
+    };
+    window.addEventListener(SETTINGS_CHANGED_EVENT, handler as EventListener);
+    return () => {
+      window.removeEventListener(SETTINGS_CHANGED_EVENT, handler as EventListener);
     };
   }, []);
 

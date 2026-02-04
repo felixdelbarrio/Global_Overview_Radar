@@ -42,8 +42,8 @@ class GdeltCollector(ReputationCollector):
             return []
 
         items: list[ReputationItem] = []
-        max_queries = _env_int("GDELT_MAX_QUERIES", 0)
-        max_errors = _env_int("GDELT_MAX_ERRORS", 10)
+        max_queries = _env_int("GDELT_MAX_QUERIES", 80)
+        max_errors = _env_int("GDELT_MAX_ERRORS", 8)
         error_count = 0
         for idx, query in enumerate(self._queries):
             if max_queries > 0 and idx >= max_queries:
