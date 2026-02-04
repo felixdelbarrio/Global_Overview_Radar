@@ -29,7 +29,7 @@ GROUPS: list[dict[str, str]] = [
     {
         "id": "language",
         "label": "Idioma",
-        "description": "Selecciona el idioma general para noticias (RSS y APIs).",
+        "description": "Selecciona el idioma general para noticias y traducciones de opiniones.",
     },
     {
         "id": "sources_public",
@@ -82,7 +82,7 @@ FIELDS: list[UserSettingField] = [
         env="NEWS_LANG",
         group="language",
         label="Idioma general",
-        description="Se aplica a RSS y NewsAPI.",
+        description="Se aplica a RSS, NewsAPI y traducciones.",
         kind="select",
         default="es",
         options=LANGUAGE_OPTIONS,

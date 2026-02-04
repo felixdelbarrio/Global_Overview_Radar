@@ -707,6 +707,8 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
   const appleStoreEnabled = storeSourcesEnabled.has("appstore");
   const googlePlayEnabled = storeSourcesEnabled.has("google_play");
   const showStoreRatings = appleStoreEnabled || googlePlayEnabled;
+  const hasGeoSelection = geo !== "all";
+  const showStoreRatingsForGeo = showStoreRatings && hasGeoSelection;
   const principalStoreRatings = useMemo(
     () => buildActorStoreRatings(marketRatings, actorPrincipalName, geo),
     [marketRatings, actorPrincipalName, geo],
@@ -722,7 +724,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
     }),
     [appleStoreEnabled, googlePlayEnabled],
   );
-  const stackSentimentSummary = isDashboard && showStoreRatings;
+  const stackSentimentSummary = isDashboard && showStoreRatingsForGeo;
   const principalMentions = useMemo(
     () => groupedMentions.filter((item) => isPrincipalGroup(item, principalAliasKeys)),
     [groupedMentions, principalAliasKeys],
@@ -909,6 +911,11 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
                 />
               </FilterField>
             )}
+            <FilterField label="Entidad">
+              <div className="w-full rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_var(--inset-highlight)]">
+                {actorPrincipalName}
+              </div>
+            </FilterField>
             {!isDashboard && (
               <FilterField label="Sentimiento">
                 <select
@@ -927,11 +934,6 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
                 </select>
               </FilterField>
             )}
-            <FilterField label="Entidad">
-              <div className="w-full rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_var(--inset-highlight)]">
-                {actorPrincipalName}
-              </div>
-            </FilterField>
             <FilterField label="País">
               <select
                 value={geo}
@@ -1044,7 +1046,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
               value={sentimentSummary.avgScore.toFixed(2)}
               loading={itemsLoading}
             />
-            {showStoreRatings && (
+            {showStoreRatingsForGeo && (
               <StoreRatingCard
                 label="Rating oficial"
                 ratings={principalStoreRatings}
@@ -1053,7 +1055,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
                 history={marketRatingsHistory}
               />
             )}
-            {showStoreRatings && !isDashboard && (
+            {showStoreRatingsForGeo && !isDashboard && (
               <StoreRatingCard
                 label="Rating oficial competencia"
                 ratings={actorStoreRatings}

@@ -13,6 +13,7 @@ from reputation.actors import (
     build_actor_alias_map,
     build_actor_aliases_by_canonical,
     canonicalize_actor,
+    primary_actor_info,
 )
 from reputation.collectors.appstore import AppStoreCollector, AppStoreScraperCollector
 from reputation.collectors.base import ReputationCollector
@@ -69,6 +70,57 @@ DEFAULT_NEWS_RSS_LIMITS = {
     "max_per_geo": 220,
     "max_per_entity": 40,
 }
+_GEO_COUNTRY_HINTS = {
+    "espana": "es",
+    "españa": "es",
+    "spain": "es",
+    "mexico": "mx",
+    "méxico": "mx",
+    "peru": "pe",
+    "peru ": "pe",
+    "perú": "pe",
+    "colombia": "co",
+    "argentina": "ar",
+    "turquia": "tr",
+    "turquía": "tr",
+    "turkey": "tr",
+    "global": "us",
+    "world": "us",
+    "estados unidos": "us",
+    "united states": "us",
+    "usa": "us",
+}
+_GOOGLE_PLAY_LOCALE_HINTS = {
+    "es": ("ES", "es"),
+    "mx": ("MX", "es-419"),
+    "pe": ("PE", "es-419"),
+    "co": ("CO", "es-419"),
+    "ar": ("AR", "es-419"),
+    "tr": ("TR", "tr"),
+    "us": ("US", "en"),
+}
+
+
+def _primary_actor_canonical(cfg: dict[str, Any]) -> str:
+    info = primary_actor_info(cfg)
+    if not info:
+        return ""
+    canonical = info.get("canonical")
+    return canonical.strip() if isinstance(canonical, str) else ""
+
+
+def _guess_country_code(geo: str | None) -> str:
+    if not geo:
+        return ""
+    normalized = normalize_text(geo)
+    return _GEO_COUNTRY_HINTS.get(normalized, "")
+
+
+def _guess_google_play_locale(geo: str | None) -> tuple[str, str]:
+    country = _guess_country_code(geo)
+    if not country:
+        return "", ""
+    return _GOOGLE_PLAY_LOCALE_HINTS.get(country, (country.upper(), country.lower()))
 DEFAULT_LOOKBACK_DAYS = 730
 
 
@@ -389,6 +441,8 @@ class ReputationIngestService:
         if not isinstance(app_id_to_actor, dict):
             app_id_to_actor = {}
 
+        fallback_actor = _primary_actor_canonical(cfg)
+        default_country = os.getenv("APPSTORE_COUNTRY", "es").strip().lower() or "es"
         timeout = _env_int("APPSTORE_RATING_TIMEOUT", 12)
         seen: set[tuple[str, str]] = set()
         out: list[MarketRating] = []
@@ -398,6 +452,8 @@ class ReputationIngestService:
             if not isinstance(app_ids_list, list):
                 continue
             country = str(country_by_geo.get(geo, "")).strip().lower()
+            if not country:
+                country = _guess_country_code(geo) or default_country
             if not country:
                 notes.append(f"appstore rating: missing country for geo '{geo}'")
                 continue
@@ -418,7 +474,7 @@ class ReputationIngestService:
                 rating, rating_count, url, name = rating_info
                 if rating is None:
                     continue
-                actor = app_id_to_actor.get(app_id)
+                actor = app_id_to_actor.get(app_id) or fallback_actor
                 out.append(
                     MarketRating(
                         source="appstore",
@@ -458,7 +514,10 @@ class ReputationIngestService:
         if not isinstance(package_id_to_actor, dict):
             package_id_to_actor = {}
 
+        fallback_actor = _primary_actor_canonical(cfg)
         timeout = _env_int("GOOGLE_PLAY_RATING_TIMEOUT", 12)
+        default_gl = os.getenv("GOOGLE_PLAY_DEFAULT_COUNTRY", "ES").strip().upper() or "ES"
+        default_hl = os.getenv("GOOGLE_PLAY_DEFAULT_LANGUAGE", "es").strip().lower() or "es"
         seen: set[tuple[str, str, str]] = set()
         out: list[MarketRating] = []
         now = datetime.now(timezone.utc)
@@ -468,6 +527,10 @@ class ReputationIngestService:
                 continue
             gl = str(geo_to_gl.get(geo, "")).strip().upper()
             hl = str(geo_to_hl.get(geo, "")).strip().lower()
+            if not gl or not hl:
+                guessed_gl, guessed_hl = _guess_google_play_locale(geo)
+                gl = gl or guessed_gl or default_gl
+                hl = hl or guessed_hl or default_hl
             if not gl or not hl:
                 notes.append(f"google_play rating: missing hl/gl for geo '{geo}'")
                 continue
@@ -488,7 +551,7 @@ class ReputationIngestService:
                 rating, rating_count, url, name = rating_info
                 if rating is None:
                     continue
-                actor = package_id_to_actor.get(package_id)
+                actor = package_id_to_actor.get(package_id) or fallback_actor
                 out.append(
                     MarketRating(
                         source="google_play",
@@ -686,13 +749,18 @@ class ReputationIngestService:
         cfg_local = dict(cfg)
         cfg_local["keywords"] = keywords
         service = ReputationSentimentService(cfg_local)
+        target_language = _resolve_translation_language()
         existing_keys = {(item.source, item.id) for item in existing} if existing else set()
         if existing_keys:
             new_items = [item for item in items if (item.source, item.id) not in existing_keys]
+            if target_language:
+                new_items = service.translate_items(new_items, target_language)
             updated = service.analyze_items(new_items)
             updated_map = {(item.source, item.id): item for item in updated}
             result = [updated_map.get((item.source, item.id), item) for item in items]
         else:
+            if target_language:
+                items = service.translate_items(items, target_language)
             result = service.analyze_items(items)
 
         if service.llm_warning and notes is not None:
@@ -2847,6 +2915,14 @@ def _env_int(env_name: str, default: int) -> int:
 def _env_str(env_name: str, default: str) -> str:
     raw = os.getenv(env_name, "").strip()
     return raw if raw else default
+
+
+def _resolve_translation_language() -> str:
+    preferred = os.getenv("NEWS_LANG", "").strip()
+    if preferred:
+        return preferred
+    fallback = os.getenv("NEWSAPI_LANGUAGE", "").strip()
+    return fallback
 
 
 def _config_int(value: object, default: int) -> int:

@@ -314,6 +314,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     ingestJobsRef.current = ingestJobs;
   }, [ingestJobs]);
+  const ingestWasActiveRef = useRef(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return undefined;
@@ -369,11 +370,10 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const activeCount = activeProfiles.length;
   const applyDisabled = profileBusy || (templatesOpen && selectedCount === 0);
   const emptySelectionHint = templatesOpen && selectedCount === 0;
-  const profilesToRender = filteredProfiles;
   const selectionBadge = templatesOpen
     ? selectedCount
       ? `${selectedCount} seleccionados`
-      : "Sin selección"
+      : "Plantillas"
     : activeCount
       ? `${activeCount} activo${activeCount > 1 ? "s" : ""}`
       : "Sin perfil";
@@ -504,6 +504,39 @@ export function Shell({ children }: { children: React.ReactNode }) {
     });
     return sorted.map((key) => ({ key, ...categoryMetaByKey(key) }));
   }, [availableProfiles]);
+
+  const profilesToRender = useMemo(() => {
+    if (!templatesOpen || !activeSectorKey) return filteredProfiles;
+    return filteredProfiles.filter((profile) => categoryKey(profile) === activeSectorKey);
+  }, [filteredProfiles, activeSectorKey, templatesOpen]);
+
+  const primaryActiveProfile = activeProfiles[0] ?? "";
+  const primaryActiveLabel = primaryActiveProfile
+    ? formatProfileLabel(primaryActiveProfile)
+    : "Sin perfil activo";
+  const primaryActiveMeta = primaryActiveProfile
+    ? categoryMeta(primaryActiveProfile)
+    : null;
+  const extraActiveCount = activeProfiles.length > 1 ? activeProfiles.length - 1 : 0;
+
+  const resetProfileTemplateState = () => {
+    setProfileSelection([]);
+    setProfileQuery("");
+    setSectorFocus("all");
+    setProfileCategoryWarning(null);
+  };
+
+  const toggleProfileTemplates = () => {
+    if (profilesOpen && templatesOpen) {
+      setProfilesOpen(false);
+      return;
+    }
+    if (!profilesOpen) {
+      setProfilesOpen(true);
+    }
+    setTemplatesOpen(true);
+    resetProfileTemplateState();
+  };
 
 
   const toggleProfileSelection = (name: string) => {
@@ -712,6 +745,19 @@ export function Shell({ children }: { children: React.ReactNode }) {
       ),
     [ingestJobs]
   );
+  useEffect(() => {
+    const wasActive = ingestWasActiveRef.current;
+    ingestWasActiveRef.current = ingestActive;
+    if (!wasActive || ingestActive || !ingestOpen) return undefined;
+    const hasSuccess = Object.values(ingestJobs).some(
+      (job) => job && job.status === "success"
+    );
+    if (!hasSuccess) return undefined;
+    const timeout = window.setTimeout(() => {
+      setIngestOpen(false);
+    }, 1200);
+    return () => window.clearTimeout(timeout);
+  }, [ingestActive, ingestJobs, ingestOpen]);
 
   useEffect(() => {
     if (!ingestActive) return;
@@ -1005,18 +1051,68 @@ export function Shell({ children }: { children: React.ReactNode }) {
               </div>
             )}
             <div className="relative">
-              <button
-                type="button"
-                onClick={() => setProfilesOpen((prev) => !prev)}
-                aria-label="Cambiar perfil"
-                title="Cambiar perfil"
-                className="h-9 px-3 rounded-full flex items-center gap-2 border border-[color:var(--border-15)] bg-[color:var(--surface-10)] text-[color:var(--text-inverse-80)] transition hover:bg-[color:var(--surface-15)] hover:text-white"
-              >
-                <Layers className="h-4 w-4" />
-                <span className="text-xs">Perfil</span>
-              </button>
+              <div className="group relative flex items-center gap-3 rounded-full border border-[color:var(--border-15)] bg-[color:var(--surface-10)] px-2 py-1 pr-1 text-[color:var(--text-inverse-80)] shadow-[var(--shadow-pill)] backdrop-blur-sm">
+                <div
+                  className="absolute inset-0 opacity-0 transition group-hover:opacity-100"
+                  style={{
+                    background:
+                      "radial-gradient(160px 80px at 0% 50%, rgba(45,204,205,0.22), transparent 65%)",
+                  }}
+                />
+                <div className="relative flex items-center gap-3 min-w-0">
+                  <div className="h-8 w-8 rounded-full border border-[color:var(--border-15)] bg-[color:var(--surface-15)] grid place-items-center">
+                    <Layers className="h-4 w-4 text-white" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-[9px] uppercase tracking-[0.32em] text-[color:var(--text-inverse-60)]">
+                      Perfil activo
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="text-xs font-semibold text-white truncate max-w-[120px] sm:max-w-[160px] lg:max-w-[220px]"
+                        title={primaryActiveLabel}
+                      >
+                        {primaryActiveLabel}
+                      </span>
+                      {extraActiveCount > 0 && (
+                        <span className="rounded-full border border-[color:var(--border-15)] bg-[color:var(--surface-20)] px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] text-white/80">
+                          +{extraActiveCount}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                {primaryActiveMeta ? (
+                  <span
+                    className="relative rounded-full border px-2.5 py-0.5 text-[10px] uppercase tracking-[0.18em]"
+                    style={{
+                      color: primaryActiveMeta.tone,
+                      borderColor: primaryActiveMeta.tone,
+                    }}
+                  >
+                    {primaryActiveMeta.label}
+                  </span>
+                ) : (
+                  <span className="relative rounded-full border border-[color:var(--border-15)] px-2.5 py-0.5 text-[10px] uppercase tracking-[0.18em] text-[color:var(--text-inverse-60)]">
+                    Sin perfil
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={toggleProfileTemplates}
+                  aria-label="Cambiar perfil"
+                  title="Cambiar perfil"
+                  className="relative rounded-full border border-[color:var(--border-15)] px-3 py-1 text-[10px] uppercase tracking-[0.24em] text-white transition hover:border-[color:var(--aqua)] hover:text-white active:scale-95"
+                  style={{
+                    background:
+                      "linear-gradient(120deg, rgba(45, 204, 205, 0.3), rgba(0, 68, 129, 0.35))",
+                  }}
+                >
+                  Cambiar perfil
+                </button>
+              </div>
               {profileAppliedNote && (
-                <span className="absolute right-0 -bottom-6 rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-10)] px-3 py-1 text-[10px] uppercase tracking-[0.18em] text-[color:var(--text-inverse-80)]">
+                <span className="absolute right-2 -bottom-6 rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-10)] px-3 py-1 text-[10px] uppercase tracking-[0.18em] text-[color:var(--text-inverse-80)]">
                   {autoIngestNote
                     ? "Perfil aplicado · Ingesta automática"
                     : "Perfil aplicado"}
@@ -1027,84 +1123,33 @@ export function Shell({ children }: { children: React.ReactNode }) {
                   <div className="absolute -top-10 right-6 h-24 w-24 rounded-full bg-[color:var(--aqua)]/20 blur-3xl" />
                   <div className="absolute -bottom-16 left-6 h-32 w-32 rounded-full bg-[color:var(--blue)]/20 blur-3xl" />
                   <div className="relative p-4">
-                    <div className="flex items-start gap-3">
-                      <div className="h-10 w-10 rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] grid place-items-center">
-                        <Layers className="h-5 w-5 text-[color:var(--blue)]" />
-                      </div>
-                      <div className="flex-1">
-                        <div className="text-[11px] font-semibold tracking-[0.35em] text-[color:var(--blue)]">
-                          PERFIL
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-start gap-3">
+                        <div className="h-10 w-10 rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] grid place-items-center">
+                          <Layers className="h-5 w-5 text-[color:var(--blue)]" />
                         </div>
-                        <div className="mt-1 text-sm text-[color:var(--text-60)]">
-                          Elige el universo que quieres analizar.
-                        </div>
-                      </div>
-                      <span className="rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] text-[color:var(--text-60)]">
-                        {selectionBadge}
-                      </span>
-                    </div>
-                    <div className="mt-4 rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] p-3">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <div className="text-[10px] uppercase tracking-[0.3em] text-[color:var(--text-55)]">
-                            Perfil activo
+                        <div className="flex-1">
+                          <div className="text-[11px] font-semibold tracking-[0.35em] text-[color:var(--blue)]">
+                            PERFIL
                           </div>
                           <div className="mt-1 text-sm text-[color:var(--text-60)]">
-                            {activeProfiles.length
-                              ? "Tu universo actual, listo para analizar."
-                              : "Aún no hay un perfil activo configurado."}
+                            Elige el universo que quieres analizar.
                           </div>
                         </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] text-[color:var(--text-60)]">
+                          {selectionBadge}
+                        </span>
                         <button
                           type="button"
-                          onClick={() => {
-                            if (templatesOpen) {
-                              setTemplatesOpen(false);
-                              return;
-                            }
-                            setTemplatesOpen(true);
-                            setProfileSelection([]);
-                            setProfileQuery("");
-                            setSectorFocus("all");
-                            setProfileCategoryWarning(null);
-                          }}
-                          className="rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-[color:var(--text-60)] transition hover:border-[color:var(--aqua)] hover:text-[color:var(--ink)]"
+                          onClick={() => setProfilesOpen(false)}
+                          aria-label="Cerrar perfiles"
+                          title="Cerrar"
+                          className="h-7 w-7 rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-70)] text-[color:var(--text-55)] transition hover:text-[color:var(--ink)] hover:border-[color:var(--aqua)]"
                         >
-                          {templatesOpen ? "Cerrar" : "Cambiar perfil"}
+                          <X className="mx-auto h-3.5 w-3.5" />
                         </button>
-                      </div>
-
-                      <div className="mt-3 space-y-2">
-                        {activeProfiles.length ? (
-                          activeProfiles.map((profile) => {
-                            const category = categoryMeta(profile);
-                            return (
-                              <div
-                                key={profile}
-                                className="flex items-center justify-between gap-3 rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-2"
-                              >
-                                <div className="min-w-0">
-                                  <div className="truncate text-sm font-semibold text-[color:var(--ink)]">
-                                    {formatProfileLabel(profile)}
-                                  </div>
-                                  <div className="truncate text-[10px] uppercase tracking-[0.2em] text-[color:var(--text-55)]">
-                                    {profile}
-                                  </div>
-                                </div>
-                                <span
-                                  className="rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-[0.18em]"
-                                  style={{ color: category.tone, borderColor: category.tone }}
-                                >
-                                  {category.label}
-                                </span>
-                              </div>
-                            );
-                          })
-                        ) : (
-                          <div className="rounded-2xl border border-dashed border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-3 text-center text-xs text-[color:var(--text-60)]">
-                            No hay perfil activo configurado.
-                          </div>
-                        )}
                       </div>
                     </div>
 
