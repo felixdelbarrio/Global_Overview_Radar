@@ -121,6 +121,8 @@ def _guess_google_play_locale(geo: str | None) -> tuple[str, str]:
     if not country:
         return "", ""
     return _GOOGLE_PLAY_LOCALE_HINTS.get(country, (country.upper(), country.lower()))
+
+
 DEFAULT_LOOKBACK_DAYS = 730
 
 
@@ -1167,7 +1169,9 @@ class ReputationIngestService:
 
         segment_query_mode = _env_optional("REPUTATION_BALANCE_SEGMENT_QUERY_MODE") or "broad"
         rss_query_geo_mode = _env_optional("REPUTATION_BALANCE_RSS_QUERY_GEO_MODE") or "required"
-        rss_query_order = _env_optional("REPUTATION_BALANCE_RSS_QUERY_ORDER") or "round_robin_geo_entity"
+        rss_query_order = (
+            _env_optional("REPUTATION_BALANCE_RSS_QUERY_ORDER") or "round_robin_geo_entity"
+        )
 
         return {
             "enabled": enabled,
@@ -1576,24 +1580,17 @@ class ReputationIngestService:
         if "newsapi" in sources_enabled:
             handled_sources.add("newsapi")
             api_key = os.getenv("NEWSAPI_API_KEY", "").strip()
-            language = (
-                os.getenv("NEWSAPI_LANGUAGE")
-                or os.getenv("NEWS_LANG", "es")
-            ).strip()
+            language = _env_str("NEWSAPI_LANGUAGE", _env_str("NEWS_LANG", "es"))
             max_articles_default = _env_int("REPUTATION_DEFAULT_MAX_ITEMS", 1200)
             max_articles = _env_int("NEWSAPI_MAX_ARTICLES", max_articles_default)
             sources = os.getenv("NEWSAPI_SOURCES", "").strip() or None
             domains = os.getenv("NEWSAPI_DOMAINS", "").strip() or None
             raw_sort_by = os.getenv("NEWSAPI_SORT_BY")
-            if raw_sort_by is None:
-                sort_by = "publishedAt"
-            else:
-                sort_by = raw_sort_by.strip() or None
+            sort_by = "publishedAt" if raw_sort_by is None else raw_sort_by.strip() or None
             raw_search_in = os.getenv("NEWSAPI_SEARCH_IN")
-            if raw_search_in is None:
-                search_in = "title,description"
-            else:
-                search_in = raw_search_in.strip() or None
+            search_in = (
+                "title,description" if raw_search_in is None else raw_search_in.strip() or None
+            )
             newsapi_endpoint = os.getenv("NEWSAPI_ENDPOINT", "").strip() or None
 
             queries = self._build_search_queries(

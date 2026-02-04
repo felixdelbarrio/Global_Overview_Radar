@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import re
+from contextlib import suppress
 from dataclasses import dataclass
 from typing import Any, Iterable
 
@@ -130,6 +131,13 @@ _COUNTRY_CODE_MAP = {
 
 _STAR_SENTIMENT_SOURCES = {"appstore", "google_reviews"}
 _ACTOR_TEXT_REQUIRED_SOURCES = {"news", "blogs", "gdelt", "newsapi", "guardian"}
+
+_ARGOS_DEFAULT_PAIRS = {
+    ("tr", "es"),
+    ("en", "es"),
+    ("es", "en"),
+}
+_ARGOS_INSTALL_ATTEMPTED: set[tuple[str, str]] = set()
 
 
 def _extract_star_rating(item: ReputationItem) -> float | None:
@@ -1098,9 +1106,7 @@ class ReputationSentimentService:
             return False
         if not self._llm_enabled:
             return False
-        if self._llm_api_key_required and not self._llm_api_key:
-            return False
-        return True
+        return not (self._llm_api_key_required and not self._llm_api_key)
 
     def _maybe_warn_llm_disabled(self) -> None:
         if self.llm_warning:
@@ -1232,7 +1238,7 @@ class ReputationSentimentService:
         return items_list
 
     def _translate_items_with_llm(self, items: list[ReputationItem], target: str) -> None:
-        translations: dict[str, dict[str, str]] = {}
+        translations: dict[str, dict[str, str | None]] = {}
         system_prompt = _DEFAULT_TRANSLATION_SYSTEM_PROMPT.format(target_language=target)
 
         for chunk in _chunked(items, self._llm_batch_size):
@@ -1291,6 +1297,14 @@ class ReputationSentimentService:
             from argostranslate import translate as argos_translate  # type: ignore
         except Exception:
             return
+
+        required_pairs: set[tuple[str, str]] = set()
+        if target == "es":
+            required_pairs.update({("tr", "es"), ("en", "es")})
+        if target == "en":
+            required_pairs.add(("es", "en"))
+        if required_pairs:
+            _ensure_argos_language_pairs(required_pairs)
 
         installed = argos_translate.get_installed_languages()
         if not installed:
@@ -1601,6 +1615,42 @@ def _normalize_lang_code(value: str | None) -> str:
         if sep in cleaned:
             cleaned = cleaned.split(sep)[0].strip()
     return cleaned
+
+
+def _ensure_argos_language_pairs(pairs: set[tuple[str, str]]) -> None:
+    if not pairs:
+        return
+    if not _env_bool(os.getenv("ARGOS_AUTO_INSTALL", "true")):
+        return
+    to_install = {
+        pair
+        for pair in pairs
+        if pair in _ARGOS_DEFAULT_PAIRS and pair not in _ARGOS_INSTALL_ATTEMPTED
+    }
+    if not to_install:
+        return
+    try:
+        from argostranslate import package as argos_package  # type: ignore
+    except Exception:
+        _ARGOS_INSTALL_ATTEMPTED.update(to_install)
+        return
+    try:
+        argos_package.update_package_index()
+        available = argos_package.get_available_packages()
+    except Exception:
+        _ARGOS_INSTALL_ATTEMPTED.update(to_install)
+        return
+    for from_code, to_code in to_install:
+        candidate = next(
+            (pkg for pkg in available if pkg.from_code == from_code and pkg.to_code == to_code),
+            None,
+        )
+        if not candidate:
+            _ARGOS_INSTALL_ATTEMPTED.add((from_code, to_code))
+            continue
+        with suppress(Exception):
+            argos_package.install_from_path(candidate.download())
+        _ARGOS_INSTALL_ATTEMPTED.add((from_code, to_code))
 
 
 def _sanitize_text(value: str) -> str:

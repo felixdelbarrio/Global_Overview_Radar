@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
 
-import os
-
-from reputation.config import REPUTATION_ENV_EXAMPLE, REPUTATION_ENV_PATH, reload_reputation_settings
+from reputation.config import (
+    REPUTATION_ENV_EXAMPLE,
+    REPUTATION_ENV_PATH,
+    reload_reputation_settings,
+)
 
 SettingKind = Literal["boolean", "string", "secret", "number", "select"]
 
@@ -690,9 +693,7 @@ def get_user_settings_snapshot() -> dict[str, Any]:
     _ensure_example_file()
     env_values = _parse_env_file(REPUTATION_ENV_PATH)
     extras = {
-        k: v
-        for k, v in env_values.items()
-        if k not in FIELDS_BY_ENV and k != "NEWSAPI_LANGUAGE"
+        k: v for k, v in env_values.items() if k not in FIELDS_BY_ENV and k != "NEWSAPI_LANGUAGE"
     }
     values_by_key: dict[str, Any] = {}
     for field in FIELDS:
@@ -761,8 +762,7 @@ def get_user_settings_snapshot() -> dict[str, Any]:
         ).isoformat()
 
     advanced_options = sorted(
-        {key for key in ADVANCED_ENV_CANDIDATES if key not in FIELDS_BY_ENV}
-        | set(extras.keys())
+        {key for key in ADVANCED_ENV_CANDIDATES if key not in FIELDS_BY_ENV} | set(extras.keys())
     )
 
     return {
@@ -812,9 +812,7 @@ def update_user_settings(values: dict[str, Any]) -> dict[str, Any]:
                 env_values.pop(key, None)
 
     extras = {
-        k: v
-        for k, v in env_values.items()
-        if k not in FIELDS_BY_ENV and k != "NEWSAPI_LANGUAGE"
+        k: v for k, v in env_values.items() if k not in FIELDS_BY_ENV and k != "NEWSAPI_LANGUAGE"
     }
 
     missing_sources: list[str] = []
@@ -827,9 +825,7 @@ def update_user_settings(values: dict[str, Any]) -> dict[str, Any]:
             missing_sources.append(source_label.label if source_label else source_env)
 
     if missing_sources:
-        raise ValueError(
-            "Faltan credenciales para: " + ", ".join(sorted(set(missing_sources)))
-        )
+        raise ValueError("Faltan credenciales para: " + ", ".join(sorted(set(missing_sources))))
     rendered = _render_env_file(env_values, extras)
     REPUTATION_ENV_PATH.write_text(rendered, encoding="utf-8")
 
