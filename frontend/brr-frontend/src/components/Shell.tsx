@@ -19,11 +19,18 @@ import {
   Layers,
   Loader2,
   Moon,
+  Search,
   Sun,
   Sparkles,
+  X,
 } from "lucide-react";
 import { apiGet, apiPost } from "@/lib/api";
-import { dispatchIngestSuccess, INGEST_STARTED_EVENT } from "@/lib/events";
+import {
+  dispatchIngestStarted,
+  dispatchIngestSuccess,
+  dispatchProfileChanged,
+  INGEST_STARTED_EVENT,
+} from "@/lib/events";
 import { INCIDENTS_FEATURE_ENABLED } from "@/lib/flags";
 import type { IngestJob, IngestJobKind, ReputationMeta } from "@/lib/types";
 
@@ -38,6 +45,8 @@ type ProfileOptionsResponse = {
     samples: string[];
   };
 };
+
+const EMPTY_PROFILES: string[] = [];
 
 export function Shell({ children }: { children: React.ReactNode }) {
   const profileAppliedKey = "gor-profile-applied";
@@ -94,11 +103,15 @@ export function Shell({ children }: { children: React.ReactNode }) {
   });
   const [profilesOpen, setProfilesOpen] = useState(false);
   const [profileOptions, setProfileOptions] = useState<ProfileOptionsResponse | null>(null);
-  const [profileSource, setProfileSource] = useState<"default" | "samples">("default");
   const [profileSelection, setProfileSelection] = useState<string[]>([]);
+  const [profileQuery, setProfileQuery] = useState("");
   const [profileBusy, setProfileBusy] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
+  const [profileCategoryWarning, setProfileCategoryWarning] = useState<string | null>(null);
+  const [sectorFocus, setSectorFocus] = useState<string>("all");
+  const [templatesOpen, setTemplatesOpen] = useState(false);
   const [profileAppliedNote, setProfileAppliedNote] = useState(false);
+  const [autoIngestNote, setAutoIngestNote] = useState(false);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -132,8 +145,6 @@ export function Shell({ children }: { children: React.ReactNode }) {
       .then((data) => {
         if (!alive) return;
         setProfileOptions(data);
-        const source = data.active.source === "samples" ? "samples" : "default";
-        setProfileSource(source);
         setProfileSelection(data.active.profiles ?? []);
       })
       .catch(() => {
@@ -151,10 +162,20 @@ export function Shell({ children }: { children: React.ReactNode }) {
       const storage = window.localStorage;
       if (!storage) return;
       const flag = storage.getItem(profileAppliedKey);
-      if (!flag) return;
-      storage.removeItem(profileAppliedKey);
-      setProfileAppliedNote(true);
-      const timer = window.setTimeout(() => setProfileAppliedNote(false), 3200);
+      const autoFlag = storage.getItem("gor-auto-ingest");
+      if (!flag && !autoFlag) return;
+      if (flag) {
+        storage.removeItem(profileAppliedKey);
+        setProfileAppliedNote(true);
+      }
+      if (autoFlag) {
+        storage.removeItem("gor-auto-ingest");
+        setAutoIngestNote(true);
+      }
+      const timer = window.setTimeout(() => {
+        setProfileAppliedNote(false);
+        setAutoIngestNote(false);
+      }, 3200);
       return () => window.clearTimeout(timer);
     } catch {
       // ignore storage failures
@@ -163,15 +184,16 @@ export function Shell({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (!profileOptions) return;
-    const active = profileOptions.active;
-    const source = active.source === "samples" ? "samples" : "default";
-    if (source === profileSource) {
-      setProfileSelection(active.profiles ?? []);
-    } else {
-      setProfileSelection([]);
+    if (!profilesOpen) {
+      setTemplatesOpen(false);
+      setProfileCategoryWarning(null);
+      return;
     }
-  }, [profileSource, profileOptions]);
+    if (!templatesOpen) return;
+    setProfileQuery("");
+    setProfileCategoryWarning(null);
+    setSectorFocus("all");
+  }, [profilesOpen, templatesOpen]);
 
   const ingestJobsRef = useRef(ingestJobs);
 
@@ -214,34 +236,158 @@ export function Shell({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const availableProfiles = profileOptions?.options[profileSource] ?? [];
-  const toggleProfileSelection = (name: string) => {
-    setProfileSelection((prev) =>
-      prev.includes(name) ? prev.filter((item) => item !== name) : [...prev, name]
+  const activeProfiles = profileOptions?.active.profiles ?? EMPTY_PROFILES;
+  const availableProfiles = useMemo(
+    () => profileOptions?.options.samples ?? EMPTY_PROFILES,
+    [profileOptions],
+  );
+  const normalizedProfileQuery = useMemo(
+    () => profileQuery.trim().toLowerCase(),
+    [profileQuery],
+  );
+  const filteredProfiles = useMemo(() => {
+    if (!normalizedProfileQuery) return availableProfiles;
+    return availableProfiles.filter((profile) =>
+      profile.toLowerCase().includes(normalizedProfileQuery),
     );
+  }, [availableProfiles, normalizedProfileQuery]);
+  const selectedCount = profileSelection.length;
+  const activeCount = activeProfiles.length;
+  const applyDisabled = profileBusy || (templatesOpen && selectedCount === 0);
+  const emptySelectionHint = templatesOpen && selectedCount === 0;
+  const profilesToRender = filteredProfiles;
+  const selectionBadge = templatesOpen
+    ? selectedCount
+      ? `${selectedCount} seleccionados`
+      : "Sin selección"
+    : activeCount
+      ? `${activeCount} activo${activeCount > 1 ? "s" : ""}`
+      : "Sin perfil";
+
+  const categoryKey = (value: string) => value.split("_")[0]?.toLowerCase() || "custom";
+  const categoryMetaByKey = (key: string) => {
+    const map: Record<string, { label: string; tone: string }> = {
+      banking: { label: "Finanzas", tone: "var(--aqua)" },
+      crypto: { label: "Cripto", tone: "var(--blue)" },
+      sports: { label: "Deporte", tone: "var(--blue)" },
+      streaming: { label: "Streaming", tone: "var(--aqua)" },
+      travel: { label: "Travel", tone: "var(--blue)" },
+      fashion: { label: "Moda", tone: "var(--aqua)" },
+      automotive: { label: "Auto", tone: "var(--blue)" },
+      taylor: { label: "Music", tone: "var(--aqua)" },
+    };
+    return map[key] ?? { label: key.toUpperCase(), tone: "var(--text-45)" };
   };
-  const selectAllProfiles = () => {
-    setProfileSelection(availableProfiles);
-  };
-  const clearProfiles = () => {
-    setProfileSelection([]);
+  const selectedCategoryKey = useMemo(
+    () => (profileSelection.length ? categoryKey(profileSelection[0]) : null),
+    [profileSelection],
+  );
+  const activeSectorKey =
+    selectedCategoryKey ?? (sectorFocus !== "all" ? sectorFocus : null);
+
+  const formatProfileLabel = (value: string) =>
+    value
+      .split("_")
+      .filter(Boolean)
+      .map((chunk) => chunk.charAt(0).toUpperCase() + chunk.slice(1))
+      .join(" ");
+
+  const categoryMeta = (value: string) => categoryMetaByKey(categoryKey(value));
+
+  const sectorOptions = useMemo(() => {
+    const keys = new Set<string>();
+    availableProfiles.forEach((profile) => keys.add(categoryKey(profile)));
+    const order = [
+      "banking",
+      "crypto",
+      "sports",
+      "streaming",
+      "travel",
+      "fashion",
+      "automotive",
+      "taylor",
+    ];
+    const sorted = Array.from(keys).sort((a, b) => {
+      const ia = order.indexOf(a);
+      const ib = order.indexOf(b);
+      const ra = ia === -1 ? 999 : ia;
+      const rb = ib === -1 ? 999 : ib;
+      if (ra !== rb) return ra - rb;
+      return a.localeCompare(b);
+    });
+    return sorted.map((key) => ({ key, ...categoryMetaByKey(key) }));
+  }, [availableProfiles]);
+
+
+  const toggleProfileSelection = (name: string) => {
+    setProfileSelection((prev) => {
+      if (prev.includes(name)) {
+        const next = prev.filter((item) => item !== name);
+        if (next.length <= 1) {
+          setProfileCategoryWarning(null);
+        }
+        return next;
+      }
+      const nextKey = categoryKey(name);
+      const currentKey = prev.length ? categoryKey(prev[0]) : activeSectorKey;
+      if (currentKey && currentKey !== nextKey) {
+        const label = categoryMetaByKey(currentKey).label;
+        setProfileCategoryWarning(
+          `Solo puedes combinar perfiles del sector ${label}.`,
+        );
+        return prev;
+      }
+      setProfileCategoryWarning(null);
+      return [...prev, name];
+    });
   };
   const applyProfiles = async () => {
     setProfileError(null);
     setProfileBusy(true);
     try {
-      await apiPost("/reputation/profiles", {
-        source: profileSource,
+      const response = await apiPost<{
+        active?: { source: string; profiles: string[]; profile_key: string };
+        auto_ingest?: { started?: boolean; job?: IngestJob };
+      }>("/reputation/profiles", {
+        source: "samples",
         profiles: profileSelection,
       });
-      try {
-        if (typeof window !== "undefined") {
-          window.localStorage?.setItem(profileAppliedKey, "1");
-        }
-      } catch {
-        // ignore storage failures
+      const autoStarted = response?.auto_ingest?.started === true;
+      if (autoStarted && response?.auto_ingest?.job) {
+        dispatchIngestStarted(response.auto_ingest.job);
       }
-      window.location.reload();
+      if (response?.active) {
+        dispatchProfileChanged(response.active);
+      } else {
+        dispatchProfileChanged({ source: "samples", profiles: profileSelection });
+      }
+      setProfileAppliedNote(true);
+      setAutoIngestNote(autoStarted);
+      if (typeof window !== "undefined") {
+        window.setTimeout(() => {
+          setProfileAppliedNote(false);
+          setAutoIngestNote(false);
+        }, 3200);
+      }
+
+      setProfilesOpen(false);
+
+      const [meta, profiles] = await Promise.all([
+        apiGet<ReputationMeta>("/reputation/meta").catch(() => null),
+        apiGet<ProfileOptionsResponse>("/reputation/profiles").catch(() => null),
+      ]);
+      if (meta) {
+        const ui = meta.ui ?? {};
+        setUiFlags({
+          incidents_enabled: ui.incidents_enabled !== false,
+          ops_enabled: ui.ops_enabled !== false,
+        });
+        setIncidentsAvailable(meta.incidents_available === true);
+      }
+      if (profiles) {
+        setProfileOptions(profiles);
+        setProfileSelection(profiles.active.profiles ?? []);
+      }
     } catch (err) {
       setProfileError(err instanceof Error ? err.message : "No se pudo aplicar el perfil");
     } finally {
@@ -402,12 +548,23 @@ export function Shell({ children }: { children: React.ReactNode }) {
                             Lanza procesos en segundo plano sin frenar tu flujo.
                           </div>
                         </div>
-                        {ingestActive && (
-                          <div className="flex items-center gap-2 text-[11px] text-[color:var(--text-55)]">
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            {ingestProgress}% listo
-                          </div>
-                        )}
+                        <div className="flex items-center gap-2">
+                          {ingestActive && (
+                            <div className="flex items-center gap-2 text-[11px] text-[color:var(--text-55)]">
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              {ingestProgress}% listo
+                            </div>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => setIngestOpen(false)}
+                            aria-label="Cerrar centro de ingesta"
+                            title="Cerrar"
+                            className="h-7 w-7 rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-70)] text-[color:var(--text-55)] transition hover:text-[color:var(--ink)] hover:border-[color:var(--aqua)]"
+                          >
+                            <X className="mx-auto h-3.5 w-3.5" />
+                          </button>
+                        </div>
                       </div>
 
                       {(["reputation", "incidents"] as IngestJobKind[])
@@ -448,13 +605,16 @@ export function Shell({ children }: { children: React.ReactNode }) {
                         const warning =
                           typeof job?.meta?.warning === "string" ? job.meta.warning : "";
                         const metaLabel = metaBits.join(" · ");
+                        const actionLabel = isError
+                          ? "Reintentar ingesta"
+                          : isSuccess
+                            ? "Lanzar de nuevo"
+                            : "Iniciar ingesta";
+                        const actionDisabled = busy;
                         return (
-                          <button
+                          <div
                             key={kind}
-                            type="button"
-                            onClick={() => startIngest(kind)}
-                            disabled={busy}
-                            className="group relative w-full overflow-hidden rounded-[18px] border border-[color:var(--border-60)] bg-[color:var(--surface-80)] p-3 text-left transition hover:shadow-[var(--shadow-soft)] disabled:opacity-70"
+                            className="group relative w-full overflow-hidden rounded-[18px] border border-[color:var(--border-60)] bg-[color:var(--surface-80)] p-3 text-left"
                           >
                             <div className="absolute inset-0 opacity-0 transition group-hover:opacity-100" style={{ background: "radial-gradient(140px 60px at 0% 0%, rgba(45,204,205,0.18), transparent 60%)" }} />
                             <div className="relative flex items-start gap-3">
@@ -489,8 +649,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
                               <div className="flex items-center gap-2 text-xs">
                                 {busy && <Loader2 className="h-4 w-4 animate-spin text-[color:var(--blue)]" />}
                                 {isSuccess && !busy && (
-                                  <span className="rounded-full bg-[color:var(--surface-60)] px-2 py-0.5 text-[10px] text-[color:var(--text-60)]">
-                                    OK
+                                  <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] text-emerald-700">
+                                    Completado
                                   </span>
                                 )}
                                 {isError && !busy && (
@@ -509,7 +669,18 @@ export function Shell({ children }: { children: React.ReactNode }) {
                                 />
                               </div>
                             )}
-                          </button>
+
+                            <div className="relative mt-3 flex items-center justify-end">
+                              <button
+                                type="button"
+                                onClick={() => startIngest(kind)}
+                                disabled={actionDisabled}
+                                className="rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-[color:var(--text-55)] transition hover:bg-[color:var(--surface-60)] disabled:opacity-60"
+                              >
+                                {actionLabel}
+                              </button>
+                            </div>
+                          </div>
                         );
                       })}
 
@@ -536,95 +707,277 @@ export function Shell({ children }: { children: React.ReactNode }) {
               </button>
               {profileAppliedNote && (
                 <span className="absolute right-0 -bottom-6 rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-10)] px-3 py-1 text-[10px] uppercase tracking-[0.18em] text-[color:var(--text-inverse-80)]">
-                  Perfil aplicado
+                  {autoIngestNote
+                    ? "Perfil aplicado · Ingesta automática"
+                    : "Perfil aplicado"}
                 </span>
               )}
               {profilesOpen && (
-                <div className="absolute right-0 mt-3 w-[280px] rounded-[20px] border border-[color:var(--border-60)] bg-[color:var(--panel-strong)] shadow-[var(--shadow-lg)] backdrop-blur-xl overflow-hidden z-50">
-                  <div className="relative p-4 space-y-3">
-                    <div className="text-xs font-semibold tracking-[0.3em] text-[color:var(--blue)]">
-                      PERFIL
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setProfileSource("default")}
-                        className={`flex-1 rounded-full border px-3 py-1 text-[11px] uppercase tracking-[0.2em] ${
-                          profileSource === "default"
-                            ? "border-[color:var(--aqua)] text-white bg-[color:var(--surface-70)]"
-                            : "border-[color:var(--border-60)] text-[color:var(--text-55)]"
-                        }`}
-                      >
-                        Producción
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setProfileSource("samples")}
-                        className={`flex-1 rounded-full border px-3 py-1 text-[11px] uppercase tracking-[0.2em] ${
-                          profileSource === "samples"
-                            ? "border-[color:var(--aqua)] text-white bg-[color:var(--surface-70)]"
-                            : "border-[color:var(--border-60)] text-[color:var(--text-55)]"
-                        }`}
-                      >
-                        Plantillas
-                      </button>
-                    </div>
-
-                    <div className="max-h-48 space-y-2 overflow-auto pr-1">
-                      {availableProfiles.length ? (
-                        availableProfiles.map((profile) => (
-                          <label
-                            key={profile}
-                            className="flex items-center gap-3 rounded-xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-3 py-2 text-sm text-[color:var(--ink)]"
-                          >
-                            <input
-                              type="checkbox"
-                              className="h-4 w-4 accent-[color:var(--aqua)]"
-                              checked={profileSelection.includes(profile)}
-                              onChange={() => toggleProfileSelection(profile)}
-                            />
-                            <span className="truncate">{profile}</span>
-                          </label>
-                        ))
-                      ) : (
-                        <div className="text-xs text-[color:var(--text-55)]">
-                          No hay perfiles disponibles.
+                <div className="absolute right-0 mt-3 w-[360px] rounded-[24px] border border-[color:var(--border-60)] bg-[color:var(--panel-strong)] shadow-[var(--shadow-lg)] backdrop-blur-xl overflow-hidden z-50">
+                  <div className="absolute -top-10 right-6 h-24 w-24 rounded-full bg-[color:var(--aqua)]/20 blur-3xl" />
+                  <div className="absolute -bottom-16 left-6 h-32 w-32 rounded-full bg-[color:var(--blue)]/20 blur-3xl" />
+                  <div className="relative p-4">
+                    <div className="flex items-start gap-3">
+                      <div className="h-10 w-10 rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] grid place-items-center">
+                        <Layers className="h-5 w-5 text-[color:var(--blue)]" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="text-[11px] font-semibold tracking-[0.35em] text-[color:var(--blue)]">
+                          PERFIL
                         </div>
-                      )}
+                        <div className="mt-1 text-sm text-[color:var(--text-60)]">
+                          Elige el universo que quieres analizar.
+                        </div>
+                      </div>
+                      <span className="rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] text-[color:var(--text-60)]">
+                        {selectionBadge}
+                      </span>
                     </div>
-
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
+                    <div className="mt-4 rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="text-[10px] uppercase tracking-[0.3em] text-[color:var(--text-55)]">
+                            Perfil activo
+                          </div>
+                          <div className="mt-1 text-sm text-[color:var(--text-60)]">
+                            {activeProfiles.length
+                              ? "Tu universo actual, listo para analizar."
+                              : "Aún no hay un perfil activo configurado."}
+                          </div>
+                        </div>
                         <button
                           type="button"
-                          onClick={selectAllProfiles}
-                          className="text-[11px] uppercase tracking-[0.2em] text-[color:var(--text-55)]"
+                          onClick={() => {
+                            if (templatesOpen) {
+                              setTemplatesOpen(false);
+                              return;
+                            }
+                            setTemplatesOpen(true);
+                            setProfileSelection([]);
+                            setProfileQuery("");
+                            setSectorFocus("all");
+                            setProfileCategoryWarning(null);
+                          }}
+                          className="rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-[color:var(--text-60)] transition hover:border-[color:var(--aqua)] hover:text-[color:var(--ink)]"
                         >
-                          Todos
-                        </button>
-                        <button
-                          type="button"
-                          onClick={clearProfiles}
-                          className="text-[11px] uppercase tracking-[0.2em] text-[color:var(--text-55)]"
-                        >
-                          Limpiar
+                          {templatesOpen ? "Cerrar" : "Cambiar perfil"}
                         </button>
                       </div>
-                      <button
-                        type="button"
-                        onClick={applyProfiles}
-                        disabled={profileBusy}
-                        className="rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-4 py-1 text-xs text-white disabled:opacity-70"
-                      >
-                        {profileBusy ? "Aplicando..." : "Aplicar"}
-                      </button>
+
+                      <div className="mt-3 space-y-2">
+                        {activeProfiles.length ? (
+                          activeProfiles.map((profile) => {
+                            const category = categoryMeta(profile);
+                            return (
+                              <div
+                                key={profile}
+                                className="flex items-center justify-between gap-3 rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-2"
+                              >
+                                <div className="min-w-0">
+                                  <div className="truncate text-sm font-semibold text-[color:var(--ink)]">
+                                    {formatProfileLabel(profile)}
+                                  </div>
+                                  <div className="truncate text-[10px] uppercase tracking-[0.2em] text-[color:var(--text-55)]">
+                                    {profile}
+                                  </div>
+                                </div>
+                                <span
+                                  className="rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-[0.18em]"
+                                  style={{ color: category.tone, borderColor: category.tone }}
+                                >
+                                  {category.label}
+                                </span>
+                              </div>
+                            );
+                          })
+                        ) : (
+                          <div className="rounded-2xl border border-dashed border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-3 text-center text-xs text-[color:var(--text-60)]">
+                            No hay perfil activo configurado.
+                          </div>
+                        )}
+                      </div>
                     </div>
-                    {profileError && (
-                      <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
-                        {profileError}
+
+                    {templatesOpen && (
+                      <>
+                        <div className="mt-4 rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-3 py-2">
+                          <div className="flex items-center gap-3">
+                            <div className="h-9 w-9 rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] grid place-items-center">
+                              <Sparkles className="h-4 w-4 text-[color:var(--aqua)]" />
+                            </div>
+                            <div className="text-[11px] text-[color:var(--text-60)]">
+                              Las plantillas reemplazan los perfiles actuales. Si el caché está vacío,
+                              lanzaremos una ingesta automática.
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="mt-4">
+                          <label className="text-[10px] uppercase tracking-[0.28em] text-[color:var(--text-60)]">
+                            Buscar perfil
+                          </label>
+                          <div className="relative mt-2">
+                            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[color:var(--text-55)]" />
+                            <input
+                              value={profileQuery}
+                              onChange={(event) => setProfileQuery(event.target.value)}
+                              onKeyDown={(event) => {
+                                if (event.key !== "Enter") return;
+                                event.preventDefault();
+                                if (!applyDisabled) {
+                                  void applyProfiles();
+                                }
+                              }}
+                              placeholder="Ej: banking, taylor, travel..."
+                              className="w-full rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] py-2 pl-9 pr-3 text-sm text-[color:var(--ink)] placeholder:text-[color:var(--text-55)] outline-none transition focus:border-[color:var(--aqua)]"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="mt-4">
+                          <div className="text-[10px] uppercase tracking-[0.28em] text-[color:var(--text-60)]">
+                            Sector
+                          </div>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (profileSelection.length) {
+                                  setProfileSelection([]);
+                                }
+                                setSectorFocus("all");
+                                setProfileCategoryWarning(null);
+                              }}
+                              className={`rounded-full border px-3 py-1 text-[10px] uppercase tracking-[0.2em] transition ${
+                                (activeSectorKey ?? "all") === "all"
+                                  ? "border-[color:var(--aqua)] bg-[color:var(--surface-70)] text-white"
+                                  : "border-[color:var(--border-60)] text-[color:var(--text-60)]"
+                              }`}
+                            >
+                              Todos
+                            </button>
+                            {sectorOptions.map((sector) => (
+                              <button
+                                key={sector.key}
+                                type="button"
+                                onClick={() => {
+                                  if (profileSelection.length && sector.key !== selectedCategoryKey) {
+                                    setProfileSelection([]);
+                                  }
+                                  setSectorFocus(sector.key);
+                                  setProfileCategoryWarning(null);
+                                }}
+                                className={`rounded-full border px-3 py-1 text-[10px] uppercase tracking-[0.2em] transition ${
+                                  activeSectorKey === sector.key
+                                    ? "border-[color:var(--aqua)] bg-[color:var(--surface-70)] text-white"
+                                    : "border-[color:var(--border-60)] text-[color:var(--text-60)]"
+                                }`}
+                              >
+                                {sector.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </>
+                    )}
+
+                    {templatesOpen && (activeSectorKey || selectedCategoryKey) && (
+                      <div className="mt-2 text-[11px] text-[color:var(--text-60)]">
+                        Sector activo:{" "}
+                        <span className="font-semibold text-[color:var(--ink)]">
+                          {categoryMetaByKey(activeSectorKey ?? selectedCategoryKey ?? "custom").label}
+                        </span>
                       </div>
                     )}
                   </div>
+
+                  {templatesOpen && (
+                    <>
+                      <div className="max-h-56 space-y-2 overflow-auto px-4 pb-4">
+                        {profilesToRender.length ? (
+                          profilesToRender.map((profile) => {
+                            const category = categoryMeta(profile);
+                            const selected = profileSelection.includes(profile);
+                            const blocked =
+                              activeSectorKey !== null &&
+                              categoryKey(profile) !== activeSectorKey;
+                            return (
+                              <label
+                                key={profile}
+                                className={`group flex items-center justify-between gap-3 rounded-2xl border px-3 py-2 text-sm transition ${
+                                  selected
+                                    ? "border-[color:var(--aqua)] bg-[color:var(--gradient-chip)] text-[color:var(--ink)] shadow-[var(--shadow-pill)]"
+                                    : "border-[color:var(--border-60)] bg-[color:var(--surface-80)] text-[color:var(--ink)] hover:shadow-[var(--shadow-soft)]"
+                                } ${blocked ? "opacity-45 grayscale" : ""}`}
+                                aria-disabled={blocked}
+                                title={blocked ? "Bloqueado por sector" : undefined}
+                              >
+                                <div className="flex items-center gap-3">
+                                  <input
+                                    type="checkbox"
+                                    className="h-4 w-4 accent-[color:var(--aqua)]"
+                                    checked={selected}
+                                    onChange={() => toggleProfileSelection(profile)}
+                                    disabled={blocked}
+                                  />
+                                  <div className="min-w-0">
+                                    <div className="truncate text-sm font-semibold">
+                                      {formatProfileLabel(profile)}
+                                    </div>
+                                    <div className="truncate text-[10px] uppercase tracking-[0.2em] text-[color:var(--text-55)]">
+                                      {profile}
+                                    </div>
+                                  </div>
+                                </div>
+                                <span
+                                  className="rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-[0.18em]"
+                                  style={{ color: category.tone, borderColor: category.tone }}
+                                >
+                                  {category.label}
+                                </span>
+                              </label>
+                            );
+                          })
+                        ) : (
+                          <div className="rounded-2xl border border-dashed border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-3 py-4 text-center text-xs text-[color:var(--text-60)]">
+                            No hay perfiles para esa búsqueda.
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="border-t border-[color:var(--border-60)] p-4 space-y-2">
+                        <div className="flex items-center justify-end">
+                          <button
+                            type="button"
+                            onClick={applyProfiles}
+                            disabled={applyDisabled}
+                            className="rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-solid)] px-4 py-1.5 text-xs font-semibold text-[color:var(--ink)] shadow-[var(--shadow-pill)] transition hover:shadow-[var(--shadow-pill-hover)] disabled:opacity-60"
+                            style={{
+                              background:
+                                "linear-gradient(120deg, rgba(45, 204, 205, 0.22), rgba(0, 68, 129, 0.18), rgba(255, 255, 255, 0.95))",
+                            }}
+                          >
+                            {profileBusy ? "Aplicando..." : "Aplicar"}
+                          </button>
+                        </div>
+                        {profileCategoryWarning && (
+                          <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-700">
+                            {profileCategoryWarning}
+                          </div>
+                        )}
+                        {emptySelectionHint && (
+                          <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-700">
+                            Selecciona al menos 1 plantilla para aplicar.
+                          </div>
+                        )}
+                        {profileError && (
+                          <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+                            {profileError}
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
             </div>
