@@ -8,10 +8,6 @@ from typing import Any, Iterable, List
 
 from fastapi import APIRouter, Body, HTTPException, Query
 from pydantic import BaseModel
-
-from bugresolutionradar.api.routers.ingest import start_reputation_ingest
-from bugresolutionradar.config import settings as brr_settings
-from bugresolutionradar.logging_utils import get_logger
 from reputation.actors import (
     actor_principal_canonicals,
     actor_principal_terms,
@@ -29,7 +25,9 @@ from reputation.config import (
     normalize_profile_source,
     set_profile_state,
 )
-from reputation.config import settings as reputation_settings
+from reputation.config import (
+    settings as reputation_settings,
+)
 from reputation.models import (
     ReputationCacheDocument,
     ReputationCacheStats,
@@ -38,6 +36,15 @@ from reputation.models import (
 )
 from reputation.repositories.cache_repo import ReputationCacheRepo
 from reputation.repositories.overrides_repo import ReputationOverridesRepo
+from reputation.user_settings import (
+    get_user_settings_snapshot,
+    reset_user_settings_to_example,
+    update_user_settings,
+)
+
+from bugresolutionradar.api.routers.ingest import start_reputation_ingest
+from bugresolutionradar.config import settings as brr_settings
+from bugresolutionradar.logging_utils import get_logger
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -49,6 +56,25 @@ def _normalize_source(value: str | None) -> str:
     if not value:
         return ""
     return "".join(ch for ch in value.lower() if ch.isalnum())
+
+
+def _enabled_sources_set() -> set[str]:
+    return {_normalize_source(source) for source in reputation_settings.enabled_sources()}
+
+
+def _resolve_enabled_sources(doc: ReputationCacheDocument | None) -> set[str] | None:
+    if doc is not None and not doc.sources_enabled:
+        return None
+    enabled = _enabled_sources_set()
+    return enabled or None
+
+
+def _is_source_enabled(source: str | None, enabled_sources: set[str] | None) -> bool:
+    if enabled_sources is None:
+        return True
+    if not source:
+        return False
+    return _normalize_source(source) in enabled_sources
 
 
 @router.get("/items")
@@ -66,10 +92,11 @@ def reputation_items(
     repo = ReputationCacheRepo(reputation_settings.cache_path)
     doc = repo.load()
     if doc is None:
+        sources_enabled = list(reputation_settings.enabled_sources())
         return ReputationCacheDocument(
             generated_at=datetime.now(timezone.utc),
             config_hash="empty",
-            sources_enabled=[],
+            sources_enabled=sources_enabled,
             items=[],
             market_ratings=[],
             market_ratings_history=[],
@@ -77,36 +104,71 @@ def reputation_items(
         )
 
     overrides = _load_overrides()
-    items = list(
-        _filter_items(
-            _apply_overrides(doc.items, overrides),
-            sources,
-            entity,
-            geo,
-            actor,
-            sentiment,
-            from_date,
-            to_date,
-            period_days,
-            q,
+    enabled_sources = _resolve_enabled_sources(doc)
+    base_items = [
+        item
+        for item in _apply_overrides(doc.items, overrides)
+        if _is_source_enabled(item.source, enabled_sources)
+    ]
+    try:
+        items = list(
+            _filter_items(
+                base_items,
+                sources,
+                entity,
+                geo,
+                actor,
+                sentiment,
+                from_date,
+                to_date,
+                period_days,
+                q,
+            )
         )
-    )
+    except FileNotFoundError as exc:
+        logger.warning("Reputation filters skipped (missing config): %s", exc)
+        items = list(
+            _filter_items(
+                base_items,
+                sources,
+                None,
+                geo,
+                None,
+                sentiment,
+                from_date,
+                to_date,
+                period_days,
+                q,
+            )
+        )
     logger.debug("Reputation items filtered: %s -> %s", len(doc.items), len(items))
     return ReputationCacheDocument(
         generated_at=doc.generated_at,
         config_hash=doc.config_hash,
-        sources_enabled=doc.sources_enabled,
+        sources_enabled=list(reputation_settings.enabled_sources()),
         items=items,
-        market_ratings=doc.market_ratings,
-        market_ratings_history=doc.market_ratings_history,
+        market_ratings=[
+            rating
+            for rating in doc.market_ratings
+            if _is_source_enabled(rating.source, enabled_sources)
+        ],
+        market_ratings_history=[
+            rating
+            for rating in doc.market_ratings_history
+            if _is_source_enabled(rating.source, enabled_sources)
+        ],
         stats=ReputationCacheStats(count=len(items), note=doc.stats.note),
     )
 
 
 @router.get("/meta")
 def reputation_meta() -> dict[str, Any]:
-    cfg = load_business_config()
-    principal = primary_actor_info(cfg)
+    try:
+        cfg = load_business_config()
+    except FileNotFoundError as exc:
+        logger.warning("Reputation config missing: %s", exc)
+        cfg = {}
+    principal = primary_actor_info(cfg) if cfg else None
     geos = [g for g in cfg.get("geografias", []) if isinstance(g, str) and g.strip()]
     otros_actores_por_geografia = cfg.get("otros_actores_por_geografia") or {}
     otros_actores_globales = cfg.get("otros_actores_globales") or []
@@ -118,20 +180,29 @@ def reputation_meta() -> dict[str, Any]:
     repo = ReputationCacheRepo(reputation_settings.cache_path)
     doc = repo.load()
     cache_available = doc is not None
-    market_ratings = doc.market_ratings if doc else []
-    market_ratings_history = doc.market_ratings_history if doc else []
+    sources_enabled = list(reputation_settings.enabled_sources())
+    enabled_sources = _resolve_enabled_sources(doc)
+    market_ratings = [
+        rating
+        for rating in (doc.market_ratings if doc else [])
+        if _is_source_enabled(rating.source, enabled_sources)
+    ]
+    market_ratings_history = [
+        rating
+        for rating in (doc.market_ratings_history if doc else [])
+        if _is_source_enabled(rating.source, enabled_sources)
+    ]
     profiles_active = active_profiles()
     profile_key = active_profile_key()
     profile_source = active_profile_source()
     source_counts: dict[str, int] = {}
     if doc:
         for item in doc.items:
-            if item.source:
+            if item.source and _is_source_enabled(item.source, enabled_sources):
                 source_counts[item.source] = source_counts.get(item.source, 0) + 1
-    sources_enabled = list(reputation_settings.enabled_sources())
     for source in sources_enabled:
         source_counts.setdefault(source, 0)
-    sources_available = sorted([s for s, count in source_counts.items() if count > 0])
+    sources_available = sorted(sources_enabled)
     incidents_available = Path(brr_settings.cache_path).exists()
     return {
         "actor_principal": principal,
@@ -223,6 +294,28 @@ class OverrideRequest(BaseModel):
     note: str | None = None
 
 
+class SettingsUpdate(BaseModel):
+    values: dict[str, Any]
+
+
+@router.get("/settings")
+def reputation_settings_get() -> dict[str, Any]:
+    return get_user_settings_snapshot()
+
+
+@router.post("/settings")
+def reputation_settings_update(payload: SettingsUpdate) -> dict[str, Any]:
+    try:
+        return update_user_settings(payload.values)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/settings/reset")
+def reputation_settings_reset() -> dict[str, Any]:
+    return reset_user_settings_to_example()
+
+
 @router.post("/items/override")
 def reputation_override(payload: OverrideRequest):
     if not payload.ids:
@@ -287,7 +380,12 @@ def reputation_compare(filters: List[CompareFilter] = COMPARE_BODY):
         }
 
     overrides = _load_overrides()
-    base_items = _apply_overrides(doc.items, overrides)
+    enabled_sources = _resolve_enabled_sources(doc)
+    base_items = [
+        item
+        for item in _apply_overrides(doc.items, overrides)
+        if _is_source_enabled(item.source, enabled_sources)
+    ]
     groups = []
     combined_map: dict[str, ReputationItem] = {}
 
@@ -352,12 +450,17 @@ def _filter_items(
 
     needs_actor_meta = entity_lc in {"actor_principal", "otros_actores"} or actor_lc is not None
     if needs_actor_meta:
-        cfg = load_business_config()
-        alias_map = build_actor_alias_map(cfg)
-        principal_canonicals = set(actor_principal_canonicals(cfg))
-        principal_terms = _principal_terms_from_cfg(cfg)
-        if actor_lc:
-            actor_filter = alias_map.get(normalize_text(actor or ""), actor or "").lower()
+        try:
+            cfg = load_business_config()
+            alias_map = build_actor_alias_map(cfg)
+            principal_canonicals = set(actor_principal_canonicals(cfg))
+            principal_terms = _principal_terms_from_cfg(cfg)
+            if actor_lc:
+                actor_filter = alias_map.get(normalize_text(actor or ""), actor or "").lower()
+        except FileNotFoundError as exc:
+            logger.warning("Reputation config missing for filters: %s", exc)
+            if entity_lc in {"actor_principal", "otros_actores"}:
+                entity_lc = None
 
     from_dt: datetime | None
     to_dt: datetime | None
