@@ -57,6 +57,19 @@ from reputation.services.sentiment_service import ReputationSentimentService
 logger = get_logger(__name__)
 ProgressCallback = Callable[[str, int, dict[str, Any] | None], None]
 CollectorProgress = Callable[[int, int, str], None]
+DEFAULT_RSS_URL_LIMITS = {
+    "NEWS_MAX_RSS_URLS": 300,
+    "FORUMS_MAX_RSS_URLS": 300,
+    "BLOGS_MAX_RSS_URLS": 300,
+    "TRUSTPILOT_MAX_RSS_URLS": 300,
+    "DOWNDETECTOR_MAX_RSS_URLS": 300,
+}
+DEFAULT_NEWS_RSS_LIMITS = {
+    "max_total": 1200,
+    "max_per_geo": 220,
+    "max_per_entity": 40,
+}
+DEFAULT_LOOKBACK_DAYS = 730
 
 
 class ReputationIngestService:
@@ -79,7 +92,7 @@ class ReputationIngestService:
         cfg_hash = compute_config_hash(cfg)
         ttl_hours = effective_ttl_hours(cfg)
         sources_enabled = list(self._settings.enabled_sources())
-        lookback_days = _env_int("REPUTATION_LOOKBACK_DAYS", 730)
+        lookback_days = DEFAULT_LOOKBACK_DAYS
         report(
             "Preparando configuración",
             4,
@@ -87,20 +100,6 @@ class ReputationIngestService:
         )
         logger.info("Reputation ingest started (force=%s)", force)
         logger.debug("Sources enabled: %s", sources_enabled)
-
-        # Feature apagada: devolvemos doc vacío, no escribimos
-        if not self._settings.reputation_enabled:
-            logger.info("Reputation ingest skipped: REPUTATION_ENABLED=false")
-            report(
-                "Reputación desactivada",
-                100,
-                {"note": "REPUTATION_ENABLED=false"},
-            )
-            return self._build_empty_doc(
-                cfg_hash=cfg_hash,
-                sources_enabled=sources_enabled,
-                note="REPUTATION_ENABLED=false",
-            )
 
         existing = self._repo.load()
 
@@ -209,7 +208,7 @@ class ReputationIngestService:
         total = len(collector_list)
         done = 0
 
-        workers = _env_int("REPUTATION_COLLECTOR_WORKERS", 4)
+        workers = _env_int("REPUTATION_COLLECTOR_WORKERS", 6)
         if workers <= 1 or len(collector_list) == 1:
             for collector in collector_list:
                 try:
@@ -1090,7 +1089,7 @@ class ReputationIngestService:
 
     @staticmethod
     def _load_balance_cfg() -> dict[str, Any]:
-        enabled = _env_bool(os.getenv("REPUTATION_BALANCE_ENABLED", "false"))
+        enabled = _env_bool(os.getenv("REPUTATION_BALANCE_ENABLED", "true"))
         sources = _split_csv(os.getenv("REPUTATION_BALANCE_SOURCES", "news"))
         segment_terms = _split_csv(os.getenv("REPUTATION_BALANCE_SEGMENT_TERMS", ""))
 
@@ -1098,22 +1097,26 @@ class ReputationIngestService:
             value = os.getenv(env_name, "").strip()
             return value or None
 
+        segment_query_mode = _env_optional("REPUTATION_BALANCE_SEGMENT_QUERY_MODE") or "broad"
+        rss_query_geo_mode = _env_optional("REPUTATION_BALANCE_RSS_QUERY_GEO_MODE") or "required"
+        rss_query_order = _env_optional("REPUTATION_BALANCE_RSS_QUERY_ORDER") or "round_robin_geo_entity"
+
         return {
             "enabled": enabled,
-            "min_per_geo": _env_int("REPUTATION_BALANCE_MIN_PER_GEO", 0),
-            "min_per_actor": _env_int("REPUTATION_BALANCE_MIN_PER_ACTOR", 0),
-            "max_passes": _env_int("REPUTATION_BALANCE_MAX_PASSES", 0),
-            "max_items_per_pass": _env_int("REPUTATION_BALANCE_MAX_ITEMS_PER_PASS", 0),
-            "max_queries_per_pass": _env_int("REPUTATION_BALANCE_MAX_QUERIES_PER_PASS", 0),
+            "min_per_geo": _env_int("REPUTATION_BALANCE_MIN_PER_GEO", 40),
+            "min_per_actor": _env_int("REPUTATION_BALANCE_MIN_PER_ACTOR", 25),
+            "max_passes": _env_int("REPUTATION_BALANCE_MAX_PASSES", 3),
+            "max_items_per_pass": _env_int("REPUTATION_BALANCE_MAX_ITEMS_PER_PASS", 400),
+            "max_queries_per_pass": _env_int("REPUTATION_BALANCE_MAX_QUERIES_PER_PASS", 500),
             "max_geos": _env_int("REPUTATION_BALANCE_MAX_GEOS", 0),
             "max_actores": _env_int("REPUTATION_BALANCE_MAX_ACTORES", 0),
-            "segment_query_mode": _env_optional("REPUTATION_BALANCE_SEGMENT_QUERY_MODE"),
+            "segment_query_mode": segment_query_mode,
             "segment_terms": segment_terms,
-            "rss_query_geo_mode": _env_optional("REPUTATION_BALANCE_RSS_QUERY_GEO_MODE"),
-            "rss_query_order": _env_optional("REPUTATION_BALANCE_RSS_QUERY_ORDER"),
-            "rss_query_max_total": _env_int("REPUTATION_BALANCE_RSS_QUERY_MAX_TOTAL", 0),
-            "rss_query_max_per_geo": _env_int("REPUTATION_BALANCE_RSS_QUERY_MAX_PER_GEO", 0),
-            "rss_query_max_per_entity": _env_int("REPUTATION_BALANCE_RSS_QUERY_MAX_PER_ENTITY", 0),
+            "rss_query_geo_mode": rss_query_geo_mode,
+            "rss_query_order": rss_query_order,
+            "rss_query_max_total": _env_int("REPUTATION_BALANCE_RSS_QUERY_MAX_TOTAL", 600),
+            "rss_query_max_per_geo": _env_int("REPUTATION_BALANCE_RSS_QUERY_MAX_PER_GEO", 120),
+            "rss_query_max_per_entity": _env_int("REPUTATION_BALANCE_RSS_QUERY_MAX_PER_ENTITY", 20),
             "sources": sources or ["news"],
         }
 
@@ -1153,7 +1156,7 @@ class ReputationIngestService:
 
         max_items_per_pass = int(balance_cfg.get("max_items_per_pass", 0))
         if max_items_per_pass <= 0:
-            max_items_per_pass = _env_int("REPUTATION_DEFAULT_MAX_ITEMS", 200)
+            max_items_per_pass = _env_int("REPUTATION_DEFAULT_MAX_ITEMS", 1200)
         max_queries_per_pass = int(balance_cfg.get("max_queries_per_pass", 0))
         max_geos = int(balance_cfg.get("max_geos", 0))
         max_actores = int(balance_cfg.get("max_actores", 0))
@@ -1419,7 +1422,7 @@ class ReputationIngestService:
             reddit_cfg = _as_dict(cfg.get("reddit"))
             client_id = os.getenv("REDDIT_CLIENT_ID", "").strip()
             client_secret = os.getenv("REDDIT_CLIENT_SECRET", "").strip()
-            user_agent = os.getenv("REDDIT_USER_AGENT", "").strip()
+            user_agent = os.getenv("REDDIT_USER_AGENT", "global-overview-radar/0.1").strip()
 
             subreddits = _get_list_str(reddit_cfg, "subreddits")
             query_templates = _get_list_str(reddit_cfg, "query_templates")
@@ -1466,11 +1469,11 @@ class ReputationIngestService:
 
             api_key = os.getenv("NEWS_API_KEY", "").strip()
             language = os.getenv("NEWS_LANG", "es").strip()
-            max_articles_default = _env_int("REPUTATION_DEFAULT_MAX_ITEMS", 200)
+            max_articles_default = _env_int("REPUTATION_DEFAULT_MAX_ITEMS", 1200)
             max_articles = _env_int("NEWS_MAX_ARTICLES", max_articles_default)
             sources = os.getenv("NEWS_SOURCES", "").strip() or None
             news_endpoint = os.getenv("NEWS_API_ENDPOINT", "").strip() or None
-            rss_only = _env_bool(os.getenv("NEWS_RSS_ONLY", "false"))
+            rss_only = _env_bool(os.getenv("NEWS_RSS_ONLY", "true"))
 
             queries = self._build_search_queries(
                 entity_terms,
@@ -1505,13 +1508,24 @@ class ReputationIngestService:
         if "newsapi" in sources_enabled:
             handled_sources.add("newsapi")
             api_key = os.getenv("NEWSAPI_API_KEY", "").strip()
-            language = os.getenv("NEWSAPI_LANGUAGE", "es").strip()
-            max_articles_default = _env_int("REPUTATION_DEFAULT_MAX_ITEMS", 200)
+            language = (
+                os.getenv("NEWSAPI_LANGUAGE")
+                or os.getenv("NEWS_LANG", "es")
+            ).strip()
+            max_articles_default = _env_int("REPUTATION_DEFAULT_MAX_ITEMS", 1200)
             max_articles = _env_int("NEWSAPI_MAX_ARTICLES", max_articles_default)
             sources = os.getenv("NEWSAPI_SOURCES", "").strip() or None
             domains = os.getenv("NEWSAPI_DOMAINS", "").strip() or None
-            sort_by = os.getenv("NEWSAPI_SORT_BY", "").strip() or None
-            search_in = os.getenv("NEWSAPI_SEARCH_IN", "").strip() or None
+            raw_sort_by = os.getenv("NEWSAPI_SORT_BY")
+            if raw_sort_by is None:
+                sort_by = "publishedAt"
+            else:
+                sort_by = raw_sort_by.strip() or None
+            raw_search_in = os.getenv("NEWSAPI_SEARCH_IN")
+            if raw_search_in is None:
+                search_in = "title,description"
+            else:
+                search_in = raw_search_in.strip() or None
             newsapi_endpoint = os.getenv("NEWSAPI_ENDPOINT", "").strip() or None
 
             queries = self._build_search_queries(
@@ -1539,7 +1553,7 @@ class ReputationIngestService:
 
         if "gdelt" in sources_enabled:
             handled_sources.add("gdelt")
-            max_items_default = _env_int("REPUTATION_DEFAULT_MAX_ITEMS", 200)
+            max_items_default = _env_int("REPUTATION_DEFAULT_MAX_ITEMS", 1200)
             max_items = _env_int("GDELT_MAX_ITEMS", max_items_default)
             max_records = _env_int("GDELT_MAX_RECORDS", 250)
             timespan = os.getenv("GDELT_TIMESPAN", "7d").strip() or None
@@ -1573,7 +1587,7 @@ class ReputationIngestService:
         if "guardian" in sources_enabled:
             handled_sources.add("guardian")
             api_key = os.getenv("GUARDIAN_API_KEY", "").strip()
-            max_items_default = _env_int("REPUTATION_DEFAULT_MAX_ITEMS", 200)
+            max_items_default = _env_int("REPUTATION_DEFAULT_MAX_ITEMS", 1200)
             max_items = _env_int("GUARDIAN_MAX_ITEMS", max_items_default)
             page_size = _env_int("GUARDIAN_PAGE_SIZE", 50)
             order_by = os.getenv("GUARDIAN_ORDER_BY", "newest").strip() or "newest"
@@ -1613,7 +1627,7 @@ class ReputationIngestService:
             rss_urls = _get_list_str_or_dict(forums_cfg, "rss_urls")
             rss_query_enabled = _env_bool(os.getenv("FORUMS_RSS_QUERY_ENABLED", "true"))
 
-            scraping_enabled = _env_bool(os.getenv("FORUMS_SCRAPING", "false"))
+            scraping_enabled = _env_bool(os.getenv("FORUMS_SCRAPING", "true"))
             max_items = _env_int("FORUMS_MAX_THREADS", 200)
             rss_sources = list(rss_urls)
             if rss_query_enabled:
@@ -1670,7 +1684,7 @@ class ReputationIngestService:
             rss_urls = _get_list_str_or_dict(trust_cfg, "rss_urls")
             rss_query_enabled = _env_bool(os.getenv("TRUSTPILOT_RSS_QUERY_ENABLED", "true"))
 
-            scraping_enabled = _env_bool(os.getenv("TRUSTPILOT_SCRAPING", "false"))
+            scraping_enabled = _env_bool(os.getenv("TRUSTPILOT_SCRAPING", "true"))
             max_items = _env_int("TRUSTPILOT_MAX_ITEMS", 200)
             rss_sources = list(rss_urls)
             if rss_query_enabled:
@@ -1742,7 +1756,7 @@ class ReputationIngestService:
             rss_urls = _get_list_str_or_dict(down_cfg, "rss_urls")
             rss_query_enabled = _env_bool(os.getenv("DOWNDETECTOR_RSS_QUERY_ENABLED", "true"))
 
-            scraping_enabled = _env_bool(os.getenv("DOWNDETECTOR_SCRAPING", "false"))
+            scraping_enabled = _env_bool(os.getenv("DOWNDETECTOR_SCRAPING", "true"))
             max_items = _env_int("DOWNDETECTOR_MAX_ITEMS", 200)
             rss_sources = list(rss_urls)
             if rss_query_enabled:
@@ -1804,6 +1818,13 @@ class ReputationIngestService:
     ) -> list[dict[str, str] | str]:
         raw = os.getenv(env_key, "").strip()
         if not raw:
+            default_limit = DEFAULT_RSS_URL_LIMITS.get(env_key)
+            if not default_limit:
+                return rss_sources
+            limit = default_limit
+            if len(rss_sources) > limit:
+                notes.append(f"{env_key}: capped rss_urls {len(rss_sources)} -> {limit}")
+                return rss_sources[:limit]
             return rss_sources
         try:
             limit = int(raw)
@@ -2269,15 +2290,25 @@ class ReputationIngestService:
             "round_robin_geo_entity",
         }:
             query_order = "as_is"
+        default_limits = DEFAULT_NEWS_RSS_LIMITS if prefix == "NEWS" else {}
         rss_query_max_total = _config_int(src_cfg.get("rss_query_max_total"), 0)
         if rss_query_max_total <= 0:
-            rss_query_max_total = _env_int(f"{prefix}_RSS_QUERY_MAX_TOTAL", 0)
+            rss_query_max_total = _env_int(
+                f"{prefix}_RSS_QUERY_MAX_TOTAL",
+                int(default_limits.get("max_total", 0)),
+            )
         rss_query_max_per_geo = _config_int(src_cfg.get("rss_query_max_per_geo"), 0)
         if rss_query_max_per_geo <= 0:
-            rss_query_max_per_geo = _env_int(f"{prefix}_RSS_QUERY_MAX_PER_GEO", 0)
+            rss_query_max_per_geo = _env_int(
+                f"{prefix}_RSS_QUERY_MAX_PER_GEO",
+                int(default_limits.get("max_per_geo", 0)),
+            )
         rss_query_max_per_entity = _config_int(src_cfg.get("rss_query_max_per_entity"), 0)
         if rss_query_max_per_entity <= 0:
-            rss_query_max_per_entity = _env_int(f"{prefix}_RSS_QUERY_MAX_PER_ENTITY", 0)
+            rss_query_max_per_entity = _env_int(
+                f"{prefix}_RSS_QUERY_MAX_PER_ENTITY",
+                int(default_limits.get("max_per_entity", 0)),
+            )
 
         geo_params_map = src_cfg.get("rss_geo_map") or geo_map or {}
         source_terms = [
