@@ -221,22 +221,26 @@ def _run_incidents_job(job_id: str) -> None:
         )
 
 
-@router.post("/reputation", response_model=IngestJob)
-def ingest_reputation(
-    payload: IngestRequest | None = _INGEST_BODY,
-) -> dict[str, Any]:
-    payload = payload or IngestRequest()
+def start_reputation_ingest(force: bool) -> dict[str, Any]:
     active = _find_active("reputation")
     if active:
         return active
     job = _create_job("reputation")
     thread = threading.Thread(
         target=_run_reputation_job,
-        args=(job["id"], payload.force),
+        args=(job["id"], force),
         daemon=True,
     )
     thread.start()
     return job
+
+
+@router.post("/reputation", response_model=IngestJob)
+def ingest_reputation(
+    payload: IngestRequest | None = _INGEST_BODY,
+) -> dict[str, Any]:
+    payload = payload or IngestRequest()
+    return start_reputation_ingest(payload.force)
 
 
 @router.post("/incidents", response_model=IngestJob)

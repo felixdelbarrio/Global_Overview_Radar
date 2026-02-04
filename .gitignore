@@ -65,8 +65,10 @@ htmlcov/
 ########################################
 # Data / cache
 ########################################
+data/reputation/**/*.json
+data/reputation_llm/**/*.json
+data/cache/**/*.json
 data/cache/
-data/cache/bugresolutionradar_cache.json
 
 ############################
 # Logs & runtime files

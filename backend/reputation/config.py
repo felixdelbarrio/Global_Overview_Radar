@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import shutil
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Sequence, cast
 
@@ -209,6 +210,11 @@ def _normalize_profile_source(value: str | None) -> str:
     return "default"
 
 
+def normalize_profile_source(value: str | None) -> str:
+    """Normaliza el origen del perfil (default vs samples)."""
+    return _normalize_profile_source(value)
+
+
 def _parse_profile_selector(value: str | None) -> list[str]:
     if not value:
         return []
@@ -294,14 +300,28 @@ def _apply_profile_cache_paths(cfg_settings: ReputationSettings) -> None:
     if _ACTIVE_PROFILE_SOURCE != "default":
         profile_key = f"{_ACTIVE_PROFILE_SOURCE}__{profile_key}"
 
+    cache_base = cfg_settings.cache_path
+    if (
+        cache_base.name.startswith("reputation_cache__")
+        and "{profile" not in str(cache_base)
+        and cache_base != DEFAULT_CACHE_PATH
+    ):
+        cache_base = DEFAULT_CACHE_PATH
     cfg_settings.cache_path = _apply_profile_path_template(
-        cfg_settings.cache_path,
+        cache_base,
         DEFAULT_CACHE_PATH,
         f"reputation_cache__{profile_key}.json",
         profile_key,
     )
+    overrides_base = cfg_settings.overrides_path
+    if (
+        overrides_base.name.startswith("reputation_overrides__")
+        and "{profile" not in str(overrides_base)
+        and overrides_base != DEFAULT_OVERRIDES_PATH
+    ):
+        overrides_base = DEFAULT_OVERRIDES_PATH
     cfg_settings.overrides_path = _apply_profile_path_template(
-        cfg_settings.overrides_path,
+        overrides_base,
         DEFAULT_OVERRIDES_PATH,
         f"reputation_overrides__{profile_key}.json",
         profile_key,
@@ -385,6 +405,86 @@ def set_profile_state(source: str, profiles: Sequence[str] | None) -> dict[str, 
         "source": _ACTIVE_PROFILE_SOURCE,
         "profiles": active_profiles(),
         "profile_key": active_profile_key(),
+    }
+
+
+def _clear_json_files(directory: Path) -> list[str]:
+    """Elimina ficheros .json de un directorio."""
+    removed: list[str] = []
+    directory.mkdir(parents=True, exist_ok=True)
+    for file_path in directory.glob("*.json"):
+        if file_path.is_file():
+            file_path.unlink()
+            removed.append(file_path.name)
+    return removed
+
+
+def _copy_files(files: Sequence[Path], dest_dir: Path) -> list[str]:
+    """Copia ficheros a un directorio destino."""
+    copied: list[str] = []
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    for file_path in files:
+        dest_path = dest_dir / file_path.name
+        shutil.copy2(file_path, dest_path)
+        copied.append(dest_path.name)
+    return copied
+
+
+def _resolve_llm_candidates(
+    cfg_files: Sequence[Path],
+    llm_dir: Path,
+) -> tuple[list[Path], list[str]]:
+    llm_files: list[Path] = []
+    missing: list[str] = []
+    for cfg_file in cfg_files:
+        candidate = llm_dir / f"{cfg_file.stem}_llm.json"
+        if candidate.exists() and candidate.is_file():
+            llm_files.append(candidate)
+        else:
+            missing.append(candidate.name)
+    return llm_files, missing
+
+
+def apply_sample_profiles_to_default(
+    profiles: Sequence[str] | None,
+) -> dict[str, Any]:
+    """Copia plantillas (samples) a carpetas de ejecucion y activa esos perfiles."""
+    profile_list: list[str] = []
+    if profiles:
+        for entry in profiles:
+            if isinstance(entry, str) and entry.strip():
+                profile_list.append(_normalize_profile_name(entry))
+
+    if not profile_list:
+        raise FileNotFoundError("No sample profiles selected")
+
+    cfg_files = _resolve_config_files(DEFAULT_SAMPLE_CONFIG_PATH, profile_list)
+    if not cfg_files:
+        raise FileNotFoundError(
+            f"Sample profiles not found at {DEFAULT_SAMPLE_CONFIG_PATH} (searched *.json)"
+        )
+    llm_files, llm_missing = _resolve_llm_candidates(cfg_files, DEFAULT_SAMPLE_LLM_CONFIG_PATH)
+
+    removed_cfg = _clear_json_files(BASE_CONFIG_PATH)
+    removed_llm = _clear_json_files(BASE_LLM_CONFIG_PATH)
+
+    copied_cfg = _copy_files(cfg_files, BASE_CONFIG_PATH)
+    copied_llm = _copy_files(llm_files, BASE_LLM_CONFIG_PATH)
+
+    active = set_profile_state("default", profile_list)
+    return {
+        "active": active,
+        "copied": {
+            "config": copied_cfg,
+            "llm": copied_llm,
+        },
+        "removed": {
+            "config": removed_cfg,
+            "llm": removed_llm,
+        },
+        "missing": {
+            "llm": llm_missing,
+        },
     }
 
 
