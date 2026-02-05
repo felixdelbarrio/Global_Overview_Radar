@@ -1,0 +1,45 @@
+# VCS
+.git
+
+# Python
+**/__pycache__/
+**/*.py[cod]
+**/*.egg-info/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.pyright/
+.venv/
+venv/
+ENV/
+env/
+coverage/
+htmlcov/
+.coverage
+
+# Node / frontend
+node_modules/
+frontend/.next/
+frontend/out/
+frontend/dist/
+frontend/build/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+
+# Env / secrets (keep examples)
+.env
+**/.env
+**/.env.local
+**/.env.*.local
+**/.env.reputation
+**/.env.reputation.*
+!**/*.example
+
+# Generated caches / local runtime state
+data/cache/
+data/reputation/
+data/reputation_llm/
