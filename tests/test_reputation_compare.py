@@ -31,6 +31,9 @@ def _list_str(value: object) -> list[str]:
 def test_compare_endpoint_normalizes_and_combines(monkeypatch, tmp_path: Path) -> None:
     import reputation.config as rep_config
 
+    # Asegura determinismo: este test usa items con source="news"
+    monkeypatch.setattr(rep_config.settings, "source_news", True)
+
     config_file = tmp_path / "profile.json"
     config_file.write_text(
         """
