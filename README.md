@@ -1,8 +1,9 @@
 # Global Overview Radar
 
-[![CI](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/ci.yml)
-[![Tests & Coverage](https://img.shields.io/github/actions/workflow/status/felixdelbarrio/Global_Overview_Radar/ci.yml?branch=main&label=Tests%20%26%20Coverage)](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/ci.yml)
-[![Typecheck](https://img.shields.io/github/actions/workflow/status/felixdelbarrio/Global_Overview_Radar/ci.yml?branch=main&label=Typecheck)](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/ci.yml)
+[![CI / test_backend](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/backend.yml/badge.svg?branch=main)](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/backend.yml)
+[![CI / test_frontend](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/frontend.yml/badge.svg?branch=main)](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/frontend.yml)
+[![typecheck](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/typecheck.yml/badge.svg?branch=main)](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/typecheck.yml)
+[![deploy_hooks](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/deploy_hooks.yml/badge.svg?branch=main)](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/deploy_hooks.yml)
 [![Sponsor](https://img.shields.io/badge/Sponsor-GitHub%20Sponsors-2ea44f.svg)](https://github.com/sponsors/felixdelbarrio)
 [![Donate](https://img.shields.io/badge/Donate-PayPal-blue.svg)](https://paypal.me/felixdelbarrio)
 
@@ -93,6 +94,7 @@ make dev-front
 Open:
 - API: http://127.0.0.1:8000
 - Frontend: http://localhost:3000
+- Production: https://global-overview-radar.vercel.app
 
 Production start (frontend):
 ```bash
@@ -122,6 +124,7 @@ make dev-front
 Abrir:
 - API: http://127.0.0.1:8000
 - Frontend: http://localhost:3000
+- Produccion: https://global-overview-radar.vercel.app
 
 Modo produccion (frontend):
 ```bash

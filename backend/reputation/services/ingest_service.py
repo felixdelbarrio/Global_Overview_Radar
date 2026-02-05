@@ -43,6 +43,7 @@ from reputation.config import (
     compute_config_hash,
     effective_ttl_hours,
     load_business_config,
+    reload_reputation_settings,
     settings,
 )
 from reputation.logging_utils import get_logger
@@ -142,11 +143,21 @@ class ReputationIngestService:
             safe_pct = max(0, min(100, int(pct)))
             progress(stage, safe_pct, meta or {})
 
+        # Relee .env.reputation para que los toggles activos se apliquen siempre.
+        reload_reputation_settings()
+        # Refresca el repo por si cambió la ruta del cache/perfil.
+        self._repo = ReputationCacheRepo(self._settings.cache_path)
+
         cfg = _as_dict(load_business_config())
         cfg_hash = compute_config_hash(cfg)
         ttl_hours = effective_ttl_hours(cfg)
-        sources_enabled = list(self._settings.enabled_sources())
-        enabled_sources = {source.strip().lower() for source in sources_enabled if source and source.strip()}
+        raw_sources = list(self._settings.enabled_sources())
+        sources_enabled: list[str] = []
+        for source in raw_sources:
+            normalized = source.strip().lower()
+            if normalized and normalized not in sources_enabled:
+                sources_enabled.append(normalized)
+        enabled_sources = set(sources_enabled)
         lookback_days = DEFAULT_LOOKBACK_DAYS
         report(
             "Preparando configuración",
@@ -159,6 +170,16 @@ class ReputationIngestService:
         existing = self._repo.load()
 
         collectors, notes = self._build_collectors(cfg, sources_enabled)
+        if enabled_sources and collectors:
+            before = len(collectors)
+            collectors = [
+                collector
+                for collector in collectors
+                if getattr(collector, "source_name", "").strip().lower() in enabled_sources
+            ]
+            dropped = before - len(collectors)
+            if dropped:
+                notes.append(f"sources filtered: dropped {dropped} collectors not enabled")
         report("Colectores listos", 12, {"collectors": len(collectors)})
 
         def filter_enabled(items: list[ReputationItem]) -> list[ReputationItem]:
