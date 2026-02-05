@@ -71,6 +71,8 @@ type ReputationSettingsResponse = {
   advanced_options?: string[];
 };
 
+type SettingsScope = "reputation" | "incidents";
+
 const EMPTY_PROFILES: string[] = [];
 const LANGUAGE_LABELS: Record<string, string> = {
   es: "Español",
@@ -152,6 +154,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const [profileAppliedNote, setProfileAppliedNote] = useState(false);
   const [autoIngestNote, setAutoIngestNote] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsScope, setSettingsScope] = useState<SettingsScope>("reputation");
   const [settingsGroups, setSettingsGroups] = useState<ReputationSettingsGroup[] | null>(
     null,
   );
@@ -281,7 +284,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
     if (!settingsOpen) return;
     let alive = true;
     setSettingsError(null);
-    apiGet<ReputationSettingsResponse>("/reputation/settings")
+    const basePath =
+      settingsScope === "reputation" ? "/reputation/settings" : "/incidents/settings";
+    apiGet<ReputationSettingsResponse>(basePath)
       .then((data) => {
         if (!alive) return;
         setSettingsGroups(data.groups);
@@ -309,7 +314,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
     return () => {
       alive = false;
     };
-  }, [settingsOpen]);
+  }, [settingsOpen, settingsScope]);
 
   const ingestJobsRef = useRef(ingestJobs);
 
@@ -387,8 +392,38 @@ export function Shell({ children }: { children: React.ReactNode }) {
     return false;
   }, [settingsBase, settingsDraft]);
 
-  const credentialSourceRows = useMemo(
-    () => [
+  const switchSettingsScope = (nextScope: SettingsScope) => {
+    if (nextScope === settingsScope) return;
+    if (settingsDirty && typeof window !== "undefined") {
+      const confirmed = window.confirm(
+        "Tienes cambios sin guardar. ¿Cambiar de sección y descartarlos?"
+      );
+      if (!confirmed) return;
+    }
+    setSettingsGroups(null);
+    setSettingsBase({});
+    setSettingsDraft({});
+    setSettingsError(null);
+    setSettingsScope(nextScope);
+  };
+
+  const credentialSourceRows = useMemo(() => {
+    if (settingsScope === "incidents") {
+      return [
+        {
+          id: "jira",
+          toggleKey: "sources.jira",
+          keyKeys: [
+            "jira.base_url",
+            "jira.user_email",
+            "jira.api_token",
+            "jira.jql",
+            "jira.filter_id",
+          ],
+        },
+      ];
+    }
+    return [
       {
         id: "newsapi",
         toggleKey: "sources.newsapi",
@@ -419,19 +454,24 @@ export function Shell({ children }: { children: React.ReactNode }) {
         toggleKey: "sources.youtube",
         keyKeys: ["keys.youtube"],
       },
-    ],
-    []
-  );
+    ];
+  }, [settingsScope]);
 
   const credentialIssues = useMemo(() => {
     const issues: { id: string; label: string; missing: string[] }[] = [];
+    const isBlank = (value: unknown) => !String(value ?? "").trim();
     credentialSourceRows.forEach((row) => {
       const toggleValue = Boolean(settingsDraft[row.toggleKey]);
       if (!toggleValue) return;
-      const missing = row.keyKeys.filter((key) => {
-        const value = settingsDraft[key];
-        return !String(value ?? "").trim();
-      });
+      let missing = row.keyKeys.filter((key) => isBlank(settingsDraft[key]));
+      if (settingsScope === "incidents" && row.id === "jira") {
+        missing = ["jira.base_url", "jira.user_email", "jira.api_token"].filter((key) =>
+          isBlank(settingsDraft[key])
+        );
+        const hasQuery =
+          !isBlank(settingsDraft["jira.jql"]) || !isBlank(settingsDraft["jira.filter_id"]);
+        if (!hasQuery) missing.push("jira.query");
+      }
       if (missing.length) {
         const labelField = settingsFieldMap.get(row.toggleKey);
         const label = labelField?.label ?? row.id;
@@ -439,7 +479,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
       }
     });
     return issues;
-  }, [credentialSourceRows, settingsDraft, settingsFieldMap]);
+  }, [credentialSourceRows, settingsDraft, settingsFieldMap, settingsScope]);
 
   const hasCredentialIssues = credentialIssues.length > 0;
   const advancedLogEnabled = Boolean(settingsDraft["advanced.log_enabled"]);
@@ -628,8 +668,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
   const resetSettingsToDefault = async () => {
     if (typeof window !== "undefined") {
+      const scopeLabel = settingsScope === "reputation" ? "Menciones" : "Incidencias";
       const confirmed = window.confirm(
-        "¿Restablecer la configuración a los valores por defecto?"
+        `¿Restablecer la configuración de ${scopeLabel} a los valores por defecto?`
       );
       if (!confirmed) return;
     }
@@ -637,8 +678,10 @@ export function Shell({ children }: { children: React.ReactNode }) {
     setSettingsBusy(true);
     setSettingsError(null);
     try {
+      const basePath =
+        settingsScope === "reputation" ? "/reputation/settings" : "/incidents/settings";
       const response = await apiPost<ReputationSettingsResponse>(
-        "/reputation/settings/reset",
+        `${basePath}/reset`,
         {}
       );
       setSettingsGroups(response.groups);
@@ -650,6 +693,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
       });
       setSettingsBase(nextBase);
       setSettingsDraft(nextBase);
+      if (settingsScope === "incidents") {
+        setIncidentsAvailable(Boolean(nextBase["ui.incidents_enabled"]));
+      }
       setAdvancedOptions(response.advanced_options ?? []);
       dispatchSettingsChanged({ updated_at: response.updated_at ?? null });
       setSettingsSaved(true);
@@ -714,7 +760,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
           updates[key] = settingsDraft[key];
         }
       });
-      const response = await apiPost<ReputationSettingsResponse>("/reputation/settings", {
+      const basePath =
+        settingsScope === "reputation" ? "/reputation/settings" : "/incidents/settings";
+      const response = await apiPost<ReputationSettingsResponse>(basePath, {
         values: updates,
       });
       setSettingsGroups(response.groups);
@@ -726,6 +774,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
       });
       setSettingsBase(nextBase);
       setSettingsDraft(nextBase);
+      if (settingsScope === "incidents") {
+        setIncidentsAvailable(Boolean(nextBase["ui.incidents_enabled"]));
+      }
       setAdvancedOptions(response.advanced_options ?? []);
       dispatchSettingsChanged({ updated_at: response.updated_at ?? null });
       setSettingsSaved(true);
@@ -1364,7 +1415,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
                             CONFIGURACIÓN
                           </div>
                           <div className="mt-1 text-sm text-[color:var(--text-60)]">
-                            Personaliza las fuentes y credenciales del análisis.
+                            {settingsScope === "reputation"
+                              ? "Personaliza las fuentes y credenciales de menciones."
+                              : "Personaliza las fuentes y credenciales de ingesta de incidencias."}
                           </div>
                         </div>
                       </div>
@@ -1383,6 +1436,30 @@ export function Shell({ children }: { children: React.ReactNode }) {
                           <X className="mx-auto h-3.5 w-3.5" />
                         </button>
                       </div>
+                    </div>
+                    <div className="mt-3 flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => switchSettingsScope("reputation")}
+                        className={`rounded-full border px-3 py-1 text-[10px] uppercase tracking-[0.2em] transition ${
+                          settingsScope === "reputation"
+                            ? "border-[color:var(--aqua)] bg-[color:var(--surface-70)] text-white"
+                            : "border-[color:var(--border-60)] text-[color:var(--text-60)] hover:text-[color:var(--ink)]"
+                        }`}
+                      >
+                        Menciones
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => switchSettingsScope("incidents")}
+                        className={`rounded-full border px-3 py-1 text-[10px] uppercase tracking-[0.2em] transition ${
+                          settingsScope === "incidents"
+                            ? "border-[color:var(--aqua)] bg-[color:var(--surface-70)] text-white"
+                            : "border-[color:var(--border-60)] text-[color:var(--text-60)] hover:text-[color:var(--ink)]"
+                        }`}
+                      >
+                        Incidencias
+                      </button>
                     </div>
                   </div>
 
@@ -1403,7 +1480,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
                           ? group.fields.filter((field) => !ADVANCED_LOG_KEYS.has(field.key))
                           : group.fields;
                         const fieldsToRender =
-                          group.id === "sources_credentials"
+                          group.id === "sources_credentials" ||
+                          group.id === "bugs_sources_credentials"
                             ? []
                             : isAdvanced
                               ? advancedOpen
@@ -1631,6 +1709,91 @@ export function Shell({ children }: { children: React.ReactNode }) {
                                 )}
                               </div>
                             )}
+                            {group.id === "bugs_sources_credentials" && (
+                              <div className="mt-3 space-y-3">
+                                {credentialSourceRows.map((row) => {
+                                  const toggleField = settingsFieldMap.get(row.toggleKey);
+                                  if (!toggleField) return null;
+                                  const enabled = Boolean(settingsDraft[row.toggleKey]);
+                                  const isBlank = (value: unknown) =>
+                                    !String(value ?? "").trim();
+                                  const missingBase = [
+                                    "jira.base_url",
+                                    "jira.user_email",
+                                    "jira.api_token",
+                                  ].filter((key) => isBlank(settingsDraft[key]));
+                                  const hasQuery =
+                                    !isBlank(settingsDraft["jira.jql"]) ||
+                                    !isBlank(settingsDraft["jira.filter_id"]);
+                                  const missing = hasQuery
+                                    ? missingBase
+                                    : [...missingBase, "jira.query"];
+                                  return (
+                                    <div
+                                      key={row.id}
+                                      className="rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-2"
+                                    >
+                                      <div className="flex items-center justify-between gap-3">
+                                        <div className="min-w-0">
+                                          <div className="text-xs font-semibold text-[color:var(--ink)]">
+                                            {toggleField.label}
+                                          </div>
+                                          {toggleField.description && (
+                                            <div className="text-[10px] text-[color:var(--text-55)]">
+                                              {toggleField.description}
+                                            </div>
+                                          )}
+                                        </div>
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            updateSettingValue(row.toggleKey, !enabled)
+                                          }
+                                          className={`relative inline-flex h-6 w-11 items-center rounded-full border transition ${
+                                            enabled
+                                              ? "border-[color:var(--aqua)] bg-[color:var(--gradient-chip)]"
+                                              : "border-[color:var(--border-60)] bg-[color:var(--surface-60)]"
+                                          }`}
+                                        >
+                                          <span
+                                            className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition ${
+                                              enabled ? "translate-x-5" : "translate-x-1"
+                                            }`}
+                                          />
+                                        </button>
+                                      </div>
+                                      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                                        {row.keyKeys.map((key) => {
+                                          const field = settingsFieldMap.get(key);
+                                          if (!field) return null;
+                                          const fullWidth =
+                                            key === "jira.jql" || key === "jira.base_url";
+                                          return (
+                                            <input
+                                              key={key}
+                                              type={field.type === "secret" ? "password" : "text"}
+                                              value={String(settingsDraft[key] ?? "")}
+                                              onChange={(event) =>
+                                                updateSettingValue(key, event.target.value)
+                                              }
+                                              placeholder={field.placeholder ?? field.label}
+                                              className={`w-full rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-60)] px-3 py-1 text-xs text-[color:var(--ink)] ${
+                                                fullWidth ? "sm:col-span-2" : ""
+                                              }`}
+                                            />
+                                          );
+                                        })}
+                                      </div>
+                                      {enabled && missing.length > 0 && (
+                                        <div className="mt-2 text-[10px] text-rose-500">
+                                          Completa URL, usuario, token y define JQL o Filter ID (o desactiva la fuente).
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
                             {isAdvanced && advancedOpen && (
                               <div className="mt-3 rounded-xl border border-dashed border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-2">
                                 <div className="text-[10px] uppercase tracking-[0.2em] text-[color:var(--text-55)]">
@@ -1853,7 +2016,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
                     <div className="flex items-center gap-2">
                       {hasCredentialIssues && (
                         <span className="text-[11px] text-rose-500">
-                          Completa credenciales o desactiva la fuente.
+                          {settingsScope === "reputation"
+                            ? "Completa credenciales o desactiva la fuente."
+                            : "Completa conexión/credenciales o desactiva la fuente."}
                         </span>
                       )}
                       {settingsSaved && (

@@ -13,7 +13,7 @@ Back to docs index: `../README.md`
 - Log and cache artifacts are generated, not committed.
 - UI exposure can be controlled per scope via `ui.incidents_enabled` / `ui.ops_enabled`.
 - Frontend can also hide the incident scope via `NEXT_PUBLIC_INCIDENTS_ENABLED`.
-- If `data/cache/bugresolutionradar_cache.json` is missing, incident scope is hidden regardless of flags.
+- Incident scope visibility is controlled by `INCIDENTS_UI_ENABLED` (backend) + `NEXT_PUBLIC_INCIDENTS_ENABLED` (frontend). Cache can be empty (0 items) until you ingest.
 - Noise control rules are enforced at ingestion time (actor presence + geo allowlists).
 
 ### Change management
@@ -41,7 +41,7 @@ Back to docs index: `../README.md`
 - Logs y caches se generan localmente y no se versionan.
 - La UI se puede modular por scope via `ui.incidents_enabled` / `ui.ops_enabled`.
 - El frontend tambien puede ocultar incidencias via `NEXT_PUBLIC_INCIDENTS_ENABLED`.
-- Si falta `data/cache/bugresolutionradar_cache.json`, el ambito de incidencias se oculta.
+- La visibilidad del ambito de incidencias se controla con `INCIDENTS_UI_ENABLED` (backend) + `NEXT_PUBLIC_INCIDENTS_ENABLED` (frontend). La cache puede estar vacía (0 items) hasta ejecutar una ingesta.
 - El control de ruido se aplica en ingesta (actor obligatorio + allowlist por geo).
 
 ### Gestion de cambios

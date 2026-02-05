@@ -6,14 +6,20 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Body, HTTPException, Query, Request
 from pydantic import BaseModel
 
 from bugresolutionradar.config import settings
 from bugresolutionradar.domain.enums import Severity, Status
 from bugresolutionradar.repositories.incidents_overrides_repo import IncidentsOverridesRepo
+from bugresolutionradar.user_settings import (
+    get_user_settings_snapshot,
+    reset_user_settings_to_example,
+    update_user_settings,
+)
 
 router = APIRouter()
+SETTINGS_BODY = Body(..., description="Actualización de settings para conectores de Bugs")
 
 
 def _matches_q(incident: Dict[str, Any], q: str) -> bool:
@@ -26,6 +32,28 @@ def _matches_q(incident: Dict[str, Any], q: str) -> bool:
     feature = str(incident.get("feature", "")).lower()
     gid = str(incident.get("global_id", "")).lower()
     return qn in title or qn in product or qn in feature or qn in gid
+
+
+class SettingsUpdate(BaseModel):
+    values: dict[str, Any]
+
+
+@router.get("/settings")
+def incidents_settings_get() -> dict[str, Any]:
+    return get_user_settings_snapshot()
+
+
+@router.post("/settings")
+def incidents_settings_update(payload: SettingsUpdate = SETTINGS_BODY) -> dict[str, Any]:
+    try:
+        return update_user_settings(payload.values)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/settings/reset")
+def incidents_settings_reset() -> dict[str, Any]:
+    return reset_user_settings_to_example()
 
 
 @router.get("")

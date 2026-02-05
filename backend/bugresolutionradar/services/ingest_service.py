@@ -7,6 +7,8 @@ import logging
 from bugresolutionradar.adapters import (
     FilesystemCSVAdapter,
     FilesystemJSONAdapter,
+    JiraAdapter,
+    JiraConfig,
     XlsxAdapter,
 )
 from bugresolutionradar.adapters.base import Adapter
@@ -46,6 +48,23 @@ class IngestService:
             adapters.append(FilesystemCSVAdapter("filesystem_csv", assets_dir_val))
         if "filesystem_xlsx" in enabled:
             adapters.append(XlsxAdapter("filesystem_xlsx", assets_dir_val))
+        if "jira" in enabled:
+            adapters.append(
+                JiraAdapter(
+                    "jira",
+                    JiraConfig(
+                        base_url=getattr(self._settings, "jira_base_url", ""),
+                        user_email=getattr(self._settings, "jira_user_email", ""),
+                        api_token=getattr(self._settings, "jira_api_token", ""),
+                        jql=getattr(self._settings, "jira_jql", ""),
+                        filter_id=getattr(self._settings, "jira_filter_id", None),
+                        max_results=getattr(self._settings, "jira_max_results", 500),
+                        page_size=getattr(self._settings, "jira_page_size", 100),
+                        timeout_sec=getattr(self._settings, "jira_timeout_sec", 30.0),
+                        verify_ssl=getattr(self._settings, "jira_verify_ssl", True),
+                    ),
+                )
+            )
 
         if logger.isEnabledFor(logging.DEBUG):
             logger.debug("Adapters enabled: %s", [adapter.source_id() for adapter in adapters])

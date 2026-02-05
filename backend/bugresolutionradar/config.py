@@ -70,9 +70,27 @@ class Settings(BaseSettings):
         description="Comma-separated list of enabled sources.",
     )
 
+    ########################################
+    # UI (frontend visibility)
+    ########################################
+    incidents_ui_enabled: bool = Field(default=True, validation_alias="INCIDENTS_UI_ENABLED")
+
     # XLSX-specific knobs (optional)
     xlsx_ignore_files: str = Field(default="", validation_alias="XLSX_IGNORE_FILES")
     xlsx_preferred_sheet: str = Field(default="Reportes", validation_alias="XLSX_PREFERRED_SHEET")
+
+    ########################################
+    # JIRA connector (optional)
+    ########################################
+    jira_base_url: str = Field(default="", validation_alias="JIRA_BASE_URL")
+    jira_user_email: str = Field(default="", validation_alias="JIRA_USER_EMAIL")
+    jira_api_token: str = Field(default="", validation_alias="JIRA_API_TOKEN")
+    jira_jql: str = Field(default="", validation_alias="JIRA_JQL")
+    jira_filter_id: str | None = Field(default=None, validation_alias="JIRA_FILTER_ID")
+    jira_max_results: int = Field(default=500, validation_alias="JIRA_MAX_RESULTS")
+    jira_page_size: int = Field(default=100, validation_alias="JIRA_PAGE_SIZE")
+    jira_timeout_sec: float = Field(default=30.0, validation_alias="JIRA_TIMEOUT_SEC")
+    jira_verify_ssl: bool = Field(default=True, validation_alias="JIRA_VERIFY_SSL")
 
     ########################################
     # KPI / Reporting settings
@@ -102,3 +120,10 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+def reload_bugresolutionradar_settings() -> None:
+    """Recarga `settings` desde `backend/bugresolutionradar/.env`."""
+    new_settings = Settings()
+    for field_name in settings.model_fields:
+        setattr(settings, field_name, getattr(new_settings, field_name))

@@ -91,7 +91,7 @@ UI flags:
 Frontend scope flag:
 - `NEXT_PUBLIC_INCIDENTS_ENABLED`: hide all incident scope (nav, ingest button, dashboard line).
 Availability gate:
-- If `data/cache/bugresolutionradar_cache.json` is missing, incident features are hidden regardless of flags.
+- Incident scope visibility is controlled by `INCIDENTS_UI_ENABLED` (backend) + `NEXT_PUBLIC_INCIDENTS_ENABLED` (frontend). Cache can be empty (0 items) until you ingest.
 
 ---
 
@@ -194,7 +194,7 @@ Flags de UI:
 Flag de scope en frontend:
 - `NEXT_PUBLIC_INCIDENTS_ENABLED`: oculta todo el ambito de incidencias (nav, boton de ingesta y linea del dashboard).
 Regla de disponibilidad:
-- Si no existe `data/cache/bugresolutionradar_cache.json`, se oculta el ambito de incidencias aunque el flag este activo.
+- La visibilidad del ambito de incidencias se controla con `INCIDENTS_UI_ENABLED` (backend) + `NEXT_PUBLIC_INCIDENTS_ENABLED` (frontend). La cache puede estar vacía (0 items) hasta ejecutar una ingesta.
 
 ---
 

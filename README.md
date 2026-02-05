@@ -152,7 +152,7 @@ UI toggles (per config):
 Frontend scope flag:
 - `NEXT_PUBLIC_INCIDENTS_ENABLED` allows hiding all incident scope (nav, ingest button, and dashboard line).
 Availability gate:
-- If `data/cache/bugresolutionradar_cache.json` is missing, incident features are hidden regardless of flags.
+- Incident scope visibility is controlled by `INCIDENTS_UI_ENABLED` (backend) + `NEXT_PUBLIC_INCIDENTS_ENABLED` (frontend). The cache can be empty; views will show 0 items until you ingest.
 
 Noise control (reputation ingestion):
 - `require_actor_sources` enforces actor presence for specific sources (e.g. news/forums).
@@ -184,7 +184,7 @@ Toggles de UI (por config):
 Flag de scope en frontend:
 - `NEXT_PUBLIC_INCIDENTS_ENABLED` oculta todo el ambito de incidencias (nav, boton de ingesta y linea del dashboard).
 Regla de disponibilidad:
-- Si no existe `data/cache/bugresolutionradar_cache.json`, se oculta el ambito de incidencias aunque el flag este activo.
+- La visibilidad del ambito de incidencias se controla con `INCIDENTS_UI_ENABLED` (backend) + `NEXT_PUBLIC_INCIDENTS_ENABLED` (frontend). La cache puede estar vacía; se verá 0 items hasta ejecutar una ingesta.
 
 Control de ruido (ingesta reputacion):
 - `require_actor_sources` obliga presencia de actor en fuentes sensibles (news/forums).
