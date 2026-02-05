@@ -62,10 +62,10 @@ def _enabled_sources_set() -> set[str]:
 
 
 def _resolve_enabled_sources(doc: ReputationCacheDocument | None) -> set[str] | None:
-    if doc is not None and not doc.sources_enabled:
-        return None
-    enabled = _enabled_sources_set()
-    return enabled or None
+    # A partir de los toggles de configuración, siempre aplicamos el filtro
+    # de fuentes en lectura. Si el usuario desactiva todas las fuentes,
+    # devolvemos un set vacío (ninguna fuente habilitada).
+    return _enabled_sources_set()
 
 
 def _is_source_enabled(source: str | None, enabled_sources: set[str] | None) -> bool:
