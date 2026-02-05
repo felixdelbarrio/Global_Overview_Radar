@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
-from pathlib import Path
 from typing import Any, Iterable, List
 
 from fastapi import APIRouter, Body, HTTPException, Query
@@ -203,7 +202,7 @@ def reputation_meta() -> dict[str, Any]:
     for source in sources_enabled:
         source_counts.setdefault(source, 0)
     sources_available = sorted(sources_enabled)
-    incidents_available = Path(brr_settings.cache_path).exists()
+    incidents_available = bool(getattr(brr_settings, "incidents_ui_enabled", True))
     return {
         "actor_principal": principal,
         "geos": geos,
