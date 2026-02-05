@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from contextlib import contextmanager
 from datetime import date, datetime
-from typing import Any, Iterable
+from typing import Any, Iterable, Iterator
 
 import httpx
 
@@ -176,7 +176,7 @@ class JiraAdapter(Adapter):
         return items
 
     @contextmanager
-    def _client_context(self) -> Iterable[httpx.Client]:
+    def _client_context(self) -> Iterator[httpx.Client]:
         if self._client is not None:
             yield self._client
             return
@@ -229,7 +229,7 @@ class JiraAdapter(Adapter):
         out: list[dict[str, Any]] = []
 
         def do_search(api_version: str) -> dict[str, Any]:
-            params = {
+            params: dict[str, str | int] = {
                 "jql": jql,
                 "startAt": start_at,
                 "maxResults": min(page_size, max_results - len(out)),
