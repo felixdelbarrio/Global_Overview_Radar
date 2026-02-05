@@ -280,7 +280,7 @@ def test_jira_adapter_tries_bearer_when_basic_gets_html(monkeypatch: pytest.Monk
     transport = httpx.MockTransport(handler)
     real_client = httpx.Client
 
-    def client_factory(*args: object, **kwargs: object) -> httpx.Client:
+    def client_factory(*args: Any, **kwargs: Any) -> httpx.Client:
         kwargs["transport"] = transport
         return real_client(*args, **kwargs)
 

@@ -1,4 +1,4 @@
-"""Adapter XLSX: lectura robusta de hojas Excel con mapeo flexible de columnas."""
+"""Adapter Excel (XLSX/XLS): lectura robusta de hojas con mapeo flexible de columnas."""
 
 from __future__ import annotations
 
@@ -7,9 +7,11 @@ import re
 import zipfile
 from datetime import date, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, List, Literal, Optional, Sequence, cast
 
 import openpyxl
+import xlrd  # type: ignore[import-untyped]
+from xlrd import XL_CELL_DATE, xldate_as_datetime  # type: ignore[import-untyped]
 
 from bugresolutionradar.adapters.filesystem import FilesystemAdapter
 from bugresolutionradar.adapters.utils import to_date, to_str
@@ -51,10 +53,10 @@ def _clean_status_text(v: object) -> str:
 
 class XlsxAdapter(FilesystemAdapter):
     """
-    XLSX adapter de filesystem.
+    Adapter Excel de filesystem (XLSX/XLS).
 
     Versión robusta y genérica:
-      - Recorre TODOS los .xlsx de ASSETS_DIR (sin depender del nombre del fichero).
+      - Recorre TODOS los .xlsx y .xls de ASSETS_DIR (sin depender del nombre del fichero).
       - Recorre TODAS las hojas de cada libro.
       - Detecta columnas por cabeceras (contains) en cada hoja.
       - Si falta id, genera source_key determinista.
@@ -71,28 +73,73 @@ class XlsxAdapter(FilesystemAdapter):
     def read(self) -> List[ObservedIncident]:
         out: List[ObservedIncident] = []
 
-        for path in sorted(self.assets_dir().glob("*.xlsx")):
-            try:
-                wb = openpyxl.load_workbook(path, data_only=True)
-            except zipfile.BadZipFile:
-                # fichero corrupto o no-xlsx renombrado
-                logger.warning(
-                    "[XlsxAdapter] '%s' no es un XLSX valido (BadZipFile). Se ignora.",
-                    path.name,
-                )
-                continue
-
-            for ws in wb.worksheets:
-                out.extend(self._read_sheet(path, ws))
+        paths = list(self.assets_dir().glob("*.xlsx"))
+        paths.extend(self.assets_dir().glob("*.xls"))
+        for path in sorted(set(paths)):
+            if path.suffix.lower() == ".xls":
+                out.extend(self._read_xls(path))
+            else:
+                out.extend(self._read_xlsx(path))
 
         return out
 
-    def _read_sheet(self, path: Path, ws: "Worksheet") -> List[ObservedIncident]:
+    def _read_xlsx(self, path: Path) -> List[ObservedIncident]:
+        try:
+            wb = openpyxl.load_workbook(path, data_only=True)
+        except zipfile.BadZipFile:
+            # fichero corrupto o no-xlsx renombrado -> intentar XLS legacy
+            logger.warning(
+                "[XlsxAdapter] '%s' no es un XLSX valido (BadZipFile). Probando XLS.",
+                path.name,
+            )
+            return self._read_xls(path)
+
+        out: List[ObservedIncident] = []
+        for ws in wb.worksheets:
+            rows = list(ws.iter_rows(values_only=True))
+            out.extend(self._read_rows(path, ws.title, rows))
+        return out
+
+    def _read_xls(self, path: Path) -> List[ObservedIncident]:
+        try:
+            wb = xlrd.open_workbook(str(path))
+        except Exception as exc:
+            logger.warning("[XlsxAdapter] '%s' no es un XLS valido (%s). Se ignora.", path.name, exc)
+            return []
+
+        out: List[ObservedIncident] = []
+        for sheet in wb.sheets():
+            rows = self._xls_sheet_rows(sheet, wb.datemode)
+            out.extend(self._read_rows(path, sheet.name, rows))
+        return out
+
+    def _xls_sheet_rows(
+        self, sheet: "xlrd.sheet.Sheet", datemode: int
+    ) -> List[Sequence[object]]:
+        rows: List[Sequence[object]] = []
+        safe_datemode = cast(Literal[0, 1], 1 if datemode == 1 else 0)
+        for r in range(sheet.nrows):
+            row_values: list[object] = []
+            for c in range(sheet.ncols):
+                cell = sheet.cell(r, c)
+                value: object = cell.value
+                if cell.ctype == XL_CELL_DATE:
+                    try:
+                        if isinstance(cell.value, (int, float)):
+                            value = xldate_as_datetime(float(cell.value), safe_datemode)
+                    except Exception:
+                        value = cell.value
+                row_values.append(value)
+            rows.append(row_values)
+        return rows
+
+    def _read_rows(
+        self, path: Path, sheet_name: str, rows: Sequence[Sequence[object]]
+    ) -> List[ObservedIncident]:
         """
         Lee una hoja cualquiera de un libro Excel, intentando mapearla al modelo ObservedIncident
         usando nombres de columna aproximados.
         """
-        rows = list(ws.iter_rows(values_only=True))
         if not rows:
             return []
 
@@ -109,13 +156,24 @@ class XlsxAdapter(FilesystemAdapter):
             return None
 
         # Campos clave
-        col_id = idx_contains("id de reporte", "id reporte", "reporte id", "id", "ticket")
+        col_id = idx_contains(
+            "id de reporte",
+            "id reporte",
+            "reporte id",
+            "id",
+            "ticket",
+            "key",
+            "issue key",
+            "clave",
+        )
 
         col_opened = idx_contains(
             "fecha de incidente",
             "fecha incidente",
             "incidente",
             "fecha apertura",
+            "creada",
+            "created",
         )
         col_opened_fallback = idx_contains(
             "fecha de reporte",
@@ -128,6 +186,14 @@ class XlsxAdapter(FilesystemAdapter):
             "fecha actualizacion",
             "updated",
             "update",
+        )
+        col_closed = idx_contains(
+            "resuelta",
+            "resuelto",
+            "fecha de cierre",
+            "fecha cierre",
+            "resolved",
+            "resolutiondate",
         )
 
         # Fallback muy genérico: cualquier cabecera que contenga 'fecha'
@@ -147,6 +213,7 @@ class XlsxAdapter(FilesystemAdapter):
             "descripcion",
             "detalle",
             "summary",
+            "resumen",
             "titulo",
             "título",
             "asunto",
@@ -163,7 +230,7 @@ class XlsxAdapter(FilesystemAdapter):
         def stable_auto_key(row_idx_1based: int, opened_at: Optional[date], title: str) -> str:
             """Genera un source_key estable cuando no hay ID en la fila."""
             basis = (
-                f"{path.name}|{ws.title}|{row_idx_1based}|"
+                f"{path.name}|{sheet_name}|{row_idx_1based}|"
                 f"{opened_at.isoformat() if opened_at else ''}|{title}"
             ).strip()
             h = hashlib.md5(basis.encode("utf-8")).hexdigest()[:12]
@@ -185,6 +252,12 @@ class XlsxAdapter(FilesystemAdapter):
                 and r[col_opened_fallback] is not None
             ):
                 opened_at = _as_date(r[col_opened_fallback])
+
+            closed_at = (
+                _as_date(r[col_closed])
+                if (col_closed is not None and r[col_closed] is not None)
+                else None
+            )
 
             if opened_at is None:
                 # sin fecha no tenemos forma de situar la incidencia en el tiempo
@@ -231,7 +304,7 @@ class XlsxAdapter(FilesystemAdapter):
                     status=status,
                     severity=severity,
                     opened_at=opened_at,
-                    closed_at=None,
+                    closed_at=closed_at,
                     updated_at=None,
                     clients_affected=None,
                     product=product or None,

@@ -49,3 +49,42 @@ def test_xlsx_adapter_reads_workbook(tmp_path: Path) -> None:
     assert second.source_key.startswith("AUTO-")
     assert second.status == Status.OPEN
     assert second.severity == Severity.MEDIUM
+
+
+def test_xlsx_adapter_reads_created_resolved_and_summary_columns() -> None:
+    adapter = XlsxAdapter("filesystem_xlsx", ".")
+    rows: list[list[object]] = [
+        [
+            "Key",
+            "Creada",
+            "Resuelta",
+            "Estado",
+            "Prioridad",
+            "Resumen",
+            "Canal",
+            "Funcionalidad",
+        ],
+        [
+            "MEX-1",
+            date(2025, 2, 1),
+            date(2025, 2, 2),
+            "Cerrado",
+            "High",
+            "Incidencia login",
+            "App",
+            "Pagos",
+        ],
+    ]
+
+    items = adapter._read_rows(Path("fake.xls"), "Sheet1", rows)
+
+    assert len(items) == 1
+    item = items[0]
+    assert item.source_key == "MEX-1"
+    assert item.title == "Incidencia login"
+    assert item.opened_at == date(2025, 2, 1)
+    assert item.closed_at == date(2025, 2, 2)
+    assert item.status == Status.CLOSED
+    assert item.severity == Severity.HIGH
+    assert item.product == "App"
+    assert item.feature == "Pagos"
