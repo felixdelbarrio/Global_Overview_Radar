@@ -62,6 +62,16 @@ class IngestService:
                         page_size=getattr(self._settings, "jira_page_size", 100),
                         timeout_sec=getattr(self._settings, "jira_timeout_sec", 30.0),
                         verify_ssl=getattr(self._settings, "jira_verify_ssl", True),
+                        auth_mode=getattr(self._settings, "jira_auth_mode", "auto"),
+                        oauth_consumer_key=getattr(
+                            self._settings, "jira_oauth_consumer_key", ""
+                        ),
+                        oauth_access_token=getattr(
+                            self._settings, "jira_oauth_access_token", ""
+                        ),
+                        oauth_private_key=getattr(
+                            self._settings, "jira_oauth_private_key", ""
+                        ),
                     ),
                 )
             )

@@ -21,6 +21,7 @@ class UserSettingField:
     default: Any
     env: str | None = None
     placeholder: str | None = None
+    options: list[str] | None = None
 
 
 GROUPS: list[dict[str, str]] = [
@@ -113,6 +114,46 @@ FIELDS: list[UserSettingField] = [
         kind="secret",
         default="",
         placeholder="••••••",
+    ),
+    UserSettingField(
+        key="jira.auth_mode",
+        env="JIRA_AUTH_MODE",
+        group="bugs_sources_credentials",
+        label="JIRA Auth Mode",
+        description="auto, basic, bearer u oauth1. Usa auto si no estás seguro.",
+        kind="select",
+        default="auto",
+        options=["auto", "basic", "bearer", "oauth1"],
+    ),
+    UserSettingField(
+        key="jira.oauth_consumer_key",
+        env="JIRA_OAUTH_CONSUMER_KEY",
+        group="bugs_sources_credentials",
+        label="JIRA OAuth Consumer Key",
+        description="Consumer key configurada en el Application Link.",
+        kind="string",
+        default="",
+        placeholder="jira-oauth-consumer",
+    ),
+    UserSettingField(
+        key="jira.oauth_access_token",
+        env="JIRA_OAUTH_ACCESS_TOKEN",
+        group="bugs_sources_credentials",
+        label="JIRA OAuth Access Token",
+        description="Access token generado tras autorizar el App Link.",
+        kind="secret",
+        default="",
+        placeholder="••••••",
+    ),
+    UserSettingField(
+        key="jira.oauth_private_key",
+        env="JIRA_OAUTH_PRIVATE_KEY",
+        group="bugs_sources_credentials",
+        label="JIRA OAuth Private Key",
+        description="Ruta al PEM o contenido PEM (con \\n).",
+        kind="secret",
+        default="",
+        placeholder="/ruta/a/privatekey.pem",
     ),
     UserSettingField(
         key="jira.jql",
@@ -241,6 +282,10 @@ def _render_env_file(env_values: dict[str, str], extras: dict[str, str]) -> str:
     lines.append("JIRA_BASE_URL=" + pick("JIRA_BASE_URL", ""))
     lines.append("JIRA_USER_EMAIL=" + pick("JIRA_USER_EMAIL", ""))
     lines.append("JIRA_API_TOKEN=" + pick("JIRA_API_TOKEN", ""))
+    lines.append("JIRA_AUTH_MODE=" + pick("JIRA_AUTH_MODE", "auto"))
+    lines.append("JIRA_OAUTH_CONSUMER_KEY=" + pick("JIRA_OAUTH_CONSUMER_KEY", ""))
+    lines.append("JIRA_OAUTH_ACCESS_TOKEN=" + pick("JIRA_OAUTH_ACCESS_TOKEN", ""))
+    lines.append("JIRA_OAUTH_PRIVATE_KEY=" + pick("JIRA_OAUTH_PRIVATE_KEY", ""))
     lines.append("JIRA_JQL=" + pick("JIRA_JQL", ""))
     lines.append("JIRA_FILTER_ID=" + pick("JIRA_FILTER_ID", ""))
     lines.append("JIRA_MAX_RESULTS=" + pick("JIRA_MAX_RESULTS", "500"))
@@ -310,7 +355,7 @@ def get_user_settings_snapshot() -> dict[str, Any]:
                     "description": field.description,
                     "type": field.kind,
                     "value": values_by_key.get(field.key, field.default),
-                    "options": None,
+                    "options": field.options,
                     "placeholder": field.placeholder,
                 }
             )
@@ -367,10 +412,19 @@ def update_user_settings(values: dict[str, Any]) -> dict[str, Any]:
     if "jira" in sources_set:
         if not env_values.get("JIRA_BASE_URL"):
             missing.append("JIRA_BASE_URL")
-        if not env_values.get("JIRA_USER_EMAIL"):
-            missing.append("JIRA_USER_EMAIL")
-        if not env_values.get("JIRA_API_TOKEN"):
-            missing.append("JIRA_API_TOKEN")
+        auth_mode = (env_values.get("JIRA_AUTH_MODE") or "auto").strip().lower()
+        if auth_mode in {"oauth1", "oauth"}:
+            if not env_values.get("JIRA_OAUTH_CONSUMER_KEY"):
+                missing.append("JIRA_OAUTH_CONSUMER_KEY")
+            if not env_values.get("JIRA_OAUTH_ACCESS_TOKEN"):
+                missing.append("JIRA_OAUTH_ACCESS_TOKEN")
+            if not env_values.get("JIRA_OAUTH_PRIVATE_KEY"):
+                missing.append("JIRA_OAUTH_PRIVATE_KEY")
+        else:
+            if not env_values.get("JIRA_USER_EMAIL"):
+                missing.append("JIRA_USER_EMAIL")
+            if not env_values.get("JIRA_API_TOKEN"):
+                missing.append("JIRA_API_TOKEN")
         has_query = bool((env_values.get("JIRA_JQL") or "").strip()) or bool(
             (env_values.get("JIRA_FILTER_ID") or "").strip()
         )
@@ -411,6 +465,10 @@ def _known_envs() -> set[str]:
         "JIRA_BASE_URL",
         "JIRA_USER_EMAIL",
         "JIRA_API_TOKEN",
+        "JIRA_AUTH_MODE",
+        "JIRA_OAUTH_CONSUMER_KEY",
+        "JIRA_OAUTH_ACCESS_TOKEN",
+        "JIRA_OAUTH_PRIVATE_KEY",
         "JIRA_JQL",
         "JIRA_FILTER_ID",
         "JIRA_MAX_RESULTS",

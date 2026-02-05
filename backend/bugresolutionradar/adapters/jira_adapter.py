@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import base64
+import secrets
+import time
 from contextlib import contextmanager
+from dataclasses import dataclass
 from datetime import date, datetime
+from pathlib import Path
 from typing import Any, Iterable, Iterator
-from urllib.parse import urlsplit
+from urllib.parse import parse_qsl, quote, urlsplit
 
 import httpx
 
@@ -233,6 +237,10 @@ class JiraConfig:
     page_size: int = 100
     timeout_sec: float = 30.0
     verify_ssl: bool = True
+    auth_mode: str = "auto"
+    oauth_consumer_key: str = ""
+    oauth_access_token: str = ""
+    oauth_private_key: str = ""
 
 
 class JiraAdapter(Adapter):
@@ -243,6 +251,7 @@ class JiraAdapter(Adapter):
         self._cfg = config
         self._client = client
         self._base_url = _normalize_jira_base_url(config.base_url)
+        self._oauth_private_key_obj = None
 
         raw = (config.base_url or "").strip().rstrip("/")
         if raw and self._base_url and raw != self._base_url:
@@ -258,21 +267,41 @@ class JiraAdapter(Adapter):
         base_url = (self._base_url or "").strip().rstrip("/")
         if not base_url:
             raise ValueError("JIRA_BASE_URL is required (e.g. https://tu-org.atlassian.net)")
-        if not cfg.api_token.strip():
-            raise ValueError("JIRA_API_TOKEN is required")
-        if not cfg.user_email.strip():
-            raise ValueError("JIRA_USER_EMAIL is required")
+        auth_mode = (cfg.auth_mode or "auto").strip().lower()
+        if auth_mode == "oauth":
+            auth_mode = "oauth1"
+        if auth_mode not in {"auto", "basic", "bearer", "oauth1"}:
+            raise ValueError("JIRA_AUTH_MODE must be one of: auto, basic, bearer, oauth1")
+        if auth_mode == "oauth1":
+            if not cfg.oauth_consumer_key.strip():
+                raise ValueError("JIRA_OAUTH_CONSUMER_KEY is required for oauth1")
+            if not cfg.oauth_access_token.strip():
+                raise ValueError("JIRA_OAUTH_ACCESS_TOKEN is required for oauth1")
+            if not cfg.oauth_private_key.strip():
+                raise ValueError("JIRA_OAUTH_PRIVATE_KEY is required for oauth1")
+        else:
+            if not cfg.api_token.strip():
+                raise ValueError("JIRA_API_TOKEN is required")
+            if not cfg.user_email.strip():
+                raise ValueError("JIRA_USER_EMAIL is required")
 
         observed_at = datetime.now().astimezone()
-        try:
+        if auth_mode == "basic":
             issues = self._read_issues(auth_mode="basic")
-        except JiraAPIError as exc:
-            content_type = (exc.content_type or "").lower()
-            looks_like_sso_html = "text/html" in content_type
-            if self._client is None and (exc.status_code in {401, 403} or looks_like_sso_html):
-                issues = self._read_issues(auth_mode="bearer")
-            else:
-                raise
+        elif auth_mode == "bearer":
+            issues = self._read_issues(auth_mode="bearer")
+        elif auth_mode == "oauth1":
+            issues = self._read_issues(auth_mode="oauth1")
+        else:
+            try:
+                issues = self._read_issues(auth_mode="basic")
+            except JiraAPIError as exc:
+                content_type = (exc.content_type or "").lower()
+                looks_like_sso_html = "text/html" in content_type
+                if self._client is None and (exc.status_code in {401, 403} or looks_like_sso_html):
+                    issues = self._read_issues(auth_mode="bearer")
+                else:
+                    raise
         items: list[ObservedIncident] = []
         for issue in issues:
             key = to_str(issue.get("key")) or ""
@@ -324,6 +353,8 @@ class JiraAdapter(Adapter):
             auth = httpx.BasicAuth(cfg.user_email, cfg.api_token)
         elif auth_mode == "bearer":
             headers["Authorization"] = f"Bearer {cfg.api_token}"
+        elif auth_mode == "oauth1":
+            auth = None
         else:
             raise ValueError(f"Unknown JIRA auth mode: {auth_mode}")
         with httpx.Client(
@@ -335,6 +366,111 @@ class JiraAdapter(Adapter):
             follow_redirects=True,
         ) as client:
             yield client
+
+    def _oauth_percent_encode(self, value: str) -> str:
+        return quote(str(value), safe="~-._")
+
+    def _oauth_base_url(self, url: str) -> str:
+        parts = urlsplit(url)
+        scheme = parts.scheme.lower()
+        netloc = parts.netloc.lower()
+        path = parts.path or "/"
+        return f"{scheme}://{netloc}{path}"
+
+    def _oauth_normalize_params(self, pairs: list[tuple[str, str]]) -> str:
+        encoded = [(self._oauth_percent_encode(k), self._oauth_percent_encode(v)) for k, v in pairs]
+        encoded.sort()
+        return "&".join(f"{k}={v}" for k, v in encoded)
+
+    def _oauth_load_private_key(self) -> Any:
+        if self._oauth_private_key_obj is not None:
+            return self._oauth_private_key_obj
+
+        raw = (self._cfg.oauth_private_key or "").strip()
+        if not raw:
+            raise ValueError("JIRA_OAUTH_PRIVATE_KEY is empty.")
+        if "-----BEGIN" in raw and "\\n" in raw:
+            raw = raw.replace("\\n", "\n")
+        elif "-----BEGIN" not in raw:
+            path = Path(raw)
+            if path.exists():
+                raw = path.read_text(encoding="utf-8")
+
+        try:
+            from cryptography.hazmat.primitives import serialization
+            from cryptography.hazmat.primitives.asymmetric import rsa
+        except Exception as exc:
+            raise ValueError(
+                "cryptography is required for oauth1. Add it to requirements and install."
+            ) from exc
+
+        try:
+            key = serialization.load_pem_private_key(raw.encode("utf-8"), password=None)
+        except Exception as exc:
+            raise ValueError("Invalid JIRA OAuth private key PEM.") from exc
+
+        if not isinstance(key, rsa.RSAPrivateKey):
+            raise ValueError("JIRA OAuth private key must be an RSA key.")
+
+        self._oauth_private_key_obj = key
+        return key
+
+    def _oauth_sign_rsa_sha1(self, base_string: str) -> str:
+        key = self._oauth_load_private_key()
+        from cryptography.hazmat.primitives import hashes
+        from cryptography.hazmat.primitives.asymmetric import padding
+
+        signature = key.sign(base_string.encode("utf-8"), padding.PKCS1v15(), hashes.SHA1())
+        return base64.b64encode(signature).decode("utf-8")
+
+    def _oauth1_header(self, method: str, url: str, params: dict[str, Any] | None) -> str:
+        cfg = self._cfg
+        oauth_params = {
+            "oauth_consumer_key": cfg.oauth_consumer_key,
+            "oauth_token": cfg.oauth_access_token,
+            "oauth_nonce": secrets.token_hex(8),
+            "oauth_timestamp": str(int(time.time())),
+            "oauth_signature_method": "RSA-SHA1",
+            "oauth_version": "1.0",
+        }
+
+        parts = urlsplit(url)
+        query_pairs = parse_qsl(parts.query, keep_blank_values=True)
+        request_pairs: list[tuple[str, str]] = []
+        if params:
+            for key, value in params.items():
+                if value is None:
+                    continue
+                request_pairs.append((str(key), str(value)))
+
+        all_pairs = query_pairs + request_pairs + list(oauth_params.items())
+        normalized = self._oauth_normalize_params(all_pairs)
+        base_url = self._oauth_base_url(url)
+        base_string = "&".join(
+            self._oauth_percent_encode(part)
+            for part in [method.upper(), base_url, normalized]
+        )
+        oauth_params["oauth_signature"] = self._oauth_sign_rsa_sha1(base_string)
+
+        header_params = ", ".join(
+            f'{self._oauth_percent_encode(k)}="{self._oauth_percent_encode(v)}"'
+            for k, v in sorted(oauth_params.items())
+        )
+        return f"OAuth {header_params}"
+
+    def _request(
+        self,
+        client: httpx.Client,
+        method: str,
+        url: str,
+        *,
+        params: dict[str, Any] | None = None,
+        auth_mode: str,
+    ) -> httpx.Response:
+        if auth_mode == "oauth1":
+            headers = {"Authorization": self._oauth1_header(method, url, params)}
+            return client.request(method, url, params=params, headers=headers)
+        return client.request(method, url, params=params)
 
     def _candidate_base_urls(self) -> list[str]:
         base = (self._base_url or "").rstrip("/")
@@ -462,7 +598,7 @@ class JiraAdapter(Adapter):
                 hint = f"{hint} login_reason={login_reason.strip()}."
             hint = (
                 f"{hint} Esto suele indicar SSO/login HTML o una URL base incorrecta "
-                "(a veces requiere /jira u os_authType=basic)."
+                "(a veces requiere /jira, os_authType=basic u OAuth 1.0a)."
             )
             if preview:
                 hint = f"{hint} Respuesta: {preview}"
@@ -509,9 +645,9 @@ class JiraAdapter(Adapter):
             for base_url in self._candidate_base_urls():
                 for api_version in ("3", "2"):
                     try:
-                        resp = client.get(
-                            self._url(f"rest/api/{api_version}/filter/{filter_id}", base_url),
-                            params=auth_params,
+                        url = self._url(f"rest/api/{api_version}/filter/{filter_id}", base_url)
+                        resp = self._request(
+                            client, "GET", url, params=auth_params, auth_mode=auth_mode
                         )
                         resp.raise_for_status()
                         data = self._parse_json_dict(resp)
@@ -574,10 +710,8 @@ class JiraAdapter(Adapter):
                         }
                         if auth_params:
                             params.update(auth_params)
-                        resp = client.get(
-                            self._url(f"rest/api/{api_version}/search", base_url),
-                            params=params,
-                        )
+                        url = self._url(f"rest/api/{api_version}/search", base_url)
+                        resp = self._request(client, "GET", url, params=params, auth_mode=auth_mode)
                         resp.raise_for_status()
                         data = self._parse_json_dict(resp)
                         self._update_base_url_from_response(resp)

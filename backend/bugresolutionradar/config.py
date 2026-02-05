@@ -91,6 +91,10 @@ class Settings(BaseSettings):
     jira_page_size: int = Field(default=100, validation_alias="JIRA_PAGE_SIZE")
     jira_timeout_sec: float = Field(default=30.0, validation_alias="JIRA_TIMEOUT_SEC")
     jira_verify_ssl: bool = Field(default=True, validation_alias="JIRA_VERIFY_SSL")
+    jira_auth_mode: str = Field(default="auto", validation_alias="JIRA_AUTH_MODE")
+    jira_oauth_consumer_key: str = Field(default="", validation_alias="JIRA_OAUTH_CONSUMER_KEY")
+    jira_oauth_access_token: str = Field(default="", validation_alias="JIRA_OAUTH_ACCESS_TOKEN")
+    jira_oauth_private_key: str = Field(default="", validation_alias="JIRA_OAUTH_PRIVATE_KEY")
 
     ########################################
     # KPI / Reporting settings

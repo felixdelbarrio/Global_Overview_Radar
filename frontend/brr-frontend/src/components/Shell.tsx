@@ -417,6 +417,10 @@ export function Shell({ children }: { children: React.ReactNode }) {
             "jira.base_url",
             "jira.user_email",
             "jira.api_token",
+            "jira.auth_mode",
+            "jira.oauth_consumer_key",
+            "jira.oauth_access_token",
+            "jira.oauth_private_key",
             "jira.jql",
             "jira.filter_id",
           ],
@@ -465,7 +469,12 @@ export function Shell({ children }: { children: React.ReactNode }) {
       if (!toggleValue) return;
       let missing = row.keyKeys.filter((key) => isBlank(settingsDraft[key]));
       if (settingsScope === "incidents" && row.id === "jira") {
-        missing = ["jira.base_url", "jira.user_email", "jira.api_token"].filter((key) =>
+        const authMode = String(settingsDraft["jira.auth_mode"] ?? "auto").toLowerCase();
+        const usesOauth = authMode === "oauth1" || authMode === "oauth";
+        const requiredAuthKeys = usesOauth
+          ? ["jira.oauth_consumer_key", "jira.oauth_access_token", "jira.oauth_private_key"]
+          : ["jira.user_email", "jira.api_token"];
+        missing = ["jira.base_url", ...requiredAuthKeys].filter((key) =>
           isBlank(settingsDraft[key])
         );
         const hasQuery =
@@ -1686,10 +1695,37 @@ export function Shell({ children }: { children: React.ReactNode }) {
                                         {row.keyKeys.map((key) => {
                                           const field = settingsFieldMap.get(key);
                                           if (!field) return null;
+                                          if (field.type === "select" && field.options?.length) {
+                                            const value = String(
+                                              settingsDraft[key] ?? field.options[0] ?? ""
+                                            );
+                                            return (
+                                              <select
+                                                key={key}
+                                                value={value}
+                                                onChange={(event) =>
+                                                  updateSettingValue(key, event.target.value)
+                                                }
+                                                className="w-full rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-60)] px-3 py-1 text-xs text-[color:var(--ink)]"
+                                              >
+                                                {field.options.map((option) => (
+                                                  <option key={option} value={option}>
+                                                    {option}
+                                                  </option>
+                                                ))}
+                                              </select>
+                                            );
+                                          }
+                                          const inputType =
+                                            field.type === "secret"
+                                              ? "password"
+                                              : field.type === "number"
+                                                ? "number"
+                                                : "text";
                                           return (
                                             <input
                                               key={key}
-                                              type={field.type === "secret" ? "password" : "text"}
+                                              type={inputType}
                                               value={String(settingsDraft[key] ?? "")}
                                               onChange={(event) =>
                                                 updateSettingValue(key, event.target.value)
@@ -1723,17 +1759,39 @@ export function Shell({ children }: { children: React.ReactNode }) {
                                   const enabled = Boolean(settingsDraft[row.toggleKey]);
                                   const isBlank = (value: unknown) =>
                                     !String(value ?? "").trim();
-                                  const missingBase = [
-                                    "jira.base_url",
-                                    "jira.user_email",
-                                    "jira.api_token",
-                                  ].filter((key) => isBlank(settingsDraft[key]));
+                                  const authMode = String(
+                                    settingsDraft["jira.auth_mode"] ?? "auto"
+                                  ).toLowerCase();
+                                  const usesOauth = authMode === "oauth1" || authMode === "oauth";
+                                  const requiredAuthKeys = usesOauth
+                                    ? [
+                                        "jira.oauth_consumer_key",
+                                        "jira.oauth_access_token",
+                                        "jira.oauth_private_key",
+                                      ]
+                                    : ["jira.user_email", "jira.api_token"];
+                                  const missingBase = ["jira.base_url", ...requiredAuthKeys].filter(
+                                    (key) => isBlank(settingsDraft[key])
+                                  );
                                   const hasQuery =
                                     !isBlank(settingsDraft["jira.jql"]) ||
                                     !isBlank(settingsDraft["jira.filter_id"]);
                                   const missing = hasQuery
                                     ? missingBase
                                     : [...missingBase, "jira.query"];
+                                  const displayKeys = [
+                                    "jira.base_url",
+                                    "jira.auth_mode",
+                                    ...(usesOauth
+                                      ? [
+                                          "jira.oauth_consumer_key",
+                                          "jira.oauth_access_token",
+                                          "jira.oauth_private_key",
+                                        ]
+                                      : ["jira.user_email", "jira.api_token"]),
+                                    "jira.jql",
+                                    "jira.filter_id",
+                                  ];
                                   return (
                                     <div
                                       key={row.id}
@@ -1769,30 +1827,62 @@ export function Shell({ children }: { children: React.ReactNode }) {
                                         </button>
                                       </div>
                                       <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                                        {row.keyKeys.map((key) => {
+                                        {displayKeys.map((key) => {
                                           const field = settingsFieldMap.get(key);
                                           if (!field) return null;
                                           const fullWidth =
-                                            key === "jira.jql" || key === "jira.base_url";
+                                            key === "jira.jql" ||
+                                            key === "jira.base_url" ||
+                                            key === "jira.oauth_private_key";
+                                          const fieldClass = `w-full rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-60)] px-3 py-1 text-xs text-[color:var(--ink)] ${
+                                            fullWidth ? "sm:col-span-2" : ""
+                                          }`;
+                                          if (field.type === "select" && field.options?.length) {
+                                            const value = String(
+                                              settingsDraft[key] ?? field.options[0] ?? ""
+                                            );
+                                            return (
+                                              <select
+                                                key={key}
+                                                value={value}
+                                                onChange={(event) =>
+                                                  updateSettingValue(key, event.target.value)
+                                                }
+                                                className={fieldClass}
+                                              >
+                                                {field.options.map((option) => (
+                                                  <option key={option} value={option}>
+                                                    {option}
+                                                  </option>
+                                                ))}
+                                              </select>
+                                            );
+                                          }
+                                          const inputType =
+                                            field.type === "secret"
+                                              ? "password"
+                                              : field.type === "number"
+                                                ? "number"
+                                                : "text";
                                           return (
                                             <input
                                               key={key}
-                                              type={field.type === "secret" ? "password" : "text"}
+                                              type={inputType}
                                               value={String(settingsDraft[key] ?? "")}
                                               onChange={(event) =>
                                                 updateSettingValue(key, event.target.value)
                                               }
                                               placeholder={field.placeholder ?? field.label}
-                                              className={`w-full rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-60)] px-3 py-1 text-xs text-[color:var(--ink)] ${
-                                                fullWidth ? "sm:col-span-2" : ""
-                                              }`}
+                                              className={fieldClass}
                                             />
                                           );
                                         })}
                                       </div>
                                       {enabled && missing.length > 0 && (
                                         <div className="mt-2 text-[10px] text-rose-500">
-                                          Completa URL, usuario, token y define JQL o Filter ID (o desactiva la fuente).
+                                          {usesOauth
+                                            ? "Completa URL, auth mode, consumer key, access token y private key; y define JQL o Filter ID (o desactiva la fuente)."
+                                            : "Completa URL, auth mode, usuario, token y define JQL o Filter ID (o desactiva la fuente)."}
                                         </div>
                                       )}
                                     </div>
