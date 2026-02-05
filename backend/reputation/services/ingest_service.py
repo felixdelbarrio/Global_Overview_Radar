@@ -4,7 +4,7 @@ import os
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
-from typing import Any, Callable, Iterable, Sequence, cast
+from typing import Any, Callable, Iterable, Optional, Sequence, cast
 from urllib.parse import quote_plus, urlparse
 
 from reputation.actors import (
@@ -56,7 +56,7 @@ from reputation.repositories.cache_repo import ReputationCacheRepo
 from reputation.services.sentiment_service import ReputationSentimentService
 
 logger = get_logger(__name__)
-ProgressCallback = Callable[[str, int, dict[str, Any] | None], None]
+ProgressCallback = Callable[[str, int, Optional[dict[str, Any]]], None]
 CollectorProgress = Callable[[int, int, str], None]
 DEFAULT_RSS_URL_LIMITS = {
     "NEWS_MAX_RSS_URLS": 300,
