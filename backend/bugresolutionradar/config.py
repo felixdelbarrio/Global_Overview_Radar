@@ -95,6 +95,7 @@ class Settings(BaseSettings):
     jira_oauth_consumer_key: str = Field(default="", validation_alias="JIRA_OAUTH_CONSUMER_KEY")
     jira_oauth_access_token: str = Field(default="", validation_alias="JIRA_OAUTH_ACCESS_TOKEN")
     jira_oauth_private_key: str = Field(default="", validation_alias="JIRA_OAUTH_PRIVATE_KEY")
+    jira_session_cookie: str = Field(default="", validation_alias="JIRA_SESSION_COOKIE")
 
     ########################################
     # KPI / Reporting settings

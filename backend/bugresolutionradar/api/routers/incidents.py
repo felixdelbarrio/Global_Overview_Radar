@@ -17,6 +17,7 @@ from bugresolutionradar.user_settings import (
     reset_user_settings_to_example,
     update_user_settings,
 )
+from bugresolutionradar.utils.jira_cookie import JiraCookieError, extract_domain, read_browser_cookie
 
 router = APIRouter()
 SETTINGS_BODY = Body(..., description="Actualización de settings para conectores de Bugs")
@@ -38,6 +39,10 @@ class SettingsUpdate(BaseModel):
     values: dict[str, Any]
 
 
+class CookieRefreshRequest(BaseModel):
+    browser: str | None = None
+
+
 @router.get("/settings")
 def incidents_settings_get() -> dict[str, Any]:
     return get_user_settings_snapshot()
@@ -54,6 +59,19 @@ def incidents_settings_update(payload: SettingsUpdate = SETTINGS_BODY) -> dict[s
 @router.post("/settings/reset")
 def incidents_settings_reset() -> dict[str, Any]:
     return reset_user_settings_to_example()
+
+
+@router.post("/settings/jira-cookie/refresh")
+def incidents_settings_jira_cookie_refresh(
+    payload: CookieRefreshRequest = Body(default=CookieRefreshRequest())
+) -> dict[str, Any]:
+    try:
+        domain = extract_domain(settings.jira_base_url)
+        cookie = read_browser_cookie(domain, payload.browser)
+        updates = {"jira.session_cookie": cookie, "jira.auth_mode": "cookie"}
+        return update_user_settings(updates)
+    except JiraCookieError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("")

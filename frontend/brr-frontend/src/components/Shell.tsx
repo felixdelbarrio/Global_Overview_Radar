@@ -167,6 +167,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const [settingsBusy, setSettingsBusy] = useState(false);
   const [settingsError, setSettingsError] = useState<string | null>(null);
   const [settingsSaved, setSettingsSaved] = useState(false);
+  const [jiraCookieBusy, setJiraCookieBusy] = useState(false);
+  const [jiraCookieNote, setJiraCookieNote] = useState<string | null>(null);
+  const [jiraCookieBrowser, setJiraCookieBrowser] = useState("chrome");
   const [advancedKey, setAdvancedKey] = useState("");
   const [advancedValue, setAdvancedValue] = useState("");
   const [advancedError, setAdvancedError] = useState<string | null>(null);
@@ -196,6 +199,16 @@ export function Shell({ children }: { children: React.ReactNode }) {
       return prev;
     });
     setThemeReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const stored = window.localStorage.getItem("gor-jira-cookie-browser");
+      if (stored) setJiraCookieBrowser(stored);
+    } catch {
+      // ignore storage failures
+    }
   }, []);
 
   useEffect(() => {
@@ -284,6 +297,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
     if (!settingsOpen) return;
     let alive = true;
     setSettingsError(null);
+    setJiraCookieNote(null);
     const basePath =
       settingsScope === "reputation" ? "/reputation/settings" : "/incidents/settings";
     apiGet<ReputationSettingsResponse>(basePath)
@@ -421,6 +435,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
             "jira.oauth_consumer_key",
             "jira.oauth_access_token",
             "jira.oauth_private_key",
+            "jira.session_cookie",
             "jira.jql",
             "jira.filter_id",
           ],
@@ -471,8 +486,12 @@ export function Shell({ children }: { children: React.ReactNode }) {
       if (settingsScope === "incidents" && row.id === "jira") {
         const authMode = String(settingsDraft["jira.auth_mode"] ?? "auto").toLowerCase();
         const usesOauth = authMode === "oauth1" || authMode === "oauth";
+        const usesCookie =
+          authMode === "cookie" || authMode === "session" || authMode === "session_cookie";
         const requiredAuthKeys = usesOauth
           ? ["jira.oauth_consumer_key", "jira.oauth_access_token", "jira.oauth_private_key"]
+          : usesCookie
+            ? ["jira.session_cookie"]
           : ["jira.user_email", "jira.api_token"];
         missing = ["jira.base_url", ...requiredAuthKeys].filter((key) =>
           isBlank(settingsDraft[key])
@@ -755,6 +774,39 @@ export function Shell({ children }: { children: React.ReactNode }) {
     });
     setAdvancedKey("");
     setAdvancedValue("");
+  };
+
+  const refreshJiraCookie = async () => {
+    if (settingsScope !== "incidents") return;
+    setJiraCookieBusy(true);
+    setJiraCookieNote(null);
+    try {
+      const response = await apiPost<ReputationSettingsResponse>(
+        "/incidents/settings/jira-cookie/refresh",
+        { browser: jiraCookieBrowser }
+      );
+      setSettingsGroups(response.groups);
+      const nextBase: Record<string, string | number | boolean> = {};
+      response.groups.forEach((group) => {
+        group.fields.forEach((field) => {
+          nextBase[field.key] = field.value;
+        });
+      });
+      setSettingsBase(nextBase);
+      setSettingsDraft(nextBase);
+      setAdvancedOptions(response.advanced_options ?? []);
+      dispatchSettingsChanged({ updated_at: response.updated_at ?? null });
+      setJiraCookieNote("Cookie actualizada desde el navegador.");
+      if (typeof window !== "undefined") {
+        window.setTimeout(() => setJiraCookieNote(null), 3200);
+      }
+    } catch (err) {
+      setJiraCookieNote(
+        err instanceof Error ? err.message : "No se pudo leer la cookie del navegador"
+      );
+    } finally {
+      setJiraCookieBusy(false);
+    }
   };
 
   const saveSettings = async () => {
@@ -1763,12 +1815,18 @@ export function Shell({ children }: { children: React.ReactNode }) {
                                     settingsDraft["jira.auth_mode"] ?? "auto"
                                   ).toLowerCase();
                                   const usesOauth = authMode === "oauth1" || authMode === "oauth";
+                                  const usesCookie =
+                                    authMode === "cookie" ||
+                                    authMode === "session" ||
+                                    authMode === "session_cookie";
                                   const requiredAuthKeys = usesOauth
                                     ? [
                                         "jira.oauth_consumer_key",
                                         "jira.oauth_access_token",
                                         "jira.oauth_private_key",
                                       ]
+                                    : usesCookie
+                                      ? ["jira.session_cookie"]
                                     : ["jira.user_email", "jira.api_token"];
                                   const missingBase = ["jira.base_url", ...requiredAuthKeys].filter(
                                     (key) => isBlank(settingsDraft[key])
@@ -1788,7 +1846,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
                                           "jira.oauth_access_token",
                                           "jira.oauth_private_key",
                                         ]
-                                      : ["jira.user_email", "jira.api_token"]),
+                                      : usesCookie
+                                        ? []
+                                        : ["jira.user_email", "jira.api_token"]),
                                     "jira.jql",
                                     "jira.filter_id",
                                   ];
@@ -1878,11 +1938,60 @@ export function Shell({ children }: { children: React.ReactNode }) {
                                           );
                                         })}
                                       </div>
+                                      {usesCookie && (
+                                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                                          <div className="flex items-center gap-2">
+                                            <span className="text-[10px] uppercase tracking-[0.2em] text-[color:var(--text-60)]">
+                                              Navegador
+                                            </span>
+                                            <select
+                                              value={jiraCookieBrowser}
+                                              onChange={(event) => {
+                                                const next = event.target.value;
+                                                setJiraCookieBrowser(next);
+                                                if (typeof window !== "undefined") {
+                                                  try {
+                                                    window.localStorage.setItem(
+                                                      "gor-jira-cookie-browser",
+                                                      next
+                                                    );
+                                                  } catch {
+                                                    // ignore storage failures
+                                                  }
+                                                }
+                                              }}
+                                              className="rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-60)] px-3 py-1 text-[10px] text-[color:var(--ink)]"
+                                            >
+                                              <option value="chrome">Chrome</option>
+                                              <option value="edge">Edge</option>
+                                              <option value="firefox">Firefox</option>
+                                              <option value="safari">Safari</option>
+                                            </select>
+                                          </div>
+                                          <button
+                                            type="button"
+                                            onClick={refreshJiraCookie}
+                                            disabled={jiraCookieBusy || !enabled}
+                                            className="rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-60)] px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-[color:var(--text-60)] transition hover:text-[color:var(--ink)] disabled:opacity-50"
+                                          >
+                                            {jiraCookieBusy
+                                              ? "Leyendo cookie..."
+                                              : "Leer cookie del navegador"}
+                                          </button>
+                                          {jiraCookieNote && (
+                                            <div className="text-[10px] text-[color:var(--text-55)]">
+                                              {jiraCookieNote}
+                                            </div>
+                                          )}
+                                        </div>
+                                      )}
                                       {enabled && missing.length > 0 && (
                                         <div className="mt-2 text-[10px] text-rose-500">
                                           {usesOauth
                                             ? "Completa URL, auth mode, consumer key, access token y private key; y define JQL o Filter ID (o desactiva la fuente)."
-                                            : "Completa URL, auth mode, usuario, token y define JQL o Filter ID (o desactiva la fuente)."}
+                                            : usesCookie
+                                              ? "Pulsa \"Leer cookie del navegador\" y define JQL o Filter ID (o desactiva la fuente)."
+                                              : "Completa URL, auth mode, usuario, token y define JQL o Filter ID (o desactiva la fuente)."}
                                         </div>
                                       )}
                                     </div>

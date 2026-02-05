@@ -73,7 +73,7 @@ FIELDS: list[UserSettingField] = [
         key="sources.filesystem_xlsx",
         group="bugs_sources_public",
         label="Filesystem (XLSX)",
-        description="Lee ficheros *.xlsx en ASSETS_DIR.",
+        description="Lee ficheros *.xlsx y *.xls en ASSETS_DIR.",
         kind="boolean",
         default=True,
     ),
@@ -120,10 +120,10 @@ FIELDS: list[UserSettingField] = [
         env="JIRA_AUTH_MODE",
         group="bugs_sources_credentials",
         label="JIRA Auth Mode",
-        description="auto, basic, bearer u oauth1. Usa auto si no estás seguro.",
+        description="auto, basic, bearer, oauth1 o cookie. Usa auto si no estás seguro.",
         kind="select",
         default="auto",
-        options=["auto", "basic", "bearer", "oauth1"],
+        options=["auto", "basic", "bearer", "oauth1", "cookie"],
     ),
     UserSettingField(
         key="jira.oauth_consumer_key",
@@ -154,6 +154,16 @@ FIELDS: list[UserSettingField] = [
         kind="secret",
         default="",
         placeholder="/ruta/a/privatekey.pem",
+    ),
+    UserSettingField(
+        key="jira.session_cookie",
+        env="JIRA_SESSION_COOKIE",
+        group="bugs_sources_credentials",
+        label="JIRA Session Cookie",
+        description="Header Cookie completo (ej. JSESSIONID=...; atlassian.xsrf.token=...).",
+        kind="secret",
+        default="",
+        placeholder="JSESSIONID=...; ...",
     ),
     UserSettingField(
         key="jira.jql",
@@ -286,6 +296,7 @@ def _render_env_file(env_values: dict[str, str], extras: dict[str, str]) -> str:
     lines.append("JIRA_OAUTH_CONSUMER_KEY=" + pick("JIRA_OAUTH_CONSUMER_KEY", ""))
     lines.append("JIRA_OAUTH_ACCESS_TOKEN=" + pick("JIRA_OAUTH_ACCESS_TOKEN", ""))
     lines.append("JIRA_OAUTH_PRIVATE_KEY=" + pick("JIRA_OAUTH_PRIVATE_KEY", ""))
+    lines.append("JIRA_SESSION_COOKIE=" + pick("JIRA_SESSION_COOKIE", ""))
     lines.append("JIRA_JQL=" + pick("JIRA_JQL", ""))
     lines.append("JIRA_FILTER_ID=" + pick("JIRA_FILTER_ID", ""))
     lines.append("JIRA_MAX_RESULTS=" + pick("JIRA_MAX_RESULTS", "500"))
@@ -420,6 +431,9 @@ def update_user_settings(values: dict[str, Any]) -> dict[str, Any]:
                 missing.append("JIRA_OAUTH_ACCESS_TOKEN")
             if not env_values.get("JIRA_OAUTH_PRIVATE_KEY"):
                 missing.append("JIRA_OAUTH_PRIVATE_KEY")
+        elif auth_mode in {"cookie", "session", "session_cookie"}:
+            if not env_values.get("JIRA_SESSION_COOKIE"):
+                missing.append("JIRA_SESSION_COOKIE")
         else:
             if not env_values.get("JIRA_USER_EMAIL"):
                 missing.append("JIRA_USER_EMAIL")
@@ -469,6 +483,7 @@ def _known_envs() -> set[str]:
         "JIRA_OAUTH_CONSUMER_KEY",
         "JIRA_OAUTH_ACCESS_TOKEN",
         "JIRA_OAUTH_PRIVATE_KEY",
+        "JIRA_SESSION_COOKIE",
         "JIRA_JQL",
         "JIRA_FILTER_ID",
         "JIRA_MAX_RESULTS",

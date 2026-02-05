@@ -72,6 +72,7 @@ class IngestService:
                         oauth_private_key=getattr(
                             self._settings, "jira_oauth_private_key", ""
                         ),
+                        session_cookie=getattr(self._settings, "jira_session_cookie", ""),
                     ),
                 )
             )

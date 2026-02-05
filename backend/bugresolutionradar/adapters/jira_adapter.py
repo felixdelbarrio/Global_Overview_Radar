@@ -241,6 +241,7 @@ class JiraConfig:
     oauth_consumer_key: str = ""
     oauth_access_token: str = ""
     oauth_private_key: str = ""
+    session_cookie: str = ""
 
 
 class JiraAdapter(Adapter):
@@ -270,8 +271,10 @@ class JiraAdapter(Adapter):
         auth_mode = (cfg.auth_mode or "auto").strip().lower()
         if auth_mode == "oauth":
             auth_mode = "oauth1"
-        if auth_mode not in {"auto", "basic", "bearer", "oauth1"}:
-            raise ValueError("JIRA_AUTH_MODE must be one of: auto, basic, bearer, oauth1")
+        if auth_mode == "session":
+            auth_mode = "cookie"
+        if auth_mode not in {"auto", "basic", "bearer", "oauth1", "cookie"}:
+            raise ValueError("JIRA_AUTH_MODE must be one of: auto, basic, bearer, oauth1, cookie")
         if auth_mode == "oauth1":
             if not cfg.oauth_consumer_key.strip():
                 raise ValueError("JIRA_OAUTH_CONSUMER_KEY is required for oauth1")
@@ -279,6 +282,9 @@ class JiraAdapter(Adapter):
                 raise ValueError("JIRA_OAUTH_ACCESS_TOKEN is required for oauth1")
             if not cfg.oauth_private_key.strip():
                 raise ValueError("JIRA_OAUTH_PRIVATE_KEY is required for oauth1")
+        elif auth_mode == "cookie":
+            if not cfg.session_cookie.strip():
+                raise ValueError("JIRA_SESSION_COOKIE is required for cookie auth")
         else:
             if not cfg.api_token.strip():
                 raise ValueError("JIRA_API_TOKEN is required")
@@ -292,6 +298,8 @@ class JiraAdapter(Adapter):
             issues = self._read_issues(auth_mode="bearer")
         elif auth_mode == "oauth1":
             issues = self._read_issues(auth_mode="oauth1")
+        elif auth_mode == "cookie":
+            issues = self._read_issues(auth_mode="cookie")
         else:
             try:
                 issues = self._read_issues(auth_mode="basic")
@@ -355,6 +363,8 @@ class JiraAdapter(Adapter):
             headers["Authorization"] = f"Bearer {cfg.api_token}"
         elif auth_mode == "oauth1":
             auth = None
+        elif auth_mode == "cookie":
+            headers["Cookie"] = cfg.session_cookie
         else:
             raise ValueError(f"Unknown JIRA auth mode: {auth_mode}")
         with httpx.Client(
@@ -598,7 +608,7 @@ class JiraAdapter(Adapter):
                 hint = f"{hint} login_reason={login_reason.strip()}."
             hint = (
                 f"{hint} Esto suele indicar SSO/login HTML o una URL base incorrecta "
-                "(a veces requiere /jira, os_authType=basic u OAuth 1.0a)."
+                "(a veces requiere /jira, os_authType=basic, OAuth 1.0a o cookie de sesión)."
             )
             if preview:
                 hint = f"{hint} Respuesta: {preview}"

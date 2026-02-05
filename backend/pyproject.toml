@@ -62,6 +62,10 @@ module = ["openpyxl", "openpyxl.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
+module = ["xlrd", "xlrd.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
 module = ["praw", "praw.*"]
 ignore_missing_imports = true
 
