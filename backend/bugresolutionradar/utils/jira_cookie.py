@@ -10,6 +10,9 @@ class JiraCookieError(RuntimeError):
     pass
 
 
+CookieLoader = Callable[..., Iterable[object]]
+
+
 def extract_domain(base_url: str) -> str:
     value = (base_url or "").strip()
     if not value:
@@ -56,7 +59,6 @@ def read_browser_cookie(domain: str, browser: str | None = None) -> str:
         ) from exc
 
     browser_key = (browser or "").strip().lower()
-    CookieLoader = Callable[..., Iterable[object]]
     loaders: list[tuple[str, CookieLoader]] = []
 
     def add_loader(name: str, fn: CookieLoader) -> None:

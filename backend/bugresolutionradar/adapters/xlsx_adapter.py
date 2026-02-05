@@ -7,7 +7,7 @@ import re
 import zipfile
 from datetime import date, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, List, Optional, Sequence
+from typing import TYPE_CHECKING, List, Literal, Optional, Sequence, cast
 
 import openpyxl
 import xlrd  # type: ignore[import-untyped]
@@ -102,7 +102,7 @@ class XlsxAdapter(FilesystemAdapter):
 
     def _read_xls(self, path: Path) -> List[ObservedIncident]:
         try:
-            wb = xlrd.open_workbook(path)
+            wb = xlrd.open_workbook(str(path))
         except Exception as exc:
             logger.warning("[XlsxAdapter] '%s' no es un XLS valido (%s). Se ignora.", path.name, exc)
             return []
@@ -117,6 +117,7 @@ class XlsxAdapter(FilesystemAdapter):
         self, sheet: "xlrd.sheet.Sheet", datemode: int
     ) -> List[Sequence[object]]:
         rows: List[Sequence[object]] = []
+        safe_datemode = cast(Literal[0, 1], 1 if datemode == 1 else 0)
         for r in range(sheet.nrows):
             row_values: list[object] = []
             for c in range(sheet.ncols):
@@ -124,7 +125,8 @@ class XlsxAdapter(FilesystemAdapter):
                 value: object = cell.value
                 if cell.ctype == XL_CELL_DATE:
                     try:
-                        value = xldate_as_datetime(cell.value, datemode)
+                        if isinstance(cell.value, (int, float)):
+                            value = xldate_as_datetime(float(cell.value), safe_datemode)
                     except Exception:
                         value = cell.value
                 row_values.append(value)
