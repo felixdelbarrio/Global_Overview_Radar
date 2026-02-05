@@ -43,6 +43,8 @@ def _client(
 
     monkeypatch.setattr(rep_config.settings, "cache_path", cache_path)
     monkeypatch.setattr(rep_config.settings, "overrides_path", overrides_path)
+    # Asegura determinismo: estos tests usan items con source="news"
+    monkeypatch.setattr(rep_config.settings, "source_news", True)
     app = create_app()
     return TestClient(app)
 
