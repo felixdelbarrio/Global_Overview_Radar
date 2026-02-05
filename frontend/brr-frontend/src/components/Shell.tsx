@@ -1013,6 +1013,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
                         }
                         const warning =
                           typeof job?.meta?.warning === "string" ? job.meta.warning : "";
+                        const jobError = typeof job?.error === "string" ? job.error : "";
                         const metaLabel = metaBits.join(" · ");
                         const actionLabel = isError
                           ? "Reintentar ingesta"
@@ -1052,6 +1053,11 @@ export function Shell({ children }: { children: React.ReactNode }) {
                                 {warning && (
                                   <div className="mt-1 text-[10px] text-[color:var(--text-50)]">
                                     {warning}
+                                  </div>
+                                )}
+                                {isError && jobError && (
+                                  <div className="mt-2 max-h-24 overflow-auto rounded-lg border border-rose-200 bg-rose-50 px-2 py-1 text-[11px] text-rose-700 break-words">
+                                    {jobError}
                                   </div>
                                 )}
                               </div>

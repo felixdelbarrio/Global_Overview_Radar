@@ -97,3 +97,107 @@ def test_jira_adapter_uses_filter_id_when_jql_missing() -> None:
     items = adapter.read()
     assert items == []
 
+
+def test_jira_adapter_normalizes_ui_dashboard_url() -> None:
+    requested_paths: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requested_paths.append(request.url.path)
+        if request.url.path.endswith("/rest/api/3/search"):
+            payload = {
+                "startAt": 0,
+                "maxResults": 50,
+                "total": 0,
+                "issues": [],
+            }
+            return httpx.Response(200, json=payload)
+        return httpx.Response(404, json={"error": "not found"})
+
+    transport = httpx.MockTransport(handler)
+    client = httpx.Client(base_url="https://jira.example", transport=transport)
+
+    adapter = JiraAdapter(
+        "jira",
+        JiraConfig(
+            base_url="https://jira.example/secure/Dashboard.jspa",
+            user_email="user@example.com",
+            api_token="token",
+            jql="project = MEXBMI1",
+        ),
+        client=client,
+    )
+    adapter.read()
+
+    assert requested_paths == ["/rest/api/3/search"]
+
+
+def test_jira_adapter_preserves_context_path_when_base_url_includes_it() -> None:
+    requested_paths: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requested_paths.append(request.url.path)
+        if request.url.path.endswith("/rest/api/3/search"):
+            payload = {
+                "startAt": 0,
+                "maxResults": 50,
+                "total": 0,
+                "issues": [],
+            }
+            return httpx.Response(200, json=payload)
+        return httpx.Response(404, json={"error": "not found"})
+
+    transport = httpx.MockTransport(handler)
+    client = httpx.Client(base_url="https://jira.example", transport=transport)
+
+    adapter = JiraAdapter(
+        "jira",
+        JiraConfig(
+            base_url="https://jira.example/jira/secure/Dashboard.jspa",
+            user_email="user@example.com",
+            api_token="token",
+            jql="project = MEXBMI1",
+        ),
+        client=client,
+    )
+    adapter.read()
+
+    assert requested_paths == ["/jira/rest/api/3/search"]
+
+
+def test_jira_adapter_falls_back_to_jira_context_path_on_404() -> None:
+    requested_paths: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requested_paths.append(request.url.path)
+        if request.url.path in {"/rest/api/3/search", "/rest/api/2/search"}:
+            return httpx.Response(404, json={"error": "not found"})
+        if request.url.path == "/jira/rest/api/3/search":
+            payload = {
+                "startAt": 0,
+                "maxResults": 50,
+                "total": 0,
+                "issues": [],
+            }
+            return httpx.Response(200, json=payload)
+        return httpx.Response(404, json={"error": "not found"})
+
+    transport = httpx.MockTransport(handler)
+    client = httpx.Client(base_url="https://jira.example", transport=transport)
+
+    adapter = JiraAdapter(
+        "jira",
+        JiraConfig(
+            base_url="https://jira.example",
+            user_email="user@example.com",
+            api_token="token",
+            jql="project = MEXBMI1",
+        ),
+        client=client,
+    )
+    adapter.read()
+
+    assert requested_paths == [
+        "/rest/api/3/search",
+        "/rest/api/2/search",
+        "/jira/rest/api/3/search",
+    ]
