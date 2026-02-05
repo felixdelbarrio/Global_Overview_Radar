@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+from bugresolutionradar.adapters.jira_adapter import JiraAPIError
 from bugresolutionradar.config import settings
 from bugresolutionradar.domain.models import RunSource
 from bugresolutionradar.logging_utils import configure_logging, get_logger
@@ -33,7 +34,11 @@ def main() -> None:
         ingest_service = IngestService(settings)
         consolidate_service = ConsolidateService()
 
-        observations = ingest_service.ingest()
+        try:
+            observations = ingest_service.ingest()
+        except JiraAPIError as exc:
+            logger.error(str(exc))
+            sys.exit(1)
         logger.info("Observations read: %s", len(observations))
 
         asset = str(Path(settings.assets_dir).resolve())

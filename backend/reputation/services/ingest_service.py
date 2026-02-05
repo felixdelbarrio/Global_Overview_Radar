@@ -146,6 +146,7 @@ class ReputationIngestService:
         cfg_hash = compute_config_hash(cfg)
         ttl_hours = effective_ttl_hours(cfg)
         sources_enabled = list(self._settings.enabled_sources())
+        enabled_sources = {source.strip().lower() for source in sources_enabled if source and source.strip()}
         lookback_days = DEFAULT_LOOKBACK_DAYS
         report(
             "Preparando configuración",
@@ -160,6 +161,11 @@ class ReputationIngestService:
         collectors, notes = self._build_collectors(cfg, sources_enabled)
         report("Colectores listos", 12, {"collectors": len(collectors)})
 
+        def filter_enabled(items: list[ReputationItem]) -> list[ReputationItem]:
+            if not enabled_sources:
+                return []
+            return [item for item in items if (item.source or "").strip().lower() in enabled_sources]
+
         # Reutiliza cache si aplica y no hay collectors activos
         if (
             not force
@@ -170,19 +176,30 @@ class ReputationIngestService:
         ):
             cache_note = "; ".join(notes) if notes else "cache hit"
             logger.info("Reputation cache hit (%s items)", len(existing.items))
+            filtered_items = filter_enabled(existing.items)
+            filtered_ratings = [
+                entry for entry in existing.market_ratings if entry.source.strip().lower() in enabled_sources
+            ]
+            filtered_history = [
+                entry
+                for entry in existing.market_ratings_history
+                if entry.source.strip().lower() in enabled_sources
+            ]
+            if len(filtered_items) != len(existing.items):
+                cache_note = f"{cache_note}; sources filtered"
             report(
                 "Cache vigente",
                 100,
-                {"items": len(existing.items), "note": cache_note},
+                {"items": len(filtered_items), "note": cache_note},
             )
             return ReputationCacheDocument(
                 generated_at=datetime.now(timezone.utc),
                 config_hash=cfg_hash,
                 sources_enabled=sources_enabled,
-                items=existing.items,
-                market_ratings=existing.market_ratings,
-                market_ratings_history=existing.market_ratings_history,
-                stats=ReputationCacheStats(count=len(existing.items), note=cache_note),
+                items=filtered_items,
+                market_ratings=filtered_ratings,
+                market_ratings_history=filtered_history,
+                stats=ReputationCacheStats(count=len(filtered_items), note=cache_note),
             )
 
         report("Recolectando señales", 20, {"collectors": len(collectors)})
@@ -200,15 +217,23 @@ class ReputationIngestService:
 
         items = self._collect_items(collectors, notes, progress=on_collector)
         report("Señales recolectadas", 45, {"items": len(items)})
+        items = filter_enabled(items)
 
         items = self._normalize_items(items, lookback_days)
         report("Normalizando señales", 52, {"items": len(items)})
         items = self._apply_geo_hints(cfg, items)
         report("Aplicando geografía", 58)
-        items = self._apply_appstore_actor_map(cfg, items)
-        report("Mapeando App Store", 62)
-        items = self._apply_google_play_actor_map(cfg, items)
-        report("Mapeando Google Play", 66)
+        if "appstore" in enabled_sources and any(item.source == "appstore" for item in items):
+            items = self._apply_appstore_actor_map(cfg, items)
+            report("Mapeando App Store", 62)
+        else:
+            report("Mapeo App Store omitido", 62)
+
+        if "google_play" in enabled_sources and any(item.source == "google_play" for item in items):
+            items = self._apply_google_play_actor_map(cfg, items)
+            report("Mapeando Google Play", 66)
+        else:
+            report("Mapeo Google Play omitido", 66)
         items = self._apply_sentiment(cfg, items, existing.items if existing else None, notes)
         report("Analizando sentimiento", 74)
         items = self._filter_noise_items(cfg, items, notes)
@@ -222,13 +247,19 @@ class ReputationIngestService:
             sources_enabled,
         )
         report("Balanceando señales", 90)
-        merged_items = self._merge_items(existing.items if existing else [], items)
+        existing_items = filter_enabled(existing.items) if existing else []
+        merged_items = self._merge_items(existing_items, items)
+        merged_items = filter_enabled(merged_items)
         report("Fusionando items", 94)
         merged_items = self._filter_noise_items(cfg, merged_items, notes)
         report("Último ajuste", 96)
         market_ratings = self._collect_market_ratings(cfg, notes, sources_enabled)
         market_ratings_history = self._merge_market_ratings_history(
-            existing.market_ratings_history if existing else [],
+            [
+                entry
+                for entry in (existing.market_ratings_history if existing else [])
+                if entry.source.strip().lower() in enabled_sources
+            ],
             market_ratings,
         )
         final_note: str | None = "; ".join(notes) if notes else None
