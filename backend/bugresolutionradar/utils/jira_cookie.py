@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Iterable
+from typing import Callable, Iterable
 from urllib.parse import urlsplit
 
 
@@ -49,16 +49,17 @@ def _cookie_header_from_jar(jar: Iterable[object], domain: str) -> str:
 
 def read_browser_cookie(domain: str, browser: str | None = None) -> str:
     try:
-        import browser_cookie3
+        import browser_cookie3  # type: ignore[import-untyped]
     except Exception as exc:  # pragma: no cover - depends on local env
         raise JiraCookieError(
             "browser-cookie3 no está instalado. Instálalo con `pip install -r requirements.txt`."
         ) from exc
 
     browser_key = (browser or "").strip().lower()
-    loaders: list[tuple[str, object]] = []
+    CookieLoader = Callable[..., Iterable[object]]
+    loaders: list[tuple[str, CookieLoader]] = []
 
-    def add_loader(name: str, fn: object) -> None:
+    def add_loader(name: str, fn: CookieLoader) -> None:
         if not browser_key or browser_key == name:
             loaders.append((name, fn))
 

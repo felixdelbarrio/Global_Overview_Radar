@@ -10,8 +10,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, List, Optional, Sequence
 
 import openpyxl
-import xlrd
-from xlrd import XL_CELL_DATE, xldate_as_datetime
+import xlrd  # type: ignore[import-untyped]
+from xlrd import XL_CELL_DATE, xldate_as_datetime  # type: ignore[import-untyped]
 
 from bugresolutionradar.adapters.filesystem import FilesystemAdapter
 from bugresolutionradar.adapters.utils import to_date, to_str

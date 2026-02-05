@@ -252,7 +252,7 @@ class JiraAdapter(Adapter):
         self._cfg = config
         self._client = client
         self._base_url = _normalize_jira_base_url(config.base_url)
-        self._oauth_private_key_obj = None
+        self._oauth_private_key_obj: Any | None = None
 
         raw = (config.base_url or "").strip().rstrip("/")
         if raw and self._base_url and raw != self._base_url:
