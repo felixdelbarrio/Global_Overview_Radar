@@ -23,11 +23,21 @@ def _write_env(path: Path, content: str) -> None:
 
 
 def _flatten_groups(snapshot: dict[str, object]) -> dict[str, object]:
-    groups = snapshot.get("groups", [])
+    raw_groups = snapshot.get("groups")
+    groups = raw_groups if isinstance(raw_groups, list) else []
     flat: dict[str, object] = {}
     for group in groups:
-        for field in group.get("fields", []):
-            flat[field["key"]] = field["value"]
+        if not isinstance(group, dict):
+            continue
+        raw_fields = group.get("fields")
+        fields = raw_fields if isinstance(raw_fields, list) else []
+        for field in fields:
+            if not isinstance(field, dict):
+                continue
+            key = field.get("key")
+            if not isinstance(key, str):
+                continue
+            flat[key] = field.get("value")
     return flat
 
 

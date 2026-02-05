@@ -53,7 +53,7 @@ def test_xlsx_adapter_reads_workbook(tmp_path: Path) -> None:
 
 def test_xlsx_adapter_reads_created_resolved_and_summary_columns() -> None:
     adapter = XlsxAdapter("filesystem_xlsx", ".")
-    rows = [
+    rows: list[list[object]] = [
         [
             "Key",
             "Creada",
