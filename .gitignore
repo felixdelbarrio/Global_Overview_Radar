@@ -70,6 +70,14 @@ data/reputation_llm/**/*.json
 data/cache/**/*.json
 data/cache/
 
+########################################
+# Benchmarks / Visual QA outputs
+########################################
+docs/benchmarks/*.latest.json
+docs/visual-qa/*.png
+docs/visual-qa/*.jpg
+docs/visual-qa/*.jpeg
+
 ############################
 # Logs & runtime files
 ############################
