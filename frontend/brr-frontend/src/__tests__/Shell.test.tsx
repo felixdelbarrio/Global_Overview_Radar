@@ -41,7 +41,7 @@ describe("Shell", () => {
       </Shell>
     );
 
-    expect(screen.getByText("Dashboard")).toBeInTheDocument();
-    expect(screen.getByText("Sentimiento")).toBeInTheDocument();
+    expect(screen.getAllByText("Dashboard").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Sentimiento").length).toBeGreaterThan(0);
   });
 });

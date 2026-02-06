@@ -314,6 +314,119 @@ body {
   animation: shimmer 1.6s ease-in-out infinite;
 }
 
+@keyframes hero-gradient {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+@keyframes hero-sheen {
+  0% {
+    transform: translateX(-120%);
+    opacity: 0;
+  }
+  35% {
+    opacity: 0.6;
+  }
+  60% {
+    opacity: 0;
+  }
+  100% {
+    transform: translateX(120%);
+    opacity: 0;
+  }
+}
+
+@keyframes hero-float {
+  0% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-6px) scale(1.05);
+  }
+  100% {
+    transform: translateY(0) scale(1);
+  }
+}
+
+.mobile-hero {
+  position: relative;
+  overflow: hidden;
+  border-radius: 20px;
+  border: 1px solid var(--border-15);
+  padding: 14px 16px;
+  background:
+    radial-gradient(180px 120px at 12% -20%, var(--glow), transparent 70%),
+    linear-gradient(140deg, rgba(255, 255, 255, 0.08), rgba(15, 191, 192, 0.28) 45%, rgba(11, 74, 162, 0.3) 85%);
+  background-size: 140% 140%;
+  box-shadow: var(--shadow-soft);
+  animation: hero-gradient 9s ease-in-out infinite;
+}
+
+.mobile-hero-sheen {
+  position: absolute;
+  inset: -40% -20%;
+  background: linear-gradient(120deg, transparent, rgba(255, 255, 255, 0.35), transparent);
+  filter: blur(6px);
+  animation: hero-sheen 4.6s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.mobile-hero-orb {
+  position: absolute;
+  right: -18px;
+  top: -18px;
+  height: 70px;
+  width: 70px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.65), transparent 70%);
+  opacity: 0.55;
+  animation: hero-float 5.5s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.mobile-hero-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  padding: 2px 8px;
+  font-size: 9px;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: #ffffff;
+  background: linear-gradient(120deg, rgba(45, 204, 205, 0.35), rgba(11, 74, 162, 0.45));
+}
+
+.mobile-hero-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  padding: 2px 8px;
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.12);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mobile-hero,
+  .mobile-hero-sheen,
+  .mobile-hero-orb {
+    animation: none;
+  }
+}
+
 .font-display {
   font-family: var(--font-display), "Space Grotesk", sans-serif;
   letter-spacing: -0.02em;
