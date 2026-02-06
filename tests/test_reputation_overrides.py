@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from bugresolutionradar.api.main import create_app
+from reputation.api.main import create_app
 
 
 def _write_cache(tmp_path: Path, items: list[dict]) -> Path:
@@ -40,12 +40,14 @@ def _client(
     monkeypatch: pytest.MonkeyPatch, cache_path: Path, overrides_path: Path
 ) -> TestClient:
     import reputation.config as rep_config
+    from reputation.api.routers import reputation as reputation_router
 
     monkeypatch.setattr(rep_config.settings, "cache_path", cache_path)
     monkeypatch.setattr(rep_config.settings, "overrides_path", overrides_path)
     # Asegura determinismo: estos tests usan items con source="news"
     monkeypatch.setattr(rep_config.settings, "source_news", True)
     app = create_app()
+    app.dependency_overrides[reputation_router._refresh_settings] = lambda: None
     return TestClient(app)
 
 

@@ -2,7 +2,7 @@
 [project]
 name = "GlobalOverviewRadar"
 version = "0.1.0"
-description = "Global Overview Radar - assets ingestion, consolidation and KPI dashboard backend"
+description = "Global Overview Radar - reputation ingestion and sentiment analytics backend"
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
@@ -13,7 +13,6 @@ dependencies = [
 ]
 
 [project.scripts]
-brr = "bugresolutionradar.cli.main:main"
 brr-reputation = "reputation.cli:main"
 
 [build-system]
@@ -22,7 +21,7 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["bugresolutionradar", "reputation"]
+include = ["reputation"]
 
 [tool.ruff]
 line-length = 100

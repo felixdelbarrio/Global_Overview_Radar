@@ -1,5 +1,7 @@
 Backend for Global Overview Radar
 
+[![format](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/format.yml/badge.svg?branch=develop)](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/format.yml)
+
 This package contains the backend services for the Global Overview Radar project.
 
 Quick start
@@ -16,4 +18,3 @@ Quick start
 3. Run tests:
 
     .venv/bin/python -m pytest
-

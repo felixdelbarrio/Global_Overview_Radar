@@ -31,17 +31,25 @@ it("renders dashboard header and combined mentions", async () => {
       return Promise.resolve({
         actor_principal: { canonical: "BBVA" },
         geos: ["España"],
-        sources_enabled: ["gdelt"],
-        sources_available: ["gdelt"],
-        incidents_available: true,
-        ui: { incidents_enabled: true, ops_enabled: true },
+        sources_enabled: ["gdelt", "appstore"],
+        sources_available: ["gdelt", "appstore"],
+        market_ratings: [
+          {
+            source: "appstore",
+            actor: "BBVA",
+            geo: "España",
+            rating: 4.1,
+            rating_count: 80,
+            collected_at: "2025-01-01T00:00:00Z",
+          },
+        ],
       });
     }
     if (path.startsWith("/reputation/items")) {
       return Promise.resolve({
         generated_at: "2025-01-02T00:00:00Z",
         config_hash: "hash",
-        sources_enabled: ["gdelt"],
+        sources_enabled: ["gdelt", "appstore"],
         items: [
           {
             id: "1",
@@ -54,30 +62,19 @@ it("renders dashboard header and combined mentions", async () => {
             published_at: "2025-01-01T10:00:00Z",
             signals: { sentiment_score: 0.5 },
           },
-        ],
-        stats: { count: 1 },
-      });
-    }
-    if (path.startsWith("/incidents")) {
-      return Promise.resolve({
-        items: [
           {
-            global_id: "INC-1",
-            title: "Caída app",
-            status: "OPEN",
-            severity: "HIGH",
-            opened_at: "2025-01-01",
-            updated_at: "2025-01-02",
-            product: "App",
-            feature: "Login",
+            id: "2",
+            source: "appstore",
+            geo: "España",
+            actor: "BBVA",
+            title: "Reseña App",
+            text: "Muy útil",
+            sentiment: "positive",
+            published_at: "2025-01-02T10:00:00Z",
+            signals: { sentiment_score: 0.7, rating: 4.2 },
           },
         ],
-      });
-    }
-    if (path.startsWith("/evolution")) {
-      return Promise.resolve({
-        days: 10,
-        series: [{ date: "2025-01-01", open: 1, new: 1, closed: 0 }],
+        stats: { count: 2 },
       });
     }
     return Promise.resolve({});
@@ -86,5 +83,5 @@ it("renders dashboard header and combined mentions", async () => {
   render(<DashboardPage />);
 
   expect(await screen.findByText("Dashboard reputacional")).toBeInTheDocument();
-  expect(await screen.findByText("Caída app")).toBeInTheDocument();
+  expect(await screen.findByText("Comentario positivo")).toBeInTheDocument();
 });
