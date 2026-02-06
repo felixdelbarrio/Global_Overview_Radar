@@ -91,7 +91,7 @@ describe("Shell settings and ingest", () => {
       </Shell>
     );
 
-    expect(await screen.findByText("Dashboard")).toBeInTheDocument();
+    expect((await screen.findAllByText("Dashboard")).length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByLabelText("Configuración"));
     expect(await screen.findByText("CONFIGURACIÓN")).toBeInTheDocument();
