@@ -1,7 +1,7 @@
 /** Tests del layout raiz. */
 
 import React from "react";
-import { render, screen } from "@testing-library/react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it, vi } from "vitest";
 
 vi.mock("next/font/google", () => ({
@@ -18,10 +18,10 @@ vi.mock("next/script", () => ({
 import RootLayout from "@/app/layout";
 
 it("renders root layout with children", () => {
-  render(
+  const html = renderToStaticMarkup(
     <RootLayout>
       <div>Hola</div>
     </RootLayout>
   );
-  expect(screen.getByText("Hola")).toBeInTheDocument();
+  expect(html).toContain("Hola");
 });

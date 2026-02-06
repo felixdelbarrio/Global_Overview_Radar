@@ -250,6 +250,8 @@
 html,
 body {
   height: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 body {
@@ -358,9 +360,9 @@ body {
 .mobile-hero {
   position: relative;
   overflow: hidden;
-  border-radius: 20px;
+  border-radius: 18px;
   border: 1px solid var(--border-15);
-  padding: 14px 16px;
+  padding: 12px 14px;
   background:
     radial-gradient(180px 120px at 12% -20%, var(--glow), transparent 70%),
     linear-gradient(140deg, rgba(255, 255, 255, 0.08), rgba(15, 191, 192, 0.28) 45%, rgba(11, 74, 162, 0.3) 85%);
@@ -419,10 +421,106 @@ body {
   background: rgba(255, 255, 255, 0.12);
 }
 
+.mobile-hero-cta {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  padding: 4px 10px;
+  font-size: 9px;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.92);
+  text-decoration: none;
+  background: linear-gradient(120deg, rgba(45, 204, 205, 0.22), rgba(11, 74, 162, 0.4));
+  box-shadow: 0 6px 18px rgba(4, 16, 36, 0.4);
+  overflow: hidden;
+  animation: hero-cta-glow 4.8s ease-in-out infinite;
+}
+
+.mobile-hero-cta::after {
+  content: "";
+  position: absolute;
+  inset: -40% -20%;
+  background: linear-gradient(120deg, transparent, rgba(255, 255, 255, 0.5), transparent);
+  opacity: 0;
+  animation: hero-cta-sheen 5.6s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@media (max-width: 639px) {
+  .mobile-header-showcase {
+    isolation: isolate;
+  }
+
+  .mobile-header-showcase::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(180px 120px at 12% -10%, rgba(62, 230, 214, 0.45), transparent 70%),
+      radial-gradient(220px 160px at 95% 0%, rgba(29, 111, 209, 0.45), transparent 72%),
+      linear-gradient(120deg, rgba(255, 255, 255, 0.05), rgba(45, 204, 205, 0.12), transparent 70%);
+    opacity: 0.85;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .mobile-header-showcase::after {
+    content: "";
+    position: absolute;
+    right: -80px;
+    top: -140px;
+    width: 260px;
+    height: 260px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 35%, rgba(255, 255, 255, 0.5), rgba(62, 230, 214, 0.15), transparent 70%);
+    opacity: 0.7;
+    filter: blur(12px);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .mobile-header-showcase > * {
+    position: relative;
+    z-index: 1;
+  }
+}
+
+@keyframes hero-cta-glow {
+  0%,
+  100% {
+    transform: translateY(0);
+    box-shadow: 0 6px 18px rgba(4, 16, 36, 0.4);
+  }
+  50% {
+    transform: translateY(-1px);
+    box-shadow: 0 10px 22px rgba(45, 204, 205, 0.25);
+  }
+}
+
+@keyframes hero-cta-sheen {
+  0% {
+    transform: translateX(-120%);
+    opacity: 0;
+  }
+  40% {
+    opacity: 0.55;
+  }
+  100% {
+    transform: translateX(120%);
+    opacity: 0;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .mobile-hero,
   .mobile-hero-sheen,
-  .mobile-hero-orb {
+  .mobile-hero-orb,
+  .mobile-hero-cta,
+  .mobile-hero-cta::after {
     animation: none;
   }
 }

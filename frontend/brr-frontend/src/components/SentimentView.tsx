@@ -1189,11 +1189,11 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
         </section>
       ) : (
         <section className="mt-6 rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-5 shadow-[var(--shadow-md)] backdrop-blur-xl animate-rise" style={{ animationDelay: "360ms" }}>
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
               LISTADO COMPLETO
             </div>
-            <div className="text-xs text-[color:var(--text-50)]">
+            <div className="text-xs text-[color:var(--text-50)] sm:text-right">
               {mentionsLoading ? (
                 <LoadingPill className="h-2 w-24" label="Cargando resultados" />
               ) : (
@@ -1203,60 +1203,66 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
               )}
             </div>
           </div>
-          <div className="mt-3 flex flex-wrap items-center gap-2 rounded-full border border-[color:var(--border-70)] bg-[color:var(--surface-70)] p-1 shadow-[var(--shadow-soft)]">
-            <button
-              onClick={() => setMentionsTab("principal")}
-              className={
-                "group flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold transition hover:-translate-y-0.5 " +
-                (mentionsTab === "principal"
-                  ? "bg-[color:var(--surface-solid)] text-[color:var(--ink)] shadow-[var(--shadow-sm)] ring-1 ring-[color:var(--aqua)]/30"
-                  : "text-[color:var(--text-50)] hover:text-[color:var(--ink)] hover:bg-[color:var(--surface-80)]")
-              }
-            >
-              <span className="inline-block h-1.5 w-7 rounded-full bg-[#004481]" />
-              {principalLabel}
-              <span className="text-[10px] text-[color:var(--text-40)]">
-                {principalMentions.length} resultados
-              </span>
-              <span className="flex items-center gap-1 text-[9px] uppercase tracking-[0.2em] text-[color:var(--text-40)] opacity-0 transition group-hover:opacity-100 group-focus-visible:opacity-100">
-                <ArrowUpRight className="h-3 w-3" />
-                Clic
-              </span>
-            </button>
-            <button
-              onClick={() => setMentionsTab("actor")}
-              className={
-                "group flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold transition hover:-translate-y-0.5 " +
-                (mentionsTab === "actor"
-                  ? "bg-[color:var(--surface-solid)] text-[color:var(--ink)] shadow-[var(--shadow-sm)] ring-1 ring-[color:var(--aqua)]/30"
-                  : "text-[color:var(--text-50)] hover:text-[color:var(--ink)] hover:bg-[color:var(--surface-80)]")
-              }
-            >
-              <span className="inline-block h-[3px] w-7 rounded-full border-t-2 border-dashed border-[#2dcccd]" />
-              {actorLabel}
-              <span className="text-[10px] text-[color:var(--text-40)]">
-                {actorMentions.length} resultados
-              </span>
-              <span className="flex items-center gap-1 text-[9px] uppercase tracking-[0.2em] text-[color:var(--text-40)] opacity-0 transition group-hover:opacity-100 group-focus-visible:opacity-100">
-                <ArrowUpRight className="h-3 w-3" />
-                Clic
-              </span>
-            </button>
-                {showDownloads && (
-                  <button
-                    onClick={() =>
-                      downloadMentionsWorkbook({
-                        principalItems: principalMentions,
-                        actorItems: actorMentions,
-                        principalLabel,
-                        actorLabel,
-                        filename: buildDownloadName("sentimiento_listado", fromDate, toDate),
-                        activeTab: mentionsTab,
-                      })
-                    }
-                    className="inline-flex items-center gap-2 rounded-full border border-[color:var(--border-70)] bg-[color:var(--surface-80)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--brand-ink)] shadow-[var(--shadow-pill)] transition hover:-translate-y-0.5 hover:shadow-[var(--shadow-pill-hover)]"
-                  >
-                    Descargar listado
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+            <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2 rounded-[22px] border border-[color:var(--border-70)] bg-[color:var(--surface-70)] p-1.5 shadow-[var(--shadow-soft)]">
+              <button
+                onClick={() => setMentionsTab("principal")}
+                className={
+                  "group w-full sm:w-auto flex flex-col items-start gap-1 sm:flex-row sm:items-center sm:gap-2 rounded-full px-3 py-1.5 text-xs font-semibold transition sm:hover:-translate-y-0.5 " +
+                  (mentionsTab === "principal"
+                    ? "bg-[color:var(--surface-solid)] text-[color:var(--ink)] shadow-[var(--shadow-sm)] ring-1 ring-[color:var(--aqua)]/30"
+                    : "text-[color:var(--text-50)] hover:text-[color:var(--ink)] hover:bg-[color:var(--surface-80)]")
+                }
+              >
+                <span className="flex items-center gap-2">
+                  <span className="inline-block h-1.5 w-7 rounded-full bg-[#004481]" />
+                  {principalLabel}
+                </span>
+                <span className="flex items-center gap-2 text-[10px] text-[color:var(--text-40)]">
+                  {principalMentions.length} resultados
+                  <span className="hidden sm:flex items-center gap-1 text-[9px] uppercase tracking-[0.2em] text-[color:var(--text-40)] opacity-0 transition group-hover:opacity-100 group-focus-visible:opacity-100">
+                    <ArrowUpRight className="h-3 w-3" />
+                    Clic
+                  </span>
+                </span>
+              </button>
+              <button
+                onClick={() => setMentionsTab("actor")}
+                className={
+                  "group w-full sm:w-auto flex flex-col items-start gap-1 sm:flex-row sm:items-center sm:gap-2 rounded-full px-3 py-1.5 text-xs font-semibold transition sm:hover:-translate-y-0.5 " +
+                  (mentionsTab === "actor"
+                    ? "bg-[color:var(--surface-solid)] text-[color:var(--ink)] shadow-[var(--shadow-sm)] ring-1 ring-[color:var(--aqua)]/30"
+                    : "text-[color:var(--text-50)] hover:text-[color:var(--ink)] hover:bg-[color:var(--surface-80)]")
+                }
+              >
+                <span className="flex items-center gap-2">
+                  <span className="inline-block h-[3px] w-7 rounded-full border-t-2 border-dashed border-[#2dcccd]" />
+                  {actorLabel}
+                </span>
+                <span className="flex items-center gap-2 text-[10px] text-[color:var(--text-40)]">
+                  {actorMentions.length} resultados
+                  <span className="hidden sm:flex items-center gap-1 text-[9px] uppercase tracking-[0.2em] text-[color:var(--text-40)] opacity-0 transition group-hover:opacity-100 group-focus-visible:opacity-100">
+                    <ArrowUpRight className="h-3 w-3" />
+                    Clic
+                  </span>
+                </span>
+              </button>
+            </div>
+            {showDownloads && (
+              <button
+                onClick={() =>
+                  downloadMentionsWorkbook({
+                    principalItems: principalMentions,
+                    actorItems: actorMentions,
+                    principalLabel,
+                    actorLabel,
+                    filename: buildDownloadName("sentimiento_listado", fromDate, toDate),
+                    activeTab: mentionsTab,
+                  })
+                }
+                className="inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-full border border-[color:var(--border-70)] bg-[color:var(--surface-80)] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--brand-ink)] shadow-[var(--shadow-pill)] transition sm:hover:-translate-y-0.5 hover:shadow-[var(--shadow-pill-hover)] sm:ml-auto"
+              >
+                Descargar listado
               </button>
             )}
           </div>

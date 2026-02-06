@@ -51,6 +51,15 @@ def _update_job(job_id: str, **fields: Any) -> None:
         job.update(fields)
 
 
+def _find_active_job(kind: str) -> dict[str, Any] | None:
+    for job in _INGEST_JOBS.values():
+        if job.get("kind") != kind:
+            continue
+        if job.get("status") in {"queued", "running"}:
+            return job
+    return None
+
+
 def _seed_reputation_cache() -> None:
     repo = ReputationCacheRepo(settings.cache_path)
     if repo.load() is not None:
@@ -112,8 +121,17 @@ def _run_reputation_job(job_id: str, force: bool) -> None:
 
 @router.post("/reputation")
 def ingest_reputation(payload: IngestRequest) -> dict[str, Any]:
-    job_id = uuid4().hex
     force = bool(payload.force)
+    with _INGEST_LOCK:
+        active = _find_active_job("reputation")
+        if active:
+            meta = active.get("meta")
+            if not isinstance(meta, dict):
+                meta = {}
+            meta.setdefault("note", "ingest already running")
+            active["meta"] = meta
+            return dict(active)
+    job_id = uuid4().hex
     job = {
         "id": job_id,
         "kind": "reputation",
@@ -121,6 +139,7 @@ def ingest_reputation(payload: IngestRequest) -> dict[str, Any]:
         "progress": 0,
         "stage": "queued",
         "started_at": _now_iso(),
+        "meta": {"force": force},
     }
     _record_job(job)
     try:
