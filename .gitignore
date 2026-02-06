@@ -69,6 +69,7 @@ data/reputation/**/*.json
 data/reputation_llm/**/*.json
 data/cache/**/*.json
 data/cache/
+!data/reputation/banking_bbva_retail.json
 
 ########################################
 # Benchmarks / Visual QA outputs
