@@ -22,7 +22,7 @@ const body = Source_Sans_3({
 /** Metadata base para SEO y titulo de la app. */
 export const metadata = {
   title: "Global Overview Radar",
-  description: "Enterprise Incident Intelligence",
+  description: "Enterprise Reputation Intelligence",
 };
 
 /** Envoltorio principal de HTML y body. */
@@ -30,13 +30,13 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html
       lang="es"
-      data-theme="ambient-light"
+      data-theme="ambient-dark"
       suppressHydrationWarning
       className={`${body.variable} ${display.variable}`}
     >
       <body>
         <Script id="theme-init" strategy="beforeInteractive">
-          {`(function(){try{var t=localStorage.getItem('gor-theme');if(t==='ambient-dark'||t==='ambient-light'){document.documentElement.dataset.theme=t;}}catch(e){}})();`}
+          {`(function(){try{var t=localStorage.getItem('gor-theme');if(t==='ambient-dark'||t==='ambient-light'){document.documentElement.dataset.theme=t;}else{document.documentElement.dataset.theme='ambient-dark';}}catch(e){}})();`}
         </Script>
         {children}
       </body>

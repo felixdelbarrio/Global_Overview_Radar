@@ -30,11 +30,8 @@ const apiGetMock = vi.mocked(apiGet);
 
 describe("Shell", () => {
   beforeEach(() => {
-    usePathnameMock.mockReturnValue("/ops");
-    apiGetMock.mockResolvedValue({
-      ui: { incidents_enabled: true, ops_enabled: true },
-      incidents_available: true,
-    });
+    usePathnameMock.mockReturnValue("/");
+    apiGetMock.mockResolvedValue({});
   });
 
   it("renders nav items and highlights active route", async () => {
@@ -46,11 +43,5 @@ describe("Shell", () => {
 
     expect(screen.getByText("Dashboard")).toBeInTheDocument();
     expect(screen.getByText("Sentimiento")).toBeInTheDocument();
-    expect(await screen.findByText("Incidencias")).toBeInTheDocument();
-    const ops = await screen.findByText("Ops Executive");
-    expect(ops).toBeInTheDocument();
-
-    const opsLink = ops.closest("a");
-    expect(opsLink?.className).toContain("text-white");
   });
 });

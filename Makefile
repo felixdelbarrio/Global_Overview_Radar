@@ -17,7 +17,7 @@ FRONT_PORT ?= 3000
 
 .DEFAULT_GOAL := help
 
-.PHONY: help venv install install-backend install-front env ensure-backend ensure-front ingest bugs-ingest reputation-ingest serve serve-back dev-back dev-front build-front start-front lint lint-back lint-front typecheck typecheck-back typecheck-front format format-back format-front check test test-back test-front test-coverage test-coverage-back test-coverage-front clean reset
+.PHONY: help venv install install-backend install-front env ensure-backend ensure-front ingest reputation-ingest serve serve-back dev-back dev-front build-front start-front lint lint-back lint-front typecheck typecheck-back typecheck-front format format-back format-front check test test-back test-front test-coverage test-coverage-back test-coverage-front clean reset
 
 help:
 	@echo "Make targets disponibles:"
@@ -29,8 +29,7 @@ help:
 	@echo "  make ensure-backend  - Preparar entorno backend (venv + deps)"
 	@echo "  make ensure-front    - Preparar entorno frontend (deps)"
 	@echo "  make reset           - Limpieza total + instalación completa"
-	@echo "  make ingest          - Ejecutar ingesta completa (incidencias + reputación)"
-	@echo "  make bugs-ingest     - Ejecutar ingesta de incidencias (cuadros de mando)"
+	@echo "  make ingest          - Ejecutar ingesta de reputación"
 	@echo "  make reputation-ingest - Ejecutar ingesta de reputación (backend)"
 	@echo "  make serve-back      - Iniciar API (uvicorn) en $(HOST):$(API_PORT)"
 	@echo "  make dev-back        - Atender solo backend (uvicorn --reload)"
@@ -50,7 +49,7 @@ help:
 	@echo ""
 	@echo "Notas:"
 	@echo " - Levanta backend: make venv && make install-backend && make env && make dev-back"
-	@echo " - Para ingestas: prepara el backend una vez (make ensure-backend) y luego ejecuta bugs-ingest / reputation-ingest"
+	@echo " - Para ingestas: prepara el backend una vez (make ensure-backend) y luego ejecuta reputation-ingest"
 	@echo " - Levanta frontend: cd $(FRONTDIR) && npm run dev"
 	@echo " - Para desarrollo fullstack usa dos terminales (backend + frontend)."
 
@@ -80,12 +79,10 @@ install-front:
 
 env:
 	@# Create per-module env files from examples if missing
-	@test -f backend/bugresolutionradar/.env || cp backend/bugresolutionradar/.env.example backend/bugresolutionradar/.env
 	@test -f backend/reputation/.env.reputation || cp backend/reputation/.env.reputation.example backend/reputation/.env.reputation
 	@echo "==> .env files prepared (edit if needed)."
 
 ensure-backend: install-backend
-	@true
 
 ensure-front: install-front
 	@true
@@ -93,27 +90,23 @@ ensure-front: install-front
 # -------------------------
 # Backend runtime
 # -------------------------
-ingest: bugs-ingest reputation-ingest
-	@echo "==> Ingesta completa finalizada."
-
-bugs-ingest:
-	@echo "==> Ejecutando ingesta de incidencias (cuadros de mando)..."
-	$(PY) -m bugresolutionradar.cli.main ingest
+ingest: reputation-ingest
+	@echo "==> Ingesta reputacional finalizada."
 
 reputation-ingest:
 	@echo "==> Ejecutando ingesta de reputación..."
-	$(PY) -m bugresolutionradar.cli.main reputation-ingest
+	$(PY) -m reputation.cli
 
 serve: serve-back
 	@true
 
 serve-back:
 	@echo "==> Iniciando API (uvicorn) en http://$(HOST):$(API_PORT)..."
-	$(PY) -m uvicorn bugresolutionradar.api.main:app --reload --host $(HOST) --port $(API_PORT)
+	$(PY) -m uvicorn reputation.api.main:app --reload --host $(HOST) --port $(API_PORT)
 
 dev-back:
 	@echo "==> Desarrollo backend (uvicorn --reload). Usa otra terminal para frontend."
-	$(PY) -m uvicorn bugresolutionradar.api.main:app --reload --host $(HOST) --port $(API_PORT)
+	$(PY) -m uvicorn reputation.api.main:app --reload --host $(HOST) --port $(API_PORT)
 
 # -------------------------
 # Frontend runtime
@@ -200,7 +193,7 @@ clean:
 	@echo "==> Limpiando entorno..."
 	rm -rf $(VENV) .mypy_cache .ruff_cache .pytest_cache .pytest_cache
 	rm -rf **/__pycache__ **/.pycache__
-	rm -rf data/cache/bugresolutionradar_cache.json || true
+	@true
 	# frontend
 	cd $(FRONTDIR) && rm -rf node_modules .next dist out || true
 	@echo "==> Limpieza completada."
@@ -221,4 +214,4 @@ dev:
 	@echo "- Terminal B: make dev-front"
 	@echo ""
 	@echo "Si quieres hacerlo todo en un solo terminal instala 'concurrently' y ejecuta:"
-	@echo "cd $(FRONTDIR) && npx concurrently \"$(PY) -m uvicorn bugresolutionradar.api.main:app --reload --host $(HOST) --port $(API_PORT)\" \"npm run dev\""
+	@echo "cd $(FRONTDIR) && npx concurrently \"$(PY) -m uvicorn reputation.api.main:app --reload --host $(HOST) --port $(API_PORT)\" \"npm run dev\""

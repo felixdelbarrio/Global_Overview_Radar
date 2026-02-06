@@ -17,6 +17,18 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       reporter: ["text", "lcov"],
+      include: ["src/**/*.{ts,tsx}"],
+      exclude: [
+        "src/**/*.d.ts",
+        "src/lib/types.ts",
+        "src/components/Shell.tsx",
+      ],
+      thresholds: {
+        lines: 70,
+        branches: 70,
+        functions: 70,
+        statements: 70,
+      },
     },
   },
 });

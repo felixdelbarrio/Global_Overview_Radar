@@ -11,9 +11,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
-  ListChecks,
-  ShieldAlert,
-  Database,
   Activity,
   HeartPulse,
   Layers,
@@ -33,8 +30,7 @@ import {
   dispatchSettingsChanged,
   INGEST_STARTED_EVENT,
 } from "@/lib/events";
-import { INCIDENTS_FEATURE_ENABLED } from "@/lib/flags";
-import type { IngestJob, IngestJobKind, ReputationMeta } from "@/lib/types";
+import type { IngestJob, IngestJobKind } from "@/lib/types";
 
 type ProfileOptionsResponse = {
   active: {
@@ -70,8 +66,6 @@ type ReputationSettingsResponse = {
   updated_at?: string | null;
   advanced_options?: string[];
 };
-
-type SettingsScope = "reputation" | "incidents";
 
 const EMPTY_PROFILES: string[] = [];
 const LANGUAGE_LABELS: Record<string, string> = {
@@ -122,25 +116,18 @@ export function Shell({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const [theme, setTheme] = useState<"ambient-light" | "ambient-dark">("ambient-light");
+  const [theme, setTheme] = useState<"ambient-light" | "ambient-dark">("ambient-dark");
   const [themeReady, setThemeReady] = useState(false);
 
   /** Ruta actual para resaltar la navegacion. */
   const pathname = usePathname();
-  const [uiFlags, setUiFlags] = useState({
-    incidents_enabled: true,
-    ops_enabled: true,
-  });
-  const [incidentsAvailable, setIncidentsAvailable] = useState(false);
   const [ingestOpen, setIngestOpen] = useState(false);
   const [ingestError, setIngestError] = useState<string | null>(null);
   const [ingestBusy, setIngestBusy] = useState<Record<IngestJobKind, boolean>>({
     reputation: false,
-    incidents: false,
   });
   const [ingestJobs, setIngestJobs] = useState<Record<IngestJobKind, IngestJob | null>>({
     reputation: null,
-    incidents: null,
   });
   const [profilesOpen, setProfilesOpen] = useState(false);
   const [profileOptions, setProfileOptions] = useState<ProfileOptionsResponse | null>(null);
@@ -154,7 +141,6 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const [profileAppliedNote, setProfileAppliedNote] = useState(false);
   const [autoIngestNote, setAutoIngestNote] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [settingsScope, setSettingsScope] = useState<SettingsScope>("reputation");
   const [settingsGroups, setSettingsGroups] = useState<ReputationSettingsGroup[] | null>(
     null,
   );
@@ -167,9 +153,6 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const [settingsBusy, setSettingsBusy] = useState(false);
   const [settingsError, setSettingsError] = useState<string | null>(null);
   const [settingsSaved, setSettingsSaved] = useState(false);
-  const [jiraCookieBusy, setJiraCookieBusy] = useState(false);
-  const [jiraCookieNote, setJiraCookieNote] = useState<string | null>(null);
-  const [jiraCookieBrowser, setJiraCookieBrowser] = useState("chrome");
   const [advancedKey, setAdvancedKey] = useState("");
   const [advancedValue, setAdvancedValue] = useState("");
   const [advancedError, setAdvancedError] = useState<string | null>(null);
@@ -187,55 +170,21 @@ export function Shell({ children }: { children: React.ReactNode }) {
   }, [settingsGroups]);
 
   useEffect(() => {
-    setTheme((prev) => {
-      const stored = readStoredTheme();
-      if (stored && stored !== prev) {
-        return stored;
-      }
-      const domTheme = document.documentElement.dataset.theme;
-      if (domTheme === "ambient-dark" || domTheme === "ambient-light") {
-        return domTheme;
-      }
-      return prev;
-    });
+    const stored = readStoredTheme();
+    const domTheme = document.documentElement.dataset.theme;
+    const next =
+      stored ??
+      (domTheme === "ambient-dark" || domTheme === "ambient-light"
+        ? domTheme
+        : "ambient-dark");
+    setTheme(next);
     setThemeReady(true);
   }, []);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      const stored = window.localStorage.getItem("gor-jira-cookie-browser");
-      if (stored) setJiraCookieBrowser(stored);
-    } catch {
-      // ignore storage failures
-    }
-  }, []);
-
-  useEffect(() => {
+    if (!themeReady) return;
     document.documentElement.dataset.theme = theme;
-  }, [theme]);
-
-  useEffect(() => {
-    let alive = true;
-    apiGet<ReputationMeta>("/reputation/meta")
-      .then((meta) => {
-        if (!alive) return;
-        const ui = meta.ui ?? {};
-        setUiFlags({
-          incidents_enabled: ui.incidents_enabled !== false,
-          ops_enabled: ui.ops_enabled !== false,
-        });
-        setIncidentsAvailable(meta.incidents_available === true);
-      })
-      .catch(() => {
-        if (!alive) return;
-        setUiFlags({ incidents_enabled: true, ops_enabled: true });
-        setIncidentsAvailable(false);
-      });
-    return () => {
-      alive = false;
-    };
-  }, []);
+  }, [theme, themeReady]);
 
   useEffect(() => {
     let alive = true;
@@ -297,10 +246,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
     if (!settingsOpen) return;
     let alive = true;
     setSettingsError(null);
-    setJiraCookieNote(null);
-    const basePath =
-      settingsScope === "reputation" ? "/reputation/settings" : "/incidents/settings";
-    apiGet<ReputationSettingsResponse>(basePath)
+    apiGet<ReputationSettingsResponse>("/reputation/settings")
       .then((data) => {
         if (!alive) return;
         setSettingsGroups(data.groups);
@@ -328,7 +274,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
     return () => {
       alive = false;
     };
-  }, [settingsOpen, settingsScope]);
+  }, [settingsOpen]);
 
   const ingestJobsRef = useRef(ingestJobs);
 
@@ -361,8 +307,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
     setIngestError(null);
     setIngestBusy((prev) => ({ ...prev, [kind]: true }));
     try {
-      const payload = kind === "reputation" ? { force: false } : {};
-      const job = await apiPost<IngestJob>(`/ingest/${kind}`, payload);
+      const job = await apiPost<IngestJob>(`/ingest/${kind}`, { force: false });
       setIngestJobs((prev) => ({ ...prev, [kind]: job }));
       setIngestOpen(true);
     } catch (err) {
@@ -406,43 +351,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
     return false;
   }, [settingsBase, settingsDraft]);
 
-  const switchSettingsScope = (nextScope: SettingsScope) => {
-    if (nextScope === settingsScope) return;
-    if (settingsDirty && typeof window !== "undefined") {
-      const confirmed = window.confirm(
-        "Tienes cambios sin guardar. ¿Cambiar de sección y descartarlos?"
-      );
-      if (!confirmed) return;
-    }
-    setSettingsGroups(null);
-    setSettingsBase({});
-    setSettingsDraft({});
-    setSettingsError(null);
-    setSettingsScope(nextScope);
-  };
-
-  const credentialSourceRows = useMemo(() => {
-    if (settingsScope === "incidents") {
-      return [
-        {
-          id: "jira",
-          toggleKey: "sources.jira",
-          keyKeys: [
-            "jira.base_url",
-            "jira.user_email",
-            "jira.api_token",
-            "jira.auth_mode",
-            "jira.oauth_consumer_key",
-            "jira.oauth_access_token",
-            "jira.oauth_private_key",
-            "jira.session_cookie",
-            "jira.jql",
-            "jira.filter_id",
-          ],
-        },
-      ];
-    }
-    return [
+  const credentialSourceRows = useMemo(
+    () => [
       {
         id: "newsapi",
         toggleKey: "sources.newsapi",
@@ -473,8 +383,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
         toggleKey: "sources.youtube",
         keyKeys: ["keys.youtube"],
       },
-    ];
-  }, [settingsScope]);
+    ],
+    []
+  );
 
   const credentialIssues = useMemo(() => {
     const issues: { id: string; label: string; missing: string[] }[] = [];
@@ -482,24 +393,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
     credentialSourceRows.forEach((row) => {
       const toggleValue = Boolean(settingsDraft[row.toggleKey]);
       if (!toggleValue) return;
-      let missing = row.keyKeys.filter((key) => isBlank(settingsDraft[key]));
-      if (settingsScope === "incidents" && row.id === "jira") {
-        const authMode = String(settingsDraft["jira.auth_mode"] ?? "auto").toLowerCase();
-        const usesOauth = authMode === "oauth1" || authMode === "oauth";
-        const usesCookie =
-          authMode === "cookie" || authMode === "session" || authMode === "session_cookie";
-        const requiredAuthKeys = usesOauth
-          ? ["jira.oauth_consumer_key", "jira.oauth_access_token", "jira.oauth_private_key"]
-          : usesCookie
-            ? ["jira.session_cookie"]
-          : ["jira.user_email", "jira.api_token"];
-        missing = ["jira.base_url", ...requiredAuthKeys].filter((key) =>
-          isBlank(settingsDraft[key])
-        );
-        const hasQuery =
-          !isBlank(settingsDraft["jira.jql"]) || !isBlank(settingsDraft["jira.filter_id"]);
-        if (!hasQuery) missing.push("jira.query");
-      }
+      const missing = row.keyKeys.filter((key) => isBlank(settingsDraft[key]));
       if (missing.length) {
         const labelField = settingsFieldMap.get(row.toggleKey);
         const label = labelField?.label ?? row.id;
@@ -507,7 +401,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
       }
     });
     return issues;
-  }, [credentialSourceRows, settingsDraft, settingsFieldMap, settingsScope]);
+  }, [credentialSourceRows, settingsDraft, settingsFieldMap]);
 
   const hasCredentialIssues = credentialIssues.length > 0;
   const advancedLogEnabled = Boolean(settingsDraft["advanced.log_enabled"]);
@@ -662,18 +556,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
       setProfilesOpen(false);
 
-      const [meta, profiles] = await Promise.all([
-        apiGet<ReputationMeta>("/reputation/meta").catch(() => null),
-        apiGet<ProfileOptionsResponse>("/reputation/profiles").catch(() => null),
-      ]);
-      if (meta) {
-        const ui = meta.ui ?? {};
-        setUiFlags({
-          incidents_enabled: ui.incidents_enabled !== false,
-          ops_enabled: ui.ops_enabled !== false,
-        });
-        setIncidentsAvailable(meta.incidents_available === true);
-      }
+      const profiles = await apiGet<ProfileOptionsResponse>("/reputation/profiles").catch(
+        () => null
+      );
       if (profiles) {
         setProfileOptions(profiles);
         setProfileSelection(profiles.active.profiles ?? []);
@@ -696,9 +581,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
   const resetSettingsToDefault = async () => {
     if (typeof window !== "undefined") {
-      const scopeLabel = settingsScope === "reputation" ? "Menciones" : "Incidencias";
       const confirmed = window.confirm(
-        `¿Restablecer la configuración de ${scopeLabel} a los valores por defecto?`
+        "¿Restablecer la configuración de Menciones a los valores por defecto?"
       );
       if (!confirmed) return;
     }
@@ -706,10 +590,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
     setSettingsBusy(true);
     setSettingsError(null);
     try {
-      const basePath =
-        settingsScope === "reputation" ? "/reputation/settings" : "/incidents/settings";
       const response = await apiPost<ReputationSettingsResponse>(
-        `${basePath}/reset`,
+        "/reputation/settings/reset",
         {}
       );
       setSettingsGroups(response.groups);
@@ -721,9 +603,6 @@ export function Shell({ children }: { children: React.ReactNode }) {
       });
       setSettingsBase(nextBase);
       setSettingsDraft(nextBase);
-      if (settingsScope === "incidents") {
-        setIncidentsAvailable(Boolean(nextBase["ui.incidents_enabled"]));
-      }
       setAdvancedOptions(response.advanced_options ?? []);
       dispatchSettingsChanged({ updated_at: response.updated_at ?? null });
       setSettingsSaved(true);
@@ -776,39 +655,6 @@ export function Shell({ children }: { children: React.ReactNode }) {
     setAdvancedValue("");
   };
 
-  const refreshJiraCookie = async () => {
-    if (settingsScope !== "incidents") return;
-    setJiraCookieBusy(true);
-    setJiraCookieNote(null);
-    try {
-      const response = await apiPost<ReputationSettingsResponse>(
-        "/incidents/settings/jira-cookie/refresh",
-        { browser: jiraCookieBrowser }
-      );
-      setSettingsGroups(response.groups);
-      const nextBase: Record<string, string | number | boolean> = {};
-      response.groups.forEach((group) => {
-        group.fields.forEach((field) => {
-          nextBase[field.key] = field.value;
-        });
-      });
-      setSettingsBase(nextBase);
-      setSettingsDraft(nextBase);
-      setAdvancedOptions(response.advanced_options ?? []);
-      dispatchSettingsChanged({ updated_at: response.updated_at ?? null });
-      setJiraCookieNote("Cookie actualizada desde el navegador.");
-      if (typeof window !== "undefined") {
-        window.setTimeout(() => setJiraCookieNote(null), 3200);
-      }
-    } catch (err) {
-      setJiraCookieNote(
-        err instanceof Error ? err.message : "No se pudo leer la cookie del navegador"
-      );
-    } finally {
-      setJiraCookieBusy(false);
-    }
-  };
-
   const saveSettings = async () => {
     if (!settingsDirty || hasCredentialIssues) return;
     setSettingsOpen(false);
@@ -821,9 +667,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
           updates[key] = settingsDraft[key];
         }
       });
-      const basePath =
-        settingsScope === "reputation" ? "/reputation/settings" : "/incidents/settings";
-      const response = await apiPost<ReputationSettingsResponse>(basePath, {
+      const response = await apiPost<ReputationSettingsResponse>("/reputation/settings", {
         values: updates,
       });
       setSettingsGroups(response.groups);
@@ -835,9 +679,6 @@ export function Shell({ children }: { children: React.ReactNode }) {
       });
       setSettingsBase(nextBase);
       setSettingsDraft(nextBase);
-      if (settingsScope === "incidents") {
-        setIncidentsAvailable(Boolean(nextBase["ui.incidents_enabled"]));
-      }
       setAdvancedOptions(response.advanced_options ?? []);
       dispatchSettingsChanged({ updated_at: response.updated_at ?? null });
       setSettingsSaved(true);
@@ -863,6 +704,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
     const wasActive = ingestWasActiveRef.current;
     ingestWasActiveRef.current = ingestActive;
     if (!wasActive || ingestActive || !ingestOpen) return undefined;
+    if (profilesOpen || settingsOpen) return undefined;
     const hasSuccess = Object.values(ingestJobs).some(
       (job) => job && job.status === "success"
     );
@@ -871,7 +713,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
       setIngestOpen(false);
     }, 1200);
     return () => window.clearTimeout(timeout);
-  }, [ingestActive, ingestJobs, ingestOpen]);
+  }, [ingestActive, ingestJobs, ingestOpen, profilesOpen, settingsOpen]);
 
   useEffect(() => {
     if (!ingestActive) return;
@@ -916,14 +758,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
     return Math.round(total / active.length);
   }, [ingestJobs]);
 
-  const incidentsScopeEnabled = INCIDENTS_FEATURE_ENABLED && incidentsAvailable;
-  const incidentsIngestEnabled =
-    INCIDENTS_FEATURE_ENABLED &&
-    incidentsAvailable &&
-    uiFlags.incidents_enabled !== false;
   const showIngestCenter = true;
-  const showIncidentsNav = incidentsScopeEnabled && uiFlags.incidents_enabled;
-  const showOpsNav = incidentsScopeEnabled && uiFlags.ops_enabled;
 
   /** Definicion de items de navegacion. */
   const nav = [
@@ -938,20 +773,6 @@ export function Shell({ children }: { children: React.ReactNode }) {
       label: "Sentimiento",
       icon: HeartPulse,
       description: "Histórico y análisis",
-    },
-    {
-      href: "/incidencias",
-      label: "Incidencias",
-      icon: ListChecks,
-      description: "Listado y filtros",
-      hidden: !showIncidentsNav,
-    },
-    {
-      href: "/ops",
-      label: "Ops Executive",
-      icon: ShieldAlert,
-      description: "Vista operativa",
-      hidden: !showOpsNav,
     },
   ];
 
@@ -975,7 +796,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
                 Global Overview Radar
               </div>
               <div className="text-[11px] text-[color:var(--text-inverse-75)] -mt-0.5">
-                Enterprise Incident Intelligence
+                Enterprise Reputation Intelligence
               </div>
             </div>
           </div>
@@ -1037,9 +858,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
                         </div>
                       </div>
 
-                      {(["reputation", "incidents"] as IngestJobKind[])
-                        .filter((kind) => kind === "reputation" || incidentsIngestEnabled)
-                        .map((kind) => {
+                      {(["reputation"] as IngestJobKind[]).map((kind) => {
                         const job = ingestJobs[kind];
                         const busy =
                           ingestBusy[kind] ||
@@ -1047,14 +866,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
                           job?.status === "running";
                         const isError = job?.status === "error";
                         const isSuccess = job?.status === "success";
-                        const label =
-                          kind === "reputation"
-                            ? "Ingesta reputación"
-                            : "Ingesta incidencias";
-                        const detail =
-                          kind === "reputation"
-                            ? "Señales externas + sentimiento"
-                            : "Fuentes internas + consolidación";
+                        const label = "Ingesta reputación";
+                        const detail = "Señales externas + sentimiento";
                         const metaBits: string[] = [];
                         const items = job?.meta?.items;
                         if (typeof items === "number") {
@@ -1063,10 +876,6 @@ export function Shell({ children }: { children: React.ReactNode }) {
                         const observations = job?.meta?.observations;
                         if (typeof observations === "number") {
                           metaBits.push(`${observations} observaciones`);
-                        }
-                        const incidents = job?.meta?.incidents;
-                        if (typeof incidents === "number") {
-                          metaBits.push(`${incidents} incidencias`);
                         }
                         const sources = job?.meta?.sources;
                         if (typeof sources === "number") {
@@ -1090,11 +899,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
                             <div className="absolute inset-0 opacity-0 transition group-hover:opacity-100" style={{ background: "radial-gradient(140px 60px at 0% 0%, rgba(45,204,205,0.18), transparent 60%)" }} />
                             <div className="relative flex items-start gap-3">
                               <div className="h-10 w-10 rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] grid place-items-center">
-                                {kind === "reputation" ? (
-                                  <Sparkles className="h-5 w-5 text-[color:var(--blue)]" />
-                                ) : (
-                                  <ListChecks className="h-5 w-5 text-[color:var(--blue)]" />
-                                )}
+                                <Sparkles className="h-5 w-5 text-[color:var(--blue)]" />
                               </div>
                               <div className="flex-1">
                                 <div className="text-sm font-semibold text-[color:var(--ink)]">
@@ -1468,7 +1273,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
                 <span className="text-xs">Config</span>
               </button>
               {settingsOpen && (
-                <div className="absolute right-0 mt-3 w-[420px] rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel-strong)] shadow-[var(--shadow-lg)] backdrop-blur-xl overflow-hidden z-50">
+                <div className="settings-panel absolute right-0 mt-3 w-[420px] rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel-strong)] shadow-[var(--shadow-lg)] backdrop-blur-xl overflow-hidden z-50">
                   <div className="absolute -top-12 right-6 h-28 w-28 rounded-full bg-[color:var(--aqua)]/20 blur-3xl" />
                   <div className="absolute -bottom-16 left-10 h-32 w-32 rounded-full bg-[color:var(--blue)]/15 blur-3xl" />
                   <div className="relative p-4">
@@ -1478,13 +1283,11 @@ export function Shell({ children }: { children: React.ReactNode }) {
                           <SlidersHorizontal className="h-5 w-5 text-[color:var(--blue)]" />
                         </div>
                         <div>
-                          <div className="text-[11px] font-semibold tracking-[0.32em] text-[color:var(--blue)]">
+                          <div className="settings-header-title text-[11px] font-semibold tracking-[0.32em] text-[color:var(--blue)]">
                             CONFIGURACIÓN
                           </div>
-                          <div className="mt-1 text-sm text-[color:var(--text-60)]">
-                            {settingsScope === "reputation"
-                              ? "Personaliza las fuentes y credenciales de menciones."
-                              : "Personaliza las fuentes y credenciales de ingesta de incidencias."}
+                          <div className="settings-header-desc mt-1 text-sm text-[color:var(--text-60)]">
+                            Personaliza las fuentes y credenciales de menciones.
                           </div>
                         </div>
                       </div>
@@ -1505,28 +1308,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
                       </div>
                     </div>
                     <div className="mt-3 flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => switchSettingsScope("reputation")}
-                        className={`rounded-full border px-3 py-1 text-[10px] uppercase tracking-[0.2em] transition ${
-                          settingsScope === "reputation"
-                            ? "border-[color:var(--aqua)] bg-[color:var(--surface-70)] text-white"
-                            : "border-[color:var(--border-60)] text-[color:var(--text-60)] hover:text-[color:var(--ink)]"
-                        }`}
-                      >
+                      <span className="rounded-full border border-[color:var(--aqua)] bg-[color:var(--surface-70)] px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-white">
                         Menciones
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => switchSettingsScope("incidents")}
-                        className={`rounded-full border px-3 py-1 text-[10px] uppercase tracking-[0.2em] transition ${
-                          settingsScope === "incidents"
-                            ? "border-[color:var(--aqua)] bg-[color:var(--surface-70)] text-white"
-                            : "border-[color:var(--border-60)] text-[color:var(--text-60)] hover:text-[color:var(--ink)]"
-                        }`}
-                      >
-                        Incidencias
-                      </button>
+                      </span>
                     </div>
                   </div>
 
@@ -1547,8 +1331,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
                           ? group.fields.filter((field) => !ADVANCED_LOG_KEYS.has(field.key))
                           : group.fields;
                         const fieldsToRender =
-                          group.id === "sources_credentials" ||
-                          group.id === "bugs_sources_credentials"
+                          group.id === "sources_credentials"
                             ? []
                             : isAdvanced
                               ? advancedOpen
@@ -1560,22 +1343,22 @@ export function Shell({ children }: { children: React.ReactNode }) {
                             key={group.id}
                             className="rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] p-3"
                           >
-                            <div className="text-[10px] uppercase tracking-[0.28em] text-[color:var(--text-55)]">
+                            <div className="settings-section-title text-[10px] uppercase tracking-[0.28em] text-[color:var(--text-55)]">
                               {group.label}
                             </div>
                             {group.description && (
-                              <div className="mt-1 text-[11px] text-[color:var(--text-60)]">
+                              <div className="settings-group-desc mt-1 text-[11px] text-[color:var(--text-60)]">
                                 {group.description}
                               </div>
                             )}
                             {isAdvanced && advancedLogField && (
                               <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-2">
                                 <div className="min-w-0">
-                                  <div className="text-xs font-semibold text-[color:var(--ink)]">
+                                  <div className="settings-field-label text-xs font-semibold text-[color:var(--ink)]">
                                     {advancedLogField.label}
                                   </div>
                                   {advancedLogField.description && (
-                                    <div className="text-[10px] text-[color:var(--text-55)]">
+                                    <div className="settings-field-desc text-[10px] text-[color:var(--text-55)]">
                                       {advancedLogField.description}
                                     </div>
                                   )}
@@ -1588,14 +1371,16 @@ export function Shell({ children }: { children: React.ReactNode }) {
                                       !Boolean(settingsDraft[advancedLogField.key])
                                     )
                                   }
-                                  className={`relative inline-flex h-6 w-11 items-center rounded-full border transition ${
+                                  className={`settings-toggle ${
+                                    settingsDraft[advancedLogField.key] ? "is-on" : "is-off"
+                                  } relative inline-flex h-6 w-11 items-center rounded-full border transition ${
                                     settingsDraft[advancedLogField.key]
                                       ? "border-[color:var(--aqua)] bg-[color:var(--gradient-chip)]"
                                       : "border-[color:var(--border-60)] bg-[color:var(--surface-60)]"
                                   }`}
                                 >
                                   <span
-                                    className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition ${
+                                    className={`settings-toggle-knob inline-block h-4 w-4 transform rounded-full bg-white shadow transition ${
                                       settingsDraft[advancedLogField.key]
                                         ? "translate-x-5"
                                         : "translate-x-1"
@@ -1614,11 +1399,11 @@ export function Shell({ children }: { children: React.ReactNode }) {
                                       className="flex items-center justify-between gap-3 rounded-xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-2"
                                     >
                                       <div className="min-w-0">
-                                        <div className="text-xs font-semibold text-[color:var(--ink)]">
+                                        <div className="settings-field-label text-xs font-semibold text-[color:var(--ink)]">
                                           {field.label}
                                         </div>
                                         {field.description && (
-                                          <div className="text-[10px] text-[color:var(--text-55)]">
+                                          <div className="settings-field-desc text-[10px] text-[color:var(--text-55)]">
                                             {field.description}
                                           </div>
                                         )}
@@ -1630,14 +1415,16 @@ export function Shell({ children }: { children: React.ReactNode }) {
                                             updateSettingValue(field.key, !Boolean(fieldValue))
                                           }
                                           disabled={advancedLocked}
-                                          className={`relative inline-flex h-6 w-11 items-center rounded-full border transition ${
+                                          className={`settings-toggle ${
+                                            fieldValue ? "is-on" : "is-off"
+                                          } relative inline-flex h-6 w-11 items-center rounded-full border transition ${
                                             fieldValue
                                               ? "border-[color:var(--aqua)] bg-[color:var(--gradient-chip)]"
                                               : "border-[color:var(--border-60)] bg-[color:var(--surface-60)]"
                                           }`}
                                         >
                                           <span
-                                            className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition ${
+                                            className={`settings-toggle-knob inline-block h-4 w-4 transform rounded-full bg-white shadow transition ${
                                               fieldValue ? "translate-x-5" : "translate-x-1"
                                             }`}
                                           />
@@ -1679,20 +1466,22 @@ export function Shell({ children }: { children: React.ReactNode }) {
                             )}
                             {isAdvanced && (
                               <div className="mt-3 flex items-center justify-between rounded-xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-2">
-                                <div className="text-[11px] text-[color:var(--text-60)]">
+                                <div className="settings-field-desc text-[11px] text-[color:var(--text-60)]">
                                   Mostrar opciones avanzadas
                                 </div>
                                 <button
                                   type="button"
                                   onClick={() => setAdvancedOpen((prev) => !prev)}
-                                  className={`relative inline-flex h-6 w-11 items-center rounded-full border transition ${
+                                  className={`settings-toggle ${
+                                    advancedOpen ? "is-on" : "is-off"
+                                  } relative inline-flex h-6 w-11 items-center rounded-full border transition ${
                                     advancedOpen
                                       ? "border-[color:var(--aqua)] bg-[color:var(--gradient-chip)]"
                                       : "border-[color:var(--border-60)] bg-[color:var(--surface-60)]"
                                   }`}
                                 >
                                   <span
-                                    className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition ${
+                                    className={`settings-toggle-knob inline-block h-4 w-4 transform rounded-full bg-white shadow transition ${
                                       advancedOpen ? "translate-x-5" : "translate-x-1"
                                     }`}
                                   />
@@ -1716,11 +1505,11 @@ export function Shell({ children }: { children: React.ReactNode }) {
                                     >
                                       <div className="flex items-center justify-between gap-3">
                                         <div className="min-w-0">
-                                          <div className="text-xs font-semibold text-[color:var(--ink)]">
+                                          <div className="settings-field-label text-xs font-semibold text-[color:var(--ink)]">
                                             {toggleField.label}
                                           </div>
                                           {toggleField.description && (
-                                            <div className="text-[10px] text-[color:var(--text-55)]">
+                                            <div className="settings-field-desc text-[10px] text-[color:var(--text-55)]">
                                               {toggleField.description}
                                             </div>
                                           )}
@@ -1730,14 +1519,16 @@ export function Shell({ children }: { children: React.ReactNode }) {
                                           onClick={() =>
                                             updateSettingValue(row.toggleKey, !enabled)
                                           }
-                                          className={`relative inline-flex h-6 w-11 items-center rounded-full border transition ${
+                                          className={`settings-toggle ${
+                                            enabled ? "is-on" : "is-off"
+                                          } relative inline-flex h-6 w-11 items-center rounded-full border transition ${
                                             enabled
                                               ? "border-[color:var(--aqua)] bg-[color:var(--gradient-chip)]"
                                               : "border-[color:var(--border-60)] bg-[color:var(--surface-60)]"
                                           }`}
                                         >
                                           <span
-                                            className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition ${
+                                            className={`settings-toggle-knob inline-block h-4 w-4 transform rounded-full bg-white shadow transition ${
                                               enabled ? "translate-x-5" : "translate-x-1"
                                             }`}
                                           />
@@ -1801,202 +1592,6 @@ export function Shell({ children }: { children: React.ReactNode }) {
                                     No hay fuentes con credenciales configuradas.
                                   </div>
                                 )}
-                              </div>
-                            )}
-                            {group.id === "bugs_sources_credentials" && (
-                              <div className="mt-3 space-y-3">
-                                {credentialSourceRows.map((row) => {
-                                  const toggleField = settingsFieldMap.get(row.toggleKey);
-                                  if (!toggleField) return null;
-                                  const enabled = Boolean(settingsDraft[row.toggleKey]);
-                                  const isBlank = (value: unknown) =>
-                                    !String(value ?? "").trim();
-                                  const authMode = String(
-                                    settingsDraft["jira.auth_mode"] ?? "auto"
-                                  ).toLowerCase();
-                                  const usesOauth = authMode === "oauth1" || authMode === "oauth";
-                                  const usesCookie =
-                                    authMode === "cookie" ||
-                                    authMode === "session" ||
-                                    authMode === "session_cookie";
-                                  const requiredAuthKeys = usesOauth
-                                    ? [
-                                        "jira.oauth_consumer_key",
-                                        "jira.oauth_access_token",
-                                        "jira.oauth_private_key",
-                                      ]
-                                    : usesCookie
-                                      ? ["jira.session_cookie"]
-                                    : ["jira.user_email", "jira.api_token"];
-                                  const missingBase = ["jira.base_url", ...requiredAuthKeys].filter(
-                                    (key) => isBlank(settingsDraft[key])
-                                  );
-                                  const hasQuery =
-                                    !isBlank(settingsDraft["jira.jql"]) ||
-                                    !isBlank(settingsDraft["jira.filter_id"]);
-                                  const missing = hasQuery
-                                    ? missingBase
-                                    : [...missingBase, "jira.query"];
-                                  const displayKeys = [
-                                    "jira.base_url",
-                                    "jira.auth_mode",
-                                    ...(usesOauth
-                                      ? [
-                                          "jira.oauth_consumer_key",
-                                          "jira.oauth_access_token",
-                                          "jira.oauth_private_key",
-                                        ]
-                                      : usesCookie
-                                        ? []
-                                        : ["jira.user_email", "jira.api_token"]),
-                                    "jira.jql",
-                                    "jira.filter_id",
-                                  ];
-                                  return (
-                                    <div
-                                      key={row.id}
-                                      className="rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-2"
-                                    >
-                                      <div className="flex items-center justify-between gap-3">
-                                        <div className="min-w-0">
-                                          <div className="text-xs font-semibold text-[color:var(--ink)]">
-                                            {toggleField.label}
-                                          </div>
-                                          {toggleField.description && (
-                                            <div className="text-[10px] text-[color:var(--text-55)]">
-                                              {toggleField.description}
-                                            </div>
-                                          )}
-                                        </div>
-                                        <button
-                                          type="button"
-                                          onClick={() =>
-                                            updateSettingValue(row.toggleKey, !enabled)
-                                          }
-                                          className={`relative inline-flex h-6 w-11 items-center rounded-full border transition ${
-                                            enabled
-                                              ? "border-[color:var(--aqua)] bg-[color:var(--gradient-chip)]"
-                                              : "border-[color:var(--border-60)] bg-[color:var(--surface-60)]"
-                                          }`}
-                                        >
-                                          <span
-                                            className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition ${
-                                              enabled ? "translate-x-5" : "translate-x-1"
-                                            }`}
-                                          />
-                                        </button>
-                                      </div>
-                                      <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                                        {displayKeys.map((key) => {
-                                          const field = settingsFieldMap.get(key);
-                                          if (!field) return null;
-                                          const fullWidth =
-                                            key === "jira.jql" ||
-                                            key === "jira.base_url" ||
-                                            key === "jira.oauth_private_key";
-                                          const fieldClass = `w-full rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-60)] px-3 py-1 text-xs text-[color:var(--ink)] ${
-                                            fullWidth ? "sm:col-span-2" : ""
-                                          }`;
-                                          if (field.type === "select" && field.options?.length) {
-                                            const value = String(
-                                              settingsDraft[key] ?? field.options[0] ?? ""
-                                            );
-                                            return (
-                                              <select
-                                                key={key}
-                                                value={value}
-                                                onChange={(event) =>
-                                                  updateSettingValue(key, event.target.value)
-                                                }
-                                                className={fieldClass}
-                                              >
-                                                {field.options.map((option) => (
-                                                  <option key={option} value={option}>
-                                                    {option}
-                                                  </option>
-                                                ))}
-                                              </select>
-                                            );
-                                          }
-                                          const inputType =
-                                            field.type === "secret"
-                                              ? "password"
-                                              : field.type === "number"
-                                                ? "number"
-                                                : "text";
-                                          return (
-                                            <input
-                                              key={key}
-                                              type={inputType}
-                                              value={String(settingsDraft[key] ?? "")}
-                                              onChange={(event) =>
-                                                updateSettingValue(key, event.target.value)
-                                              }
-                                              placeholder={field.placeholder ?? field.label}
-                                              className={fieldClass}
-                                            />
-                                          );
-                                        })}
-                                      </div>
-                                      {usesCookie && (
-                                        <div className="mt-2 flex flex-wrap items-center gap-2">
-                                          <div className="flex items-center gap-2">
-                                            <span className="text-[10px] uppercase tracking-[0.2em] text-[color:var(--text-60)]">
-                                              Navegador
-                                            </span>
-                                            <select
-                                              value={jiraCookieBrowser}
-                                              onChange={(event) => {
-                                                const next = event.target.value;
-                                                setJiraCookieBrowser(next);
-                                                if (typeof window !== "undefined") {
-                                                  try {
-                                                    window.localStorage.setItem(
-                                                      "gor-jira-cookie-browser",
-                                                      next
-                                                    );
-                                                  } catch {
-                                                    // ignore storage failures
-                                                  }
-                                                }
-                                              }}
-                                              className="rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-60)] px-3 py-1 text-[10px] text-[color:var(--ink)]"
-                                            >
-                                              <option value="chrome">Chrome</option>
-                                              <option value="edge">Edge</option>
-                                              <option value="firefox">Firefox</option>
-                                              <option value="safari">Safari</option>
-                                            </select>
-                                          </div>
-                                          <button
-                                            type="button"
-                                            onClick={refreshJiraCookie}
-                                            disabled={jiraCookieBusy || !enabled}
-                                            className="rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-60)] px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-[color:var(--text-60)] transition hover:text-[color:var(--ink)] disabled:opacity-50"
-                                          >
-                                            {jiraCookieBusy
-                                              ? "Leyendo cookie..."
-                                              : "Leer cookie del navegador"}
-                                          </button>
-                                          {jiraCookieNote && (
-                                            <div className="text-[10px] text-[color:var(--text-55)]">
-                                              {jiraCookieNote}
-                                            </div>
-                                          )}
-                                        </div>
-                                      )}
-                                      {enabled && missing.length > 0 && (
-                                        <div className="mt-2 text-[10px] text-rose-500">
-                                          {usesOauth
-                                            ? "Completa URL, auth mode, consumer key, access token y private key; y define JQL o Filter ID (o desactiva la fuente)."
-                                            : usesCookie
-                                              ? "Pulsa \"Leer cookie del navegador\" y define JQL o Filter ID (o desactiva la fuente)."
-                                              : "Completa URL, auth mode, usuario, token y define JQL o Filter ID (o desactiva la fuente)."}
-                                        </div>
-                                      )}
-                                    </div>
-                                  );
-                                })}
                               </div>
                             )}
                             {isAdvanced && advancedOpen && (
@@ -2079,11 +1674,11 @@ export function Shell({ children }: { children: React.ReactNode }) {
                                     className="flex items-center justify-between gap-3 rounded-xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-2"
                                   >
                                     <div className="min-w-0">
-                                      <div className="text-xs font-semibold text-[color:var(--ink)]">
+                                      <div className="settings-field-label text-xs font-semibold text-[color:var(--ink)]">
                                         {field.label}
                                       </div>
                                       {field.description && (
-                                        <div className="text-[10px] text-[color:var(--text-55)]">
+                                        <div className="settings-field-desc text-[10px] text-[color:var(--text-55)]">
                                           {field.description}
                                         </div>
                                       )}
@@ -2095,14 +1690,16 @@ export function Shell({ children }: { children: React.ReactNode }) {
                                           updateSettingValue(field.key, !Boolean(fieldValue))
                                         }
                                         disabled={fieldDisabled}
-                                        className={`relative inline-flex h-6 w-11 items-center rounded-full border transition ${
+                                        className={`settings-toggle ${
+                                          fieldValue ? "is-on" : "is-off"
+                                        } relative inline-flex h-6 w-11 items-center rounded-full border transition ${
                                           fieldValue
                                             ? "border-[color:var(--aqua)] bg-[color:var(--gradient-chip)]"
                                             : "border-[color:var(--border-60)] bg-[color:var(--surface-60)]"
                                         }`}
                                       >
                                         <span
-                                          className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition ${
+                                          className={`settings-toggle-knob inline-block h-4 w-4 transform rounded-full bg-white shadow transition ${
                                             fieldValue ? "translate-x-5" : "translate-x-1"
                                           }`}
                                         />
@@ -2221,9 +1818,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
                     <div className="flex items-center gap-2">
                       {hasCredentialIssues && (
                         <span className="text-[11px] text-rose-500">
-                          {settingsScope === "reputation"
-                            ? "Completa credenciales o desactiva la fuente."
-                            : "Completa conexión/credenciales o desactiva la fuente."}
+                          Completa credenciales o desactiva la fuente.
                         </span>
                       )}
                       {settingsSaved && (
@@ -2272,10 +1867,6 @@ export function Shell({ children }: { children: React.ReactNode }) {
                 <Sun className="h-4 w-4" />
               )}
             </button>
-            <span className="hidden sm:inline-flex items-center gap-2 rounded-full bg-[color:var(--surface-10)] border border-[color:var(--border-15)] px-3 py-1">
-              <Database className="h-4 w-4" />
-              API proxied en <span className="text-white">/api</span>
-            </span>
           </div>
         </div>
       </header>
@@ -2297,7 +1888,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
             </div>
 
             <nav className="mt-3 flex flex-col gap-2">
-              {nav.filter((item) => !item.hidden).map((item) => {
+              {nav.map((item) => {
                 const active = pathname === item.href;
                 const Icon = item.icon;
 

@@ -1,18 +1,16 @@
 # Global Overview Radar
 
-[![CI / test_backend](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/backend.yml/badge.svg?branch=main)](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/backend.yml)
-[![CI / test_frontend](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/frontend.yml/badge.svg?branch=main)](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/frontend.yml)
-[![typecheck](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/typecheck.yml/badge.svg?branch=main)](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/typecheck.yml)
-[![deploy_hooks](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/deploy_hooks.yml/badge.svg?branch=main)](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/deploy_hooks.yml)
+[![CI / test_backend](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/backend.yml/badge.svg?branch=develop)](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/backend.yml)
+[![CI / test_frontend](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/frontend.yml/badge.svg?branch=develop)](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/frontend.yml)
+[![typecheck](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/typecheck.yml/badge.svg?branch=develop)](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/typecheck.yml)
+[![format](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/format.yml/badge.svg?branch=develop)](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/format.yml)
+[![deploy_hooks](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/deploy_hooks.yml/badge.svg?branch=develop)](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/deploy_hooks.yml)
 [![Sponsor](https://img.shields.io/badge/Sponsor-GitHub%20Sponsors-2ea44f.svg)](https://github.com/sponsors/felixdelbarrio)
 [![Donate](https://img.shields.io/badge/Donate-PayPal-blue.svg)](https://paypal.me/felixdelbarrio)
 
-Global Overview Radar is a full-stack system that combines:
-- a Reputation Radar for public signals and market perception
-- As well, for sotfware analysis, a Bug Resolution Radar for incident/ops visibility
-
+Global Overview Radar is a full-stack system for reputation signals and market perception.
 It is designed to be configuration-driven, reproducible, and explainable by default.
-The current product focus is **sentiment-first** with incidents as a complementary layer.
+The product focus is **sentiment-first** and exclusively reputation-oriented.
 
 ---
 
@@ -20,7 +18,6 @@ The current product focus is **sentiment-first** with incidents as a complementa
 
 - Backend (Python + FastAPI)
   - `backend/reputation`: multi-source collectors, normalization, sentiment, caching, API endpoints.
-  - `backend/bugresolutionradar`: ingestion of incidents (CSV/JSON/XLSX), consolidation, KPIs, API.
 - Frontend (Next.js)
   - `frontend/brr-frontend`: UI + client logging pipeline.
 - Data
@@ -34,7 +31,6 @@ The current product focus is **sentiment-first** with incidents as a complementa
 
 - Backend (Python + FastAPI)
   - `backend/reputation`: collectors multi-fuente, normalizacion, sentimiento, cache, endpoints.
-  - `backend/bugresolutionradar`: ingesta de incidencias (CSV/JSON/XLSX), consolidacion, KPIs, API.
 - Frontend (Next.js)
   - `frontend/brr-frontend`: UI + pipeline de logs del cliente.
 - Data
@@ -46,30 +42,28 @@ The current product focus is **sentiment-first** with incidents as a complementa
 
 ## EN | Current state (product)
 
-- **Dashboard (/) = sentiment-first.** It shows sentiment trend + incident trend (when enabled) and the latest 20 mixed mentions.
+- **Dashboard (/) = sentiment-first.** It shows the sentiment trend and latest mentions.
 - **Sentiment tab** includes filters + full listing and CSV downloads (chart + grid).
-- **Incidencias** and **Ops Executive** remain available but can be disabled per business config for non-IT actors.
-- **Ingest Center** (top-right) can launch reputation or incidents ingests with live progress, without blocking other UI.
+- **Ingest Center** (top-right) launches reputation ingests with live progress, without blocking other UI.
 - **Noise control is strict by design:** actor presence is required for selected sources, actor must appear in text, guard actors block ambiguous context, and actor/geo allowlists discard mismatched items.
 
 ## ES | Estado actual (producto)
 
-- **Dashboard (/) = sentimiento primero.** Muestra tendencia de sentimiento + incidencias (si estan habilitadas) y las ultimas 20 menciones mezcladas.
+- **Dashboard (/) = sentimiento primero.** Muestra la tendencia de sentimiento y las ultimas menciones.
 - **Pestana Sentimiento** con filtros + listado completo y descargas CSV (grafico + grid).
-- **Incidencias** y **Ops Executive** siguen disponibles pero pueden deshabilitarse por config cuando el actor no es tecnologico.
-- **Centro de ingesta** (arriba a la derecha) permite lanzar ingestas de reputacion o incidencias con progreso en vivo.
+- **Centro de ingesta** (arriba a la derecha) permite lanzar ingestas de reputacion con progreso en vivo.
 - **Control de ruido estricto:** requerimos actor para fuentes sensibles, el actor debe aparecer en el texto, usamos guard actors para evitar ambiguedad y descartamos items fuera de su geo permitido.
 
 ## EN | Rationale
 
 - The main product value is **sentiment visibility** with minimal noise.
-- Incidents are meaningful only for certain actors; therefore they are **configurable** and secondary.
+- The platform focuses exclusively on reputation signals and perception.
 - Strict ingestion filters keep the customer experience clean and trustworthy.
 
 ## ES | Racional
 
 - El valor principal es **visibilidad de sentimiento** con el menor ruido posible.
-- Incidencias solo aportan valor en actores IT/ops; por eso son **configurables** y secundarias.
+- La plataforma se centra exclusivamente en senales de reputacion y percepcion.
 - Filtros estrictos en ingesta mantienen la experiencia limpia y confiable.
 
 ---
@@ -80,7 +74,6 @@ Backend:
 ```bash
 make ensure-backend
 make env
-make bugs-ingest
 make reputation-ingest
 make dev-back
 ```
@@ -110,7 +103,6 @@ Backend:
 ```bash
 make ensure-backend
 make env
-make bugs-ingest
 make reputation-ingest
 make dev-back
 ```
@@ -137,7 +129,6 @@ make start-front
 ## EN | Configuration notes
 
 - Backend env files are auto-created from examples if missing:
-  - `backend/bugresolutionradar/.env` from `.env.example`
   - `backend/reputation/.env.reputation` from `.env.reputation.example`
 - Frontend env file:
   - `frontend/brr-frontend/.env.local` from `.env.local.example`
@@ -149,13 +140,6 @@ Reputation config loading:
   - dicts: deep merge
   - lists: concatenated with de-duplication
   - scalars: override only when incoming value is not empty
-
-UI toggles (per config):
-- `ui.incidents_enabled` and `ui.ops_enabled` allow hiding Incidents/Ops and turning the dashboard into sentiment-only.
-Frontend scope flag:
-- `NEXT_PUBLIC_INCIDENTS_ENABLED` allows hiding all incident scope (nav, ingest button, and dashboard line).
-Availability gate:
-- Incident scope visibility is controlled by `INCIDENTS_UI_ENABLED` (backend) + `NEXT_PUBLIC_INCIDENTS_ENABLED` (frontend). The cache can be empty; views will show 0 items until you ingest.
 
 Noise control (reputation ingestion):
 - `require_actor_sources` enforces actor presence for specific sources (e.g. news/forums).
@@ -169,7 +153,6 @@ Noise control (reputation ingestion):
 ## ES | Notas de configuracion
 
 - Los .env del backend se crean desde los ejemplos si faltan:
-  - `backend/bugresolutionradar/.env` desde `.env.example`
   - `backend/reputation/.env.reputation` desde `.env.reputation.example`
 - Frontend:
   - `frontend/brr-frontend/.env.local` desde `.env.local.example`
@@ -182,13 +165,6 @@ Carga de configuracion de reputacion:
   - listas: concatenadas con deduplicado
   - escalares: override solo si el valor entrante no esta vacio
 
-Toggles de UI (por config):
-- `ui.incidents_enabled` y `ui.ops_enabled` permiten ocultar Incidencias/Ops y dejar el dashboard solo con sentimiento.
-Flag de scope en frontend:
-- `NEXT_PUBLIC_INCIDENTS_ENABLED` oculta todo el ambito de incidencias (nav, boton de ingesta y linea del dashboard).
-Regla de disponibilidad:
-- La visibilidad del ambito de incidencias se controla con `INCIDENTS_UI_ENABLED` (backend) + `NEXT_PUBLIC_INCIDENTS_ENABLED` (frontend). La cache puede estar vacía; se verá 0 items hasta ejecutar una ingesta.
-
 Control de ruido (ingesta reputacion):
 - `require_actor_sources` obliga presencia de actor en fuentes sensibles (news/forums).
 - El actor debe aparecer en titulo/texto cuando aplica.
@@ -199,9 +175,6 @@ Control de ruido (ingesta reputacion):
 ---
 
 ## EN | Logging
-
-BugResolutionRadar:
-- `LOG_ENABLED`, `LOG_TO_FILE`, `LOG_FILE_NAME`, `LOG_DEBUG`
 
 Reputation:
 - `REPUTATION_LOG_ENABLED`, `REPUTATION_LOG_TO_FILE`, `REPUTATION_LOG_FILE_NAME`, `REPUTATION_LOG_DEBUG`

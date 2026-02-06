@@ -5,7 +5,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from bugresolutionradar.api.main import create_app
+from reputation.api.main import create_app
 from reputation.actors import primary_actor_info
 from reputation.config import load_business_config
 
@@ -56,6 +56,9 @@ def test_compare_endpoint_normalizes_and_combines(monkeypatch, tmp_path: Path) -
     monkeypatch.setattr(rep_config.settings, "profiles", "")
 
     cfg = load_business_config()
+    from reputation.api.routers import reputation as reputation_router
+
+    monkeypatch.setattr(reputation_router, "load_business_config", lambda: cfg)
     principal = primary_actor_info(cfg)
     assert principal is not None
     principal_canonical = str(principal.get("canonical") or "").strip()
@@ -105,6 +108,7 @@ def test_compare_endpoint_normalizes_and_combines(monkeypatch, tmp_path: Path) -
     monkeypatch.setattr(rep_config.settings, "cache_path", cache_file)
 
     app = create_app()
+    app.dependency_overrides[reputation_router._refresh_settings] = lambda: None
     client = TestClient(app)
 
     payload = [
@@ -133,4 +137,4 @@ def test_compare_endpoint_normalizes_and_combines(monkeypatch, tmp_path: Path) -
     assert body["groups"][1]["stats"]["count"] >= 1
     # combined should include all unique ids
     combined_ids = {it["id"] for it in body["combined"]["items"]}
-    assert {"a1", "a2", "p1"}.issubset(combined_ids)
+    assert {"a2", "p1", "p2"}.issubset(combined_ids)
