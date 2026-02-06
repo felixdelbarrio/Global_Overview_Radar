@@ -25,6 +25,12 @@ export const metadata = {
   description: "Enterprise Reputation Intelligence",
 };
 
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+};
+
 /** Envoltorio principal de HTML y body. */
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (

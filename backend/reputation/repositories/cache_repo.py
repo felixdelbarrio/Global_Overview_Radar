@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -48,8 +49,12 @@ class ReputationCacheRepo:
         self._path.parent.mkdir(parents=True, exist_ok=True)
         import json
 
-        with self._path.open("w", encoding="utf-8") as f:
+        tmp_path = self._path.with_name(f"{self._path.name}.tmp")
+        with tmp_path.open("w", encoding="utf-8") as f:
             json.dump(doc.model_dump(mode="json"), f, ensure_ascii=False, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+        tmp_path.replace(self._path)
 
     def is_fresh(self, ttl_hours: int) -> bool:
         doc = self.load()
