@@ -783,18 +783,18 @@ export function Shell({ children }: { children: React.ReactNode }) {
       {/* Barra superior */}
       <header className="sticky top-0 z-40">
         <div
-          className="min-h-16 px-4 sm:px-6 py-3 sm:py-0 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4 text-white shadow-[var(--shadow-header)]"
+          className="min-h-16 px-4 sm:px-6 py-4 sm:py-0 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4 text-white shadow-[var(--shadow-header)]"
           style={{
             background: "var(--nav-gradient)",
           }}
         >
           {/* Logo */}
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="h-9 w-9 rounded-full bg-[color:var(--surface-12)] border border-[color:var(--border-18)] grid place-items-center">
-              <Activity className="h-5 w-5 text-white" />
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <div className="h-8 w-8 sm:h-9 sm:w-9 rounded-full bg-[color:var(--surface-12)] border border-[color:var(--border-18)] grid place-items-center">
+              <Activity className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
             </div>
             <div className="leading-tight min-w-0">
-              <div className="font-display font-semibold tracking-tight text-sm sm:text-base truncate">
+              <div className="font-display font-semibold tracking-tight text-[13px] sm:text-base leading-tight truncate">
                 Global Overview Radar
               </div>
               <div className="text-[11px] text-[color:var(--text-inverse-75)] -mt-0.5 hidden sm:block">
@@ -812,7 +812,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
                     onClick={() => setIngestOpen((prev) => !prev)}
                     aria-label="Centro de ingestas"
                     title="Centro de ingestas"
-                    className="relative h-9 w-9 rounded-full border border-[color:var(--border-15)] overflow-hidden"
+                    className="relative h-8 w-8 sm:h-9 sm:w-9 rounded-full border border-[color:var(--border-15)] overflow-hidden"
                   >
                     <span
                       className="absolute inset-0"
@@ -980,7 +980,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
               )}
             </div>
             <div className="relative w-full sm:w-auto basis-full sm:basis-auto order-2 sm:order-none">
-              <div className="group relative flex flex-col sm:flex-row sm:items-center gap-3 rounded-[24px] sm:rounded-full border border-[color:var(--border-15)] bg-[color:var(--surface-10)] px-3 py-2 sm:px-2 sm:py-1 sm:pr-1 text-[color:var(--text-inverse-80)] shadow-[var(--shadow-pill)] backdrop-blur-sm w-full sm:w-auto">
+              <div className="group relative flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 rounded-[24px] sm:rounded-full border border-[color:var(--border-15)] bg-[color:var(--surface-10)] px-3 py-2 sm:px-2 sm:py-1 sm:pr-1 text-[color:var(--text-inverse-80)] shadow-[var(--shadow-pill)] backdrop-blur-sm w-full sm:w-auto">
                 <div
                   className="absolute inset-0 opacity-0 transition group-hover:opacity-100"
                   style={{
@@ -993,12 +993,12 @@ export function Shell({ children }: { children: React.ReactNode }) {
                     <Layers className="h-4 w-4 text-white" />
                   </div>
                   <div className="min-w-0">
-                    <div className="text-[9px] uppercase tracking-[0.32em] text-[color:var(--text-inverse-60)]">
+                    <div className="text-[8px] sm:text-[9px] uppercase tracking-[0.4em] sm:tracking-[0.32em] text-[color:var(--text-inverse-60)]">
                       Perfil activo
                     </div>
                     <div className="flex items-center gap-2">
                       <span
-                        className="text-xs font-semibold text-white truncate max-w-[120px] sm:max-w-[160px] lg:max-w-[220px]"
+                        className="text-[13px] sm:text-xs font-semibold text-white truncate max-w-[120px] sm:max-w-[160px] lg:max-w-[220px]"
                         title={primaryActiveLabel}
                       >
                         {primaryActiveLabel}
@@ -1032,7 +1032,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
                     onClick={toggleProfileTemplates}
                     aria-label="Cambiar perfil"
                     title="Cambiar perfil"
-                    className="relative w-full sm:w-auto rounded-full border border-[color:var(--border-15)] px-3 py-1 text-[10px] uppercase tracking-[0.2em] sm:tracking-[0.24em] text-white transition hover:border-[color:var(--aqua)] hover:text-white active:scale-95"
+                    className="relative w-full sm:w-auto rounded-full border border-[color:var(--border-15)] px-3 py-1 text-[9px] sm:text-[10px] uppercase tracking-[0.26em] sm:tracking-[0.24em] text-white transition hover:border-[color:var(--aqua)] hover:text-white active:scale-95"
                     style={{
                       background:
                         "linear-gradient(120deg, rgba(45, 204, 205, 0.3), rgba(0, 68, 129, 0.35))",
@@ -1275,7 +1275,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
                   onClick={() => setSettingsOpen((prev) => !prev)}
                   aria-label="Configuración"
                   title="Configuración"
-                  className="h-9 px-2 sm:px-3 rounded-full flex items-center gap-2 border border-[color:var(--border-15)] bg-[color:var(--surface-10)] text-[color:var(--text-inverse-80)] transition hover:bg-[color:var(--surface-15)] hover:text-white"
+                  className="h-8 sm:h-9 px-2 sm:px-3 rounded-full flex items-center gap-2 border border-[color:var(--border-15)] bg-[color:var(--surface-10)] text-[color:var(--text-inverse-80)] transition hover:bg-[color:var(--surface-15)] hover:text-white"
                 >
                   <SlidersHorizontal className="h-4 w-4" />
                   <span className="text-xs hidden sm:inline">Config</span>
@@ -1864,7 +1864,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
                     ? "Ambient dark"
                     : "Ambient light"
                 }
-                className="h-9 w-9 rounded-full grid place-items-center border border-[color:var(--border-15)] bg-[color:var(--surface-10)] text-[color:var(--text-inverse-80)] transition hover:bg-[color:var(--surface-15)] hover:text-white active:scale-95"
+                className="h-8 w-8 sm:h-9 sm:w-9 rounded-full grid place-items-center border border-[color:var(--border-15)] bg-[color:var(--surface-10)] text-[color:var(--text-inverse-80)] transition hover:bg-[color:var(--surface-15)] hover:text-white active:scale-95"
                 suppressHydrationWarning
               >
                 {!themeReady ? (
@@ -1878,29 +1878,29 @@ export function Shell({ children }: { children: React.ReactNode }) {
             </div>
 
             <div className="w-full sm:hidden order-3 basis-full">
-              <div className="mobile-hero mt-1">
+              <div className="mobile-hero mt-2">
                 <span className="mobile-hero-sheen" aria-hidden="true" />
                 <span className="mobile-hero-orb" aria-hidden="true" />
                 <div className="relative z-10">
-                  <div className="text-[9px] uppercase tracking-[0.4em] text-[color:var(--text-inverse-70)]">
+                  <div className="text-[8px] uppercase tracking-[0.5em] text-[color:var(--text-inverse-70)]">
                     Pulso diario
                   </div>
-                  <div className="mt-1 flex items-center justify-between gap-3">
-                    <div className="font-display text-base font-semibold tracking-tight">
+                  <div className="mt-1.5 flex items-center justify-between gap-3">
+                    <div className="font-display text-[15px] font-semibold tracking-tight leading-tight">
                       Radar reputacional
                     </div>
                     <span className="mobile-hero-pill">Live</span>
                   </div>
-                  <div className="text-[11px] text-[color:var(--text-inverse-80)]">
+                  <div className="text-[11px] leading-snug text-[color:var(--text-inverse-80)]">
                     Señales clave y sentimiento en un vistazo.
                   </div>
-                  <div className="mt-2 flex flex-wrap gap-2">
+                  <div className="mt-2 flex flex-wrap gap-1.5">
                     <span className="mobile-hero-chip">Menciones</span>
                     <span className="mobile-hero-chip">Tendencias</span>
                     <span className="mobile-hero-chip">Alertas</span>
                   </div>
                   <div className="mt-3 flex items-center justify-between gap-2">
-                    <span className="text-[9px] uppercase tracking-[0.32em] text-[color:var(--text-inverse-70)]">
+                    <span className="text-[8px] uppercase tracking-[0.36em] text-[color:var(--text-inverse-70)]">
                       Mejor en escritorio
                     </span>
                     <Link
