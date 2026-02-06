@@ -185,7 +185,9 @@ class ReputationIngestService:
         def filter_enabled(items: list[ReputationItem]) -> list[ReputationItem]:
             if not enabled_sources:
                 return []
-            return [item for item in items if (item.source or "").strip().lower() in enabled_sources]
+            return [
+                item for item in items if (item.source or "").strip().lower() in enabled_sources
+            ]
 
         # Reutiliza cache si aplica y no hay collectors activos
         if (
@@ -199,7 +201,9 @@ class ReputationIngestService:
             logger.info("Reputation cache hit (%s items)", len(existing.items))
             filtered_items = filter_enabled(existing.items)
             filtered_ratings = [
-                entry for entry in existing.market_ratings if entry.source.strip().lower() in enabled_sources
+                entry
+                for entry in existing.market_ratings
+                if entry.source.strip().lower() in enabled_sources
             ]
             filtered_history = [
                 entry

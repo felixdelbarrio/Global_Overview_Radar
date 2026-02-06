@@ -46,10 +46,8 @@ import {
   SETTINGS_CHANGED_EVENT,
   type IngestSuccessDetail,
 } from "@/lib/events";
-import { INCIDENTS_FEATURE_ENABLED } from "@/lib/flags";
 import type {
   ActorPrincipalMeta,
-  EvolutionPoint,
   MarketRating,
   IngestJob,
   ReputationCacheDocument,
@@ -89,21 +87,9 @@ type SentimentViewProps = {
   mode?: DashboardMode;
 };
 
-type IncidentItem = {
-  global_id: string;
-  title: string;
-  status: string;
-  severity: string;
-  opened_at?: string | null;
-  updated_at?: string | null;
-  closed_at?: string | null;
-  product?: string | null;
-  feature?: string | null;
-};
-
 type DashboardMention = {
   key: string;
-  kind: "sentiment" | "incident";
+  kind: "sentiment";
   title: string;
   text?: string;
   geo?: string;
@@ -112,8 +98,6 @@ type DashboardMention = {
   rating?: number | null;
   date?: string | null;
   sources?: string[];
-  severity?: string;
-  status?: string;
 };
 
 export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
@@ -160,7 +144,6 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
   const [overrideRefresh, setOverrideRefresh] = useState(0);
   const [reputationRefresh, setReputationRefresh] = useState(0);
   const [profileRefresh, setProfileRefresh] = useState(0);
-  const [incidentsRefresh, setIncidentsRefresh] = useState(0);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
   const [reputationIngesting, setReputationIngesting] = useState(false);
   const [reputationIngestNote, setReputationIngestNote] = useState<string | null>(null);
@@ -179,16 +162,9 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
           : "actor_principal",
     [isDashboard, effectiveActor],
   );
-  const incidentsAvailable = meta?.incidents_available === true;
-  const incidentsEnabled =
-    INCIDENTS_FEATURE_ENABLED && incidentsAvailable && meta?.ui?.incidents_enabled !== false;
-  const showIncidents = mode === "dashboard" && incidentsEnabled;
   const showDownloads = mode === "sentiment";
   const reputationCacheMissing = meta?.cache_available === false;
   const showCacheNotice = reputationCacheMissing && !cacheNoticeDismissed;
-  const [incidents, setIncidents] = useState<IncidentItem[]>([]);
-  const [incidentsSeries, setIncidentsSeries] = useState<EvolutionPoint[]>([]);
-  const [incidentsError, setIncidentsError] = useState<string | null>(null);
 
   const touchItemsFilters = () => {
     setError(null);
@@ -217,9 +193,6 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
       if (!detail) return;
       if (detail.kind === "reputation") {
         setReputationRefresh((value) => value + 1);
-      }
-      if (detail.kind === "incidents") {
-        setIncidentsRefresh((value) => value + 1);
       }
     };
     window.addEventListener(INGEST_SUCCESS_EVENT, handler as EventListener);
@@ -323,39 +296,6 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
       alive = false;
     };
   }, [profileRefresh]);
-
-  useEffect(() => {
-    if (!showIncidents) {
-      setIncidents([]);
-      setIncidentsSeries([]);
-      setIncidentsError(null);
-      return;
-    }
-    let alive = true;
-
-    apiGet<{ items: IncidentItem[] }>("/incidents?sort=updated_desc&limit=200")
-      .then((payload) => {
-        if (!alive) return;
-        setIncidents(payload.items ?? []);
-      })
-      .catch((e) => {
-        if (alive) setIncidentsError(String(e));
-      });
-
-    const days = computeEvolutionDays(effectiveFromDate, effectiveToDate, today);
-    apiGet<{ days: number; series: EvolutionPoint[] }>(`/evolution?days=${days}`)
-      .then((payload) => {
-        if (!alive) return;
-        setIncidentsSeries(payload.series ?? []);
-      })
-      .catch((e) => {
-        if (alive) setIncidentsError(String(e));
-      });
-
-    return () => {
-      alive = false;
-    };
-  }, [showIncidents, effectiveFromDate, effectiveToDate, today, incidentsRefresh]);
 
   useEffect(() => {
     let alive = true;
@@ -638,28 +578,12 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
   );
   const dashboardSeries = useMemo(
     () =>
-      buildDashboardSeries(
-        sentimentSeries,
-        incidentsSeries,
-        effectiveFromDate,
-        effectiveToDate,
-        showIncidents,
-      ),
-    [sentimentSeries, incidentsSeries, effectiveFromDate, effectiveToDate, showIncidents],
+      sentimentSeries.map((row) => ({
+        date: row.date,
+        sentiment: typeof row.principal === "number" ? row.principal : null,
+      })),
+    [sentimentSeries],
   );
-  const incidentsSummary = useMemo(() => {
-    if (!showIncidents || !incidentsSeries.length) {
-      return { open: 0, newTotal: 0, closedTotal: 0 };
-    }
-    const last = incidentsSeries[incidentsSeries.length - 1];
-    return {
-      open: last?.open ?? 0,
-      newTotal: incidentsSeries.reduce((acc, row) => acc + (row.new ?? 0), 0),
-      closedTotal: incidentsSeries.reduce((acc, row) => acc + (row.closed ?? 0), 0),
-    };
-  }, [showIncidents, incidentsSeries]);
-  const incidentsSummaryLoading =
-    showIncidents && !incidentsSeries.length && !incidentsError;
   const groupedMentions = useMemo(() => groupMentions(items), [items]);
   const rangeLabel = useMemo(
     () => buildRangeLabel(effectiveFromDate, effectiveToDate),
@@ -755,32 +679,20 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
       date: group.published_at || group.collected_at || null,
       sources: group.sources.map((src) => src.name),
     }));
-    const incidentMentions = showIncidents
-      ? incidents.map((it) => ({
-          key: `incident:${it.global_id}`,
-          kind: "incident" as const,
-          title: it.title || it.global_id,
-          text: [it.product, it.feature].filter(Boolean).join(" · ") || undefined,
-          date: it.updated_at || it.opened_at || it.closed_at || null,
-          severity: it.severity,
-          status: it.status,
-        }))
-      : [];
-
-    return [...sentimentMentions, ...incidentMentions]
+    return sentimentMentions
       .sort((a, b) => {
         const da = a.date || "";
         const db = b.date || "";
         return db.localeCompare(da);
       })
       .slice(0, 20);
-  }, [groupedMentions, incidents, showIncidents, isDashboard, principalAliasKeys]);
+  }, [groupedMentions, isDashboard, principalAliasKeys]);
   const [mentionsTab, setMentionsTab] = useState<"principal" | "actor">("principal");
 
   const mentionsToShow =
     mentionsTab === "principal" ? principalMentions : actorMentions;
   const mentionsLabel = mentionsTab === "principal" ? principalLabel : actorLabel;
-  const errorMessage = error || chartError || incidentsError;
+  const errorMessage = error || chartError;
   const mentionsLoading = itemsLoading || chartLoading;
   const headerEyebrow = mode === "dashboard" ? "Dashboard" : "Panorama reputacional";
   const headerTitle =
@@ -1093,30 +1005,6 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
               </>
             )}
           </div>
-          {isDashboard && showIncidents && (
-            <>
-              <div className="mt-4 text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
-                INCIDENCIAS · ÚLTIMOS 30 DÍAS
-              </div>
-              <div className="mt-2 grid grid-cols-2 gap-3">
-                <SummaryCard
-                  label="Abiertas"
-                  value={incidentsSummary.open}
-                  loading={incidentsSummaryLoading}
-                />
-                <SummaryCard
-                  label="Nuevas"
-                  value={incidentsSummary.newTotal}
-                  loading={incidentsSummaryLoading}
-                />
-                <SummaryCard
-                  label="Cerradas"
-                  value={incidentsSummary.closedTotal}
-                  loading={incidentsSummaryLoading}
-                />
-              </div>
-            </>
-          )}
           {!isDashboard && (
             <div className="mt-5">
               <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
@@ -1218,11 +1106,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
       <section className="mt-6 rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-5 shadow-[var(--shadow-md)] backdrop-blur-xl animate-rise" style={{ animationDelay: "300ms" }}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
-            {mode === "dashboard"
-              ? showIncidents
-                ? "SENTIMIENTO VS INCIDENCIAS"
-                : "SENTIMIENTO"
-              : "ÍNDICE REPUTACIONAL ACUMULADO"}
+            {mode === "dashboard" ? "SENTIMIENTO" : "ÍNDICE REPUTACIONAL ACUMULADO"}
           </div>
           <div className="text-xs text-[color:var(--text-55)]">
             {mode === "dashboard"
@@ -1254,8 +1138,6 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
             <DashboardChart
               data={dashboardSeries}
               sentimentLabel={principalLabel}
-              incidentsLabel={`Incidencias ${principalLabel}`}
-              showIncidents={showIncidents}
             />
           ) : (
             <SentimentChart
@@ -1280,7 +1162,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
               ) : (
                 <>
                   Mostrando {dashboardMentions.length} recientes ·{" "}
-                  {showIncidents ? "Sentimiento + incidencias" : "Sentimiento"}
+                  Sentimiento
                 </>
               )}
             </div>
@@ -2633,13 +2515,9 @@ function SentimentChart({
 function DashboardChart({
   data,
   sentimentLabel,
-  incidentsLabel,
-  showIncidents,
 }: {
-  data: { date: string; sentiment: number | null; incidents: number | null }[];
+  data: { date: string; sentiment: number | null }[];
   sentimentLabel: string;
-  incidentsLabel: string;
-  showIncidents: boolean;
 }) {
   const tooltipFormatter: Formatter<ValueType, string | number> = (value) => {
     if (typeof value === "number") {
@@ -2662,9 +2540,6 @@ function DashboardChart({
         <CartesianGrid stroke="var(--chart-grid)" vertical={false} />
         <XAxis dataKey="date" tickFormatter={(d: string) => d.slice(5)} fontSize={11} />
         <YAxis yAxisId="sentiment" fontSize={11} />
-        {showIncidents && (
-          <YAxis yAxisId="incidents" orientation="right" fontSize={11} />
-        )}
         <Tooltip
           formatter={tooltipFormatter}
           contentStyle={{
@@ -2684,18 +2559,6 @@ function DashboardChart({
           yAxisId="sentiment"
           connectNulls
         />
-        {showIncidents && (
-          <Line
-            type="monotone"
-            dataKey="incidents"
-            name={incidentsLabel}
-            stroke="#2dcccd"
-            strokeWidth={2}
-            dot={false}
-            yAxisId="incidents"
-            connectNulls
-          />
-        )}
       </LineChart>
     </ResponsiveContainer>
   );
@@ -2711,9 +2574,7 @@ function DashboardMentionCard({
   principalLabel: string;
 }) {
   const displayDate = formatDate(item.date || null);
-  const sentimentTone = item.kind === "sentiment" ? getSentimentTone(item.sentiment) : null;
-  const severityTone = item.kind === "incident" ? getIncidentSeverityTone(item.severity) : null;
-  const statusTone = item.kind === "incident" ? getIncidentStatusTone(item.status) : null;
+  const sentimentTone = getSentimentTone(item.sentiment);
   const ratingValue = typeof item.rating === "number" ? item.rating : null;
   const title = cleanText(item.title) || "Sin título";
   const text = cleanText(item.text);
@@ -2737,23 +2598,13 @@ function DashboardMentionCard({
           <Calendar className="h-3.5 w-3.5 text-[color:var(--blue)]" />
           {displayDate}
         </span>
-        {item.kind === "sentiment" && sentimentTone && (
+        {sentimentTone && (
           <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 ${sentimentTone.className}`}>
             {sentimentTone.icon}
             {sentimentTone.label}
           </span>
         )}
-        {item.kind === "incident" && severityTone && (
-          <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 ${severityTone.className}`}>
-            {severityTone.label}
-          </span>
-        )}
-        {item.kind === "incident" && statusTone && (
-          <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 ${statusTone.className}`}>
-            {statusTone.label}
-          </span>
-        )}
-        {item.kind === "sentiment" && ratingValue !== null && (
+        {ratingValue !== null && (
           <span className="inline-flex items-center gap-2 rounded-full border border-[color:var(--aqua)]/40 [background-image:var(--gradient-chip)] px-2.5 py-1 text-[11px] text-[color:var(--brand-ink)] shadow-[var(--shadow-pill)]">
             <StarMeter rating={ratingValue} />
             <span className="font-semibold">{ratingValue.toFixed(1)}</span>
@@ -2769,76 +2620,6 @@ function DashboardMentionCard({
       )}
     </article>
   );
-}
-
-function computeEvolutionDays(
-  fromDate?: string,
-  toDate?: string,
-  fallbackDate: Date = new Date(),
-) {
-  const end =
-    toDate && !Number.isNaN(new Date(`${toDate}T00:00:00`).getTime())
-      ? new Date(`${toDate}T00:00:00`)
-      : fallbackDate;
-  const safeEnd = end > fallbackDate ? fallbackDate : end;
-  const start =
-    fromDate && !Number.isNaN(new Date(`${fromDate}T00:00:00`).getTime())
-      ? new Date(`${fromDate}T00:00:00`)
-      : new Date(safeEnd);
-  const diffMs = safeEnd.getTime() - start.getTime();
-  const days = Math.max(1, Math.floor(diffMs / 86_400_000) + 1);
-  return Math.min(days, 3650);
-}
-
-function buildDashboardSeries(
-  sentimentSeries: { date: string; principal: number | null; actor: number | null }[],
-  incidentsSeries: EvolutionPoint[],
-  fromDate?: string,
-  toDate?: string,
-  showIncidents = true,
-) {
-  const sentimentMap = new Map(
-    sentimentSeries.map((row) => [row.date, row.principal]),
-  );
-  const incidentsMap = new Map(
-    incidentsSeries.map((row) => [row.date, row.open]),
-  );
-
-  const dates =
-    sentimentSeries.length > 0
-      ? sentimentSeries.map((row) => row.date)
-      : buildDateRange(fromDate, toDate, incidentsSeries);
-
-  return dates.map((date) => ({
-    date,
-    sentiment: sentimentMap.get(date) ?? null,
-    incidents: showIncidents ? incidentsMap.get(date) ?? null : null,
-  }));
-}
-
-function buildDateRange(
-  fromDate?: string,
-  toDate?: string,
-  fallbackSeries: EvolutionPoint[] = [],
-) {
-  if (fromDate && toDate) {
-    const start = new Date(`${fromDate}T00:00:00`);
-    const end = new Date(`${toDate}T00:00:00`);
-    if (!Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime())) {
-      const result: string[] = [];
-      const cursor = new Date(start);
-      const endDate = end < start ? start : end;
-      while (cursor <= endDate) {
-        result.push(toDateInput(cursor));
-        cursor.setDate(cursor.getDate() + 1);
-      }
-      return result;
-    }
-  }
-  if (fallbackSeries.length) {
-    return fallbackSeries.map((row) => row.date);
-  }
-  return [];
 }
 
 function downloadChartCsv(
@@ -3035,68 +2816,4 @@ function escapeXml(value: string) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&apos;");
-}
-
-function getIncidentSeverityTone(severity?: string | null) {
-  const sev = (severity || "UNKNOWN").toUpperCase();
-  if (sev === "CRITICAL") {
-    return {
-      label: "Crítica",
-      className: "bg-rose-50 text-rose-700 border-rose-200",
-    };
-  }
-  if (sev === "HIGH") {
-    return {
-      label: "Alta",
-      className: "bg-amber-50 text-amber-700 border-amber-200",
-    };
-  }
-  if (sev === "MEDIUM") {
-    return {
-      label: "Media",
-      className: "bg-blue-50 text-blue-700 border-blue-200",
-    };
-  }
-  if (sev === "LOW") {
-    return {
-      label: "Baja",
-      className: "bg-emerald-50 text-emerald-700 border-emerald-200",
-    };
-  }
-  return {
-    label: "Desconocida",
-    className: "bg-slate-50 text-slate-600 border-slate-200",
-  };
-}
-
-function getIncidentStatusTone(status?: string | null) {
-  const st = (status || "UNKNOWN").toUpperCase();
-  if (st === "OPEN") {
-    return {
-      label: "Abierta",
-      className: "bg-sky-50 text-sky-700 border-sky-200",
-    };
-  }
-  if (st === "IN_PROGRESS") {
-    return {
-      label: "En progreso",
-      className: "bg-purple-50 text-purple-700 border-purple-200",
-    };
-  }
-  if (st === "BLOCKED") {
-    return {
-      label: "Bloqueada",
-      className: "bg-amber-50 text-amber-700 border-amber-200",
-    };
-  }
-  if (st === "CLOSED") {
-    return {
-      label: "Cerrada",
-      className: "bg-slate-50 text-slate-600 border-slate-200",
-    };
-  }
-  return {
-    label: "Desconocida",
-    className: "bg-slate-50 text-slate-600 border-slate-200",
-  };
 }

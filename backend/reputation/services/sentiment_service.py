@@ -131,6 +131,7 @@ _COUNTRY_CODE_MAP = {
 _STAR_SENTIMENT_SOURCES = {"appstore", "google_reviews"}
 _ACTOR_TEXT_REQUIRED_SOURCES = {"news", "blogs", "gdelt", "newsapi", "guardian"}
 
+
 def _extract_star_rating(item: ReputationItem) -> float | None:
     signals = item.signals or {}
     raw = signals.get("rating")

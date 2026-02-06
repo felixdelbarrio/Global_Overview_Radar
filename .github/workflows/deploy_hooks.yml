@@ -2,7 +2,7 @@ name: deploy_hooks
 
 on:
   workflow_run:
-    workflows: ["CI", "typecheck"]
+    workflows: ["CI", "typecheck", "format"]
     types: [completed]
 
 concurrency:
@@ -14,7 +14,7 @@ jobs:
     if: >-
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
-      (github.event.workflow_run.head_branch == 'main' || github.event.workflow_run.head_branch == 'master')
+      (github.event.workflow_run.head_branch == 'develop' || github.event.workflow_run.head_branch == 'master')
     runs-on: ubuntu-latest
     permissions:
       actions: read
@@ -27,7 +27,7 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const workflows = ["typecheck.yml", "backend.yml", "frontend.yml"];
+            const workflows = ["typecheck.yml", "backend.yml", "frontend.yml", "format.yml"];
             const owner = context.repo.owner;
             const repo = context.repo.repo;
             const headSha = context.payload.workflow_run.head_sha;
@@ -60,10 +60,15 @@ jobs:
       contents: read
     steps:
       - name: Trigger Render deploy hook
-        if: ${{ secrets.RENDER_DEPLOY_HOOK_URL != '' }}
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
         run: |
           set -euo pipefail
-          url="${{ secrets.RENDER_DEPLOY_HOOK_URL }}"
+          if [ -z "${RENDER_DEPLOY_HOOK_URL}" ]; then
+            echo "Render hook not configured (missing RENDER_DEPLOY_HOOK_URL secret)."
+            exit 0
+          fi
+          url="${RENDER_DEPLOY_HOOK_URL}"
           code="$(curl -sS -o /tmp/render_hook.out -w "%{http_code}" -X POST -L "$url" || true)"
           if [ "${code}" = "405" ]; then
             code="$(curl -sS -o /tmp/render_hook.out -w "%{http_code}" -L "$url")"
@@ -73,10 +78,15 @@ jobs:
           test "${code}" -ge 200 -a "${code}" -lt 400
 
       - name: Trigger Vercel deploy hook
-        if: ${{ secrets.VERCEL_DEPLOY_HOOK_URL != '' }}
+        env:
+          VERCEL_DEPLOY_HOOK_URL: ${{ secrets.VERCEL_DEPLOY_HOOK_URL }}
         run: |
           set -euo pipefail
-          url="${{ secrets.VERCEL_DEPLOY_HOOK_URL }}"
+          if [ -z "${VERCEL_DEPLOY_HOOK_URL}" ]; then
+            echo "Vercel hook not configured (missing VERCEL_DEPLOY_HOOK_URL secret)."
+            exit 0
+          fi
+          url="${VERCEL_DEPLOY_HOOK_URL}"
           code="$(curl -sS -o /tmp/vercel_hook.out -w "%{http_code}" -X POST -L "$url" || true)"
           if [ "${code}" = "405" ]; then
             code="$(curl -sS -o /tmp/vercel_hook.out -w "%{http_code}" -L "$url")"
@@ -86,13 +96,16 @@ jobs:
           test "${code}" -ge 200 -a "${code}" -lt 400
 
       - name: Hooks status
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+          VERCEL_DEPLOY_HOOK_URL: ${{ secrets.VERCEL_DEPLOY_HOOK_URL }}
         run: |
-          if [ -z "${{ secrets.RENDER_DEPLOY_HOOK_URL }}" ]; then
+          if [ -z "${RENDER_DEPLOY_HOOK_URL}" ]; then
             echo "Render hook not configured (missing RENDER_DEPLOY_HOOK_URL secret)."
           else
             echo "Render hook configured."
           fi
-          if [ -z "${{ secrets.VERCEL_DEPLOY_HOOK_URL }}" ]; then
+          if [ -z "${VERCEL_DEPLOY_HOOK_URL}" ]; then
             echo "Vercel hook not configured (missing VERCEL_DEPLOY_HOOK_URL secret)."
           else
             echo "Vercel hook configured."

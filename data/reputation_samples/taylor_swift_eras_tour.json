@@ -21,10 +21,6 @@
     "Austria",
     "Dinamarca"
   ],
-  "ui": {
-    "incidents_enabled": false,
-    "ops_enabled": false
-  },
   "geografias_aliases": {
     "Estados Unidos": [
       "USA",
