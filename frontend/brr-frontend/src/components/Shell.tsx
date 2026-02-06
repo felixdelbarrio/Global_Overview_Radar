@@ -781,29 +781,29 @@ export function Shell({ children }: { children: React.ReactNode }) {
       {/* Barra superior */}
       <header className="sticky top-0 z-40">
         <div
-          className="h-16 px-6 flex items-center gap-4 text-white shadow-[var(--shadow-header)]"
+          className="min-h-16 px-4 sm:px-6 py-3 sm:py-0 flex flex-wrap items-center gap-3 sm:gap-4 text-white shadow-[var(--shadow-header)]"
           style={{
             background: "var(--nav-gradient)",
           }}
         >
           {/* Logo */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 min-w-0">
             <div className="h-9 w-9 rounded-full bg-[color:var(--surface-12)] border border-[color:var(--border-18)] grid place-items-center">
               <Activity className="h-5 w-5 text-white" />
             </div>
-            <div className="leading-tight">
-              <div className="font-display font-semibold tracking-tight">
+            <div className="leading-tight min-w-0">
+              <div className="font-display font-semibold tracking-tight text-sm sm:text-base truncate">
                 Global Overview Radar
               </div>
-              <div className="text-[11px] text-[color:var(--text-inverse-75)] -mt-0.5">
+              <div className="text-[11px] text-[color:var(--text-inverse-75)] -mt-0.5 hidden sm:block">
                 Enterprise Reputation Intelligence
               </div>
             </div>
           </div>
 
-          <div className="ml-auto flex items-center gap-3 text-xs text-[color:var(--text-inverse-80)]">
+          <div className="ml-0 sm:ml-auto w-full sm:w-auto flex flex-wrap items-center justify-end sm:justify-start gap-2 sm:gap-3 text-xs text-[color:var(--text-inverse-80)]">
             {showIngestCenter && (
-              <div className="relative">
+              <div className="relative order-2 sm:order-none">
                 <button
                   type="button"
                   onClick={() => setIngestOpen((prev) => !prev)}
@@ -826,7 +826,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
                 </button>
 
                 {ingestOpen && (
-                  <div className="absolute right-0 mt-3 w-[320px] rounded-[22px] border border-[color:var(--border-60)] bg-[color:var(--panel-strong)] shadow-[var(--shadow-lg)] backdrop-blur-xl overflow-hidden z-50">
+                  <div className="absolute right-0 mt-3 w-[92vw] max-w-[360px] sm:w-[320px] rounded-[22px] border border-[color:var(--border-60)] bg-[color:var(--panel-strong)] shadow-[var(--shadow-lg)] backdrop-blur-xl overflow-hidden z-50">
                     <div className="absolute -top-12 -right-12 h-32 w-32 rounded-full bg-[color:var(--aqua)]/20 blur-3xl" />
                     <div className="absolute -bottom-16 left-6 h-36 w-36 rounded-full bg-[color:var(--blue)]/10 blur-3xl" />
                     <div className="relative p-4 space-y-3">
@@ -975,8 +975,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
                 )}
               </div>
             )}
-            <div className="relative">
-              <div className="group relative flex items-center gap-3 rounded-full border border-[color:var(--border-15)] bg-[color:var(--surface-10)] px-2 py-1 pr-1 text-[color:var(--text-inverse-80)] shadow-[var(--shadow-pill)] backdrop-blur-sm">
+            <div className="relative w-full sm:w-auto order-1 sm:order-none">
+              <div className="group relative flex flex-wrap items-center gap-3 rounded-[24px] sm:rounded-full border border-[color:var(--border-15)] bg-[color:var(--surface-10)] px-3 py-2 sm:px-2 sm:py-1 sm:pr-1 text-[color:var(--text-inverse-80)] shadow-[var(--shadow-pill)] backdrop-blur-sm w-full sm:w-auto">
                 <div
                   className="absolute inset-0 opacity-0 transition group-hover:opacity-100"
                   style={{
@@ -1027,7 +1027,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
                   onClick={toggleProfileTemplates}
                   aria-label="Cambiar perfil"
                   title="Cambiar perfil"
-                  className="relative rounded-full border border-[color:var(--border-15)] px-3 py-1 text-[10px] uppercase tracking-[0.24em] text-white transition hover:border-[color:var(--aqua)] hover:text-white active:scale-95"
+                  className="relative w-full sm:w-auto rounded-full border border-[color:var(--border-15)] px-3 py-1 text-[10px] uppercase tracking-[0.24em] text-white transition hover:border-[color:var(--aqua)] hover:text-white active:scale-95"
                   style={{
                     background:
                       "linear-gradient(120deg, rgba(45, 204, 205, 0.3), rgba(0, 68, 129, 0.35))",
@@ -1044,7 +1044,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
                 </span>
               )}
               {profilesOpen && (
-                <div className="absolute right-0 mt-3 w-[360px] rounded-[24px] border border-[color:var(--border-60)] bg-[color:var(--panel-strong)] shadow-[var(--shadow-lg)] backdrop-blur-xl overflow-hidden z-50">
+                <div className="absolute right-0 mt-3 w-[92vw] max-w-[420px] sm:w-[360px] rounded-[24px] border border-[color:var(--border-60)] bg-[color:var(--panel-strong)] shadow-[var(--shadow-lg)] backdrop-blur-xl overflow-hidden z-50">
                   <div className="absolute -top-10 right-6 h-24 w-24 rounded-full bg-[color:var(--aqua)]/20 blur-3xl" />
                   <div className="absolute -bottom-16 left-6 h-32 w-32 rounded-full bg-[color:var(--blue)]/20 blur-3xl" />
                   <div className="relative p-4">
@@ -1261,19 +1261,19 @@ export function Shell({ children }: { children: React.ReactNode }) {
                 </div>
               )}
             </div>
-            <div className="relative">
+            <div className="relative order-3 sm:order-none">
               <button
                 type="button"
                 onClick={() => setSettingsOpen((prev) => !prev)}
                 aria-label="Configuración"
                 title="Configuración"
-                className="h-9 px-3 rounded-full flex items-center gap-2 border border-[color:var(--border-15)] bg-[color:var(--surface-10)] text-[color:var(--text-inverse-80)] transition hover:bg-[color:var(--surface-15)] hover:text-white"
+                className="h-9 px-2 sm:px-3 rounded-full flex items-center gap-2 border border-[color:var(--border-15)] bg-[color:var(--surface-10)] text-[color:var(--text-inverse-80)] transition hover:bg-[color:var(--surface-15)] hover:text-white"
               >
                 <SlidersHorizontal className="h-4 w-4" />
-                <span className="text-xs">Config</span>
+                <span className="text-xs hidden sm:inline">Config</span>
               </button>
               {settingsOpen && (
-                <div className="settings-panel absolute right-0 mt-3 w-[420px] rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel-strong)] shadow-[var(--shadow-lg)] backdrop-blur-xl overflow-hidden z-50">
+                <div className="settings-panel absolute right-0 mt-3 w-[92vw] max-w-[520px] sm:w-[420px] rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel-strong)] shadow-[var(--shadow-lg)] backdrop-blur-xl overflow-hidden z-50">
                   <div className="absolute -top-12 right-6 h-28 w-28 rounded-full bg-[color:var(--aqua)]/20 blur-3xl" />
                   <div className="absolute -bottom-16 left-10 h-32 w-32 rounded-full bg-[color:var(--blue)]/15 blur-3xl" />
                   <div className="relative p-4">
@@ -1856,7 +1856,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
                   ? "Ambient dark"
                   : "Ambient light"
               }
-              className="h-9 w-9 rounded-full grid place-items-center border border-[color:var(--border-15)] bg-[color:var(--surface-10)] text-[color:var(--text-inverse-80)] transition hover:bg-[color:var(--surface-15)] hover:text-white active:scale-95"
+              className="h-9 w-9 rounded-full grid place-items-center border border-[color:var(--border-15)] bg-[color:var(--surface-10)] text-[color:var(--text-inverse-80)] transition hover:bg-[color:var(--surface-15)] hover:text-white active:scale-95 order-4 sm:order-none"
               suppressHydrationWarning
             >
               {!themeReady ? (
@@ -1867,15 +1867,41 @@ export function Shell({ children }: { children: React.ReactNode }) {
                 <Sun className="h-4 w-4" />
               )}
             </button>
+
+            <div className="w-full sm:hidden">
+              <div className="mobile-hero mt-2">
+                <span className="mobile-hero-sheen" aria-hidden="true" />
+                <span className="mobile-hero-orb" aria-hidden="true" />
+                <div className="relative z-10">
+                  <div className="text-[9px] uppercase tracking-[0.4em] text-[color:var(--text-inverse-70)]">
+                    Pulso diario
+                  </div>
+                  <div className="mt-1 flex items-center justify-between gap-3">
+                    <div className="font-display text-base font-semibold tracking-tight">
+                      Radar reputacional
+                    </div>
+                    <span className="mobile-hero-pill">Live</span>
+                  </div>
+                  <div className="text-xs text-[color:var(--text-inverse-80)]">
+                    Señales clave y sentimiento en un vistazo.
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <span className="mobile-hero-chip">Menciones</span>
+                    <span className="mobile-hero-chip">Tendencias</span>
+                    <span className="mobile-hero-chip">Alertas</span>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </header>
 
       {/* Layout principal */}
-      <div className="mx-auto max-w-7xl px-4 py-6 grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-6">
+      <div className="mx-auto max-w-7xl px-4 pt-6 pb-24 lg:py-6 grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-6">
         {/* Barra lateral */}
         <aside
-          className="h-fit rounded-[var(--radius)] border backdrop-blur-xl"
+          className="hidden lg:block h-fit rounded-[var(--radius)] border backdrop-blur-xl"
           style={{
             background: "var(--panel)",
             borderColor: "var(--border)",
@@ -1970,6 +1996,56 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
         {/* Contenido */}
         <main className="min-w-0">{children}</main>
+      </div>
+
+      {/* Tab bar mobile */}
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-50">
+        <div className="mx-auto max-w-7xl px-4 pb-[calc(env(safe-area-inset-bottom,0px)+12px)] pt-3">
+          <div
+            className="rounded-[24px] border backdrop-blur-xl overflow-hidden"
+            style={{
+              background: "var(--panel)",
+              borderColor: "var(--border-60)",
+              boxShadow: "var(--shadow-lg)",
+            }}
+          >
+            <nav className="grid grid-flow-col auto-cols-fr">
+              {nav.map((item) => {
+                const active = pathname === item.href;
+                const Icon = item.icon;
+                return (
+                  <Link
+                    key={`mobile-${item.href}`}
+                    href={item.href}
+                    className={
+                      "flex flex-col items-center justify-center gap-1 px-3 py-3 text-[10px] uppercase tracking-[0.24em] transition " +
+                      (active
+                        ? "text-white"
+                        : "text-[color:var(--text-60)] hover:text-white")
+                    }
+                    style={
+                      active
+                        ? {
+                            background: "var(--nav-active-gradient)",
+                            boxShadow: "var(--nav-active-shadow)",
+                          }
+                        : undefined
+                    }
+                  >
+                    <Icon
+                      className={
+                        active
+                          ? "h-5 w-5 text-white"
+                          : "h-5 w-5 text-[color:var(--blue)]"
+                      }
+                    />
+                    <span>{item.label}</span>
+                  </Link>
+                );
+              })}
+            </nav>
+          </div>
+        </div>
       </div>
     </div>
   );
