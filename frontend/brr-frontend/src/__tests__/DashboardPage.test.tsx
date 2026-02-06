@@ -33,8 +33,8 @@ it("renders dashboard header and combined mentions", async () => {
         geos: ["España"],
         sources_enabled: ["gdelt"],
         sources_available: ["gdelt"],
-        incidents_available: true,
-        ui: { incidents_enabled: true, ops_enabled: true },
+        incidents_available: false,
+        ui: { incidents_enabled: false, ops_enabled: false },
       });
     }
     if (path.startsWith("/reputation/items")) {
@@ -58,33 +58,11 @@ it("renders dashboard header and combined mentions", async () => {
         stats: { count: 1 },
       });
     }
-    if (path.startsWith("/incidents")) {
-      return Promise.resolve({
-        items: [
-          {
-            global_id: "INC-1",
-            title: "Caída app",
-            status: "OPEN",
-            severity: "HIGH",
-            opened_at: "2025-01-01",
-            updated_at: "2025-01-02",
-            product: "App",
-            feature: "Login",
-          },
-        ],
-      });
-    }
-    if (path.startsWith("/evolution")) {
-      return Promise.resolve({
-        days: 10,
-        series: [{ date: "2025-01-01", open: 1, new: 1, closed: 0 }],
-      });
-    }
     return Promise.resolve({});
   });
 
   render(<DashboardPage />);
 
   expect(await screen.findByText("Dashboard reputacional")).toBeInTheDocument();
-  expect(await screen.findByText("Caída app")).toBeInTheDocument();
+  expect(await screen.findByText("Comentario positivo")).toBeInTheDocument();
 });

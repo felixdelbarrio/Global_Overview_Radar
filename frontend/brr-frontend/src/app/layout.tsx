@@ -21,8 +21,8 @@ const body = Source_Sans_3({
 
 /** Metadata base para SEO y titulo de la app. */
 export const metadata = {
-  title: "Global Overview Radar",
-  description: "Enterprise Incident Intelligence",
+  title: "Reputation Radar",
+  description: "Sentiment Intelligence Console",
 };
 
 /** Envoltorio principal de HTML y body. */

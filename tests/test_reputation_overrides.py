@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from bugresolutionradar.api.main import create_app
+from reputation.api.main import create_app
 
 
 def _write_cache(tmp_path: Path, items: list[dict]) -> Path:

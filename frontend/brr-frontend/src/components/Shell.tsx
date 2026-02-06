@@ -408,6 +408,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
   const switchSettingsScope = (nextScope: SettingsScope) => {
     if (nextScope === settingsScope) return;
+    if (nextScope === "incidents" && !incidentsAvailable) return;
     if (settingsDirty && typeof window !== "undefined") {
       const confirmed = window.confirm(
         "Tienes cambios sin guardar. ¿Cambiar de sección y descartarlos?"
@@ -972,10 +973,10 @@ export function Shell({ children }: { children: React.ReactNode }) {
             </div>
             <div className="leading-tight">
               <div className="font-display font-semibold tracking-tight">
-                Global Overview Radar
+                Reputation Radar
               </div>
               <div className="text-[11px] text-[color:var(--text-inverse-75)] -mt-0.5">
-                Enterprise Incident Intelligence
+                Sentiment Intelligence Console
               </div>
             </div>
           </div>
@@ -1516,17 +1517,19 @@ export function Shell({ children }: { children: React.ReactNode }) {
                       >
                         Menciones
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => switchSettingsScope("incidents")}
-                        className={`rounded-full border px-3 py-1 text-[10px] uppercase tracking-[0.2em] transition ${
-                          settingsScope === "incidents"
-                            ? "border-[color:var(--aqua)] bg-[color:var(--surface-70)] text-white"
-                            : "border-[color:var(--border-60)] text-[color:var(--text-60)] hover:text-[color:var(--ink)]"
-                        }`}
-                      >
-                        Incidencias
-                      </button>
+                      {incidentsAvailable && (
+                        <button
+                          type="button"
+                          onClick={() => switchSettingsScope("incidents")}
+                          className={`rounded-full border px-3 py-1 text-[10px] uppercase tracking-[0.2em] transition ${
+                            settingsScope === "incidents"
+                              ? "border-[color:var(--aqua)] bg-[color:var(--surface-70)] text-white"
+                              : "border-[color:var(--border-60)] text-[color:var(--text-60)] hover:text-[color:var(--ink)]"
+                          }`}
+                        >
+                          Incidencias
+                        </button>
+                      )}
                     </div>
                   </div>
 

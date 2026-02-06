@@ -1,6 +1,6 @@
-Backend for Global Overview Radar
+Backend for Reputation Radar
 
-This package contains the backend services for the Global Overview Radar project.
+This package contains the backend services for the Reputation Radar (sentiment) project.
 
 Quick start
 
@@ -16,4 +16,3 @@ Quick start
 3. Run tests:
 
     .venv/bin/python -m pytest
-

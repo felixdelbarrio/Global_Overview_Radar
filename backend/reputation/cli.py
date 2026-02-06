@@ -11,7 +11,7 @@ from reputation.services.ingest_service import ReputationIngestService
 def main() -> None:
     """Punto de entrada para la ingesta de reputación.
 
-    Uso: brr-reputation [--force]
+    Uso: reputation [--force]
     """
     configure_logging(force=True)
     logger = get_logger(__name__)

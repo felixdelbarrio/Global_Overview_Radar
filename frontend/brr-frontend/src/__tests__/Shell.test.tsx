@@ -33,7 +33,7 @@ describe("Shell", () => {
     usePathnameMock.mockReturnValue("/ops");
     apiGetMock.mockResolvedValue({
       ui: { incidents_enabled: true, ops_enabled: true },
-      incidents_available: true,
+      incidents_available: false,
     });
   });
 
@@ -46,11 +46,7 @@ describe("Shell", () => {
 
     expect(screen.getByText("Dashboard")).toBeInTheDocument();
     expect(screen.getByText("Sentimiento")).toBeInTheDocument();
-    expect(await screen.findByText("Incidencias")).toBeInTheDocument();
-    const ops = await screen.findByText("Ops Executive");
-    expect(ops).toBeInTheDocument();
-
-    const opsLink = ops.closest("a");
-    expect(opsLink?.className).toContain("text-white");
+    expect(screen.queryByText("Incidencias")).not.toBeInTheDocument();
+    expect(screen.queryByText("Ops Executive")).not.toBeInTheDocument();
   });
 });

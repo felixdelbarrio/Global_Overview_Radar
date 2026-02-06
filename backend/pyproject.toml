@@ -1,8 +1,8 @@
 # Configuracion principal del paquete backend (migrado desde la raiz)
 [project]
-name = "GlobalOverviewRadar"
+name = "ReputationRadar"
 version = "0.1.0"
-description = "Global Overview Radar - assets ingestion, consolidation and KPI dashboard backend"
+description = "Reputation Radar - sentiment ingestion, enrichment and analytics backend"
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
@@ -13,8 +13,7 @@ dependencies = [
 ]
 
 [project.scripts]
-brr = "bugresolutionradar.cli.main:main"
-brr-reputation = "reputation.cli:main"
+reputation = "reputation.cli:main"
 
 [build-system]
 requires = ["setuptools>=68"]
@@ -22,7 +21,7 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["bugresolutionradar", "reputation"]
+include = ["reputation"]
 
 [tool.ruff]
 line-length = 100
@@ -56,14 +55,6 @@ no_implicit_optional = true
 check_untyped_defs = true
 warn_return_any = true
 exclude = "data/|tests/"
-
-[[tool.mypy.overrides]]
-module = ["openpyxl", "openpyxl.*"]
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = ["xlrd", "xlrd.*"]
-ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = ["praw", "praw.*"]

@@ -5,7 +5,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from bugresolutionradar.api.main import create_app
+from reputation.api.main import create_app
 from reputation.actors import primary_actor_info
 from reputation.config import load_business_config
 

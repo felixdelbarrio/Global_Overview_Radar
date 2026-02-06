@@ -10,5 +10,5 @@ function parseBoolEnv(value: string | undefined, defaultValue: boolean): boolean
 
 export const INCIDENTS_FEATURE_ENABLED = parseBoolEnv(
   process.env.NEXT_PUBLIC_INCIDENTS_ENABLED,
-  true
+  false
 );
