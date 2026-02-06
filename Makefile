@@ -14,10 +14,23 @@ NODE := node
 HOST ?= 127.0.0.1
 API_PORT ?= 8000
 FRONT_PORT ?= 3000
+FRONT_BENCH_URL ?= http://localhost:$(FRONT_PORT)
+
+BENCH_DIR ?= docs/benchmarks
+BENCH_ITERATIONS ?= 40
+BENCH_WARMUP ?= 5
+BENCH_MAX_REGRESSION ?= 0.15
+BENCH_OUT_BACK ?= $(BENCH_DIR)/backend.latest.json
+BENCH_BASELINE_BACK ?= $(BENCH_DIR)/backend.baseline.json
+BENCH_OUT_FRONT ?= $(BENCH_DIR)/frontend.latest.json
+BENCH_BASELINE_FRONT ?= $(BENCH_DIR)/frontend.baseline.json
+
+VISUAL_QA_URL ?= http://localhost:$(FRONT_PORT)
+VISUAL_QA_OUT ?= docs/visual-qa
 
 .DEFAULT_GOAL := help
 
-.PHONY: help venv install install-backend install-front env ensure-backend ensure-front ingest reputation-ingest serve serve-back dev-back dev-front build-front start-front lint lint-back lint-front typecheck typecheck-back typecheck-front format format-back format-front check test test-back test-front test-coverage test-coverage-back test-coverage-front clean reset
+.PHONY: help venv install install-backend install-front env ensure-backend ensure-front ingest reputation-ingest serve serve-back dev-back dev-front build-front start-front lint lint-back lint-front typecheck typecheck-back typecheck-front format format-back format-front check test test-back test-front test-coverage test-coverage-back test-coverage-front bench bench-back bench-front bench-baseline visual-qa clean reset
 
 help:
 	@echo "Make targets disponibles:"
@@ -45,6 +58,11 @@ help:
 	@echo "  make test-back       - Ejecutar tests backend (pytest + cobertura)"
 	@echo "  make test-front      - Ejecutar tests frontend (vitest)"
 	@echo "  make test-coverage   - Ejecutar cobertura backend + frontend (>=70%)"
+	@echo "  make bench           - Benchmark backend + frontend (comparacion baseline)"
+	@echo "  make bench-back      - Benchmark backend (API reputacion)"
+	@echo "  make bench-front     - Benchmark frontend (requiere frontend levantado)"
+	@echo "  make bench-baseline  - Generar baselines (backend + frontend)"
+	@echo "  make visual-qa       - Capturas headless mobile (frontend)"
 	@echo "  make clean           - Eliminar venv, caches, node_modules (frontend)"
 	@echo ""
 	@echo "Notas:"
@@ -185,6 +203,33 @@ test-coverage-back:
 test-coverage-front:
 	@echo "==> Cobertura frontend (vitest >=70%)..."
 	cd $(FRONTDIR) && $(NPM) run test:coverage
+
+# -------------------------
+# Benchmarks / Visual QA
+# -------------------------
+bench:
+	@$(MAKE) bench-back
+	@$(MAKE) bench-front
+
+bench-back:
+	@echo "==> Benchmark backend..."
+	@mkdir -p $(BENCH_DIR)
+	$(PY) scripts/bench_backend.py --iterations $(BENCH_ITERATIONS) --warmup $(BENCH_WARMUP) --json $(BENCH_OUT_BACK) --baseline $(BENCH_BASELINE_BACK) --max-regression $(BENCH_MAX_REGRESSION)
+
+bench-front:
+	@echo "==> Benchmark frontend..."
+	@mkdir -p $(BENCH_DIR)
+	$(PY) scripts/bench_frontend.py --url $(FRONT_BENCH_URL) --iterations $(BENCH_ITERATIONS) --warmup $(BENCH_WARMUP) --json $(BENCH_OUT_FRONT) --baseline $(BENCH_BASELINE_FRONT) --max-regression $(BENCH_MAX_REGRESSION)
+
+bench-baseline:
+	@echo "==> Generando baselines de benchmarks..."
+	@mkdir -p $(BENCH_DIR)
+	$(PY) scripts/bench_backend.py --iterations $(BENCH_ITERATIONS) --warmup $(BENCH_WARMUP) --json $(BENCH_BASELINE_BACK)
+	$(PY) scripts/bench_frontend.py --url $(FRONT_BENCH_URL) --iterations $(BENCH_ITERATIONS) --warmup $(BENCH_WARMUP) --json $(BENCH_BASELINE_FRONT)
+
+visual-qa:
+	@echo "==> Visual QA mobile..."
+	VISUAL_QA_URL=$(VISUAL_QA_URL) VISUAL_QA_OUT=$(VISUAL_QA_OUT) bash scripts/visual-qa.sh
 
 # -------------------------
 # Limpieza
