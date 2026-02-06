@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import re
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Iterable, Optional, Sequence, cast
@@ -169,6 +170,13 @@ class ReputationIngestService:
 
         existing = self._repo.load()
 
+        def is_doc_fresh(doc: ReputationCacheDocument | None) -> bool:
+            if not doc:
+                return False
+            now = datetime.now(timezone.utc)
+            age_hours = (now - doc.generated_at).total_seconds() / 3600.0
+            return age_hours <= ttl_hours
+
         collectors, notes = self._build_collectors(cfg, sources_enabled)
         if enabled_sources and collectors:
             before = len(collectors)
@@ -194,12 +202,15 @@ class ReputationIngestService:
             not force
             and existing
             and existing.config_hash == cfg_hash
-            and self._repo.is_fresh(ttl_hours)
+            and is_doc_fresh(existing)
             and not collectors
         ):
             cache_note = "; ".join(notes) if notes else "cache hit"
             logger.info("Reputation cache hit (%s items)", len(existing.items))
-            filtered_items = filter_enabled(existing.items)
+            filtered_items = self._drop_invalid_items(
+                filter_enabled(existing.items),
+                notes,
+            )
             filtered_ratings = [
                 entry
                 for entry in existing.market_ratings
@@ -241,6 +252,9 @@ class ReputationIngestService:
             )
 
         items = self._collect_items(collectors, notes, progress=on_collector)
+        items = self._drop_invalid_items(items, notes)
+        if items:
+            items = self._merge_items([], items)
         report("Señales recolectadas", 45, {"items": len(items)})
         items = filter_enabled(items)
 
@@ -272,7 +286,9 @@ class ReputationIngestService:
             sources_enabled,
         )
         report("Balanceando señales", 90)
-        existing_items = filter_enabled(existing.items) if existing else []
+        existing_items = (
+            self._drop_invalid_items(filter_enabled(existing.items), notes) if existing else []
+        )
         merged_items = self._merge_items(existing_items, items)
         merged_items = filter_enabled(merged_items)
         report("Fusionando items", 94)
@@ -317,12 +333,28 @@ class ReputationIngestService:
             return items
         total = len(collector_list)
         done = 0
+        diag = _env_bool(os.getenv("REPUTATION_COLLECTOR_DIAG", "false"))
+        raw_slow = os.getenv("REPUTATION_COLLECTOR_SLOW_SEC", "8").strip()
+        try:
+            slow_threshold = float(raw_slow) if raw_slow else 8.0
+        except ValueError:
+            slow_threshold = 8.0
+        if slow_threshold < 0:
+            slow_threshold = 0.0
+
+        def maybe_note(collector: ReputationCollector, duration: float, count: int) -> None:
+            if diag or (slow_threshold and duration >= slow_threshold):
+                notes.append(f"collector: {collector.source_name} {duration:.1f}s items={count}")
 
         workers = _env_int("REPUTATION_COLLECTOR_WORKERS", 6)
         if workers <= 1 or len(collector_list) == 1:
             for collector in collector_list:
                 try:
-                    items.extend(list(collector.collect()))
+                    started = time.perf_counter()
+                    batch = list(collector.collect())
+                    duration = time.perf_counter() - started
+                    items.extend(batch)
+                    maybe_note(collector, duration, len(batch))
                 except Exception as exc:  # pragma: no cover - defensive
                     notes.append(f"{collector.source_name}: error {exc}")
                     logger.warning("Collector %s failed: %s", collector.source_name, exc)
@@ -334,8 +366,13 @@ class ReputationIngestService:
 
         max_workers = max(1, min(workers, len(collector_list)))
 
-        def _run(collector: ReputationCollector) -> list[ReputationItem]:
-            return list(collector.collect())
+        def _run(
+            collector: ReputationCollector,
+        ) -> tuple[list[ReputationItem], float]:
+            started = time.perf_counter()
+            batch = list(collector.collect())
+            duration = time.perf_counter() - started
+            return batch, duration
 
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             future_map = {
@@ -344,7 +381,9 @@ class ReputationIngestService:
             for future in as_completed(future_map):
                 collector = future_map[future]
                 try:
-                    items.extend(future.result())
+                    batch, duration = future.result()
+                    items.extend(batch)
+                    maybe_note(collector, duration, len(batch))
                 except Exception as exc:  # pragma: no cover - defensive
                     notes.append(f"{collector.source_name}: error {exc}")
                     logger.warning("Collector %s failed: %s", collector.source_name, exc)
@@ -353,6 +392,24 @@ class ReputationIngestService:
                     if progress:
                         progress(done, total, collector.source_name)
         return items
+
+    @staticmethod
+    def _drop_invalid_items(
+        items: list[ReputationItem],
+        notes: list[str],
+    ) -> list[ReputationItem]:
+        if not items:
+            return items
+        filtered: list[ReputationItem] = []
+        dropped = 0
+        for item in items:
+            if not item.id or not item.source:
+                dropped += 1
+                continue
+            filtered.append(item)
+        if dropped:
+            notes.append(f"sanity: dropped {dropped} items missing id/source")
+        return filtered
 
     @classmethod
     def _apply_appstore_actor_map(

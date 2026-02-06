@@ -27,6 +27,7 @@ DEFAULT_HTTP_CACHE_TTL_SEC = 120
 DEFAULT_HTTP_CACHE_MAX_ENTRIES = 500
 DEFAULT_HTTP_RETRIES = 1
 DEFAULT_HTTP_BLOCK_TTL_SEC = 90
+DEFAULT_HTTP_MAX_BYTES = 2_000_000
 
 
 def _env_int(name: str, default: int) -> int:
@@ -47,6 +48,37 @@ def _env_float(name: str, default: float) -> float:
         return float(raw)
     except ValueError:
         return default
+
+
+def _env_bool(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return default
+    return raw.lower() in {"1", "true", "yes", "y", "on"}
+
+
+def _read_response(response: Any, max_bytes: int) -> tuple[bytes, bool]:
+    if max_bytes <= 0:
+        raw = response.read()
+        if isinstance(raw, str):
+            raw = raw.encode("utf-8", errors="replace")
+        elif not isinstance(raw, bytes):
+            raw = bytes(raw)
+        return raw, False
+    remaining = max_bytes
+    chunks: list[bytes] = []
+    while remaining > 0:
+        chunk = response.read(min(65536, remaining))
+        if not chunk:
+            break
+        if isinstance(chunk, str):
+            chunk = chunk.encode("utf-8", errors="replace")
+        elif not isinstance(chunk, bytes):
+            chunk = bytes(chunk)
+        chunks.append(chunk)
+        remaining -= len(chunk)
+    truncated = remaining == 0
+    return b"".join(chunks), truncated
 
 
 def _http_cache_key(url: str, headers: dict[str, str]) -> str:
@@ -127,6 +159,8 @@ def http_get_text(url: str, headers: dict[str, str] | None = None, timeout: int 
 
     retries = max(0, _env_int("REPUTATION_HTTP_RETRIES", DEFAULT_HTTP_RETRIES))
     backoff = max(0.0, _env_float("REPUTATION_HTTP_RETRY_BACKOFF_SEC", 0.4))
+    max_bytes = _env_int("REPUTATION_HTTP_MAX_BYTES", DEFAULT_HTTP_MAX_BYTES)
+    raise_on_error = _env_bool("REPUTATION_HTTP_RAISE_ERRORS", False)
     attempt = 0
     context = _ssl_context()
 
@@ -134,9 +168,10 @@ def http_get_text(url: str, headers: dict[str, str] | None = None, timeout: int 
         try:
             req = Request(url, headers=req_headers)
             with urlopen(req, timeout=timeout, context=context) as response:
-                raw = response.read()
-            text = raw.decode("utf-8", errors="replace") if isinstance(raw, bytes) else str(raw)
-            _http_cache_set(cache_key, text)
+                raw, truncated = _read_response(response, max_bytes)
+            text = raw.decode("utf-8", errors="replace")
+            if not truncated:
+                _http_cache_set(cache_key, text)
             return text
         except HTTPError as exc:
             if exc.code in {429, 502, 503, 403}:
@@ -147,9 +182,12 @@ def http_get_text(url: str, headers: dict[str, str] | None = None, timeout: int 
             attempt += 1
             if sleep_for > 0:
                 time.sleep(sleep_for)
-        except Exception:
+        except Exception as exc:
             if attempt >= retries:
-                raise
+                if raise_on_error:
+                    raise
+                logger.warning("http_get_text error for %s: %s", url, exc)
+                return ""
             sleep_for = backoff * (2**attempt)
             attempt += 1
             if sleep_for > 0:

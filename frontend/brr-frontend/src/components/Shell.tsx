@@ -16,6 +16,7 @@ import {
   Layers,
   Loader2,
   Moon,
+  ArrowUpRight,
   Search,
   Sun,
   Sparkles,
@@ -121,6 +122,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
   /** Ruta actual para resaltar la navegacion. */
   const pathname = usePathname();
+  const desktopCtaHref = pathname ? `${pathname}?view=desktop` : "/?view=desktop";
   const [ingestOpen, setIngestOpen] = useState(false);
   const [ingestError, setIngestError] = useState<string | null>(null);
   const [ingestBusy, setIngestBusy] = useState<Record<IngestJobKind, boolean>>({
@@ -781,18 +783,18 @@ export function Shell({ children }: { children: React.ReactNode }) {
       {/* Barra superior */}
       <header className="sticky top-0 z-40">
         <div
-          className="min-h-16 px-4 sm:px-6 py-3 sm:py-0 flex flex-wrap items-center gap-3 sm:gap-4 text-white shadow-[var(--shadow-header)]"
+          className="relative mobile-header-showcase min-h-16 px-4 sm:px-6 py-4 sm:py-0 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4 text-white shadow-[var(--shadow-header)]"
           style={{
             background: "var(--nav-gradient)",
           }}
         >
           {/* Logo */}
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="h-9 w-9 rounded-full bg-[color:var(--surface-12)] border border-[color:var(--border-18)] grid place-items-center">
-              <Activity className="h-5 w-5 text-white" />
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <div className="h-8 w-8 sm:h-9 sm:w-9 rounded-full bg-[color:var(--surface-12)] border border-[color:var(--border-18)] grid place-items-center">
+              <Activity className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
             </div>
             <div className="leading-tight min-w-0">
-              <div className="font-display font-semibold tracking-tight text-sm sm:text-base truncate">
+              <div className="font-display font-semibold tracking-tight text-[13px] sm:text-base leading-tight truncate">
                 Global Overview Radar
               </div>
               <div className="text-[11px] text-[color:var(--text-inverse-75)] -mt-0.5 hidden sm:block">
@@ -802,181 +804,183 @@ export function Shell({ children }: { children: React.ReactNode }) {
           </div>
 
           <div className="ml-0 sm:ml-auto w-full sm:w-auto flex flex-wrap items-center justify-end sm:justify-start gap-2 sm:gap-3 text-xs text-[color:var(--text-inverse-80)]">
-            {showIngestCenter && (
-              <div className="relative order-2 sm:order-none">
-                <button
-                  type="button"
-                  onClick={() => setIngestOpen((prev) => !prev)}
-                  aria-label="Centro de ingestas"
-                  title="Centro de ingestas"
-                  className="relative h-9 w-9 rounded-full border border-[color:var(--border-15)] overflow-hidden"
-                >
-                  <span
-                    className="absolute inset-0"
-                    style={{
-                      background: ingestActive
-                        ? `conic-gradient(from 210deg, var(--aqua) 0 ${ingestProgress}%, rgba(255,255,255,0.18) ${ingestProgress}% 100%)`
-                        : "radial-gradient(circle at 20% 20%, rgba(255,255,255,0.35), rgba(255,255,255,0.05) 65%)",
-                    }}
-                  />
-                  <span className="absolute inset-[2px] rounded-full bg-[color:var(--surface-10)] backdrop-blur" />
-                  <span className="relative z-10 h-full w-full grid place-items-center text-white">
-                    <Sparkles className={ingestActive ? "h-4 w-4 animate-pulse" : "h-4 w-4"} />
-                  </span>
-                </button>
+            <div className="flex items-center gap-2 order-1 w-auto sm:order-none">
+              {showIngestCenter && (
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setIngestOpen((prev) => !prev)}
+                    aria-label="Centro de ingestas"
+                    title="Centro de ingestas"
+                    className="relative h-8 w-8 sm:h-9 sm:w-9 rounded-full border border-[color:var(--border-15)] overflow-hidden"
+                  >
+                    <span
+                      className="absolute inset-0"
+                      style={{
+                        background: ingestActive
+                          ? `conic-gradient(from 210deg, var(--aqua) 0 ${ingestProgress}%, rgba(255,255,255,0.18) ${ingestProgress}% 100%)`
+                          : "radial-gradient(circle at 20% 20%, rgba(255,255,255,0.35), rgba(255,255,255,0.05) 65%)",
+                      }}
+                    />
+                    <span className="absolute inset-[2px] rounded-full bg-[color:var(--surface-10)] backdrop-blur" />
+                    <span className="relative z-10 h-full w-full grid place-items-center text-white">
+                      <Sparkles className={ingestActive ? "h-4 w-4 animate-pulse" : "h-4 w-4"} />
+                    </span>
+                  </button>
 
-                {ingestOpen && (
-                  <div className="absolute right-0 mt-3 w-[92vw] max-w-[360px] sm:w-[320px] rounded-[22px] border border-[color:var(--border-60)] bg-[color:var(--panel-strong)] shadow-[var(--shadow-lg)] backdrop-blur-xl overflow-hidden z-50">
-                    <div className="absolute -top-12 -right-12 h-32 w-32 rounded-full bg-[color:var(--aqua)]/20 blur-3xl" />
-                    <div className="absolute -bottom-16 left-6 h-36 w-36 rounded-full bg-[color:var(--blue)]/10 blur-3xl" />
-                    <div className="relative p-4 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <div className="text-xs font-semibold tracking-[0.3em] text-[color:var(--blue)]">
-                            CENTRO DE INGESTA
-                          </div>
-                          <div className="mt-1 text-sm text-[color:var(--text-60)]">
-                            Lanza procesos en segundo plano sin frenar tu flujo.
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {ingestActive && (
-                            <div className="flex items-center gap-2 text-[11px] text-[color:var(--text-55)]">
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                              {ingestProgress}% listo
+                  {ingestOpen && (
+                    <div className="absolute right-0 mt-3 w-[92vw] max-w-[360px] sm:w-[320px] rounded-[22px] border border-[color:var(--border-60)] bg-[color:var(--panel-strong)] shadow-[var(--shadow-lg)] backdrop-blur-xl overflow-hidden z-50">
+                      <div className="absolute -top-12 -right-12 h-32 w-32 rounded-full bg-[color:var(--aqua)]/20 blur-3xl" />
+                      <div className="absolute -bottom-16 left-6 h-36 w-36 rounded-full bg-[color:var(--blue)]/10 blur-3xl" />
+                      <div className="relative p-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="text-xs font-semibold tracking-[0.3em] text-[color:var(--blue)]">
+                              CENTRO DE INGESTA
                             </div>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => setIngestOpen(false)}
-                            aria-label="Cerrar centro de ingesta"
-                            title="Cerrar"
-                            className="h-7 w-7 rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-70)] text-[color:var(--text-55)] transition hover:text-[color:var(--ink)] hover:border-[color:var(--aqua)]"
-                          >
-                            <X className="mx-auto h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      </div>
-
-                      {(["reputation"] as IngestJobKind[]).map((kind) => {
-                        const job = ingestJobs[kind];
-                        const busy =
-                          ingestBusy[kind] ||
-                          job?.status === "queued" ||
-                          job?.status === "running";
-                        const isError = job?.status === "error";
-                        const isSuccess = job?.status === "success";
-                        const label = "Ingesta reputación";
-                        const detail = "Señales externas + sentimiento";
-                        const metaBits: string[] = [];
-                        const items = job?.meta?.items;
-                        if (typeof items === "number") {
-                          metaBits.push(`${items} items`);
-                        }
-                        const observations = job?.meta?.observations;
-                        if (typeof observations === "number") {
-                          metaBits.push(`${observations} observaciones`);
-                        }
-                        const sources = job?.meta?.sources;
-                        if (typeof sources === "number") {
-                          metaBits.push(`${sources} fuentes`);
-                        }
-                        const warning =
-                          typeof job?.meta?.warning === "string" ? job.meta.warning : "";
-                        const jobError = typeof job?.error === "string" ? job.error : "";
-                        const metaLabel = metaBits.join(" · ");
-                        const actionLabel = isError
-                          ? "Reintentar ingesta"
-                          : isSuccess
-                            ? "Lanzar de nuevo"
-                            : "Iniciar ingesta";
-                        const actionDisabled = busy;
-                        return (
-                          <div
-                            key={kind}
-                            className="group relative w-full overflow-hidden rounded-[18px] border border-[color:var(--border-60)] bg-[color:var(--surface-80)] p-3 text-left"
-                          >
-                            <div className="absolute inset-0 opacity-0 transition group-hover:opacity-100" style={{ background: "radial-gradient(140px 60px at 0% 0%, rgba(45,204,205,0.18), transparent 60%)" }} />
-                            <div className="relative flex items-start gap-3">
-                              <div className="h-10 w-10 rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] grid place-items-center">
-                                <Sparkles className="h-5 w-5 text-[color:var(--blue)]" />
-                              </div>
-                              <div className="flex-1">
-                                <div className="text-sm font-semibold text-[color:var(--ink)]">
-                                  {label}
-                                </div>
-                                <div className="text-xs text-[color:var(--text-60)]">{detail}</div>
-                                {job?.stage && (
-                                  <div className="mt-2 text-[11px] text-[color:var(--text-50)]">
-                                    {job.stage}
-                                  </div>
-                                )}
-                                {metaLabel && (
-                                  <div className="mt-1 text-[10px] uppercase tracking-[0.18em] text-[color:var(--text-40)]">
-                                    {metaLabel}
-                                  </div>
-                                )}
-                                {warning && (
-                                  <div className="mt-1 text-[10px] text-[color:var(--text-50)]">
-                                    {warning}
-                                  </div>
-                                )}
-                                {isError && jobError && (
-                                  <div className="mt-2 max-h-24 overflow-auto rounded-lg border border-rose-200 bg-rose-50 px-2 py-1 text-[11px] text-rose-700 break-words">
-                                    {jobError}
-                                  </div>
-                                )}
-                              </div>
-                              <div className="flex items-center gap-2 text-xs">
-                                {busy && <Loader2 className="h-4 w-4 animate-spin text-[color:var(--blue)]" />}
-                                {isSuccess && !busy && (
-                                  <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] text-emerald-700">
-                                    Completado
-                                  </span>
-                                )}
-                                {isError && !busy && (
-                                  <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] text-rose-700">
-                                    Error
-                                  </span>
-                                )}
-                              </div>
+                            <div className="mt-1 text-sm text-[color:var(--text-60)]">
+                              Lanza procesos en segundo plano sin frenar tu flujo.
                             </div>
-
-                            {job && (
-                              <div className="relative mt-3 h-2 w-full rounded-full bg-[color:var(--surface-10)] overflow-hidden">
-                                <div
-                                  className="h-full rounded-full bg-gradient-to-r from-[color:var(--aqua)] via-[color:var(--blue)] to-transparent transition-all"
-                                  style={{ width: `${job.progress ?? 0}%` }}
-                                />
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {ingestActive && (
+                              <div className="flex items-center gap-2 text-[11px] text-[color:var(--text-55)]">
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                {ingestProgress}% listo
                               </div>
                             )}
-
-                            <div className="relative mt-3 flex items-center justify-end">
-                              <button
-                                type="button"
-                                onClick={() => startIngest(kind)}
-                                disabled={actionDisabled}
-                                className="rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-[color:var(--text-55)] transition hover:bg-[color:var(--surface-60)] disabled:opacity-60"
-                              >
-                                {actionLabel}
-                              </button>
-                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setIngestOpen(false)}
+                              aria-label="Cerrar centro de ingesta"
+                              title="Cerrar"
+                              className="h-7 w-7 rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-70)] text-[color:var(--text-55)] transition hover:text-[color:var(--ink)] hover:border-[color:var(--aqua)]"
+                            >
+                              <X className="mx-auto h-3.5 w-3.5" />
+                            </button>
                           </div>
-                        );
-                      })}
-
-                      {ingestError && (
-                        <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
-                          {ingestError}
                         </div>
-                      )}
+
+                        {(["reputation"] as IngestJobKind[]).map((kind) => {
+                          const job = ingestJobs[kind];
+                          const busy =
+                            ingestBusy[kind] ||
+                            job?.status === "queued" ||
+                            job?.status === "running";
+                          const isError = job?.status === "error";
+                          const isSuccess = job?.status === "success";
+                          const label = "Ingesta reputación";
+                          const detail = "Señales externas + sentimiento";
+                          const metaBits: string[] = [];
+                          const items = job?.meta?.items;
+                          if (typeof items === "number") {
+                            metaBits.push(`${items} items`);
+                          }
+                          const observations = job?.meta?.observations;
+                          if (typeof observations === "number") {
+                            metaBits.push(`${observations} observaciones`);
+                          }
+                          const sources = job?.meta?.sources;
+                          if (typeof sources === "number") {
+                            metaBits.push(`${sources} fuentes`);
+                          }
+                          const warning =
+                            typeof job?.meta?.warning === "string" ? job.meta.warning : "";
+                          const jobError = typeof job?.error === "string" ? job.error : "";
+                          const metaLabel = metaBits.join(" · ");
+                          const actionLabel = isError
+                            ? "Reintentar ingesta"
+                            : isSuccess
+                              ? "Lanzar de nuevo"
+                              : "Iniciar ingesta";
+                          const actionDisabled = busy;
+                          return (
+                            <div
+                              key={kind}
+                              className="group relative w-full overflow-hidden rounded-[18px] border border-[color:var(--border-60)] bg-[color:var(--surface-80)] p-3 text-left"
+                            >
+                              <div className="absolute inset-0 opacity-0 transition group-hover:opacity-100" style={{ background: "radial-gradient(140px 60px at 0% 0%, rgba(45,204,205,0.18), transparent 60%)" }} />
+                              <div className="relative flex items-start gap-3">
+                                <div className="h-10 w-10 rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] grid place-items-center">
+                                  <Sparkles className="h-5 w-5 text-[color:var(--blue)]" />
+                                </div>
+                                <div className="flex-1">
+                                  <div className="text-sm font-semibold text-[color:var(--ink)]">
+                                    {label}
+                                  </div>
+                                  <div className="text-xs text-[color:var(--text-60)]">{detail}</div>
+                                  {job?.stage && (
+                                    <div className="mt-2 text-[11px] text-[color:var(--text-50)]">
+                                      {job.stage}
+                                    </div>
+                                  )}
+                                  {metaLabel && (
+                                    <div className="mt-1 text-[10px] uppercase tracking-[0.18em] text-[color:var(--text-40)]">
+                                      {metaLabel}
+                                    </div>
+                                  )}
+                                  {warning && (
+                                    <div className="mt-1 text-[10px] text-[color:var(--text-50)]">
+                                      {warning}
+                                    </div>
+                                  )}
+                                  {isError && jobError && (
+                                    <div className="mt-2 max-h-24 overflow-auto rounded-lg border border-rose-200 bg-rose-50 px-2 py-1 text-[11px] text-rose-700 break-words">
+                                      {jobError}
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-2 text-xs">
+                                  {busy && <Loader2 className="h-4 w-4 animate-spin text-[color:var(--blue)]" />}
+                                  {isSuccess && !busy && (
+                                    <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] text-emerald-700">
+                                      Completado
+                                    </span>
+                                  )}
+                                  {isError && !busy && (
+                                    <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] text-rose-700">
+                                      Error
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+
+                              {job && (
+                                <div className="relative mt-3 h-2 w-full rounded-full bg-[color:var(--surface-10)] overflow-hidden">
+                                  <div
+                                    className="h-full rounded-full bg-gradient-to-r from-[color:var(--aqua)] via-[color:var(--blue)] to-transparent transition-all"
+                                    style={{ width: `${job.progress ?? 0}%` }}
+                                  />
+                                </div>
+                              )}
+
+                              <div className="relative mt-3 flex items-center justify-end">
+                                <button
+                                  type="button"
+                                  onClick={() => startIngest(kind)}
+                                  disabled={actionDisabled}
+                                  className="rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-[color:var(--text-55)] transition hover:bg-[color:var(--surface-60)] disabled:opacity-60"
+                                >
+                                  {actionLabel}
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+
+                        {ingestError && (
+                          <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+                            {ingestError}
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                )}
-              </div>
-            )}
-            <div className="relative w-full sm:w-auto order-1 sm:order-none">
-              <div className="group relative flex flex-wrap items-center gap-3 rounded-[24px] sm:rounded-full border border-[color:var(--border-15)] bg-[color:var(--surface-10)] px-3 py-2 sm:px-2 sm:py-1 sm:pr-1 text-[color:var(--text-inverse-80)] shadow-[var(--shadow-pill)] backdrop-blur-sm w-full sm:w-auto">
+                  )}
+                </div>
+              )}
+            </div>
+            <div className="relative w-full sm:w-auto basis-full sm:basis-auto order-2 sm:order-none">
+              <div className="group relative flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 rounded-[24px] sm:rounded-full border border-[color:var(--border-15)] bg-[color:var(--surface-10)] px-3 py-2 sm:px-2 sm:py-1 sm:pr-1 text-[color:var(--text-inverse-80)] shadow-[var(--shadow-pill)] backdrop-blur-sm w-full sm:w-auto">
                 <div
                   className="absolute inset-0 opacity-0 transition group-hover:opacity-100"
                   style={{
@@ -984,17 +988,17 @@ export function Shell({ children }: { children: React.ReactNode }) {
                       "radial-gradient(160px 80px at 0% 50%, rgba(45,204,205,0.22), transparent 65%)",
                   }}
                 />
-                <div className="relative flex items-center gap-3 min-w-0">
+                <div className="relative flex items-center gap-3 min-w-0 w-full sm:w-auto">
                   <div className="h-8 w-8 rounded-full border border-[color:var(--border-15)] bg-[color:var(--surface-15)] grid place-items-center">
                     <Layers className="h-4 w-4 text-white" />
                   </div>
                   <div className="min-w-0">
-                    <div className="text-[9px] uppercase tracking-[0.32em] text-[color:var(--text-inverse-60)]">
+                    <div className="text-[8px] sm:text-[9px] uppercase tracking-[0.4em] sm:tracking-[0.32em] text-[color:var(--text-inverse-60)]">
                       Perfil activo
                     </div>
                     <div className="flex items-center gap-2">
                       <span
-                        className="text-xs font-semibold text-white truncate max-w-[120px] sm:max-w-[160px] lg:max-w-[220px]"
+                        className="text-[13px] sm:text-xs font-semibold text-white truncate max-w-[120px] sm:max-w-[160px] lg:max-w-[220px]"
                         title={primaryActiveLabel}
                       >
                         {primaryActiveLabel}
@@ -1007,37 +1011,40 @@ export function Shell({ children }: { children: React.ReactNode }) {
                     </div>
                   </div>
                 </div>
-                {primaryActiveMeta ? (
-                  <span
-                    className="relative rounded-full border px-2.5 py-0.5 text-[10px] uppercase tracking-[0.18em]"
+                <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto sm:ml-auto">
+                  {primaryActiveMeta ? (
+                    <span
+                      className="relative rounded-full border px-2.5 py-0.5 text-[10px] uppercase tracking-[0.18em] truncate max-w-[140px] sm:max-w-none"
+                      style={{
+                        color: primaryActiveMeta.tone,
+                        borderColor: primaryActiveMeta.tone,
+                      }}
+                    >
+                      {primaryActiveMeta.label}
+                    </span>
+                  ) : (
+                    <span className="relative rounded-full border border-[color:var(--border-15)] px-2.5 py-0.5 text-[10px] uppercase tracking-[0.18em] text-[color:var(--text-inverse-60)]">
+                      Sin perfil
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={toggleProfileTemplates}
+                    aria-label="Cambiar perfil"
+                    title="Cambiar perfil"
+                    className="relative w-full sm:w-auto rounded-full border border-[color:var(--border-15)] px-3 py-1 text-[9px] sm:text-[10px] uppercase tracking-[0.26em] sm:tracking-[0.24em] text-white transition hover:border-[color:var(--aqua)] hover:text-white active:scale-95"
                     style={{
-                      color: primaryActiveMeta.tone,
-                      borderColor: primaryActiveMeta.tone,
+                      background:
+                        "linear-gradient(120deg, rgba(45, 204, 205, 0.3), rgba(0, 68, 129, 0.35))",
                     }}
                   >
-                    {primaryActiveMeta.label}
-                  </span>
-                ) : (
-                  <span className="relative rounded-full border border-[color:var(--border-15)] px-2.5 py-0.5 text-[10px] uppercase tracking-[0.18em] text-[color:var(--text-inverse-60)]">
-                    Sin perfil
-                  </span>
-                )}
-                <button
-                  type="button"
-                  onClick={toggleProfileTemplates}
-                  aria-label="Cambiar perfil"
-                  title="Cambiar perfil"
-                  className="relative w-full sm:w-auto rounded-full border border-[color:var(--border-15)] px-3 py-1 text-[10px] uppercase tracking-[0.24em] text-white transition hover:border-[color:var(--aqua)] hover:text-white active:scale-95"
-                  style={{
-                    background:
-                      "linear-gradient(120deg, rgba(45, 204, 205, 0.3), rgba(0, 68, 129, 0.35))",
-                  }}
-                >
-                  Cambiar perfil
-                </button>
+                    <span className="sm:hidden">Cambiar</span>
+                    <span className="hidden sm:inline">Cambiar perfil</span>
+                  </button>
+                </div>
               </div>
               {profileAppliedNote && (
-                <span className="absolute right-2 -bottom-6 rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-10)] px-3 py-1 text-[10px] uppercase tracking-[0.18em] text-[color:var(--text-inverse-80)]">
+                <span className="mt-2 sm:mt-0 sm:absolute sm:right-2 sm:-bottom-6 rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-10)] px-3 py-1 text-[10px] uppercase tracking-[0.18em] text-[color:var(--text-inverse-80)]">
                   {autoIngestNote
                     ? "Perfil aplicado · Ingesta automática"
                     : "Perfil aplicado"}
@@ -1261,23 +1268,24 @@ export function Shell({ children }: { children: React.ReactNode }) {
                 </div>
               )}
             </div>
-            <div className="relative order-3 sm:order-none">
-              <button
-                type="button"
-                onClick={() => setSettingsOpen((prev) => !prev)}
-                aria-label="Configuración"
-                title="Configuración"
-                className="h-9 px-2 sm:px-3 rounded-full flex items-center gap-2 border border-[color:var(--border-15)] bg-[color:var(--surface-10)] text-[color:var(--text-inverse-80)] transition hover:bg-[color:var(--surface-15)] hover:text-white"
-              >
-                <SlidersHorizontal className="h-4 w-4" />
-                <span className="text-xs hidden sm:inline">Config</span>
-              </button>
-              {settingsOpen && (
-                <div className="settings-panel absolute right-0 mt-3 w-[92vw] max-w-[520px] sm:w-[420px] rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel-strong)] shadow-[var(--shadow-lg)] backdrop-blur-xl overflow-hidden z-50">
-                  <div className="absolute -top-12 right-6 h-28 w-28 rounded-full bg-[color:var(--aqua)]/20 blur-3xl" />
-                  <div className="absolute -bottom-16 left-10 h-32 w-32 rounded-full bg-[color:var(--blue)]/15 blur-3xl" />
-                  <div className="relative p-4">
-                    <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-2 order-1 w-auto sm:order-none">
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setSettingsOpen((prev) => !prev)}
+                  aria-label="Configuración"
+                  title="Configuración"
+                  className="h-8 sm:h-9 px-2 sm:px-3 rounded-full flex items-center gap-2 border border-[color:var(--border-15)] bg-[color:var(--surface-10)] text-[color:var(--text-inverse-80)] transition hover:bg-[color:var(--surface-15)] hover:text-white"
+                >
+                  <SlidersHorizontal className="h-4 w-4" />
+                  <span className="text-xs hidden sm:inline">Config</span>
+                </button>
+                {settingsOpen && (
+                  <div className="settings-panel absolute right-0 mt-3 w-[92vw] max-w-[520px] sm:w-[420px] rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel-strong)] shadow-[var(--shadow-lg)] backdrop-blur-xl overflow-hidden z-50">
+                    <div className="absolute -top-12 right-6 h-28 w-28 rounded-full bg-[color:var(--aqua)]/20 blur-3xl" />
+                    <div className="absolute -bottom-16 left-10 h-32 w-32 rounded-full bg-[color:var(--blue)]/15 blur-3xl" />
+                    <div className="relative p-4">
+                      <div className="flex items-start justify-between gap-3">
                       <div className="flex items-start gap-3">
                         <div className="h-10 w-10 rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] grid place-items-center">
                           <SlidersHorizontal className="h-5 w-5 text-[color:var(--blue)]" />
@@ -1306,13 +1314,13 @@ export function Shell({ children }: { children: React.ReactNode }) {
                           <X className="mx-auto h-3.5 w-3.5" />
                         </button>
                       </div>
+                      </div>
+                      <div className="mt-3 flex items-center gap-2">
+                        <span className="rounded-full border border-[color:var(--aqua)] bg-[color:var(--surface-70)] px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-white">
+                          Menciones
+                        </span>
+                      </div>
                     </div>
-                    <div className="mt-3 flex items-center gap-2">
-                      <span className="rounded-full border border-[color:var(--aqua)] bg-[color:var(--surface-70)] px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-white">
-                        Menciones
-                      </span>
-                    </div>
-                  </div>
 
                   <div className="max-h-[60vh] overflow-auto px-4 pb-4 space-y-3">
                     {settingsGroups ? (
@@ -1839,56 +1847,70 @@ export function Shell({ children }: { children: React.ReactNode }) {
                         {settingsBusy ? "Guardando..." : "Guardar"}
                       </button>
                     </div>
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={toggleTheme}
+                aria-label={
+                  theme === "ambient-light"
+                    ? "Cambiar a modo oscuro"
+                    : "Cambiar a modo claro"
+                }
+                title={
+                  theme === "ambient-light"
+                    ? "Ambient dark"
+                    : "Ambient light"
+                }
+                className="h-8 w-8 sm:h-9 sm:w-9 rounded-full grid place-items-center border border-[color:var(--border-15)] bg-[color:var(--surface-10)] text-[color:var(--text-inverse-80)] transition hover:bg-[color:var(--surface-15)] hover:text-white active:scale-95"
+                suppressHydrationWarning
+              >
+                {!themeReady ? (
+                  <Moon className="h-4 w-4" />
+                ) : theme === "ambient-light" ? (
+                  <Moon className="h-4 w-4" />
+                ) : (
+                  <Sun className="h-4 w-4" />
+                )}
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={toggleTheme}
-              aria-label={
-                theme === "ambient-light"
-                  ? "Cambiar a modo oscuro"
-                  : "Cambiar a modo claro"
-              }
-              title={
-                theme === "ambient-light"
-                  ? "Ambient dark"
-                  : "Ambient light"
-              }
-              className="h-9 w-9 rounded-full grid place-items-center border border-[color:var(--border-15)] bg-[color:var(--surface-10)] text-[color:var(--text-inverse-80)] transition hover:bg-[color:var(--surface-15)] hover:text-white active:scale-95 order-4 sm:order-none"
-              suppressHydrationWarning
-            >
-              {!themeReady ? (
-                <Moon className="h-4 w-4" />
-              ) : theme === "ambient-light" ? (
-                <Moon className="h-4 w-4" />
-              ) : (
-                <Sun className="h-4 w-4" />
-              )}
-            </button>
 
-            <div className="w-full sm:hidden">
+            <div className="w-full sm:hidden order-3 basis-full">
               <div className="mobile-hero mt-2">
                 <span className="mobile-hero-sheen" aria-hidden="true" />
                 <span className="mobile-hero-orb" aria-hidden="true" />
                 <div className="relative z-10">
-                  <div className="text-[9px] uppercase tracking-[0.4em] text-[color:var(--text-inverse-70)]">
+                  <div className="text-[8px] uppercase tracking-[0.5em] text-[color:var(--text-inverse-70)]">
                     Pulso diario
                   </div>
-                  <div className="mt-1 flex items-center justify-between gap-3">
-                    <div className="font-display text-base font-semibold tracking-tight">
+                  <div className="mt-1.5 flex items-center justify-between gap-3">
+                    <div className="font-display text-[15px] font-semibold tracking-tight leading-tight">
                       Radar reputacional
                     </div>
                     <span className="mobile-hero-pill">Live</span>
                   </div>
-                  <div className="text-xs text-[color:var(--text-inverse-80)]">
+                  <div className="text-[11px] leading-snug text-[color:var(--text-inverse-80)]">
                     Señales clave y sentimiento en un vistazo.
                   </div>
-                  <div className="mt-2 flex flex-wrap gap-2">
+                  <div className="mt-2 flex flex-wrap gap-1.5">
                     <span className="mobile-hero-chip">Menciones</span>
                     <span className="mobile-hero-chip">Tendencias</span>
                     <span className="mobile-hero-chip">Alertas</span>
+                  </div>
+                  <div className="mt-3 flex items-center justify-between gap-2">
+                    <span className="text-[8px] uppercase tracking-[0.36em] text-[color:var(--text-inverse-70)]">
+                      Mejor en escritorio
+                    </span>
+                    <Link
+                      href={desktopCtaHref}
+                      className="mobile-hero-cta"
+                      aria-label="Ver en pantalla grande"
+                    >
+                      Ver en grande
+                      <ArrowUpRight className="h-3 w-3" />
+                    </Link>
                   </div>
                 </div>
               </div>

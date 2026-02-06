@@ -41,7 +41,7 @@ describe("Shell", () => {
       </Shell>
     );
 
-    expect(screen.getAllByText("Dashboard").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Sentimiento").length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("link", { name: "Dashboard" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("link", { name: "Sentimiento" }).length).toBeGreaterThan(0);
   });
 });
