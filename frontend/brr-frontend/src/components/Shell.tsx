@@ -783,7 +783,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
       {/* Barra superior */}
       <header className="sticky top-0 z-40">
         <div
-          className="min-h-16 px-4 sm:px-6 py-4 sm:py-0 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4 text-white shadow-[var(--shadow-header)]"
+          className="relative mobile-header-showcase min-h-16 px-4 sm:px-6 py-4 sm:py-0 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4 text-white shadow-[var(--shadow-header)]"
           style={{
             background: "var(--nav-gradient)",
           }}

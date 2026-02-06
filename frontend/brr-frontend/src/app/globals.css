@@ -450,6 +450,45 @@ body {
   pointer-events: none;
 }
 
+@media (max-width: 639px) {
+  .mobile-header-showcase {
+    isolation: isolate;
+  }
+
+  .mobile-header-showcase::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(180px 120px at 12% -10%, rgba(62, 230, 214, 0.45), transparent 70%),
+      radial-gradient(220px 160px at 95% 0%, rgba(29, 111, 209, 0.45), transparent 72%),
+      linear-gradient(120deg, rgba(255, 255, 255, 0.05), rgba(45, 204, 205, 0.12), transparent 70%);
+    opacity: 0.85;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .mobile-header-showcase::after {
+    content: "";
+    position: absolute;
+    right: -80px;
+    top: -140px;
+    width: 260px;
+    height: 260px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 35%, rgba(255, 255, 255, 0.5), rgba(62, 230, 214, 0.15), transparent 70%);
+    opacity: 0.7;
+    filter: blur(12px);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .mobile-header-showcase > * {
+    position: relative;
+    z-index: 1;
+  }
+}
+
 @keyframes hero-cta-glow {
   0%,
   100% {
