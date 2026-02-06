@@ -10,6 +10,11 @@ PIP := $(PY) -m pip
 FRONTDIR := frontend/brr-frontend
 NPM := npm
 NODE := node
+NPM_INSTALL_CMD ?= install
+
+ifneq ($(CI),)
+NPM_INSTALL_CMD := ci
+endif
 
 HOST ?= 127.0.0.1
 API_PORT ?= 8000
@@ -86,7 +91,7 @@ install-backend: venv
 
 install-front:
 	@echo "==> Instalando dependencias frontend (cd $(FRONTDIR))..."
-	cd $(FRONTDIR) && $(NPM) install
+	cd $(FRONTDIR) && $(NPM) $(NPM_INSTALL_CMD)
 	@echo "==> Instalación frontend completada."
 
 env:
