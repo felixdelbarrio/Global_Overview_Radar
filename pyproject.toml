@@ -4,9 +4,9 @@
 # from failing. Adjust CI to point to backend/pyproject.toml when possible.
 
 [project]
-name = "ReputationRadar-root-stub"
+name = "GlobalOverviewRadar-root-stub"
 version = "0.0.0"
-description = "Stub pyproject for tooling; real metadata in backend/pyproject.toml"
+description = "Stub pyproject for Global Overview Radar tooling; real metadata in backend/pyproject.toml"
 
 [tool.note]
 message = "See backend/pyproject.toml for the real project configuration."

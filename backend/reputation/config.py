@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 import shutil
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Sequence, cast
@@ -26,6 +27,23 @@ PROFILE_STATE_PATH = REPO_ROOT / "data" / "cache" / "reputation_profile.json"
 DEFAULT_CACHE_TTL_HOURS = 24
 
 logger = logging.getLogger(__name__)
+
+_CONFIG_CACHE_KEY: tuple[tuple[str, float], ...] | None = None
+_CONFIG_CACHE: Dict[str, Any] | None = None
+
+
+def _file_cache_key(path: Path) -> tuple[str, float]:
+    try:
+        mtime = path.stat().st_mtime
+    except OSError:
+        mtime = 0.0
+    return (str(path), mtime)
+
+
+def _build_config_cache_key(
+    config_files: Sequence[Path], llm_files: Sequence[Path]
+) -> tuple[tuple[str, float], ...]:
+    return tuple(_file_cache_key(path) for path in [*config_files, *llm_files])
 
 
 class ReputationSettings(BaseSettings):
@@ -162,12 +180,17 @@ def load_business_config(path: Path | None = None) -> Dict[str, Any]:
             f"Reputation config files not found at {cfg_path} (searched *.json)"
         )
 
+    llm_files = _resolve_llm_config_files(config_files, settings.llm_config_path)
+    cache_key = _build_config_cache_key(config_files, llm_files)
+    global _CONFIG_CACHE_KEY, _CONFIG_CACHE
+    if cache_key == _CONFIG_CACHE_KEY and _CONFIG_CACHE is not None:
+        return _CONFIG_CACHE
+
     merged: Dict[str, Any] = {}
     for file_path in config_files:
         data = _load_config_file(file_path)
         merged = _merge_configs(merged, data, file_path)
 
-    llm_files = _resolve_llm_config_files(config_files, settings.llm_config_path)
     for file_path in llm_files:
         data = _load_config_file(file_path)
         merged = _merge_configs(merged, data, file_path)
@@ -186,6 +209,8 @@ def load_business_config(path: Path | None = None) -> Dict[str, Any]:
             ", ".join(str(p) for p in llm_files),
         )
 
+    _CONFIG_CACHE_KEY = cache_key
+    _CONFIG_CACHE = merged
     return merged
 
 
@@ -514,6 +539,12 @@ def _apply_profile_path_template(
 
 def _apply_profile_state(cfg_settings: ReputationSettings) -> None:
     global _ACTIVE_PROFILE_SOURCE
+    if os.getenv("REPUTATION_PROFILE_STATE_DISABLED", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }:
+        return
     state = _load_profile_state()
     if not state:
         return

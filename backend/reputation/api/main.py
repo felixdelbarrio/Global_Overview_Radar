@@ -1,4 +1,4 @@
-"""Factory de la aplicacion FastAPI para Reputation Radar."""
+"""Factory de la aplicacion FastAPI para Global Overview Radar."""
 
 from __future__ import annotations
 
@@ -13,8 +13,7 @@ from reputation.config import settings
 from reputation.logging_utils import configure_logging, get_logger
 from reputation.repositories.cache_repo import ReputationCacheRepo
 
-
-APP_TITLE = "Reputation Radar"
+APP_TITLE = "Global Overview Radar"
 
 
 def create_app() -> FastAPI:

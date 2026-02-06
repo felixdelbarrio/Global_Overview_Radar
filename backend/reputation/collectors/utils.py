@@ -25,6 +25,7 @@ _HTTP_BLOCKED: dict[str, float] = {}
 
 DEFAULT_HTTP_CACHE_TTL_SEC = 120
 DEFAULT_HTTP_CACHE_MAX_ENTRIES = 500
+DEFAULT_HTTP_CACHE_MAX_BYTES = 1_000_000
 DEFAULT_HTTP_RETRIES = 1
 DEFAULT_HTTP_BLOCK_TTL_SEC = 90
 
@@ -76,6 +77,9 @@ def _http_cache_get(key: str) -> str | None:
 def _http_cache_set(key: str, value: str) -> None:
     ttl = _env_int("REPUTATION_HTTP_CACHE_TTL_SEC", DEFAULT_HTTP_CACHE_TTL_SEC)
     if ttl <= 0:
+        return
+    max_bytes = _env_int("REPUTATION_HTTP_CACHE_MAX_BYTES", DEFAULT_HTTP_CACHE_MAX_BYTES)
+    if max_bytes > 0 and len(value) > max_bytes:
         return
     expires_at = time.time() + ttl
     with _HTTP_CACHE_LOCK:
@@ -315,6 +319,23 @@ def match_keywords(text: str | None, keywords: Iterable[str]) -> bool:
     if not text:
         return False
     tokens = set(tokenize(text))
+    if not tokens:
+        return False
+    for keyword in keywords:
+        if not keyword:
+            continue
+        ktokens = [t for t in tokenize(keyword) if t not in _STOPWORDS and len(t) > 1]
+        if not ktokens:
+            continue
+        if all(token in tokens for token in ktokens):
+            return True
+    return False
+
+
+def match_keyword_tokens(tokens: set[str], keywords: Iterable[str]) -> bool:
+    """Match keywords against pre-tokenized text to avoid repeated normalization."""
+    if not keywords:
+        return True
     if not tokens:
         return False
     for keyword in keywords:

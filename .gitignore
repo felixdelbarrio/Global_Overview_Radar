@@ -69,6 +69,11 @@ data/reputation/**/*.json
 data/reputation_llm/**/*.json
 data/cache/**/*.json
 data/cache/
+benchmarks/
+*.prof
+*.pstats
+*.lprof
+*.profile
 
 ############################
 # Logs & runtime files

@@ -46,10 +46,8 @@ import {
   SETTINGS_CHANGED_EVENT,
   type IngestSuccessDetail,
 } from "@/lib/events";
-import { INCIDENTS_FEATURE_ENABLED } from "@/lib/flags";
 import type {
   ActorPrincipalMeta,
-  EvolutionPoint,
   MarketRating,
   IngestJob,
   ReputationCacheDocument,
@@ -89,21 +87,9 @@ type SentimentViewProps = {
   mode?: DashboardMode;
 };
 
-type IncidentItem = {
-  global_id: string;
-  title: string;
-  status: string;
-  severity: string;
-  opened_at?: string | null;
-  updated_at?: string | null;
-  closed_at?: string | null;
-  product?: string | null;
-  feature?: string | null;
-};
-
 type DashboardMention = {
   key: string;
-  kind: "sentiment" | "incident";
+  kind: "sentiment";
   title: string;
   text?: string;
   geo?: string;
@@ -112,8 +98,6 @@ type DashboardMention = {
   rating?: number | null;
   date?: string | null;
   sources?: string[];
-  severity?: string;
-  status?: string;
 };
 
 export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
@@ -160,7 +144,6 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
   const [overrideRefresh, setOverrideRefresh] = useState(0);
   const [reputationRefresh, setReputationRefresh] = useState(0);
   const [profileRefresh, setProfileRefresh] = useState(0);
-  const [incidentsRefresh, setIncidentsRefresh] = useState(0);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
   const [reputationIngesting, setReputationIngesting] = useState(false);
   const [reputationIngestNote, setReputationIngestNote] = useState<string | null>(null);
@@ -179,16 +162,9 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
           : "actor_principal",
     [isDashboard, effectiveActor],
   );
-  const incidentsAvailable = meta?.incidents_available === true;
-  const incidentsEnabled =
-    INCIDENTS_FEATURE_ENABLED && incidentsAvailable && meta?.ui?.incidents_enabled !== false;
-  const showIncidents = mode === "dashboard" && incidentsEnabled;
   const showDownloads = mode === "sentiment";
   const reputationCacheMissing = meta?.cache_available === false;
   const showCacheNotice = reputationCacheMissing && !cacheNoticeDismissed;
-  const [incidents, setIncidents] = useState<IncidentItem[]>([]);
-  const [incidentsSeries, setIncidentsSeries] = useState<EvolutionPoint[]>([]);
-  const [incidentsError, setIncidentsError] = useState<string | null>(null);
 
   const touchItemsFilters = () => {
     setError(null);
@@ -218,15 +194,12 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
       if (detail.kind === "reputation") {
         setReputationRefresh((value) => value + 1);
       }
-      if (detail.kind === "incidents") {
-        setIncidentsRefresh((value) => value + 1);
-      }
     };
     window.addEventListener(INGEST_SUCCESS_EVENT, handler as EventListener);
     return () => {
       window.removeEventListener(INGEST_SUCCESS_EVENT, handler as EventListener);
     };
-  }, [reputationRefresh]);
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return undefined;
@@ -323,39 +296,6 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
       alive = false;
     };
   }, [profileRefresh]);
-
-  useEffect(() => {
-    if (!showIncidents) {
-      setIncidents([]);
-      setIncidentsSeries([]);
-      setIncidentsError(null);
-      return;
-    }
-    let alive = true;
-
-    apiGet<{ items: IncidentItem[] }>("/incidents?sort=updated_desc&limit=200")
-      .then((payload) => {
-        if (!alive) return;
-        setIncidents(payload.items ?? []);
-      })
-      .catch((e) => {
-        if (alive) setIncidentsError(String(e));
-      });
-
-    const days = computeEvolutionDays(effectiveFromDate, effectiveToDate, today);
-    apiGet<{ days: number; series: EvolutionPoint[] }>(`/evolution?days=${days}`)
-      .then((payload) => {
-        if (!alive) return;
-        setIncidentsSeries(payload.series ?? []);
-      })
-      .catch((e) => {
-        if (alive) setIncidentsError(String(e));
-      });
-
-    return () => {
-      alive = false;
-    };
-  }, [showIncidents, effectiveFromDate, effectiveToDate, today, incidentsRefresh]);
 
   useEffect(() => {
     let alive = true;
@@ -636,30 +576,6 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
       ),
     [chartItems, effectiveActor, principalAliasKeys, effectiveFromDate, effectiveToDate],
   );
-  const dashboardSeries = useMemo(
-    () =>
-      buildDashboardSeries(
-        sentimentSeries,
-        incidentsSeries,
-        effectiveFromDate,
-        effectiveToDate,
-        showIncidents,
-      ),
-    [sentimentSeries, incidentsSeries, effectiveFromDate, effectiveToDate, showIncidents],
-  );
-  const incidentsSummary = useMemo(() => {
-    if (!showIncidents || !incidentsSeries.length) {
-      return { open: 0, newTotal: 0, closedTotal: 0 };
-    }
-    const last = incidentsSeries[incidentsSeries.length - 1];
-    return {
-      open: last?.open ?? 0,
-      newTotal: incidentsSeries.reduce((acc, row) => acc + (row.new ?? 0), 0),
-      closedTotal: incidentsSeries.reduce((acc, row) => acc + (row.closed ?? 0), 0),
-    };
-  }, [showIncidents, incidentsSeries]);
-  const incidentsSummaryLoading =
-    showIncidents && !incidentsSeries.length && !incidentsError;
   const groupedMentions = useMemo(() => groupMentions(items), [items]);
   const rangeLabel = useMemo(
     () => buildRangeLabel(effectiveFromDate, effectiveToDate),
@@ -755,54 +671,42 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
       date: group.published_at || group.collected_at || null,
       sources: group.sources.map((src) => src.name),
     }));
-    const incidentMentions = showIncidents
-      ? incidents.map((it) => ({
-          key: `incident:${it.global_id}`,
-          kind: "incident" as const,
-          title: it.title || it.global_id,
-          text: [it.product, it.feature].filter(Boolean).join(" · ") || undefined,
-          date: it.updated_at || it.opened_at || it.closed_at || null,
-          severity: it.severity,
-          status: it.status,
-        }))
-      : [];
-
-    return [...sentimentMentions, ...incidentMentions]
+    return sentimentMentions
       .sort((a, b) => {
         const da = a.date || "";
         const db = b.date || "";
         return db.localeCompare(da);
       })
       .slice(0, 20);
-  }, [groupedMentions, incidents, showIncidents, isDashboard, principalAliasKeys]);
+  }, [groupedMentions, isDashboard, principalAliasKeys]);
   const [mentionsTab, setMentionsTab] = useState<"principal" | "actor">("principal");
 
   const mentionsToShow =
     mentionsTab === "principal" ? principalMentions : actorMentions;
   const mentionsLabel = mentionsTab === "principal" ? principalLabel : actorLabel;
-  const errorMessage = error || chartError || incidentsError;
+  const errorMessage = error || chartError;
   const mentionsLoading = itemsLoading || chartLoading;
   const headerEyebrow = mode === "dashboard" ? "Dashboard" : "Panorama reputacional";
   const headerTitle =
     mode === "dashboard" ? "Dashboard reputacional" : "Sentimiento histórico";
   const headerSubtitle =
     mode === "dashboard"
-      ? "Señales de percepción y salud operativa en un mismo vistazo."
+      ? "Señales de percepción y confianza de mercado en un solo vistazo."
       : "Analiza la conversación por país, periodo y fuente. Detecta señales tempranas y compara impacto entre entidades.";
 
   return (
     <Shell>
-      <section className="relative overflow-hidden rounded-[28px] border border-[color:var(--border-60)] bg-[color:var(--panel-strong)] p-6 shadow-[var(--shadow-lg)] animate-rise">
+      <section className="relative overflow-hidden rounded-[28px] border border-[color:var(--border-60)] bg-[color:var(--panel-strong)] p-5 sm:p-6 shadow-[var(--shadow-lg)] animate-rise">
         <div className="absolute inset-0 pointer-events-none">
           <div className="absolute -top-24 -right-10 h-48 w-48 rounded-full bg-[color:var(--aqua)]/15 blur-3xl" />
           <div className="absolute -bottom-16 left-10 h-40 w-40 rounded-full bg-[color:var(--blue)]/10 blur-3xl" />
         </div>
         <div className="relative">
-          <div className="inline-flex items-center gap-2 rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-[color:var(--blue)] shadow-sm">
+          <div className="inline-flex items-center gap-2 rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-1 text-[11px] caps-hero text-[color:var(--blue)] shadow-sm">
             <Sparkles className="h-3.5 w-3.5" />
             {headerEyebrow}
           </div>
-          <h1 className="mt-4 text-3xl sm:text-4xl font-display font-semibold text-[color:var(--ink)]">
+          <h1 className="mt-4 text-3xl sm:text-4xl font-display font-bold text-[color:var(--ink)]">
             {headerTitle}
           </h1>
           <p className="mt-2 max-w-2xl text-sm text-[color:var(--text-60)]">
@@ -861,7 +765,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
               type="button"
               onClick={handleStartReputationIngest}
               disabled={reputationIngesting}
-              className="inline-flex items-center gap-2 rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[color:var(--ink)] transition hover:shadow-[var(--shadow-soft)] disabled:opacity-70"
+              className="inline-flex items-center gap-2 rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-4 py-2 text-xs font-semibold caps-micro text-[color:var(--ink)] transition hover:shadow-[var(--shadow-soft)] disabled:opacity-70"
             >
               {reputationIngesting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
               Iniciar ingesta
@@ -876,12 +780,12 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
         </div>
       )}
 
-      <div className="mt-6 grid grid-cols-1 lg:grid-cols-[1.2fr_1fr] gap-4">
+      <div className="mt-6 grid grid-cols-1 lg:grid-cols-[1.2fr_1fr] gap-3 sm:gap-4">
         <section
-          className="rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-5 shadow-[var(--shadow-md)] backdrop-blur-xl animate-rise"
+          className="rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-4 sm:p-5 shadow-[var(--shadow-md)] backdrop-blur-xl animate-rise"
           style={{ animationDelay: "120ms" }}
         >
-          <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
+          <div className="text-[11px] caps-section text-[color:var(--blue)]">
             FILTROS PRINCIPALES
           </div>
           <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -973,7 +877,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
           </div>
 
           <div className="mt-4">
-            <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
+            <div className="text-[11px] caps-section text-[color:var(--blue)]">
               FUENTES
             </div>
             <div className="mt-2 flex flex-wrap gap-2">
@@ -1033,13 +937,13 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
         </section>
 
         <section
-          className="rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-5 shadow-[var(--shadow-md)] backdrop-blur-xl animate-rise"
+          className="rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-4 sm:p-5 shadow-[var(--shadow-md)] backdrop-blur-xl animate-rise"
           style={{ animationDelay: "180ms" }}
         >
-          <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
+          <div className="text-[11px] caps-section text-[color:var(--blue)]">
             RESUMEN
           </div>
-          <div className="mt-4 grid grid-cols-2 gap-3">
+          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
             <SummaryCard label="Total menciones" value={items.length} loading={itemsLoading} />
             <SummaryCard
               label="Score medio"
@@ -1093,33 +997,9 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
               </>
             )}
           </div>
-          {isDashboard && showIncidents && (
-            <>
-              <div className="mt-4 text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
-                INCIDENCIAS · ÚLTIMOS 30 DÍAS
-              </div>
-              <div className="mt-2 grid grid-cols-2 gap-3">
-                <SummaryCard
-                  label="Abiertas"
-                  value={incidentsSummary.open}
-                  loading={incidentsSummaryLoading}
-                />
-                <SummaryCard
-                  label="Nuevas"
-                  value={incidentsSummary.newTotal}
-                  loading={incidentsSummaryLoading}
-                />
-                <SummaryCard
-                  label="Cerradas"
-                  value={incidentsSummary.closedTotal}
-                  loading={incidentsSummaryLoading}
-                />
-              </div>
-            </>
-          )}
           {!isDashboard && (
             <div className="mt-5">
-              <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
+              <div className="text-[11px] caps-section text-[color:var(--blue)]">
                 TOP FUENTES
               </div>
               <div className="mt-2 space-y-2">
@@ -1143,7 +1023,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
           )}
           {!isDashboard && (
             <div className="mt-4">
-              <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
+              <div className="text-[11px] caps-section text-[color:var(--blue)]">
                 TOP OTROS ACTORES DEL MERCADO
               </div>
               <div className="mt-2 space-y-2">
@@ -1169,14 +1049,14 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
       </div>
 
       {!isDashboard && (
-        <section className="mt-6 rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-5 shadow-[var(--shadow-md)] backdrop-blur-xl animate-rise" style={{ animationDelay: "240ms" }}>
-          <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
+        <section className="mt-6 rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-4 sm:p-5 shadow-[var(--shadow-md)] backdrop-blur-xl animate-rise" style={{ animationDelay: "240ms" }}>
+          <div className="text-[11px] caps-section text-[color:var(--blue)]">
             {`SENTIMIENTO POR PAÍS: ${actorPrincipalName}`}
           </div>
           <div className="mt-3 overflow-auto">
             <table className="min-w-full text-sm">
               <thead>
-                <tr className="text-left text-[11px] uppercase tracking-[0.2em] text-[color:var(--text-45)]">
+                <tr className="text-left text-[11px] caps-tight text-[color:var(--text-60)]">
                   <th className="py-2 pr-4">País</th>
                   <th className="py-2 pr-4">Menciones</th>
                   <th className="py-2 pr-4">Score medio</th>
@@ -1204,7 +1084,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
                 )}
                 {!itemsLoading && !geoSummaryPrincipal.length && (
                   <tr>
-                    <td className="py-3 text-sm text-[color:var(--text-45)]" colSpan={6}>
+                    <td className="py-3 text-sm text-[color:var(--text-55)]" colSpan={6}>
                       No hay datos para los filtros seleccionados.
                     </td>
                   </tr>
@@ -1215,14 +1095,10 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
         </section>
       )}
 
-      <section className="mt-6 rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-5 shadow-[var(--shadow-md)] backdrop-blur-xl animate-rise" style={{ animationDelay: "300ms" }}>
+        <section className="mt-6 rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-4 sm:p-5 shadow-[var(--shadow-md)] backdrop-blur-xl animate-rise" style={{ animationDelay: "300ms" }}>
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
-            {mode === "dashboard"
-              ? showIncidents
-                ? "SENTIMIENTO VS INCIDENCIAS"
-                : "SENTIMIENTO"
-              : "ÍNDICE REPUTACIONAL ACUMULADO"}
+          <div className="text-[11px] caps-section text-[color:var(--blue)]">
+            {mode === "dashboard" ? "SENTIMIENTO" : "ÍNDICE REPUTACIONAL ACUMULADO"}
           </div>
           <div className="text-xs text-[color:var(--text-55)]">
             {mode === "dashboard"
@@ -1241,22 +1117,15 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
                   buildDownloadName("sentimiento_grafico", fromDate, toDate),
                 )
               }
-              className="inline-flex items-center gap-2 rounded-full border border-[color:var(--border-70)] bg-[color:var(--surface-80)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--brand-ink)] shadow-[var(--shadow-pill)] transition hover:-translate-y-0.5 hover:shadow-[var(--shadow-pill-hover)]"
+              className="inline-flex items-center gap-2 rounded-full border border-[color:var(--border-70)] bg-[color:var(--surface-80)] px-3 py-1 text-[11px] font-semibold caps-micro text-[color:var(--brand-ink)] shadow-[var(--shadow-pill)] transition hover:-translate-y-0.5 hover:shadow-[var(--shadow-pill-hover)]"
             >
               Descargar gráfico
             </button>
           </div>
         )}
-        <div className="mt-3 h-72 min-h-[240px]">
+        <div className="mt-3 h-64 sm:h-72 min-h-[240px]">
           {chartLoading ? (
             <div className="h-full rounded-[22px] border border-[color:var(--border-60)] bg-[color:var(--surface-70)] animate-pulse" />
-          ) : mode === "dashboard" ? (
-            <DashboardChart
-              data={dashboardSeries}
-              sentimentLabel={principalLabel}
-              incidentsLabel={`Incidencias ${principalLabel}`}
-              showIncidents={showIncidents}
-            />
           ) : (
             <SentimentChart
               data={sentimentSeries}
@@ -1269,9 +1138,9 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
 
 
       {mode === "dashboard" ? (
-        <section className="mt-6 rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-5 shadow-[var(--shadow-md)] backdrop-blur-xl animate-rise" style={{ animationDelay: "360ms" }}>
+        <section className="mt-6 rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-4 sm:p-5 shadow-[var(--shadow-md)] backdrop-blur-xl animate-rise" style={{ animationDelay: "360ms" }}>
           <div className="flex items-center justify-between gap-3">
-            <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
+            <div className="text-[11px] caps-section text-[color:var(--blue)]">
               ÚLTIMAS MENCIONES
             </div>
             <div className="text-xs text-[color:var(--text-50)]">
@@ -1280,7 +1149,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
               ) : (
                 <>
                   Mostrando {dashboardMentions.length} recientes ·{" "}
-                  {showIncidents ? "Sentimiento + incidencias" : "Sentimiento"}
+                  Sentimiento
                 </>
               )}
             </div>
@@ -1299,16 +1168,16 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
                 />
               ))}
             {!mentionsLoading && !dashboardMentions.length && (
-              <div className="text-sm text-[color:var(--text-45)]">
+              <div className="text-sm text-[color:var(--text-55)]">
                 No hay menciones para mostrar.
               </div>
             )}
           </div>
         </section>
       ) : (
-        <section className="mt-6 rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-5 shadow-[var(--shadow-md)] backdrop-blur-xl animate-rise" style={{ animationDelay: "360ms" }}>
+        <section className="mt-6 rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-4 sm:p-5 shadow-[var(--shadow-md)] backdrop-blur-xl animate-rise" style={{ animationDelay: "360ms" }}>
           <div className="flex items-center justify-between gap-3">
-            <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
+            <div className="text-[11px] caps-section text-[color:var(--blue)]">
               LISTADO COMPLETO
             </div>
             <div className="text-xs text-[color:var(--text-50)]">
@@ -1331,12 +1200,12 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
                   : "text-[color:var(--text-50)] hover:text-[color:var(--ink)] hover:bg-[color:var(--surface-80)]")
               }
             >
-              <span className="inline-block h-1.5 w-7 rounded-full bg-[#004481]" />
+              <span className="inline-block h-1.5 w-7 rounded-full bg-[color:var(--blue)]" />
               {principalLabel}
               <span className="text-[10px] text-[color:var(--text-40)]">
                 {principalMentions.length} resultados
               </span>
-              <span className="flex items-center gap-1 text-[9px] uppercase tracking-[0.2em] text-[color:var(--text-40)] opacity-0 transition group-hover:opacity-100 group-focus-visible:opacity-100">
+              <span className="flex items-center gap-1 text-[9px] caps-tight text-[color:var(--text-40)] opacity-0 transition group-hover:opacity-100 group-focus-visible:opacity-100">
                 <ArrowUpRight className="h-3 w-3" />
                 Clic
               </span>
@@ -1350,12 +1219,12 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
                   : "text-[color:var(--text-50)] hover:text-[color:var(--ink)] hover:bg-[color:var(--surface-80)]")
               }
             >
-              <span className="inline-block h-[3px] w-7 rounded-full border-t-2 border-dashed border-[#2dcccd]" />
+              <span className="inline-block h-[3px] w-7 rounded-full border-t-2 border-dashed border-[color:var(--aqua)]" />
               {actorLabel}
               <span className="text-[10px] text-[color:var(--text-40)]">
                 {actorMentions.length} resultados
               </span>
-              <span className="flex items-center gap-1 text-[9px] uppercase tracking-[0.2em] text-[color:var(--text-40)] opacity-0 transition group-hover:opacity-100 group-focus-visible:opacity-100">
+              <span className="flex items-center gap-1 text-[9px] caps-tight text-[color:var(--text-40)] opacity-0 transition group-hover:opacity-100 group-focus-visible:opacity-100">
                 <ArrowUpRight className="h-3 w-3" />
                 Clic
               </span>
@@ -1372,7 +1241,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
                         activeTab: mentionsTab,
                       })
                     }
-                    className="inline-flex items-center gap-2 rounded-full border border-[color:var(--border-70)] bg-[color:var(--surface-80)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--brand-ink)] shadow-[var(--shadow-pill)] transition hover:-translate-y-0.5 hover:shadow-[var(--shadow-pill-hover)]"
+                    className="inline-flex items-center gap-2 rounded-full border border-[color:var(--border-70)] bg-[color:var(--surface-80)] px-3 py-1 text-[11px] font-semibold caps-micro text-[color:var(--brand-ink)] shadow-[var(--shadow-pill)] transition hover:-translate-y-0.5 hover:shadow-[var(--shadow-pill-hover)]"
                   >
                     Descargar listado
               </button>
@@ -1394,7 +1263,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
                 />
               ))}
             {!mentionsLoading && !mentionsToShow.length && (
-              <div className="text-sm text-[color:var(--text-45)]">
+              <div className="text-sm text-[color:var(--text-55)]">
                 No hay menciones para mostrar.
               </div>
             )}
@@ -1413,7 +1282,7 @@ function FilterField({
   children: React.ReactNode;
 }) {
   return (
-    <label className="text-[11px] uppercase tracking-[0.18em] text-[color:var(--text-50)]">
+    <label className="text-[11px] caps-micro text-[color:var(--text-50)]">
       <span className="block mb-2">{label}</span>
       {children}
     </label>
@@ -1448,7 +1317,7 @@ function SummaryCard({
   return (
     <div className="relative overflow-hidden rounded-2xl border border-[color:var(--border-70)] bg-[color:var(--surface-80)] px-4 py-3 shadow-[var(--shadow-soft)]">
       <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-[color:var(--aqua)] via-[color:var(--blue)] to-transparent" />
-      <div className="text-[11px] uppercase tracking-[0.16em] text-[color:var(--text-45)]">
+      <div className="text-[11px] caps-micro text-[color:var(--text-55)]">
         {label}
       </div>
       <div className="mt-2 text-2xl font-display font-semibold text-[color:var(--ink)]">
@@ -1483,7 +1352,7 @@ function StoreRatingCard({
   return (
     <div className="relative flex h-full flex-col overflow-hidden rounded-2xl border border-[color:var(--border-70)] bg-[color:var(--surface-80)] px-4 py-3 shadow-[var(--shadow-soft)]">
       <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-[color:var(--aqua)] via-[color:var(--blue)] to-transparent" />
-      <div className="text-[11px] uppercase tracking-[0.16em] text-[color:var(--text-45)]">
+      <div className="text-[11px] caps-micro text-[color:var(--text-55)]">
         {label}
       </div>
       {loading ? (
@@ -1542,7 +1411,7 @@ function StoreRatingRow({
       ? "text-emerald-400"
       : trend.status === "down"
         ? "text-rose-400"
-        : "text-[color:var(--text-45)]";
+        : "text-[color:var(--text-55)]";
   return (
     <div className="group relative grid grid-cols-[28px_1fr_auto] items-center gap-3 rounded-xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-2">
       <div className={tone === "apple" ? "text-white" : "text-[color:var(--aqua)]"}>
@@ -1550,12 +1419,12 @@ function StoreRatingRow({
       </div>
       <div
         className={`text-right text-lg font-display font-semibold ${
-          hasValue ? "text-[color:var(--ink)]" : "text-[color:var(--text-45)]"
+          hasValue ? "text-[color:var(--ink)]" : "text-[color:var(--text-55)]"
         }`}
       >
         {hasValue ? value.toFixed(2) : "—"}
         {hasValue && (
-          <span className="ml-1 text-[11px] text-[color:var(--text-45)]">
+          <span className="ml-1 text-[11px] text-[color:var(--text-55)]">
             /5
           </span>
         )}
@@ -1758,7 +1627,7 @@ function MentionCard({
           <span className="inline-flex items-center gap-2 rounded-full border border-[color:var(--aqua)]/40 [background-image:var(--gradient-chip)] px-2.5 py-1 text-[11px] text-[color:var(--brand-ink)] shadow-[var(--shadow-pill)]">
             <StarMeter rating={ratingValue} />
             <span className="font-semibold">{ratingLabel}</span>
-            <span className="text-[10px] uppercase tracking-[0.2em] text-[color:var(--text-45)]">/5</span>
+            <span className="text-[10px] caps-tight text-[color:var(--text-55)]">/5</span>
           </span>
         )}
         {item.manual_override && (
@@ -1792,12 +1661,12 @@ function MentionCard({
       {!manualOverrideBlocked && (
         <div className="mt-4 rounded-2xl border border-[color:var(--aqua)]/30 [background-image:var(--gradient-callout)] p-3 shadow-[inset_0_1px_0_var(--inset-highlight-strong)]">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="text-[10px] font-semibold uppercase tracking-[0.3em] text-[color:var(--blue)]">
+            <div className="text-[10px] caps-section text-[color:var(--blue)]">
               Control manual
             </div>
             <button
               onClick={() => setEditOpen((value) => !value)}
-              className="inline-flex items-center gap-2 rounded-full border border-[color:var(--border-70)] bg-[color:var(--surface-80)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--brand-ink)] shadow-[var(--shadow-pill)] transition hover:-translate-y-0.5 hover:shadow-[var(--shadow-pill-hover)]"
+              className="inline-flex items-center gap-2 rounded-full border border-[color:var(--border-70)] bg-[color:var(--surface-80)] px-3 py-1 text-[11px] font-semibold caps-micro text-[color:var(--brand-ink)] shadow-[var(--shadow-pill)] transition hover:-translate-y-0.5 hover:shadow-[var(--shadow-pill-hover)]"
             >
               <PenSquare className="h-3.5 w-3.5" />
               {editOpen ? "Cerrar" : "Ajustar"}
@@ -1813,7 +1682,7 @@ function MentionCard({
           {editOpen && (
             <div className="mt-3 grid gap-3">
               <div className="grid gap-1">
-                <span className="text-[10px] uppercase tracking-[0.2em] text-[color:var(--text-45)]">
+                <span className="text-[10px] caps-tight text-[color:var(--text-55)]">
                   País
                 </span>
                 <input
@@ -1831,7 +1700,7 @@ function MentionCard({
                 </datalist>
               </div>
               <div className="grid gap-2">
-                <span className="text-[10px] uppercase tracking-[0.2em] text-[color:var(--text-45)]">
+                <span className="text-[10px] caps-tight text-[color:var(--text-55)]">
                   Sentimiento
                 </span>
                 <div className="flex flex-wrap gap-2">
@@ -1865,7 +1734,7 @@ function MentionCard({
                 <button
                   onClick={handleSave}
                   disabled={!isDirty || saving}
-                  className="inline-flex items-center gap-2 rounded-full bg-[color:var(--blue)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-white shadow-[0_12px_26px_rgba(0,68,129,0.28)] transition hover:-translate-y-0.5 hover:shadow-[0_16px_32px_rgba(0,68,129,0.32)] disabled:cursor-not-allowed disabled:opacity-60"
+                  className="inline-flex items-center gap-2 rounded-full bg-[color:var(--blue)] px-4 py-2 text-xs font-semibold caps-micro text-white shadow-[0_12px_26px_rgba(0,68,129,0.28)] transition hover:-translate-y-0.5 hover:shadow-[0_16px_32px_rgba(0,68,129,0.32)] disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {saving ? (
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -1881,7 +1750,7 @@ function MentionCard({
                     setDraftSentiment(currentSentiment);
                     setLocalError(null);
                   }}
-                  className="inline-flex items-center gap-2 rounded-full border border-[color:var(--border-70)] bg-[color:var(--surface-80)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[color:var(--text-60)] transition hover:text-[color:var(--ink)]"
+                  className="inline-flex items-center gap-2 rounded-full border border-[color:var(--border-70)] bg-[color:var(--surface-80)] px-4 py-2 text-xs font-semibold caps-micro text-[color:var(--text-60)] transition hover:text-[color:var(--ink)]"
                 >
                   <X className="h-3.5 w-3.5" />
                   Cancelar
@@ -1891,9 +1760,9 @@ function MentionCard({
           )}
         </div>
       )}
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs text-[color:var(--text-45)]">
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs text-[color:var(--text-55)]">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-[11px] uppercase tracking-[0.16em] text-[color:var(--text-40)]">
+          <span className="text-[11px] caps-micro text-[color:var(--text-40)]">
             Fuentes
           </span>
           {item.sources.map((src) =>
@@ -2575,7 +2444,7 @@ function SentimentChart({
 
   if (!data.length) {
     return (
-      <div className="h-full grid place-items-center text-sm text-[color:var(--text-45)]">
+      <div className="h-full grid place-items-center text-sm text-[color:var(--text-55)]">
         No hay datos para el periodo seleccionado.
       </div>
     );
@@ -2589,11 +2458,15 @@ function SentimentChart({
           dataKey="date"
           tickFormatter={(d: string) => d.slice(5)}
           fontSize={11}
+          tick={{ fill: "var(--text-60)" }}
+          axisLine={{ stroke: "var(--border)" }}
         />
         <YAxis
           domain={["auto", "auto"]}
           fontSize={11}
           tickFormatter={(v: number) => v.toFixed(2)}
+          tick={{ fill: "var(--text-60)" }}
+          axisLine={{ stroke: "var(--border)" }}
         />
         <ReferenceLine y={0} stroke="var(--chart-reference)" strokeDasharray="3 3" />
         <Tooltip
@@ -2603,14 +2476,16 @@ function SentimentChart({
             borderRadius: 16,
             border: "1px solid var(--border)",
             boxShadow: "var(--shadow-tooltip)",
+            background: "var(--surface-85)",
+            color: "var(--text-primary)",
           }}
         />
-        <Legend wrapperStyle={{ fontSize: 12 }} />
+        <Legend wrapperStyle={{ fontSize: 12, color: "var(--text-60)" }} />
         <Line
           type="monotone"
           dataKey="principal"
           name={principalLabel}
-          stroke="#004481"
+          stroke="var(--blue)"
           strokeWidth={2}
           dot={false}
           connectNulls
@@ -2619,83 +2494,12 @@ function SentimentChart({
           type="monotone"
           dataKey="actor"
           name={actorLabel}
-          stroke="#2dcccd"
+          stroke="var(--aqua)"
           strokeWidth={2}
           dot={false}
           strokeDasharray="6 4"
           connectNulls
         />
-      </LineChart>
-    </ResponsiveContainer>
-  );
-}
-
-function DashboardChart({
-  data,
-  sentimentLabel,
-  incidentsLabel,
-  showIncidents,
-}: {
-  data: { date: string; sentiment: number | null; incidents: number | null }[];
-  sentimentLabel: string;
-  incidentsLabel: string;
-  showIncidents: boolean;
-}) {
-  const tooltipFormatter: Formatter<ValueType, string | number> = (value) => {
-    if (typeof value === "number") {
-      return value.toFixed(2);
-    }
-    return value ?? "";
-  };
-
-  if (!data.length) {
-    return (
-      <div className="h-full grid place-items-center text-sm text-[color:var(--text-45)]">
-        No hay datos para el periodo seleccionado.
-      </div>
-    );
-  }
-
-  return (
-    <ResponsiveContainer width="100%" height="100%">
-      <LineChart data={data}>
-        <CartesianGrid stroke="var(--chart-grid)" vertical={false} />
-        <XAxis dataKey="date" tickFormatter={(d: string) => d.slice(5)} fontSize={11} />
-        <YAxis yAxisId="sentiment" fontSize={11} />
-        {showIncidents && (
-          <YAxis yAxisId="incidents" orientation="right" fontSize={11} />
-        )}
-        <Tooltip
-          formatter={tooltipFormatter}
-          contentStyle={{
-            borderRadius: 16,
-            border: "1px solid var(--border)",
-            boxShadow: "var(--shadow-tooltip)",
-          }}
-        />
-        <Legend wrapperStyle={{ fontSize: 12 }} />
-        <Line
-          type="monotone"
-          dataKey="sentiment"
-          name={sentimentLabel}
-          stroke="#004481"
-          strokeWidth={2.5}
-          dot={false}
-          yAxisId="sentiment"
-          connectNulls
-        />
-        {showIncidents && (
-          <Line
-            type="monotone"
-            dataKey="incidents"
-            name={incidentsLabel}
-            stroke="#2dcccd"
-            strokeWidth={2}
-            dot={false}
-            yAxisId="incidents"
-            connectNulls
-          />
-        )}
       </LineChart>
     </ResponsiveContainer>
   );
@@ -2711,9 +2515,7 @@ function DashboardMentionCard({
   principalLabel: string;
 }) {
   const displayDate = formatDate(item.date || null);
-  const sentimentTone = item.kind === "sentiment" ? getSentimentTone(item.sentiment) : null;
-  const severityTone = item.kind === "incident" ? getIncidentSeverityTone(item.severity) : null;
-  const statusTone = item.kind === "incident" ? getIncidentStatusTone(item.status) : null;
+  const sentimentTone = getSentimentTone(item.sentiment);
   const ratingValue = typeof item.rating === "number" ? item.rating : null;
   const title = cleanText(item.title) || "Sin título";
   const text = cleanText(item.text);
@@ -2737,27 +2539,17 @@ function DashboardMentionCard({
           <Calendar className="h-3.5 w-3.5 text-[color:var(--blue)]" />
           {displayDate}
         </span>
-        {item.kind === "sentiment" && sentimentTone && (
+        {sentimentTone && (
           <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 ${sentimentTone.className}`}>
             {sentimentTone.icon}
             {sentimentTone.label}
           </span>
         )}
-        {item.kind === "incident" && severityTone && (
-          <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 ${severityTone.className}`}>
-            {severityTone.label}
-          </span>
-        )}
-        {item.kind === "incident" && statusTone && (
-          <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 ${statusTone.className}`}>
-            {statusTone.label}
-          </span>
-        )}
-        {item.kind === "sentiment" && ratingValue !== null && (
+        {ratingValue !== null && (
           <span className="inline-flex items-center gap-2 rounded-full border border-[color:var(--aqua)]/40 [background-image:var(--gradient-chip)] px-2.5 py-1 text-[11px] text-[color:var(--brand-ink)] shadow-[var(--shadow-pill)]">
             <StarMeter rating={ratingValue} />
             <span className="font-semibold">{ratingValue.toFixed(1)}</span>
-            <span className="text-[10px] uppercase tracking-[0.2em] text-[color:var(--text-45)]">/5</span>
+            <span className="text-[10px] caps-tight text-[color:var(--text-55)]">/5</span>
           </span>
         )}
       </div>
@@ -2769,76 +2561,6 @@ function DashboardMentionCard({
       )}
     </article>
   );
-}
-
-function computeEvolutionDays(
-  fromDate?: string,
-  toDate?: string,
-  fallbackDate: Date = new Date(),
-) {
-  const end =
-    toDate && !Number.isNaN(new Date(`${toDate}T00:00:00`).getTime())
-      ? new Date(`${toDate}T00:00:00`)
-      : fallbackDate;
-  const safeEnd = end > fallbackDate ? fallbackDate : end;
-  const start =
-    fromDate && !Number.isNaN(new Date(`${fromDate}T00:00:00`).getTime())
-      ? new Date(`${fromDate}T00:00:00`)
-      : new Date(safeEnd);
-  const diffMs = safeEnd.getTime() - start.getTime();
-  const days = Math.max(1, Math.floor(diffMs / 86_400_000) + 1);
-  return Math.min(days, 3650);
-}
-
-function buildDashboardSeries(
-  sentimentSeries: { date: string; principal: number | null; actor: number | null }[],
-  incidentsSeries: EvolutionPoint[],
-  fromDate?: string,
-  toDate?: string,
-  showIncidents = true,
-) {
-  const sentimentMap = new Map(
-    sentimentSeries.map((row) => [row.date, row.principal]),
-  );
-  const incidentsMap = new Map(
-    incidentsSeries.map((row) => [row.date, row.open]),
-  );
-
-  const dates =
-    sentimentSeries.length > 0
-      ? sentimentSeries.map((row) => row.date)
-      : buildDateRange(fromDate, toDate, incidentsSeries);
-
-  return dates.map((date) => ({
-    date,
-    sentiment: sentimentMap.get(date) ?? null,
-    incidents: showIncidents ? incidentsMap.get(date) ?? null : null,
-  }));
-}
-
-function buildDateRange(
-  fromDate?: string,
-  toDate?: string,
-  fallbackSeries: EvolutionPoint[] = [],
-) {
-  if (fromDate && toDate) {
-    const start = new Date(`${fromDate}T00:00:00`);
-    const end = new Date(`${toDate}T00:00:00`);
-    if (!Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime())) {
-      const result: string[] = [];
-      const cursor = new Date(start);
-      const endDate = end < start ? start : end;
-      while (cursor <= endDate) {
-        result.push(toDateInput(cursor));
-        cursor.setDate(cursor.getDate() + 1);
-      }
-      return result;
-    }
-  }
-  if (fallbackSeries.length) {
-    return fallbackSeries.map((row) => row.date);
-  }
-  return [];
 }
 
 function downloadChartCsv(
@@ -3035,68 +2757,4 @@ function escapeXml(value: string) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&apos;");
-}
-
-function getIncidentSeverityTone(severity?: string | null) {
-  const sev = (severity || "UNKNOWN").toUpperCase();
-  if (sev === "CRITICAL") {
-    return {
-      label: "Crítica",
-      className: "bg-rose-50 text-rose-700 border-rose-200",
-    };
-  }
-  if (sev === "HIGH") {
-    return {
-      label: "Alta",
-      className: "bg-amber-50 text-amber-700 border-amber-200",
-    };
-  }
-  if (sev === "MEDIUM") {
-    return {
-      label: "Media",
-      className: "bg-blue-50 text-blue-700 border-blue-200",
-    };
-  }
-  if (sev === "LOW") {
-    return {
-      label: "Baja",
-      className: "bg-emerald-50 text-emerald-700 border-emerald-200",
-    };
-  }
-  return {
-    label: "Desconocida",
-    className: "bg-slate-50 text-slate-600 border-slate-200",
-  };
-}
-
-function getIncidentStatusTone(status?: string | null) {
-  const st = (status || "UNKNOWN").toUpperCase();
-  if (st === "OPEN") {
-    return {
-      label: "Abierta",
-      className: "bg-sky-50 text-sky-700 border-sky-200",
-    };
-  }
-  if (st === "IN_PROGRESS") {
-    return {
-      label: "En progreso",
-      className: "bg-purple-50 text-purple-700 border-purple-200",
-    };
-  }
-  if (st === "BLOCKED") {
-    return {
-      label: "Bloqueada",
-      className: "bg-amber-50 text-amber-700 border-amber-200",
-    };
-  }
-  if (st === "CLOSED") {
-    return {
-      label: "Cerrada",
-      className: "bg-slate-50 text-slate-600 border-slate-200",
-    };
-  }
-  return {
-    label: "Desconocida",
-    className: "bg-slate-50 text-slate-600 border-slate-200",
-  };
 }

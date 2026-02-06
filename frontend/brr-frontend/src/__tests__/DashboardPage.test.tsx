@@ -33,8 +33,6 @@ it("renders dashboard header and combined mentions", async () => {
         geos: ["España"],
         sources_enabled: ["gdelt"],
         sources_available: ["gdelt"],
-        incidents_available: false,
-        ui: { incidents_enabled: false, ops_enabled: false },
       });
     }
     if (path.startsWith("/reputation/items")) {

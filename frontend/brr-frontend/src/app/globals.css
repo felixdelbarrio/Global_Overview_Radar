@@ -4,180 +4,187 @@
 
 :root {
   --radius: 22px;
+  --tracking-display: -0.018em;
+  --tracking-tight: -0.012em;
+  --tracking-body: 0.006em;
+  --tracking-caps-hero: 0.28em;
+  --tracking-caps-section: 0.22em;
+  --tracking-caps-micro: 0.18em;
+  --tracking-caps-tight: 0.14em;
 }
 
 :root,
 :root[data-theme="ambient-light"] {
   color-scheme: light;
 
-  --navy: #041a38;
-  --blue: #0b4aa2;
-  --aqua: #0fbfc0;
-  --brand-ink: #041a38;
-  --ink: #04162f;
-  --mist: #dfeaf2;
-  --sand: #f1e6d7;
-  --glow: rgba(15, 191, 192, 0.22);
+  --navy: #0a1a35;
+  --blue: #1562d5;
+  --aqua: #12c5c7;
+  --brand-ink: #0a1a35;
+  --ink: #0f1d33;
+  --mist: #e6eef6;
+  --sand: #f4e7d5;
+  --glow: rgba(18, 197, 199, 0.24);
 
-  --bg: #eef2f7;
-  --bg-fade: #f9fbfd;
-  --bg-grid: rgba(7, 33, 70, 0.08);
-  --bg-glow-1: rgba(15, 191, 192, 0.16);
-  --bg-glow-2: rgba(11, 74, 162, 0.12);
-  --bg-glow-3: rgba(7, 33, 70, 0.06);
+  --bg: #f3f6fb;
+  --bg-fade: #fbfcfe;
+  --bg-grid: rgba(10, 26, 53, 0.08);
+  --bg-glow-1: rgba(18, 197, 199, 0.2);
+  --bg-glow-2: rgba(21, 98, 213, 0.14);
+  --bg-glow-3: rgba(10, 26, 53, 0.08);
 
-  --panel: rgba(255, 255, 255, 0.94);
-  --panel-strong: rgba(255, 255, 255, 0.98);
+  --panel: rgba(255, 255, 255, 0.96);
+  --panel-strong: rgba(255, 255, 255, 0.99);
 
-  --surface-solid: #fdfefe;
-  --surface-85: rgba(255, 255, 255, 0.92);
-  --surface-80: rgba(255, 255, 255, 0.88);
-  --surface-70: rgba(255, 255, 255, 0.82);
-  --surface-60: rgba(255, 255, 255, 0.72);
-  --surface-40: rgba(255, 255, 255, 0.58);
-  --surface-18: rgba(255, 255, 255, 0.28);
-  --surface-15: rgba(255, 255, 255, 0.22);
-  --surface-12: rgba(255, 255, 255, 0.18);
-  --surface-10: rgba(255, 255, 255, 0.12);
+  --surface-solid: #ffffff;
+  --surface-85: rgba(255, 255, 255, 0.94);
+  --surface-80: rgba(255, 255, 255, 0.9);
+  --surface-70: rgba(255, 255, 255, 0.84);
+  --surface-60: rgba(255, 255, 255, 0.76);
+  --surface-40: rgba(255, 255, 255, 0.62);
+  --surface-18: rgba(255, 255, 255, 0.36);
+  --surface-15: rgba(255, 255, 255, 0.3);
+  --surface-12: rgba(255, 255, 255, 0.24);
+  --surface-10: rgba(255, 255, 255, 0.18);
 
-  --border: rgba(7, 33, 70, 0.14);
-  --border-70: rgba(7, 33, 70, 0.24);
-  --border-60: rgba(7, 33, 70, 0.18);
-  --border-20: rgba(7, 33, 70, 0.12);
-  --border-18: rgba(7, 33, 70, 0.10);
-  --border-15: rgba(7, 33, 70, 0.08);
+  --border: rgba(10, 26, 53, 0.18);
+  --border-70: rgba(10, 26, 53, 0.32);
+  --border-60: rgba(10, 26, 53, 0.24);
+  --border-20: rgba(10, 26, 53, 0.16);
+  --border-18: rgba(10, 26, 53, 0.14);
+  --border-15: rgba(10, 26, 53, 0.12);
 
-  --overlay-20: rgba(7, 33, 70, 0.18);
-  --overlay-10: rgba(7, 33, 70, 0.12);
-  --overlay-5: rgba(7, 33, 70, 0.08);
+  --overlay-20: rgba(10, 26, 53, 0.2);
+  --overlay-10: rgba(10, 26, 53, 0.14);
+  --overlay-5: rgba(10, 26, 53, 0.1);
 
-  --text-primary: #04162f;
-  --text-70: rgba(4, 22, 47, 0.75);
-  --text-60: rgba(4, 22, 47, 0.65);
-  --text-55: rgba(4, 22, 47, 0.58);
-  --text-50: rgba(4, 22, 47, 0.52);
-  --text-45: rgba(4, 22, 47, 0.46);
-  --text-40: rgba(4, 22, 47, 0.40);
+  --text-primary: #0a1628;
+  --text-70: rgba(10, 22, 40, 0.88);
+  --text-60: rgba(10, 22, 40, 0.8);
+  --text-55: rgba(10, 22, 40, 0.72);
+  --text-50: rgba(10, 22, 40, 0.66);
+  --text-45: rgba(10, 22, 40, 0.6);
+  --text-40: rgba(10, 22, 40, 0.54);
 
   --text-inverse: #ffffff;
-  --text-inverse-80: rgba(255, 255, 255, 0.80);
-  --text-inverse-75: rgba(255, 255, 255, 0.75);
-  --text-inverse-70: rgba(255, 255, 255, 0.70);
+  --text-inverse-80: rgba(255, 255, 255, 0.86);
+  --text-inverse-75: rgba(255, 255, 255, 0.78);
+  --text-inverse-70: rgba(255, 255, 255, 0.7);
 
-  --shadow: 0 12px 30px rgba(4, 22, 47, 0.18);
-  --shadow-header: 0 12px 30px rgba(4, 22, 47, 0.22);
-  --shadow-lg: 0 36px 80px rgba(4, 22, 47, 0.22);
-  --shadow-md: 0 22px 55px rgba(4, 22, 47, 0.16);
-  --shadow-soft: 0 12px 30px rgba(4, 22, 47, 0.12);
-  --shadow-sm: 0 8px 18px rgba(4, 22, 47, 0.18);
-  --shadow-pill: 0 6px 14px rgba(4, 22, 47, 0.16);
-  --shadow-pill-hover: 0 10px 22px rgba(4, 22, 47, 0.22);
-  --shadow-card: 0 20px 50px rgba(4, 22, 47, 0.18);
-  --shadow-tone: 0 12px 22px rgba(4, 22, 47, 0.18);
-  --shadow-tooltip: 0 12px 32px rgba(4, 22, 47, 0.18);
+  --shadow: 0 14px 32px rgba(6, 20, 45, 0.18);
+  --shadow-header: 0 12px 28px rgba(6, 20, 45, 0.24);
+  --shadow-lg: 0 36px 80px rgba(6, 20, 45, 0.22);
+  --shadow-md: 0 22px 55px rgba(6, 20, 45, 0.16);
+  --shadow-soft: 0 12px 30px rgba(6, 20, 45, 0.12);
+  --shadow-sm: 0 8px 18px rgba(6, 20, 45, 0.18);
+  --shadow-pill: 0 6px 14px rgba(6, 20, 45, 0.16);
+  --shadow-pill-hover: 0 10px 22px rgba(6, 20, 45, 0.22);
+  --shadow-card: 0 20px 50px rgba(6, 20, 45, 0.18);
+  --shadow-tone: 0 12px 22px rgba(6, 20, 45, 0.18);
+  --shadow-tooltip: 0 12px 32px rgba(6, 20, 45, 0.18);
 
-  --inset-highlight: rgba(255, 255, 255, 0.75);
-  --inset-highlight-strong: rgba(255, 255, 255, 0.85);
+  --inset-highlight: rgba(255, 255, 255, 0.78);
+  --inset-highlight-strong: rgba(255, 255, 255, 0.88);
 
-  --nav-gradient: linear-gradient(90deg, #041a38, #0b4aa2 55%, rgba(15, 191, 192, 0.5));
-  --nav-active-gradient: linear-gradient(90deg, rgba(11, 74, 162, 0.95), rgba(4, 26, 56, 0.92));
-  --nav-active-shadow: 0 12px 22px rgba(11, 74, 162, 0.32);
+  --nav-gradient: linear-gradient(90deg, #0a1a35, #1562d5 55%, rgba(18, 197, 199, 0.6));
+  --nav-active-gradient: linear-gradient(90deg, rgba(21, 98, 213, 0.98), rgba(10, 26, 53, 0.94));
+  --nav-active-shadow: 0 12px 26px rgba(21, 98, 213, 0.35);
 
-  --gradient-chip: linear-gradient(120deg, rgba(11, 74, 162, 0.14), rgba(15, 191, 192, 0.2), rgba(255, 255, 255, 0.95));
-  --gradient-callout: linear-gradient(135deg, rgba(15, 191, 192, 0.14), rgba(11, 74, 162, 0.08), rgba(255, 255, 255, 0.98));
+  --gradient-chip: linear-gradient(120deg, rgba(21, 98, 213, 0.18), rgba(18, 197, 199, 0.22), rgba(255, 255, 255, 0.96));
+  --gradient-callout: linear-gradient(135deg, rgba(18, 197, 199, 0.16), rgba(21, 98, 213, 0.12), rgba(255, 255, 255, 0.98));
 
-  --chart-grid: rgba(7, 33, 70, 0.12);
-  --chart-reference: rgba(7, 33, 70, 0.28);
+  --chart-grid: rgba(10, 26, 53, 0.16);
+  --chart-reference: rgba(10, 26, 53, 0.36);
 
-  --selection: rgba(15, 191, 192, 0.24);
-  --scrollbar-thumb: rgba(7, 33, 70, 0.28);
+  --selection: rgba(18, 197, 199, 0.3);
+  --scrollbar-thumb: rgba(10, 26, 53, 0.34);
   --scrollbar-track: transparent;
 }
 
 :root[data-theme="ambient-dark"] {
   color-scheme: dark;
 
-  --navy: #051326;
-  --blue: #1d6fd1;
-  --aqua: #3ee6d6;
-  --brand-ink: #c3dcff;
-  --ink: #e8f1ff;
-  --mist: #0a1322;
-  --sand: rgba(255, 214, 148, 0.18);
-  --glow: rgba(62, 230, 214, 0.35);
+  --navy: #071427;
+  --blue: #3b82f6;
+  --aqua: #33dccb;
+  --brand-ink: #d3e6ff;
+  --ink: #f1f6ff;
+  --mist: #0b1628;
+  --sand: rgba(255, 214, 148, 0.22);
+  --glow: rgba(51, 220, 203, 0.36);
 
-  --bg: #05070f;
-  --bg-fade: #0b1220;
-  --bg-grid: rgba(140, 190, 255, 0.08);
-  --bg-glow-1: rgba(62, 230, 214, 0.18);
-  --bg-glow-2: rgba(29, 111, 209, 0.22);
-  --bg-glow-3: rgba(9, 20, 35, 0.65);
+  --bg: #05080f;
+  --bg-fade: #0b1323;
+  --bg-grid: rgba(160, 205, 255, 0.1);
+  --bg-glow-1: rgba(51, 220, 203, 0.2);
+  --bg-glow-2: rgba(59, 130, 246, 0.2);
+  --bg-glow-3: rgba(9, 20, 35, 0.7);
 
-  --panel: rgba(9, 16, 30, 0.78);
-  --panel-strong: rgba(12, 20, 36, 0.92);
+  --panel: rgba(11, 18, 34, 0.82);
+  --panel-strong: rgba(12, 20, 38, 0.96);
 
-  --surface-solid: #0d1729;
-  --surface-85: rgba(13, 23, 41, 0.85);
-  --surface-80: rgba(13, 23, 41, 0.80);
-  --surface-70: rgba(13, 23, 41, 0.70);
-  --surface-60: rgba(13, 23, 41, 0.60);
-  --surface-40: rgba(13, 23, 41, 0.40);
-  --surface-18: rgba(140, 190, 255, 0.18);
-  --surface-15: rgba(140, 190, 255, 0.15);
-  --surface-12: rgba(140, 190, 255, 0.12);
-  --surface-10: rgba(140, 190, 255, 0.10);
+  --surface-solid: #0e1a2f;
+  --surface-85: rgba(14, 26, 47, 0.88);
+  --surface-80: rgba(14, 26, 47, 0.82);
+  --surface-70: rgba(14, 26, 47, 0.72);
+  --surface-60: rgba(14, 26, 47, 0.62);
+  --surface-40: rgba(14, 26, 47, 0.45);
+  --surface-18: rgba(160, 205, 255, 0.22);
+  --surface-15: rgba(160, 205, 255, 0.18);
+  --surface-12: rgba(160, 205, 255, 0.14);
+  --surface-10: rgba(160, 205, 255, 0.12);
 
-  --border: rgba(120, 170, 230, 0.18);
-  --border-70: rgba(140, 190, 255, 0.35);
-  --border-60: rgba(140, 190, 255, 0.28);
-  --border-20: rgba(140, 190, 255, 0.20);
-  --border-18: rgba(140, 190, 255, 0.18);
-  --border-15: rgba(140, 190, 255, 0.15);
+  --border: rgba(160, 205, 255, 0.22);
+  --border-70: rgba(160, 205, 255, 0.4);
+  --border-60: rgba(160, 205, 255, 0.32);
+  --border-20: rgba(160, 205, 255, 0.24);
+  --border-18: rgba(160, 205, 255, 0.2);
+  --border-15: rgba(160, 205, 255, 0.18);
 
-  --overlay-20: rgba(255, 255, 255, 0.14);
-  --overlay-10: rgba(255, 255, 255, 0.08);
-  --overlay-5: rgba(255, 255, 255, 0.05);
+  --overlay-20: rgba(255, 255, 255, 0.18);
+  --overlay-10: rgba(255, 255, 255, 0.12);
+  --overlay-5: rgba(255, 255, 255, 0.08);
 
-  --text-primary: #e8f1ff;
-  --text-70: rgba(232, 241, 255, 0.72);
-  --text-60: rgba(232, 241, 255, 0.60);
-  --text-55: rgba(232, 241, 255, 0.55);
-  --text-50: rgba(232, 241, 255, 0.50);
-  --text-45: rgba(232, 241, 255, 0.45);
-  --text-40: rgba(232, 241, 255, 0.38);
+  --text-primary: #eff5ff;
+  --text-70: rgba(239, 245, 255, 0.82);
+  --text-60: rgba(239, 245, 255, 0.72);
+  --text-55: rgba(239, 245, 255, 0.64);
+  --text-50: rgba(239, 245, 255, 0.58);
+  --text-45: rgba(239, 245, 255, 0.52);
+  --text-40: rgba(239, 245, 255, 0.46);
 
   --text-inverse: #05070f;
-  --text-inverse-80: rgba(5, 7, 15, 0.80);
-  --text-inverse-75: rgba(5, 7, 15, 0.75);
-  --text-inverse-70: rgba(5, 7, 15, 0.70);
+  --text-inverse-80: rgba(5, 7, 15, 0.85);
+  --text-inverse-75: rgba(5, 7, 15, 0.78);
+  --text-inverse-70: rgba(5, 7, 15, 0.72);
 
-  --shadow: 0 10px 30px rgba(2, 6, 14, 0.55), 0 0 30px rgba(62, 230, 214, 0.06);
-  --shadow-header: 0 10px 30px rgba(2, 6, 14, 0.65);
-  --shadow-lg: 0 30px 70px rgba(2, 6, 14, 0.6), 0 0 60px rgba(62, 230, 214, 0.12);
-  --shadow-md: 0 20px 50px rgba(2, 6, 14, 0.5), 0 0 40px rgba(29, 111, 209, 0.1);
+  --shadow: 0 12px 32px rgba(2, 6, 14, 0.55), 0 0 28px rgba(51, 220, 203, 0.08);
+  --shadow-header: 0 12px 32px rgba(2, 6, 14, 0.65);
+  --shadow-lg: 0 30px 70px rgba(2, 6, 14, 0.62), 0 0 60px rgba(51, 220, 203, 0.12);
+  --shadow-md: 0 20px 50px rgba(2, 6, 14, 0.52), 0 0 40px rgba(59, 130, 246, 0.12);
   --shadow-soft: 0 10px 30px rgba(2, 6, 14, 0.45);
   --shadow-sm: 0 8px 18px rgba(2, 6, 14, 0.55);
   --shadow-pill: 0 6px 18px rgba(2, 6, 14, 0.5);
-  --shadow-pill-hover: 0 10px 24px rgba(2, 6, 14, 0.55), 0 0 20px rgba(62, 230, 214, 0.1);
-  --shadow-card: 0 16px 40px rgba(2, 6, 14, 0.6), 0 0 40px rgba(62, 230, 214, 0.08);
+  --shadow-pill-hover: 0 10px 24px rgba(2, 6, 14, 0.55), 0 0 20px rgba(51, 220, 203, 0.12);
+  --shadow-card: 0 16px 40px rgba(2, 6, 14, 0.6), 0 0 40px rgba(51, 220, 203, 0.08);
   --shadow-tone: 0 10px 20px rgba(2, 6, 14, 0.55);
-  --shadow-tooltip: 0 10px 30px rgba(2, 6, 14, 0.6), 0 0 25px rgba(62, 230, 214, 0.1);
+  --shadow-tooltip: 0 10px 30px rgba(2, 6, 14, 0.6), 0 0 25px rgba(51, 220, 203, 0.1);
 
-  --inset-highlight: rgba(255, 255, 255, 0.08);
-  --inset-highlight-strong: rgba(255, 255, 255, 0.14);
+  --inset-highlight: rgba(255, 255, 255, 0.1);
+  --inset-highlight-strong: rgba(255, 255, 255, 0.16);
 
-  --nav-gradient: linear-gradient(90deg, #041024, #0b2a55 55%, rgba(62, 230, 214, 0.45));
-  --nav-active-gradient: linear-gradient(90deg, rgba(29, 111, 209, 0.9), rgba(5, 18, 40, 0.92));
-  --nav-active-shadow: 0 12px 22px rgba(29, 111, 209, 0.35);
+  --nav-gradient: linear-gradient(90deg, #041024, #183a73 55%, rgba(51, 220, 203, 0.5));
+  --nav-active-gradient: linear-gradient(90deg, rgba(59, 130, 246, 0.9), rgba(5, 18, 40, 0.92));
+  --nav-active-shadow: 0 12px 24px rgba(59, 130, 246, 0.35);
 
-  --gradient-chip: linear-gradient(120deg, rgba(29, 111, 209, 0.25), rgba(62, 230, 214, 0.28), rgba(13, 23, 41, 0.9));
-  --gradient-callout: linear-gradient(135deg, rgba(62, 230, 214, 0.18), rgba(29, 111, 209, 0.12), rgba(13, 23, 41, 0.95));
+  --gradient-chip: linear-gradient(120deg, rgba(59, 130, 246, 0.25), rgba(51, 220, 203, 0.28), rgba(14, 26, 47, 0.92));
+  --gradient-callout: linear-gradient(135deg, rgba(51, 220, 203, 0.2), rgba(59, 130, 246, 0.14), rgba(14, 26, 47, 0.96));
 
-  --chart-grid: rgba(140, 190, 255, 0.12);
-  --chart-reference: rgba(140, 190, 255, 0.35);
+  --chart-grid: rgba(160, 205, 255, 0.18);
+  --chart-reference: rgba(160, 205, 255, 0.4);
 
-  --selection: rgba(62, 230, 214, 0.32);
-  --scrollbar-thumb: rgba(140, 190, 255, 0.28);
+  --selection: rgba(51, 220, 203, 0.36);
+  --scrollbar-thumb: rgba(160, 205, 255, 0.32);
   --scrollbar-track: transparent;
 }
 
@@ -196,6 +203,24 @@ body {
     linear-gradient(180deg, var(--bg), var(--bg-fade) 60%);
   background-size: auto, auto, auto, 28px 28px, auto;
   color: var(--text-primary);
+  line-height: 1.55;
+  letter-spacing: var(--tracking-body);
+  font-weight: 450;
+  font-kerning: normal;
+  font-feature-settings: "calt" 1, "liga" 1, "kern" 1, "ss01" 1;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+:focus-visible {
+  outline: 2px solid rgba(18, 197, 199, 0.55);
+  outline-offset: 2px;
 }
 
 /* Feedback visual consistente para elementos clicables */
@@ -250,7 +275,32 @@ body {
 
 .font-display {
   font-family: var(--font-display), "Space Grotesk", sans-serif;
-  letter-spacing: -0.02em;
+  letter-spacing: var(--tracking-display);
+  font-weight: 600;
+}
+
+.caps-hero {
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-caps-hero);
+  font-weight: 600;
+}
+
+.caps-section {
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-caps-section);
+  font-weight: 600;
+}
+
+.caps-micro {
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-caps-micro);
+  font-weight: 600;
+}
+
+.caps-tight {
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-caps-tight);
+  font-weight: 600;
 }
 
 /* Selección “premium” */
@@ -284,4 +334,19 @@ body {
 
 .animate-rise {
   animation: rise-in 0.7s ease-out both;
+}
+
+@media (max-width: 640px) {
+  body {
+    background-size: auto, auto, auto, 22px 22px, auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

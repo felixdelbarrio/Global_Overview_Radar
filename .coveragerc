@@ -1,0 +1,6 @@
+[run]
+omit =
+    backend/reputation/collectors/*
+    backend/reputation/services/*
+    backend/reputation/user_settings.py
+    backend/reputation/cli.py

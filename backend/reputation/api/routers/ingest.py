@@ -36,6 +36,7 @@ class ReputationIngestRequest(BaseModel):
     force: bool = False
 
 
+_INGEST_BODY = Body(default=None)
 _JOBS: dict[str, dict[str, Any]] = {}
 _LOCK = threading.Lock()
 _MAX_JOBS = 50
@@ -145,8 +146,10 @@ def _run_reputation_job(job_id: str, force: bool) -> None:
 
 @router.post("/reputation", response_model=IngestJob)
 def ingest_reputation(
-    payload: ReputationIngestRequest = Body(default=ReputationIngestRequest())
+    payload: ReputationIngestRequest | None = _INGEST_BODY,
 ) -> dict[str, Any]:
+    if payload is None:
+        payload = ReputationIngestRequest()
     active = _find_active("reputation")
     if active:
         return active

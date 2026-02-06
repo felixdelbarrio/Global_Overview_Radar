@@ -30,10 +30,10 @@ const apiGetMock = vi.mocked(apiGet);
 
 describe("Shell", () => {
   beforeEach(() => {
-    usePathnameMock.mockReturnValue("/ops");
+    usePathnameMock.mockReturnValue("/");
     apiGetMock.mockResolvedValue({
-      ui: { incidents_enabled: true, ops_enabled: true },
-      incidents_available: false,
+      active: { source: "samples", profiles: [], profile_key: "samples__empty" },
+      options: { default: [], samples: [] },
     });
   });
 
@@ -46,7 +46,6 @@ describe("Shell", () => {
 
     expect(screen.getByText("Dashboard")).toBeInTheDocument();
     expect(screen.getByText("Sentimiento")).toBeInTheDocument();
-    expect(screen.queryByText("Incidencias")).not.toBeInTheDocument();
-    expect(screen.queryByText("Ops Executive")).not.toBeInTheDocument();
+    expect(screen.getByText("Global Overview Radar")).toBeInTheDocument();
   });
 });

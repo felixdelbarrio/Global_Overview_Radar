@@ -131,6 +131,7 @@ _COUNTRY_CODE_MAP = {
 _STAR_SENTIMENT_SOURCES = {"appstore", "google_reviews"}
 _ACTOR_TEXT_REQUIRED_SOURCES = {"news", "blogs", "gdelt", "newsapi", "guardian"}
 
+
 def _extract_star_rating(item: ReputationItem) -> float | None:
     signals = item.signals or {}
     raw = signals.get("rating")
@@ -748,37 +749,33 @@ class ReputationSentimentService:
         self._maybe_warn_llm_disabled()
 
     def analyze_items(self, items: Iterable[ReputationItem]) -> list[ReputationItem]:
-        items_list = list(items)
+        items_list = items if isinstance(items, list) else list(items)
         if not items_list:
             return []
 
         use_llm = self._should_use_llm()
-        result: list[ReputationItem | None] = [None] * len(items_list)
-        pending: list[tuple[int, _ItemSentimentContext]] = []
+        pending: list[_ItemSentimentContext] = []
 
-        for idx, item in enumerate(items_list):
+        for item in items_list:
             context, handled = self._prepare_item_context(item)
             if handled or context is None:
-                result[idx] = item
                 continue
 
             if not context.evaluated_text:
                 self._finalize_item(item, context, "neutral", 0.0, used_llm=False)
-                result[idx] = item
                 continue
 
             if use_llm:
-                pending.append((idx, context))
+                pending.append(context)
             else:
                 label, score = self._rule_based_sentiment(context.evaluated_text, context.language)
                 self._finalize_item(item, context, label, score, used_llm=False)
-                result[idx] = item
 
         llm_results: dict[str, tuple[str, float]] = {}
         if use_llm and pending:
-            llm_results = self._llm_sentiment_batch([context for _, context in pending])
+            llm_results = self._llm_sentiment_batch(pending)
 
-        for idx, context in pending:
+        for context in pending:
             item = context.item
             label_score = llm_results.get(item.id)
             if label_score:
@@ -788,9 +785,8 @@ class ReputationSentimentService:
                 label, score = self._rule_based_sentiment(context.evaluated_text, context.language)
                 used_llm = False
             self._finalize_item(item, context, label, score, used_llm=used_llm)
-            result[idx] = item
 
-        return [item for item in result if item is not None]
+        return items_list
 
     def analyze_item(self, item: ReputationItem) -> ReputationItem:
         context, handled = self._prepare_item_context(item)
@@ -1193,7 +1189,7 @@ class ReputationSentimentService:
         items: Iterable[ReputationItem],
         target_language: str,
     ) -> list[ReputationItem]:
-        items_list = list(items)
+        items_list = items if isinstance(items, list) else list(items)
         target = _normalize_lang_code(target_language)
         if not items_list or not target:
             return items_list

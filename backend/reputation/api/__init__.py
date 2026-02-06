@@ -1,1 +1,1 @@
-"""API package for Reputation Radar."""
+"""API package for Global Overview Radar."""

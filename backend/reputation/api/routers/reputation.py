@@ -8,7 +8,7 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
-from fastapi import APIRouter, Body, HTTPException, Query
+from fastapi import APIRouter, Body, HTTPException
 from pydantic import BaseModel
 
 from reputation.actors import (
@@ -38,6 +38,9 @@ from reputation.user_settings import (
 )
 
 router = APIRouter()
+_SETTINGS_BODY = Body(...)
+_PROFILES_BODY = Body(...)
+_COMPARE_BODY = Body(...)
 
 
 class SettingsUpdate(BaseModel):
@@ -138,9 +141,14 @@ def _load_overrides(path: Path) -> dict[str, Any]:
 
 def _load_override_items(path: Path) -> tuple[dict[str, Any], str | None]:
     data = _load_overrides(path)
-    items = data.get("items") if isinstance(data.get("items"), dict) else {}
+    raw_items: dict[str, Any] = {}
+    candidate = data.get("items")
+    if isinstance(candidate, dict):
+        for key, value in candidate.items():
+            if isinstance(key, str):
+                raw_items[key] = value
     updated_at = data.get("updated_at") if isinstance(data.get("updated_at"), str) else None
-    return items, updated_at
+    return raw_items, updated_at
 
 
 def _save_overrides(path: Path, items: dict[str, Any], updated_at: str) -> None:
@@ -152,7 +160,9 @@ def _save_overrides(path: Path, items: dict[str, Any], updated_at: str) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def _apply_overrides(items: list[ReputationItem], overrides: dict[str, Any]) -> list[ReputationItem]:
+def _apply_overrides(
+    items: list[ReputationItem], overrides: dict[str, Any]
+) -> list[ReputationItem]:
     for item in items:
         override = overrides.get(item.id)
         if not isinstance(override, dict):
@@ -220,7 +230,9 @@ def _filter_items(
     from_date = _parse_date(filt.get("from_date"))
     to_date = _parse_date(filt.get("to_date"))
     sentiment = str(filt.get("sentiment") or "").strip().lower() or None
-    geo_filter = _canonical_geo(str(filt.get("geo") or "").strip(), geo_map) if filt.get("geo") else None
+    geo_filter = (
+        _canonical_geo(str(filt.get("geo") or "").strip(), geo_map) if filt.get("geo") else None
+    )
     sources = _parse_sources(filt.get("sources"))
     entity = str(filt.get("entity") or "").strip().lower()
     actor_value = filt.get("actor")
@@ -277,7 +289,7 @@ def reputation_settings_get() -> dict[str, Any]:
 
 
 @router.post("/settings")
-def reputation_settings_update(payload: SettingsUpdate = Body(...)) -> dict[str, Any]:
+def reputation_settings_update(payload: SettingsUpdate = _SETTINGS_BODY) -> dict[str, Any]:
     try:
         return update_user_settings(payload.values)
     except ValueError as exc:
@@ -314,7 +326,7 @@ def reputation_profiles() -> dict[str, Any]:
 
 
 @router.post("/profiles")
-def reputation_profiles_apply(payload: ProfileApplyRequest = Body(...)) -> dict[str, Any]:
+def reputation_profiles_apply(payload: ProfileApplyRequest = _PROFILES_BODY) -> dict[str, Any]:
     try:
         if payload.source == "samples":
             result = apply_sample_profiles_to_default(payload.profiles)
@@ -356,7 +368,9 @@ def reputation_meta() -> dict[str, Any]:
         )
         source_counts = dict(counts)
         market_ratings = [rating.model_dump(mode="json") for rating in doc.market_ratings]
-        market_ratings_history = [rating.model_dump(mode="json") for rating in doc.market_ratings_history]
+        market_ratings_history = [
+            rating.model_dump(mode="json") for rating in doc.market_ratings_history
+        ]
 
     return {
         "actor_principal": primary_actor_info(cfg),
@@ -366,17 +380,12 @@ def reputation_meta() -> dict[str, Any]:
         "sources_enabled": sources_enabled,
         "sources_available": sources_available,
         "source_counts": source_counts,
-        "incidents_available": False,
         "cache_available": cache_available,
         "market_ratings": market_ratings,
         "market_ratings_history": market_ratings_history,
         "profiles_active": active_profiles(),
         "profile_key": active_profile_key(),
         "profile_source": active_profile_source(),
-        "ui": {
-            "incidents_enabled": False,
-            "ops_enabled": False,
-        },
     }
 
 
@@ -400,7 +409,9 @@ def reputation_items(
         return {
             "generated_at": _now_iso(),
             "config_hash": "",
-            "sources_enabled": settings.enabled_sources() if hasattr(settings, "enabled_sources") else [],
+            "sources_enabled": settings.enabled_sources()
+            if hasattr(settings, "enabled_sources")
+            else [],
             "items": [],
             "market_ratings": [],
             "market_ratings_history": [],
@@ -430,7 +441,9 @@ def reputation_items(
         "sources_enabled": doc.sources_enabled,
         "items": [item.model_dump(mode="json") for item in filtered],
         "market_ratings": [rating.model_dump(mode="json") for rating in doc.market_ratings],
-        "market_ratings_history": [rating.model_dump(mode="json") for rating in doc.market_ratings_history],
+        "market_ratings_history": [
+            rating.model_dump(mode="json") for rating in doc.market_ratings_history
+        ],
         "stats": {
             "count": len(filtered),
             "note": doc.stats.note,
@@ -439,7 +452,7 @@ def reputation_items(
 
 
 @router.post("/items/compare")
-def reputation_items_compare(payload: list[dict[str, Any]] = Body(...)) -> dict[str, Any]:
+def reputation_items_compare(payload: list[dict[str, Any]] = _COMPARE_BODY) -> dict[str, Any]:
     if not isinstance(payload, list):
         raise HTTPException(status_code=400, detail="payload must be a list")
 

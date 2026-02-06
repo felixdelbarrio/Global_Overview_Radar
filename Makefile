@@ -14,10 +14,20 @@ NODE := node
 HOST ?= 127.0.0.1
 API_PORT ?= 8000
 FRONT_PORT ?= 3000
+BENCH_ITEMS ?= 500
+BENCH_ITERATIONS ?= 20
+BENCH_WARMUP ?= 3
+BENCH_PROFILE ?= 0
+BENCH_REAL_CACHE ?=
+BENCH_REAL_MAX_ITEMS ?= 0
+VISUAL_QA_LABEL ?= gor
+VISUAL_QA_ROUTE ?= /
+VISUAL_QA_DIR ?= /tmp/visual-qa/$(VISUAL_QA_LABEL)
+CHROME ?= /Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome
 
 .DEFAULT_GOAL := help
 
-.PHONY: help venv install install-backend install-front env ensure-backend ensure-front ingest reputation-ingest serve serve-back dev-back dev-front build-front start-front lint lint-back lint-front typecheck typecheck-back typecheck-front format format-back format-front check test test-back test-front test-coverage test-coverage-back test-coverage-front clean reset
+.PHONY: help venv install install-backend install-front env ensure-backend ensure-front ingest reputation-ingest serve serve-back dev-back dev-front build-front start-front lint lint-back lint-front typecheck typecheck-back typecheck-front format format-back format-front check test test-back test-front test-coverage test-coverage-back test-coverage-front bench visual-qa clean reset
 
 help:
 	@echo "Make targets disponibles:"
@@ -45,6 +55,8 @@ help:
 	@echo "  make test-back       - Ejecutar tests backend (pytest + cobertura)"
 	@echo "  make test-front      - Ejecutar tests frontend (vitest)"
 	@echo "  make test-coverage   - Ejecutar cobertura backend + frontend (>=70%)"
+	@echo "  make bench           - Benchmarks ingest + endpoints"
+	@echo "  make visual-qa       - Capturas QA visual (desktop + mobile, light/dark)"
 	@echo "  make clean           - Eliminar venv, caches, node_modules (frontend)"
 	@echo ""
 	@echo "Notas:"
@@ -186,6 +198,33 @@ test-coverage-back:
 test-coverage-front:
 	@echo "==> Cobertura frontend (vitest >=70%)..."
 	cd $(FRONTDIR) && $(NPM) run test:coverage
+
+# -------------------------
+# Benchmarks
+# -------------------------
+bench:
+	@echo "==> Benchmarks (reputacion)..."
+	@REAL_ARGS=""; \
+	if [ -n "$(BENCH_REAL_CACHE)" ]; then REAL_ARGS="--real-cache $(BENCH_REAL_CACHE)"; fi; \
+	if [ "$(BENCH_REAL_MAX_ITEMS)" != "0" ]; then REAL_ARGS="$$REAL_ARGS --max-items $(BENCH_REAL_MAX_ITEMS)"; fi; \
+	if [ "$(BENCH_PROFILE)" = "1" ]; then \
+		$(PY) scripts/bench_reputation.py --items $(BENCH_ITEMS) --iterations $(BENCH_ITERATIONS) --warmup $(BENCH_WARMUP) $$REAL_ARGS --profile; \
+	else \
+		$(PY) scripts/bench_reputation.py --items $(BENCH_ITEMS) --iterations $(BENCH_ITERATIONS) --warmup $(BENCH_WARMUP) $$REAL_ARGS; \
+	fi
+
+# -------------------------
+# Visual QA
+# -------------------------
+visual-qa: ensure-front
+	@echo "==> Visual QA (frontend) ..."
+	@VISUAL_QA_LABEL="$(VISUAL_QA_LABEL)" \
+	VISUAL_QA_ROUTE="$(VISUAL_QA_ROUTE)" \
+	VISUAL_QA_DIR="$(VISUAL_QA_DIR)" \
+	CHROME="$(CHROME)" \
+	HOST="$(HOST)" \
+	FRONT_PORT="$(FRONT_PORT)" \
+	bash scripts/visual-qa.sh
 
 # -------------------------
 # Limpieza

@@ -36,7 +36,9 @@ from reputation.collectors.utils import (
     http_get_json,
     http_get_text,
     match_keywords,
+    match_keyword_tokens,
     normalize_text,
+    tokenize,
 )
 from reputation.collectors.youtube import YouTubeCollector
 from reputation.config import (
@@ -134,6 +136,48 @@ class ReputationIngestService:
         self._settings = settings
         self._repo = ReputationCacheRepo(self._settings.cache_path)
 
+    @staticmethod
+    def _filter_items_inplace(
+        items: list[ReputationItem],
+        predicate: Callable[[ReputationItem], bool],
+    ) -> list[ReputationItem]:
+        write_idx = 0
+        for item in items:
+            if predicate(item):
+                items[write_idx] = item
+                write_idx += 1
+        if write_idx < len(items):
+            del items[write_idx:]
+        return items
+
+    @staticmethod
+    def _dedupe_items_inplace(items: list[ReputationItem]) -> list[ReputationItem]:
+        seen: set[tuple[str, str]] = set()
+        write_idx = 0
+        for item in items:
+            key = (item.source, item.id)
+            if key in seen:
+                continue
+            seen.add(key)
+            items[write_idx] = item
+            write_idx += 1
+        if write_idx < len(items):
+            del items[write_idx:]
+        return items
+
+    @staticmethod
+    def _cap_item_texts(items: list[ReputationItem]) -> list[ReputationItem]:
+        title_max = _env_int("REPUTATION_ITEM_TITLE_MAX", 400)
+        text_max = _env_int("REPUTATION_ITEM_TEXT_MAX", 8000)
+        if title_max <= 0 and text_max <= 0:
+            return items
+        for item in items:
+            if title_max > 0 and item.title and len(item.title) > title_max:
+                item.title = item.title[:title_max]
+            if text_max > 0 and item.text and len(item.text) > text_max:
+                item.text = item.text[:text_max]
+        return items
+
     def run(
         self, force: bool = False, progress: ProgressCallback | None = None
     ) -> ReputationCacheDocument:
@@ -159,6 +203,8 @@ class ReputationIngestService:
                 sources_enabled.append(normalized)
         enabled_sources = set(sources_enabled)
         lookback_days = DEFAULT_LOOKBACK_DAYS
+        now = datetime.now(timezone.utc)
+        min_dt = now - timedelta(days=max(0, lookback_days))
         report(
             "Preparando configuración",
             4,
@@ -184,8 +230,12 @@ class ReputationIngestService:
 
         def filter_enabled(items: list[ReputationItem]) -> list[ReputationItem]:
             if not enabled_sources:
-                return []
-            return [item for item in items if (item.source or "").strip().lower() in enabled_sources]
+                items.clear()
+                return items
+            return self._filter_items_inplace(
+                items,
+                lambda item: (item.source or "").strip().lower() in enabled_sources,
+            )
 
         # Reutiliza cache si aplica y no hay collectors activos
         if (
@@ -199,7 +249,9 @@ class ReputationIngestService:
             logger.info("Reputation cache hit (%s items)", len(existing.items))
             filtered_items = filter_enabled(existing.items)
             filtered_ratings = [
-                entry for entry in existing.market_ratings if entry.source.strip().lower() in enabled_sources
+                entry
+                for entry in existing.market_ratings
+                if entry.source.strip().lower() in enabled_sources
             ]
             filtered_history = [
                 entry
@@ -236,11 +288,14 @@ class ReputationIngestService:
                 {"collector": source_name, "done": done, "total": total},
             )
 
-        items = self._collect_items(collectors, notes, progress=on_collector)
+        items = self._collect_items(
+            collectors, notes, progress=on_collector, min_dt=min_dt, collected_at=now
+        )
         report("Señales recolectadas", 45, {"items": len(items)})
         items = filter_enabled(items)
+        items = self._dedupe_items_inplace(items)
 
-        items = self._normalize_items(items, lookback_days)
+        items = self._normalize_items(items, lookback_days, now=now)
         report("Normalizando señales", 52, {"items": len(items)})
         items = self._apply_geo_hints(cfg, items)
         report("Aplicando geografía", 58)
@@ -255,10 +310,12 @@ class ReputationIngestService:
             report("Mapeando Google Play", 66)
         else:
             report("Mapeo Google Play omitido", 66)
-        items = self._apply_sentiment(cfg, items, existing.items if existing else None, notes)
-        report("Analizando sentimiento", 74)
+        items = self._cap_item_texts(items)
+        report("Compactando contenido", 68)
         items = self._filter_noise_items(cfg, items, notes)
-        report("Filtrando ruido", 82)
+        report("Filtrando ruido", 72)
+        items = self._apply_sentiment(cfg, items, existing.items if existing else None, notes)
+        report("Analizando sentimiento", 80)
         items = self._balance_items(
             cfg,
             items,
@@ -306,19 +363,32 @@ class ReputationIngestService:
         collectors: Iterable[ReputationCollector],
         notes: list[str],
         progress: CollectorProgress | None = None,
+        min_dt: datetime | None = None,
+        collected_at: datetime | None = None,
     ) -> list[ReputationItem]:
         items: list[ReputationItem] = []
-        collector_list = list(collectors)
+        collector_list = collectors if isinstance(collectors, list) else list(collectors)
         if not collector_list:
             return items
         total = len(collector_list)
         done = 0
+        collected_now = collected_at or datetime.now(timezone.utc)
+
+        def keep_item(item: ReputationItem) -> bool:
+            if item.collected_at is None:
+                item.collected_at = collected_now
+            if min_dt is None:
+                return True
+            compare_dt = item.published_at or item.collected_at
+            return bool(compare_dt and compare_dt >= min_dt)
 
         workers = _env_int("REPUTATION_COLLECTOR_WORKERS", 6)
         if workers <= 1 or len(collector_list) == 1:
             for collector in collector_list:
                 try:
-                    items.extend(list(collector.collect()))
+                    for item in collector.collect():
+                        if keep_item(item):
+                            items.append(item)
                 except Exception as exc:  # pragma: no cover - defensive
                     notes.append(f"{collector.source_name}: error {exc}")
                     logger.warning("Collector %s failed: %s", collector.source_name, exc)
@@ -331,7 +401,10 @@ class ReputationIngestService:
         max_workers = max(1, min(workers, len(collector_list)))
 
         def _run(collector: ReputationCollector) -> list[ReputationItem]:
-            return list(collector.collect())
+            result = collector.collect()
+            if isinstance(result, list):
+                return result
+            return list(result)
 
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             future_map = {
@@ -340,7 +413,9 @@ class ReputationIngestService:
             for future in as_completed(future_map):
                 collector = future_map[future]
                 try:
-                    items.extend(future.result())
+                    result = future.result()
+                    ReputationIngestService._filter_items_inplace(result, keep_item)
+                    items.extend(result)
                 except Exception as exc:  # pragma: no cover - defensive
                     notes.append(f"{collector.source_name}: error {exc}")
                     logger.warning("Collector %s failed: %s", collector.source_name, exc)
@@ -423,19 +498,29 @@ class ReputationIngestService:
         return items
 
     @staticmethod
-    def _normalize_items(items: list[ReputationItem], lookback_days: int) -> list[ReputationItem]:
-        now = datetime.now(timezone.utc)
-        min_dt = now - timedelta(days=max(0, lookback_days))
-        filtered: list[ReputationItem] = []
+    def _normalize_items(
+        items: list[ReputationItem],
+        lookback_days: int,
+        *,
+        now: datetime | None = None,
+    ) -> list[ReputationItem]:
+        if not items:
+            return items
+        normalized_now = now or datetime.now(timezone.utc)
+        min_dt = normalized_now - timedelta(days=max(0, lookback_days))
+        write_idx = 0
 
         for item in items:
             if item.collected_at is None:
-                item.collected_at = now
+                item.collected_at = normalized_now
             compare_dt = item.published_at or item.collected_at
             if compare_dt and compare_dt >= min_dt:
-                filtered.append(item)
+                items[write_idx] = item
+                write_idx += 1
 
-        return filtered
+        if write_idx < len(items):
+            del items[write_idx:]
+        return items
 
     def _collect_market_ratings(
         self,
@@ -811,7 +896,11 @@ class ReputationIngestService:
                 new_items = service.translate_items(new_items, target_language)
             updated = service.analyze_items(new_items)
             updated_map = {(item.source, item.id): item for item in updated}
-            result = [updated_map.get((item.source, item.id), item) for item in items]
+            for idx, item in enumerate(items):
+                updated_item = updated_map.get((item.source, item.id))
+                if updated_item is not None:
+                    items[idx] = updated_item
+            result = items
         else:
             if target_language:
                 items = service.translate_items(items, target_language)
@@ -855,16 +944,31 @@ class ReputationIngestService:
                         ]
                 combined = list(dict.fromkeys([*context_terms, *extra_terms]))
                 source_context_terms[source] = combined
-        filtered: list[ReputationItem] = []
         dropped_actor = 0
         dropped_actor_text = 0
         dropped_guard = 0
         dropped_geo = 0
         dropped_noise = 0
         dropped_context = 0
+        write_idx = 0
 
         for item in items:
-            text = f"{item.title or ''} {item.text or ''}".strip()
+            text: str | None = None
+            tokens: set[str] | None = None
+
+            def item_text() -> str:
+                nonlocal text
+                if text is None:
+                    text = f"{item.title or ''} {item.text or ''}".strip()
+                return text
+
+            def item_tokens() -> set[str]:
+                nonlocal tokens
+                if tokens is None:
+                    content = item_text()
+                    tokens = set(tokenize(content)) if content else set()
+                return tokens
+
             if item.source in require_actor_sources and not cls._item_has_actor(item):
                 dropped_actor += 1
                 continue
@@ -875,9 +979,10 @@ class ReputationIngestService:
                 continue
             if require_context_sources and item.source in require_context_sources:
                 terms = source_context_terms.get(item.source, context_terms)
-                if text and terms and not match_keywords(text, terms):
-                    dropped_context += 1
-                    continue
+                if terms:
+                    if not match_keyword_tokens(item_tokens(), terms):
+                        dropped_context += 1
+                        continue
             if (
                 allowed_by_geo
                 and item.geo
@@ -890,23 +995,21 @@ class ReputationIngestService:
             if (
                 guard_actors
                 and cls._item_has_guard_actor(item, guard_actors, alias_map)
-                and text
                 and context_terms
-                and not match_keywords(text, context_terms)
             ):
-                dropped_guard += 1
-                continue
-            if (
-                noise_terms
-                and item.source in noise_sources
-                and text
-                and match_keywords(text, noise_terms)
-                and (not context_terms or not match_keywords(text, context_terms))
-            ):
-                dropped_noise += 1
-                continue
-            filtered.append(item)
+                if not match_keyword_tokens(item_tokens(), context_terms):
+                    dropped_guard += 1
+                    continue
+            if noise_terms and item.source in noise_sources:
+                if match_keyword_tokens(item_tokens(), noise_terms):
+                    if not context_terms or not match_keyword_tokens(item_tokens(), context_terms):
+                        dropped_noise += 1
+                        continue
+            items[write_idx] = item
+            write_idx += 1
 
+        if write_idx < len(items):
+            del items[write_idx:]
         if (
             dropped_actor
             or dropped_actor_text
@@ -935,7 +1038,7 @@ class ReputationIngestService:
                     dropped_noise,
                 )
             )
-        return filtered
+        return items
 
     @staticmethod
     def _item_has_actor(item: ReputationItem) -> bool:

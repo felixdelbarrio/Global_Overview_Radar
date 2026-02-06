@@ -1,11 +1,49 @@
-# Reputation Radar (Sentiment)
+# Global Overview Radar
 
 [![CI / test_backend](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/backend.yml/badge.svg?branch=main)](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/backend.yml)
 [![CI / test_frontend](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/frontend.yml/badge.svg?branch=main)](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/frontend.yml)
 [![typecheck](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/typecheck.yml/badge.svg?branch=main)](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/typecheck.yml)
 [![deploy_hooks](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/deploy_hooks.yml/badge.svg?branch=main)](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/deploy_hooks.yml)
 
-Reputation Radar is a full-stack system focused on **sentiment ingestion and market perception analytics**.
+Global Overview Radar convierte señales publicas en **inteligencia accionable de reputacion y sentimiento**. Es un radar always-on: orquesta multiples fuentes, normaliza actores y geografias, enriquece con sentimiento y rating, y lo transforma en un panel que revela cambios reales, compara competidores con precision y activa alertas de riesgo antes de que escalen.
+
+---
+
+## EN | What it does
+
+- Ingests multi-source public signals (news, reviews, forums, social, app stores).
+- Normalizes entities, geographies, and time windows to compare like with like.
+- Enriches every mention with sentiment and rating signals, ready to serve fast.
+- Powers a high-signal dashboard that surfaces trends, competitors, and early shifts.
+
+---
+
+## ES | Qué hace
+
+- Ingesta señales públicas multi-fuente (news, reviews, foros, social, app stores).
+- Normaliza entidades, geografías y ventanas temporales para comparar con precision.
+- Enriquece cada mencion con sentimiento y ratings, listo para servir rapido.
+- Ofrece un dashboard que destapa tendencias, competidores y cambios tempranos.
+
+---
+
+## EN | How it works
+
+- **Collect**: connectors gather raw mentions and ratings.
+- **Normalize**: actor aliases and geo mappings unify the data.
+- **Enrich**: sentiment + aspect + rating signals are computed.
+- **Cache**: fast JSON snapshots feed the UI.
+- **Analyze**: the frontend surfaces patterns, deltas, and rankings.
+
+---
+
+## ES | Cómo funciona
+
+- **Recolecta**: conectores extraen menciones y ratings.
+- **Normaliza**: alias de actores y geos unifican los datos.
+- **Enriquece**: se calculan sentimiento, aspectos y señales de rating.
+- **Cachea**: snapshots JSON rapidos alimentan la UI.
+- **Analiza**: el frontend revela patrones, cambios y rankings.
 
 ---
 
@@ -16,7 +54,7 @@ Reputation Radar is a full-stack system focused on **sentiment ingestion and mar
 - Frontend (Next.js)
   - `frontend/brr-frontend`: sentiment dashboard and analysis.
 - Data
-  - `data/reputation/*.json`: business configurations (mergeable, multi-file).
+  - `data/reputation/*.json`: business configurations (mergeable, multi‑file).
   - `data/reputation_samples/*.json`: sample configs to copy from.
   - `data/cache/`: generated caches.
 
@@ -29,7 +67,7 @@ Reputation Radar is a full-stack system focused on **sentiment ingestion and mar
 - Frontend (Next.js)
   - `frontend/brr-frontend`: dashboard y análisis de sentimiento.
 - Data
-  - `data/reputation/*.json`: configuración de negocio (multi-archivo, mergeable).
+  - `data/reputation/*.json`: configuración de negocio (multi‑archivo, mergeable).
   - `data/reputation_samples/*.json`: muestras para copiar.
   - `data/cache/`: caches generados.
 
@@ -93,7 +131,7 @@ make start-front
 
 ## EN | Configuration notes
 
-- Backend env file is auto-created from example if missing:
+- Backend env file is auto‑created from example if missing:
   - `backend/reputation/.env.reputation` from `.env.reputation.example`
 - Frontend env file:
   - `frontend/brr-frontend/.env.local` from `.env.local.example`

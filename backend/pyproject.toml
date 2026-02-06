@@ -1,8 +1,8 @@
 # Configuracion principal del paquete backend (migrado desde la raiz)
 [project]
-name = "ReputationRadar"
+name = "GlobalOverviewRadar"
 version = "0.1.0"
-description = "Reputation Radar - sentiment ingestion, enrichment and analytics backend"
+description = "Global Overview Radar - sentiment intelligence and market perception backend"
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [

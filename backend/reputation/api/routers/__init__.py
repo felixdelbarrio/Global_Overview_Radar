@@ -1,1 +1,1 @@
-"""Router package for Reputation Radar API."""
+"""Router package for Global Overview Radar API."""

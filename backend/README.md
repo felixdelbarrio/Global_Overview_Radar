@@ -1,6 +1,8 @@
-Backend for Reputation Radar
+Backend for Global Overview Radar
 
-This package contains the backend services for the Reputation Radar (sentiment) project.
+This package contains the backend services for Global Overview Radar. It powers
+multi-source ingestion, sentiment enrichment, cache generation, and the API
+consumed by the dashboard.
 
 Quick start
 
