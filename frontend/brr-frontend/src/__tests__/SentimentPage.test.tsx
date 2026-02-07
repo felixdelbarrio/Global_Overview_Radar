@@ -221,4 +221,23 @@ describe("Sentimiento page", () => {
     revokeUrlSpy.mockRestore();
     anchorClickSpy.mockRestore();
   });
+
+  it("requests comparison when selecting another actor", async () => {
+    render(<SentimientoPage />);
+
+    expect(await screen.findByText("Sentimiento histórico")).toBeInTheDocument();
+
+    const geoSelect = screen.getByLabelText("País");
+    fireEvent.change(geoSelect, { target: { value: "España" } });
+
+    const actorSelect = screen.getByLabelText("Otros actores del mercado");
+    fireEvent.change(actorSelect, { target: { value: "Beta Bank" } });
+
+    await waitFor(() => {
+      expect(apiPostMock).toHaveBeenCalledWith(
+        "/reputation/items/compare",
+        expect.anything()
+      );
+    });
+  });
 });

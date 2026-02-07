@@ -19,6 +19,7 @@ jobs:
     permissions:
       actions: read
       contents: read
+      pull-requests: read
     outputs:
       ok: ${{ steps.check.outputs.ok }}
     steps:
@@ -49,6 +50,18 @@ jobs:
                   }`
                 );
               }
+            }
+            const prs = await github.rest.repos.listPullRequestsAssociatedWithCommit({
+              owner,
+              repo,
+              commit_sha: headSha,
+            });
+            const mergedPr = prs.data.find(
+              (pr) => pr.merged_at && pr.base && pr.base.ref === "master"
+            );
+            if (!mergedPr) {
+              allOk = false;
+              core.info(`No merged PR found for ${headSha}. Skipping deploy.`);
             }
             core.setOutput("ok", allOk ? "true" : "false");
 

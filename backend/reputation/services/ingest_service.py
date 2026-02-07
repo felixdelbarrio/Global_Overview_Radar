@@ -1673,7 +1673,7 @@ class ReputationIngestService:
                 )
             rss_sources = self._limit_rss_sources(rss_sources, "NEWS_MAX_RSS_URLS", notes)
 
-            if not api_key and not rss_sources:
+            if api_key == "" and len(rss_sources) == 0:
                 notes.append("news: missing NEWS_API_KEY and rss_urls")
             else:
                 collectors.append(
@@ -1712,7 +1712,7 @@ class ReputationIngestService:
                 segment_mode,
                 include_unquoted=True,
             )
-            if not api_key:
+            if api_key == "":
                 notes.append("newsapi: missing NEWSAPI_API_KEY")
             else:
                 collectors.append(
@@ -1781,7 +1781,7 @@ class ReputationIngestService:
                 segment_mode,
                 include_unquoted=True,
             )
-            if not api_key:
+            if api_key == "":
                 notes.append("guardian: missing GUARDIAN_API_KEY")
             else:
                 collectors.append(
@@ -1894,7 +1894,7 @@ class ReputationIngestService:
             max_reviews = _env_int("GOOGLE_MAX_REVIEWS", 200)
 
             place_ids = list(dict.fromkeys(place_ids))
-            if not api_key or not place_ids:
+            if api_key == "" or len(place_ids) == 0:
                 notes.append("google_reviews: missing API key or place_ids in config.json")
             else:
                 for place_id_value in place_ids:
@@ -1917,7 +1917,7 @@ class ReputationIngestService:
                 segment_mode,
                 include_unquoted=True,
             )
-            if not api_key:
+            if api_key == "":
                 notes.append("youtube: missing YOUTUBE_API_KEY")
             else:
                 collectors.append(

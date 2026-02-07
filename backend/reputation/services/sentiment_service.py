@@ -566,8 +566,6 @@ class ReputationSentimentService:
         raw_actor_aliases = build_actor_aliases_by_canonical(cfg)
         self._actor_aliases: dict[str, list[str]] = {}
         for name, aliases in raw_actor_aliases.items():
-            if not isinstance(name, str):
-                continue
             cleaned = (
                 [a.strip() for a in aliases if isinstance(a, str) and a.strip()]
                 if isinstance(aliases, list)
@@ -1332,7 +1330,18 @@ class ReputationSentimentService:
             )
             resp.raise_for_status()
             data = resp.json()
-            return data["choices"][0]["message"]["content"]
+            content: str | None = None
+            if isinstance(data, dict):
+                choices = data.get("choices")
+                if isinstance(choices, list) and choices:
+                    first = choices[0]
+                    if isinstance(first, dict):
+                        message = first.get("message")
+                        if isinstance(message, dict):
+                            raw_content = message.get("content")
+                            if isinstance(raw_content, str):
+                                content = raw_content
+            return content
         except httpx.HTTPStatusError as exc:
             if self._handle_llm_http_error(exc):
                 return None
@@ -1519,10 +1528,13 @@ def _extract_gemini_text(payload: Any) -> str | None:
         parts = content.get("parts")
         if isinstance(parts, list):
             for part in parts:
-                if isinstance(part, dict) and isinstance(part.get("text"), str):
-                    return part["text"]
-    if isinstance(candidate.get("text"), str):
-        return candidate["text"]
+                if isinstance(part, dict):
+                    text = part.get("text")
+                    if isinstance(text, str):
+                        return text
+    text = candidate.get("text")
+    if isinstance(text, str):
+        return text
     return None
 
 
