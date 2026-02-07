@@ -5,6 +5,7 @@
  */
 
 import { logger } from "@/lib/logger";
+import { getStoredToken } from "@/lib/auth";
 
 /** Base de la API; permite proxy local con /api. */
 export const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api";
@@ -15,9 +16,13 @@ export const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api";
  */
 export async function apiGet<T>(path: string): Promise<T> {
   const url = `${API_BASE}${path.startsWith("/") ? path : `/${path}`}`;
+  const token = getStoredToken();
 
   logger.debug("apiGet -> request", () => ({ path, url }));
-  const res = await fetch(url, { cache: "no-store" });
+  const res = await fetch(url, {
+    cache: "no-store",
+    headers: token ? { "x-user-id-token": token } : undefined,
+  });
 
   if (!res.ok) {
     const text = await res.text().catch(() => "");
@@ -34,11 +39,15 @@ export async function apiGet<T>(path: string): Promise<T> {
  */
 export async function apiPost<T>(path: string, body: unknown): Promise<T> {
   const url = `${API_BASE}${path.startsWith("/") ? path : `/${path}`}`;
+  const token = getStoredToken();
 
   logger.debug("apiPost -> request", () => ({ path, url, body }));
   const res = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { "x-user-id-token": token } : {}),
+    },
     body: JSON.stringify(body),
     cache: "no-store",
   });

@@ -4,6 +4,7 @@ import "./globals.css";
 import type { ReactNode } from "react";
 import { Space_Grotesk, Source_Sans_3 } from "next/font/google";
 import Script from "next/script";
+import { AuthGate } from "@/components/AuthGate";
 
 const display = Space_Grotesk({
   subsets: ["latin"],
@@ -44,7 +45,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <Script id="theme-init" strategy="beforeInteractive">
           {`(function(){try{var t=localStorage.getItem('gor-theme');if(t==='ambient-dark'||t==='ambient-light'){document.documentElement.dataset.theme=t;}else{document.documentElement.dataset.theme='ambient-dark';}}catch(e){}})();`}
         </Script>
-        {children}
+        <AuthGate>{children}</AuthGate>
       </body>
     </html>
   );

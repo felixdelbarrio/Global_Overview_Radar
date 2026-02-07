@@ -1,0 +1,160 @@
+name: deploy_cloudrun
+
+on:
+  workflow_run:
+    workflows: ["CI", "typecheck", "format"]
+    types: [completed]
+
+concurrency:
+  group: deploy-cloudrun-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'master'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: read
+    outputs:
+      ok: ${{ steps.check.outputs.ok }}
+    steps:
+      - name: Check all workflows succeeded
+        id: check
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const workflows = ["typecheck.yml", "backend.yml", "frontend.yml", "format.yml"];
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const headSha = context.payload.workflow_run.head_sha;
+            let allOk = true;
+            for (const wf of workflows) {
+              const runs = await github.rest.actions.listWorkflowRuns({
+                owner,
+                repo,
+                workflow_id: wf,
+                head_sha: headSha,
+                per_page: 1,
+              });
+              const run = runs.data.workflow_runs[0];
+              if (!run || run.status !== "completed" || run.conclusion !== "success") {
+                allOk = false;
+                core.info(
+                  `Workflow ${wf} not successful for ${headSha}: ${
+                    run ? `${run.status}/${run.conclusion}` : "missing"
+                  }`
+                );
+              }
+            }
+            const prs = await github.rest.repos.listPullRequestsAssociatedWithCommit({
+              owner,
+              repo,
+              commit_sha: headSha,
+            });
+            const mergedPr = prs.data.find(
+              (pr) => pr.merged_at && pr.base && pr.base.ref === "master"
+            );
+            if (!mergedPr) {
+              allOk = false;
+              core.info(`No merged PR found for ${headSha}. Skipping deploy.`);
+            }
+            core.setOutput("ok", allOk ? "true" : "false");
+
+  deploy:
+    needs: gate
+    if: needs.gate.outputs.ok == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      GCP_PROJECT: global-overview-radar
+      GCP_REGION: europe-southwest1
+      BACKEND_SERVICE: gor-backend
+      FRONTEND_SERVICE: gor-frontend
+      FRONTEND_SA: gor-frontend-sa@global-overview-radar.iam.gserviceaccount.com
+      BACKEND_MAX_INSTANCES: "1"
+      FRONTEND_MAX_INSTANCES: "1"
+      BACKEND_CONCURRENCY: "2"
+      FRONTEND_CONCURRENCY: "2"
+      BACKEND_MEMORY: 768Mi
+      FRONTEND_MEMORY: 768Mi
+      BACKEND_CPU: "1"
+      FRONTEND_CPU: "1"
+      AUTH_ALLOWED_DOMAINS: gmail.com
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Prepare backend env file
+        run: |
+          set -euo pipefail
+          awk -F= '$0 !~ /^[[:space:]]*#/ && $0 ~ /=/ {print $0}' backend/reputation/.env.reputation.example > backend/reputation/cloudrun.env
+
+      - name: Deploy backend (Cloud Run)
+        env:
+          AUTH_GOOGLE_CLIENT_ID: ${{ secrets.AUTH_GOOGLE_CLIENT_ID }}
+          AUTH_ALLOWED_EMAILS: ${{ secrets.AUTH_ALLOWED_EMAILS }}
+        run: |
+          set -euo pipefail
+          if [ -z "${AUTH_GOOGLE_CLIENT_ID:-}" ]; then
+            echo "Missing AUTH_GOOGLE_CLIENT_ID secret."
+            exit 1
+          fi
+          gcloud run deploy "$BACKEND_SERVICE" \
+            --project "$GCP_PROJECT" \
+            --region "$GCP_REGION" \
+            --source . \
+            --no-allow-unauthenticated \
+            --min-instances 0 \
+            --max-instances "$BACKEND_MAX_INSTANCES" \
+            --concurrency "$BACKEND_CONCURRENCY" \
+            --cpu "$BACKEND_CPU" \
+            --memory "$BACKEND_MEMORY" \
+            --cpu-throttling \
+            --env-vars-file backend/reputation/cloudrun.env \
+            --update-env-vars "AUTH_ENABLED=true,AUTH_GOOGLE_CLIENT_ID=${AUTH_GOOGLE_CLIENT_ID},AUTH_ALLOWED_EMAILS=${AUTH_ALLOWED_EMAILS},AUTH_ALLOWED_DOMAINS=${AUTH_ALLOWED_DOMAINS}"
+
+      - name: Deploy frontend (Cloud Run)
+        env:
+          AUTH_GOOGLE_CLIENT_ID: ${{ secrets.AUTH_GOOGLE_CLIENT_ID }}
+          AUTH_ALLOWED_EMAILS: ${{ secrets.AUTH_ALLOWED_EMAILS }}
+        run: |
+          set -euo pipefail
+          if [ -z "${AUTH_GOOGLE_CLIENT_ID:-}" ]; then
+            echo "Missing AUTH_GOOGLE_CLIENT_ID secret."
+            exit 1
+          fi
+          BACKEND_URL="$(gcloud run services describe "$BACKEND_SERVICE" --project "$GCP_PROJECT" --region "$GCP_REGION" --format 'value(status.url)')"
+          if [ -z "$BACKEND_URL" ]; then
+            echo "Failed to resolve backend URL."
+            exit 1
+          fi
+          gcloud run deploy "$FRONTEND_SERVICE" \
+            --project "$GCP_PROJECT" \
+            --region "$GCP_REGION" \
+            --source frontend/brr-frontend \
+            --service-account "$FRONTEND_SA" \
+            --allow-unauthenticated \
+            --min-instances 0 \
+            --max-instances "$FRONTEND_MAX_INSTANCES" \
+            --concurrency "$FRONTEND_CONCURRENCY" \
+            --cpu "$FRONTEND_CPU" \
+            --memory "$FRONTEND_MEMORY" \
+            --cpu-throttling \
+            --set-env-vars "API_PROXY_TARGET=${BACKEND_URL},USE_SERVER_PROXY=true" \
+            --set-build-env-vars "NEXT_PUBLIC_AUTH_ENABLED=true,NEXT_PUBLIC_GOOGLE_CLIENT_ID=${AUTH_GOOGLE_CLIENT_ID},NEXT_PUBLIC_ALLOWED_EMAILS=${AUTH_ALLOWED_EMAILS}"

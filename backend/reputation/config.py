@@ -75,6 +75,12 @@ class ReputationSettings(BaseSettings):
     source_downdetector: bool = Field(default=False, alias="REPUTATION_SOURCE_DOWNDETECTOR")
     sources_allowlist: str = Field(default="", alias="REPUTATION_SOURCES_ALLOWLIST")
 
+    # Auth (Google ID tokens)
+    auth_enabled: bool = Field(default=False, alias="AUTH_ENABLED")
+    auth_google_client_id: str = Field(default="", alias="AUTH_GOOGLE_CLIENT_ID")
+    auth_allowed_emails: str = Field(default="", alias="AUTH_ALLOWED_EMAILS")
+    auth_allowed_domains: str = Field(default="", alias="AUTH_ALLOWED_DOMAINS")
+
     def enabled_sources(self) -> List[str]:
         """Devuelve la lista de fuentes activas según los toggles."""
         result: List[str] = []

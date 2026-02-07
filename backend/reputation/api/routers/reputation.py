@@ -13,6 +13,7 @@ from reputation.actors import (
     canonicalize_actor,
     primary_actor_info,
 )
+from reputation.auth import require_google_user
 from reputation.collectors.utils import match_keywords
 from reputation.config import (
     active_profile_key,
@@ -45,7 +46,7 @@ def _refresh_settings() -> None:
     reload_reputation_settings()
 
 
-router = APIRouter(dependencies=[Depends(_refresh_settings)])
+router = APIRouter(dependencies=[Depends(_refresh_settings), Depends(require_google_user)])
 
 _ALLOWED_SENTIMENTS = {"positive", "negative", "neutral"}
 _COMPARE_BODY = Body(...)
