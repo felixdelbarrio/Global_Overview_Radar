@@ -597,9 +597,7 @@ class ReputationIngestService:
         if guard_active:
             for actor_key, term_list in guard_terms_by_actor_raw.items():
                 canonical = (
-                    canonicalize_actor(actor_key, guard_alias_map)
-                    if guard_alias_map
-                    else actor_key
+                    canonicalize_actor(actor_key, guard_alias_map) if guard_alias_map else actor_key
                 )
                 if not canonical or not term_list:
                     continue
@@ -731,9 +729,7 @@ class ReputationIngestService:
         if guard_active:
             for actor_key, term_list in guard_terms_by_actor_raw.items():
                 canonical = (
-                    canonicalize_actor(actor_key, guard_alias_map)
-                    if guard_alias_map
-                    else actor_key
+                    canonicalize_actor(actor_key, guard_alias_map) if guard_alias_map else actor_key
                 )
                 if not canonical or not term_list:
                     continue
