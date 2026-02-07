@@ -34,7 +34,11 @@ BACKEND_MEMORY ?= 768Mi
 FRONTEND_MEMORY ?= 768Mi
 BACKEND_CPU ?= 1
 FRONTEND_CPU ?= 1
+AUTH_GOOGLE_CLIENT_ID ?=
+AUTH_ALLOWED_EMAILS ?=
 AUTH_ALLOWED_DOMAINS ?= gmail.com
+AUTH_ALLOWED_GROUPS ?=
+NEXT_PUBLIC_ALLOWED_DOMAINS ?=
 BENCH_DIR ?= docs/benchmarks
 BENCH_ITERATIONS ?= 40
 BENCH_WARMUP ?= 5
@@ -150,7 +154,7 @@ deploy-cloudrun-back: cloudrun-env
 		--memory $(BACKEND_MEMORY) \
 		--cpu-throttling \
 		--env-vars-file backend/reputation/cloudrun.env \
-		--update-env-vars AUTH_ENABLED=true,AUTH_GOOGLE_CLIENT_ID=$(AUTH_GOOGLE_CLIENT_ID),AUTH_ALLOWED_EMAILS=$(AUTH_ALLOWED_EMAILS),AUTH_ALLOWED_DOMAINS=$(AUTH_ALLOWED_DOMAINS)
+		--update-env-vars AUTH_ENABLED=true,AUTH_GOOGLE_CLIENT_ID=$(AUTH_GOOGLE_CLIENT_ID),AUTH_ALLOWED_EMAILS=$(AUTH_ALLOWED_EMAILS),AUTH_ALLOWED_DOMAINS=$(AUTH_ALLOWED_DOMAINS),AUTH_ALLOWED_GROUPS=$(AUTH_ALLOWED_GROUPS)
 
 deploy-cloudrun-front:
 	@echo "==> Deploy frontend en Cloud Run..."
@@ -176,7 +180,7 @@ deploy-cloudrun-front:
 		--memory $(FRONTEND_MEMORY) \
 		--cpu-throttling \
 		--set-env-vars API_PROXY_TARGET=$$BACKEND_URL,USE_SERVER_PROXY=true \
-		--set-build-env-vars NEXT_PUBLIC_AUTH_ENABLED=true,NEXT_PUBLIC_GOOGLE_CLIENT_ID=$(AUTH_GOOGLE_CLIENT_ID),NEXT_PUBLIC_ALLOWED_EMAILS=$(AUTH_ALLOWED_EMAILS)
+		--set-build-env-vars NEXT_PUBLIC_AUTH_ENABLED=true,NEXT_PUBLIC_GOOGLE_CLIENT_ID=$(AUTH_GOOGLE_CLIENT_ID),NEXT_PUBLIC_ALLOWED_EMAILS=$(AUTH_ALLOWED_EMAILS),NEXT_PUBLIC_ALLOWED_DOMAINS=$(NEXT_PUBLIC_ALLOWED_DOMAINS)
 
 deploy-cloudrun: deploy-cloudrun-back deploy-cloudrun-front
 	@true
@@ -244,7 +248,7 @@ typecheck: typecheck-back typecheck-front
 
 typecheck-back:
 	@echo "==> Typecheck backend (mypy + pyright)..."
-	$(PY) -m mypy .
+	$(PY) -m mypy --config-file backend/pyproject.toml backend
 	$(PY) -m pyright
 
 typecheck-front:

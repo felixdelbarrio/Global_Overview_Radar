@@ -86,7 +86,8 @@ jobs:
       FRONTEND_MEMORY: 768Mi
       BACKEND_CPU: "1"
       FRONTEND_CPU: "1"
-      AUTH_ALLOWED_DOMAINS: gmail.com
+      AUTH_ALLOWED_DOMAINS: ${{ secrets.AUTH_ALLOWED_DOMAINS }}
+      AUTH_ALLOWED_GROUPS: ${{ secrets.AUTH_ALLOWED_GROUPS }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -109,6 +110,7 @@ jobs:
         env:
           AUTH_GOOGLE_CLIENT_ID: ${{ secrets.AUTH_GOOGLE_CLIENT_ID }}
           AUTH_ALLOWED_EMAILS: ${{ secrets.AUTH_ALLOWED_EMAILS }}
+          AUTH_ALLOWED_GROUPS: ${{ secrets.AUTH_ALLOWED_GROUPS }}
         run: |
           set -euo pipefail
           if [ -z "${AUTH_GOOGLE_CLIENT_ID:-}" ]; then
@@ -127,12 +129,13 @@ jobs:
             --memory "$BACKEND_MEMORY" \
             --cpu-throttling \
             --env-vars-file backend/reputation/cloudrun.env \
-            --update-env-vars "AUTH_ENABLED=true,AUTH_GOOGLE_CLIENT_ID=${AUTH_GOOGLE_CLIENT_ID},AUTH_ALLOWED_EMAILS=${AUTH_ALLOWED_EMAILS},AUTH_ALLOWED_DOMAINS=${AUTH_ALLOWED_DOMAINS}"
+            --update-env-vars "AUTH_ENABLED=true,AUTH_GOOGLE_CLIENT_ID=${AUTH_GOOGLE_CLIENT_ID},AUTH_ALLOWED_EMAILS=${AUTH_ALLOWED_EMAILS},AUTH_ALLOWED_DOMAINS=${AUTH_ALLOWED_DOMAINS},AUTH_ALLOWED_GROUPS=${AUTH_ALLOWED_GROUPS}"
 
       - name: Deploy frontend (Cloud Run)
         env:
           AUTH_GOOGLE_CLIENT_ID: ${{ secrets.AUTH_GOOGLE_CLIENT_ID }}
           AUTH_ALLOWED_EMAILS: ${{ secrets.AUTH_ALLOWED_EMAILS }}
+          AUTH_ALLOWED_DOMAINS: ${{ secrets.AUTH_ALLOWED_DOMAINS }}
         run: |
           set -euo pipefail
           if [ -z "${AUTH_GOOGLE_CLIENT_ID:-}" ]; then
@@ -157,4 +160,4 @@ jobs:
             --memory "$FRONTEND_MEMORY" \
             --cpu-throttling \
             --set-env-vars "API_PROXY_TARGET=${BACKEND_URL},USE_SERVER_PROXY=true" \
-            --set-build-env-vars "NEXT_PUBLIC_AUTH_ENABLED=true,NEXT_PUBLIC_GOOGLE_CLIENT_ID=${AUTH_GOOGLE_CLIENT_ID},NEXT_PUBLIC_ALLOWED_EMAILS=${AUTH_ALLOWED_EMAILS}"
+            --set-build-env-vars "NEXT_PUBLIC_AUTH_ENABLED=true,NEXT_PUBLIC_GOOGLE_CLIENT_ID=${AUTH_GOOGLE_CLIENT_ID},NEXT_PUBLIC_ALLOWED_EMAILS=${AUTH_ALLOWED_EMAILS},NEXT_PUBLIC_ALLOWED_DOMAINS=${AUTH_ALLOWED_DOMAINS}"

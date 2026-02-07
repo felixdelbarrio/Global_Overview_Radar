@@ -70,6 +70,10 @@ ignore_missing_imports = true
 module = ["praw", "praw.*"]
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = ["google.auth", "google.auth.*", "google.oauth2", "google.oauth2.*"]
+ignore_missing_imports = true
+
 # Pyright config (used by pycheck if you add it in CI)
 [tool.pyright]
 typeCheckingMode = "strict"

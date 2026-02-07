@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Script from "next/script";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   clearStoredToken,
   getEmailFromToken,
@@ -21,45 +21,52 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   const buttonRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const pathname = usePathname();
-  const searchParams = useSearchParams();
   const [ready, setReady] = useState(false);
-  const [token, setToken] = useState<string | null>(null);
-  const [email, setEmail] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const isLoginPage = pathname === "/login";
-  const currentSearch = searchParams?.toString() ?? "";
-  const nextParam = searchParams?.get("next") ?? "/";
-
-  useEffect(() => {
-    if (!AUTH_ENABLED) return;
+  const [auth, setAuth] = useState<{
+    token: string | null;
+    email: string | null;
+    shouldClear: boolean;
+  }>(() => {
+    if (!AUTH_ENABLED || typeof window === "undefined") {
+      return { token: null, email: null, shouldClear: false };
+    }
     const stored = getStoredToken();
     if (!stored || isTokenExpired(stored)) {
-      clearStoredToken();
-      return;
+      return { token: null, email: null, shouldClear: Boolean(stored) };
     }
     const storedEmail = getEmailFromToken(stored);
     if (storedEmail && isEmailAllowed(storedEmail)) {
-      setToken(stored);
-      setEmail(storedEmail);
-    } else {
-      clearStoredToken();
+      return { token: stored, email: storedEmail, shouldClear: false };
     }
-  }, []);
+    return { token: null, email: null, shouldClear: true };
+  });
+  const { token, email } = auth;
+  const [error, setError] = useState<string | null>(null);
+  const isLoginPage = pathname === "/login";
+
+  useEffect(() => {
+    if (!auth.shouldClear) return;
+    clearStoredToken();
+  }, [auth.shouldClear]);
 
   useEffect(() => {
     if (!AUTH_ENABLED) return;
     if (token) return;
     if (isLoginPage) return;
-    const target = currentSearch ? `${pathname}?${currentSearch}` : pathname;
+    const search = typeof window !== "undefined" ? window.location.search : "";
+    const target = search ? `${pathname}${search}` : pathname;
     router.replace(`/login?next=${encodeURIComponent(target)}`);
-  }, [AUTH_ENABLED, token, isLoginPage, pathname, currentSearch, router]);
+  }, [token, isLoginPage, pathname, router]);
 
   useEffect(() => {
     if (!AUTH_ENABLED) return;
     if (!token) return;
     if (!isLoginPage) return;
-    router.replace(nextParam || "/");
-  }, [AUTH_ENABLED, token, isLoginPage, nextParam, router]);
+    const params =
+      typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+    const nextParam = params?.get("next") || "/";
+    router.replace(nextParam);
+  }, [token, isLoginPage, router]);
 
   useEffect(() => {
     if (!AUTH_ENABLED || !CLIENT_ID || !ready) return;
@@ -84,14 +91,12 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
         }
         if (!isEmailAllowed(nextEmail)) {
           clearStoredToken();
-          setToken(null);
-          setEmail(null);
+          setAuth({ token: null, email: null, shouldClear: false });
           setError(`El correo ${nextEmail} no está autorizado.`);
           return;
         }
         storeToken(credential, nextEmail);
-        setToken(credential);
-        setEmail(nextEmail);
+        setAuth({ token: credential, email: nextEmail, shouldClear: false });
         setError(null);
       },
       auto_select: false,
@@ -110,8 +115,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
 
   const handleLogout = () => {
     clearStoredToken();
-    setToken(null);
-    setEmail(null);
+    setAuth({ token: null, email: null, shouldClear: false });
     setError(null);
     if (window.google?.accounts?.id) {
       window.google.accounts.id.disableAutoSelect();

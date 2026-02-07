@@ -425,8 +425,6 @@ def reputation_items_compare(
     combined_map: dict[str, ReputationItem] = {}
 
     for group in payload:
-        if not isinstance(group, dict):
-            continue
         group_items = _filter_items(
             items,
             group,

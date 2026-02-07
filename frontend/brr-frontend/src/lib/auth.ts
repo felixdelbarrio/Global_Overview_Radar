@@ -11,6 +11,14 @@ function isBrowser(): boolean {
   return typeof window !== "undefined";
 }
 
+function hasStorage(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    typeof window.localStorage !== "undefined" &&
+    typeof window.localStorage.getItem === "function"
+  );
+}
+
 function decodeBase64Url(value: string): string | null {
   const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
   const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
@@ -49,17 +57,17 @@ export function isTokenExpired(token: string): boolean {
 }
 
 export function getStoredToken(): string | null {
-  if (!isBrowser()) return null;
+  if (!hasStorage()) return null;
   return window.localStorage.getItem(TOKEN_KEY);
 }
 
 export function getStoredEmail(): string | null {
-  if (!isBrowser()) return null;
+  if (!hasStorage()) return null;
   return window.localStorage.getItem(EMAIL_KEY);
 }
 
 export function storeToken(token: string, email: string | null): void {
-  if (!isBrowser()) return;
+  if (!hasStorage()) return;
   window.localStorage.setItem(TOKEN_KEY, token);
   if (email) {
     window.localStorage.setItem(EMAIL_KEY, email);
@@ -67,7 +75,7 @@ export function storeToken(token: string, email: string | null): void {
 }
 
 export function clearStoredToken(): void {
-  if (!isBrowser()) return;
+  if (!hasStorage()) return;
   window.localStorage.removeItem(TOKEN_KEY);
   window.localStorage.removeItem(EMAIL_KEY);
 }
@@ -80,9 +88,22 @@ export function readAllowedEmails(): string[] {
     .filter(Boolean);
 }
 
+export function readAllowedDomains(): string[] {
+  const raw = process.env.NEXT_PUBLIC_ALLOWED_DOMAINS || "";
+  return raw
+    .split(",")
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean);
+}
+
 export function isEmailAllowed(email: string | null): boolean {
   if (!email) return false;
-  const allowed = readAllowedEmails();
-  if (!allowed.length) return true;
-  return allowed.includes(email.toLowerCase());
+  const allowedEmails = readAllowedEmails();
+  const allowedDomains = readAllowedDomains();
+  if (!allowedEmails.length && !allowedDomains.length) return true;
+  const normalized = email.toLowerCase();
+  if (allowedEmails.includes(normalized)) return true;
+  const domain = normalized.split("@")[1] || "";
+  if (!domain) return false;
+  return allowedDomains.includes(domain);
 }
