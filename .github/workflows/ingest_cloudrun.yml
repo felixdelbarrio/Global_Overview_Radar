@@ -13,7 +13,7 @@ on:
       all_sources:
         description: "Ignorar toggles y probar todas las fuentes (true/false)"
         required: false
-        default: "true"
+        default: "false"
 
 concurrency:
   group: ingest-cloudrun
@@ -43,7 +43,7 @@ jobs:
       - name: Trigger backend ingest
         env:
           FORCE: ${{ github.event.inputs.force || 'true' }}
-          ALL_SOURCES: ${{ github.event.inputs.all_sources || 'true' }}
+          ALL_SOURCES: ${{ github.event.inputs.all_sources || 'false' }}
         run: |
           set -euo pipefail
           if [ -z "${AUTH_GOOGLE_CLIENT_ID:-}" ]; then
@@ -60,36 +60,71 @@ jobs:
           RUN_TOKEN="$(gcloud auth print-identity-token --audiences="$BACKEND_URL")"
           USER_TOKEN="$(gcloud auth print-identity-token --audiences="$AUTH_GOOGLE_CLIENT_ID" --include-email)"
 
-          payload="$(jq -n --argjson force "$FORCE" --argjson all "$ALL_SOURCES" '{force:$force, all_sources:$all}')"
-          response="$(curl -sS -f -X POST "$BACKEND_URL/ingest/reputation" \
-            -H "Authorization: Bearer ${RUN_TOKEN}" \
-            -H "x-user-id-token: ${USER_TOKEN}" \
-            -H "Content-Type: application/json" \
-            -d "$payload")"
-
-          job_id="$(printf '%s' "$response" | jq -r '.id')"
-          if [ -z "$job_id" ] || [ "$job_id" = "null" ]; then
-            echo "No job id returned: $response"
-            exit 1
-          fi
-
-          echo "Ingest job started: $job_id"
-          for i in {1..60}; do
-            job="$(curl -sS -f "$BACKEND_URL/ingest/jobs/$job_id" \
+          api_get() {
+            curl -sS -f "$BACKEND_URL$1" \
               -H "Authorization: Bearer ${RUN_TOKEN}" \
-              -H "x-user-id-token: ${USER_TOKEN}")"
-            status="$(printf '%s' "$job" | jq -r '.status')"
-            echo "Status: $status"
-            if [ "$status" = "success" ]; then
-              echo "$job" | jq .
-              exit 0
-            fi
-            if [ "$status" = "error" ]; then
-              echo "$job" | jq .
-              exit 1
-            fi
-            sleep 10
-          done
+              -H "x-user-id-token: ${USER_TOKEN}"
+          }
 
-          echo "Timeout waiting for ingest job."
-          exit 1
+          api_post() {
+            local path="$1"
+            local payload="$2"
+            curl -sS -f -X POST "$BACKEND_URL$path" \
+              -H "Authorization: Bearer ${RUN_TOKEN}" \
+              -H "x-user-id-token: ${USER_TOKEN}" \
+              -H "Content-Type: application/json" \
+              -d "$payload"
+          }
+
+          wait_job() {
+            local job_id="$1"
+            echo "Ingest job started: $job_id"
+            for i in {1..60}; do
+              job="$(api_get "/ingest/jobs/$job_id")"
+              status="$(printf '%s' "$job" | jq -r '.status')"
+              echo "Status: $status"
+              if [ "$status" = "success" ]; then
+                echo "$job" | jq .
+                return 0
+              fi
+              if [ "$status" = "error" ]; then
+                echo "$job" | jq .
+                return 1
+              fi
+              sleep 10
+            done
+            echo "Timeout waiting for ingest job."
+            return 1
+          }
+
+          set_profile() {
+            local source="$1"
+            local profiles_json="$2"
+            payload="$(jq -n --arg source "$source" --argjson profiles "$profiles_json" '{source:$source, profiles:$profiles}')"
+            api_post "/reputation/profiles" "$payload" >/dev/null
+            echo "Profile set to $source: $profiles_json"
+          }
+
+          start_ingest() {
+            payload="$(jq -n --argjson force "$FORCE" --argjson all "$ALL_SOURCES" '{force:$force, all_sources:$all}')"
+            response="$(api_post "/ingest/reputation" "$payload")"
+            job_id="$(printf '%s' "$response" | jq -r '.id')"
+            if [ -z "$job_id" ] || [ "$job_id" = "null" ]; then
+              echo "No job id returned: $response"
+              return 1
+            fi
+            wait_job "$job_id"
+          }
+
+          current="$(api_get "/reputation/profiles")"
+          orig_source="$(printf '%s' "$current" | jq -r '.active.source // "default"')"
+          orig_profiles="$(printf '%s' "$current" | jq -c '.active.profiles // []')"
+          echo "Original profile: ${orig_source} ${orig_profiles}"
+
+          set_profile "samples" '["banking_bbva_retail"]'
+          start_ingest
+
+          set_profile "samples" '["banking_bbva_empresas"]'
+          start_ingest
+
+          set_profile "$orig_source" "$orig_profiles"
