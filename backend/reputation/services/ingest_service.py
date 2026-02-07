@@ -576,11 +576,19 @@ class ReputationIngestService:
         app_id_to_actor = appstore_cfg.get("app_id_to_actor") or {}
         if not isinstance(app_id_to_actor, dict):
             app_id_to_actor = {}
+        raw_core_only = appstore_cfg.get("core_only")
+        if isinstance(raw_core_only, bool):
+            core_only = raw_core_only
+        elif isinstance(raw_core_only, str):
+            core_only = _env_bool(raw_core_only)
+        else:
+            core_only = _env_bool(os.getenv("APPSTORE_CORE_ONLY", "false"))
 
         fallback_actor = _primary_actor_canonical(cfg)
         default_country = os.getenv("APPSTORE_COUNTRY", "es").strip().lower() or "es"
         timeout = _env_int("APPSTORE_RATING_TIMEOUT", 12)
         seen: set[tuple[str, str]] = set()
+        seen_actor_geo: set[tuple[str, str]] = set()
         out: list[MarketRating] = []
         now = datetime.now(timezone.utc)
 
@@ -596,6 +604,11 @@ class ReputationIngestService:
             for app_id in app_ids_list:
                 if not isinstance(app_id, str) or not app_id.strip():
                     continue
+                actor = app_id_to_actor.get(app_id) or fallback_actor
+                actor_key = str(actor).strip().lower() if actor else ""
+                geo_key = str(geo).strip().lower()
+                if core_only and actor_key and (actor_key, geo_key) in seen_actor_geo:
+                    continue
                 key = (app_id, country)
                 if key in seen:
                     continue
@@ -610,7 +623,8 @@ class ReputationIngestService:
                 rating, rating_count, url, name = rating_info
                 if rating is None:
                     continue
-                actor = app_id_to_actor.get(app_id) or fallback_actor
+                if core_only and actor_key:
+                    seen_actor_geo.add((actor_key, geo_key))
                 out.append(
                     MarketRating(
                         source="appstore",
@@ -649,12 +663,20 @@ class ReputationIngestService:
         package_id_to_actor = play_cfg.get("package_id_to_actor") or {}
         if not isinstance(package_id_to_actor, dict):
             package_id_to_actor = {}
+        raw_core_only = play_cfg.get("core_only")
+        if isinstance(raw_core_only, bool):
+            core_only = raw_core_only
+        elif isinstance(raw_core_only, str):
+            core_only = _env_bool(raw_core_only)
+        else:
+            core_only = _env_bool(os.getenv("GOOGLE_PLAY_CORE_ONLY", "false"))
 
         fallback_actor = _primary_actor_canonical(cfg)
         timeout = _env_int("GOOGLE_PLAY_RATING_TIMEOUT", 12)
         default_gl = os.getenv("GOOGLE_PLAY_DEFAULT_COUNTRY", "ES").strip().upper() or "ES"
         default_hl = os.getenv("GOOGLE_PLAY_DEFAULT_LANGUAGE", "es").strip().lower() or "es"
         seen: set[tuple[str, str, str]] = set()
+        seen_actor_geo: set[tuple[str, str]] = set()
         out: list[MarketRating] = []
         now = datetime.now(timezone.utc)
 
@@ -673,6 +695,11 @@ class ReputationIngestService:
             for package_id in packages:
                 if not isinstance(package_id, str) or not package_id.strip():
                     continue
+                actor = package_id_to_actor.get(package_id) or fallback_actor
+                actor_key = str(actor).strip().lower() if actor else ""
+                geo_key = str(geo).strip().lower()
+                if core_only and actor_key and (actor_key, geo_key) in seen_actor_geo:
+                    continue
                 key = (package_id, gl, hl)
                 if key in seen:
                     continue
@@ -687,7 +714,8 @@ class ReputationIngestService:
                 rating, rating_count, url, name = rating_info
                 if rating is None:
                     continue
-                actor = package_id_to_actor.get(package_id) or fallback_actor
+                if core_only and actor_key:
+                    seen_actor_geo.add((actor_key, geo_key))
                 out.append(
                     MarketRating(
                         source="google_play",
