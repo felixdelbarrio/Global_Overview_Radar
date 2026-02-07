@@ -583,12 +583,40 @@ class ReputationIngestService:
             core_only = _env_bool(raw_core_only)
         else:
             core_only = _env_bool(os.getenv("APPSTORE_CORE_ONLY", "false"))
+        (
+            guard_enabled,
+            guard_default_terms,
+            guard_terms_by_actor_raw,
+            guard_sources,
+            guard_mode,
+            guard_min_matches,
+        ) = self._load_segment_guard_cfg(cfg)
+        guard_active = guard_enabled and "appstore" in guard_sources
+        guard_alias_map = build_actor_alias_map(cfg) if guard_active else {}
+        guard_terms_by_actor: dict[str, list[str]] = {}
+        if guard_active:
+            for actor_key, term_list in guard_terms_by_actor_raw.items():
+                canonical = (
+                    canonicalize_actor(actor_key, guard_alias_map)
+                    if guard_alias_map
+                    else actor_key
+                )
+                if not canonical or not term_list:
+                    continue
+                bucket = guard_terms_by_actor.setdefault(canonical, [])
+                for term in term_list:
+                    cleaned = term.strip()
+                    if cleaned and cleaned not in bucket:
+                        bucket.append(cleaned)
 
         fallback_actor = _primary_actor_canonical(cfg)
         default_country = os.getenv("APPSTORE_COUNTRY", "es").strip().lower() or "es"
         timeout = _env_int("APPSTORE_RATING_TIMEOUT", 12)
         seen: set[tuple[str, str]] = set()
         seen_actor_geo: set[tuple[str, str]] = set()
+        guard_checked = 0
+        guard_blocked = 0
+        guard_missing = 0
         out: list[MarketRating] = []
         now = datetime.now(timezone.utc)
 
@@ -623,6 +651,20 @@ class ReputationIngestService:
                 rating, rating_count, url, name = rating_info
                 if rating is None:
                     continue
+                if guard_active:
+                    guard_terms = self._segment_guard_terms_for_actor(
+                        actor, guard_default_terms, guard_terms_by_actor, guard_alias_map
+                    )
+                    if guard_terms:
+                        if not name:
+                            guard_missing += 1
+                            continue
+                        guard_checked += 1
+                        if not self._segment_guard_matches(
+                            name, guard_terms, guard_mode, guard_min_matches
+                        ):
+                            guard_blocked += 1
+                            continue
                 if core_only and actor_key:
                     seen_actor_geo.add((actor_key, geo_key))
                 out.append(
@@ -639,6 +681,11 @@ class ReputationIngestService:
                     )
                 )
 
+        if guard_active and (guard_blocked or guard_missing):
+            notes.append(
+                "segment_guard ratings appstore: checked "
+                f"{guard_checked}, blocked {guard_blocked}, missing_name {guard_missing}"
+            )
         return out
 
     def _collect_google_play_market_ratings(
@@ -670,6 +717,31 @@ class ReputationIngestService:
             core_only = _env_bool(raw_core_only)
         else:
             core_only = _env_bool(os.getenv("GOOGLE_PLAY_CORE_ONLY", "false"))
+        (
+            guard_enabled,
+            guard_default_terms,
+            guard_terms_by_actor_raw,
+            guard_sources,
+            guard_mode,
+            guard_min_matches,
+        ) = self._load_segment_guard_cfg(cfg)
+        guard_active = guard_enabled and "google_play" in guard_sources
+        guard_alias_map = build_actor_alias_map(cfg) if guard_active else {}
+        guard_terms_by_actor: dict[str, list[str]] = {}
+        if guard_active:
+            for actor_key, term_list in guard_terms_by_actor_raw.items():
+                canonical = (
+                    canonicalize_actor(actor_key, guard_alias_map)
+                    if guard_alias_map
+                    else actor_key
+                )
+                if not canonical or not term_list:
+                    continue
+                bucket = guard_terms_by_actor.setdefault(canonical, [])
+                for term in term_list:
+                    cleaned = term.strip()
+                    if cleaned and cleaned not in bucket:
+                        bucket.append(cleaned)
 
         fallback_actor = _primary_actor_canonical(cfg)
         timeout = _env_int("GOOGLE_PLAY_RATING_TIMEOUT", 12)
@@ -677,6 +749,9 @@ class ReputationIngestService:
         default_hl = os.getenv("GOOGLE_PLAY_DEFAULT_LANGUAGE", "es").strip().lower() or "es"
         seen: set[tuple[str, str, str]] = set()
         seen_actor_geo: set[tuple[str, str]] = set()
+        guard_checked = 0
+        guard_blocked = 0
+        guard_missing = 0
         out: list[MarketRating] = []
         now = datetime.now(timezone.utc)
 
@@ -714,6 +789,20 @@ class ReputationIngestService:
                 rating, rating_count, url, name = rating_info
                 if rating is None:
                     continue
+                if guard_active:
+                    guard_terms = self._segment_guard_terms_for_actor(
+                        actor, guard_default_terms, guard_terms_by_actor, guard_alias_map
+                    )
+                    if guard_terms:
+                        if not name:
+                            guard_missing += 1
+                            continue
+                        guard_checked += 1
+                        if not self._segment_guard_matches(
+                            name, guard_terms, guard_mode, guard_min_matches
+                        ):
+                            guard_blocked += 1
+                            continue
                 if core_only and actor_key:
                     seen_actor_geo.add((actor_key, geo_key))
                 out.append(
@@ -729,6 +818,11 @@ class ReputationIngestService:
                         collected_at=now,
                     )
                 )
+        if guard_active and (guard_blocked or guard_missing):
+            notes.append(
+                "segment_guard ratings google_play: checked "
+                f"{guard_checked}, blocked {guard_blocked}, missing_name {guard_missing}"
+            )
         return out
 
     @classmethod
