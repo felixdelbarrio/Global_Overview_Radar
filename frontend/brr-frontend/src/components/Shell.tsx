@@ -6,7 +6,7 @@
  * Incluye topbar, sidebar y contenedor de contenido.
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -168,14 +168,14 @@ export function Shell({ children }: { children: React.ReactNode }) {
     setTemplatesOpen(false);
   };
 
-  const openPanel = (panel: FloatingPanel) => {
+  const openPanel = useCallback((panel: FloatingPanel) => {
     setIngestOpen(panel === "ingest");
     setProfilesOpen(panel === "profiles");
     setSettingsOpen(panel === "settings");
     if (panel !== "profiles") {
       setTemplatesOpen(false);
     }
-  };
+  }, []);
 
   const toggleIngestPanel = () => {
     if (ingestOpen) {
@@ -213,7 +213,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
         : "ambient-dark");
     setTheme(next);
     setThemeReady(true);
-  }, []);
+  }, [openPanel]);
 
   useEffect(() => {
     if (!themeReady) return;
@@ -329,7 +329,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
     return () => {
       window.removeEventListener(INGEST_STARTED_EVENT, handler as EventListener);
     };
-  }, []);
+  }, [openPanel]);
 
   const toggleTheme = () => {
     const nextTheme = theme === "ambient-light" ? "ambient-dark" : "ambient-light";

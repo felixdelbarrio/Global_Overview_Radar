@@ -191,7 +191,7 @@ test-back:
 
 test-front:
 	@echo "==> Tests frontend (vitest)..."
-	cd $(FRONTDIR) && $(NPM) run test
+	cd $(FRONTDIR) && CI=1 $(NPM) run test
 
 test-coverage: test-coverage-back test-coverage-front
 
