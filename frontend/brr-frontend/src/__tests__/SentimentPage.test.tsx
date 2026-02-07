@@ -18,14 +18,16 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@/lib/api", () => ({
   apiGet: vi.fn(),
+  apiGetCached: vi.fn(),
   apiPost: vi.fn(),
 }));
 
-import { apiGet, apiPost } from "@/lib/api";
+import { apiGet, apiGetCached, apiPost } from "@/lib/api";
 import { INGEST_SUCCESS_EVENT } from "@/lib/events";
 import SentimientoPage from "@/app/sentimiento/page";
 
 const apiGetMock = vi.mocked(apiGet);
+const apiGetCachedMock = vi.mocked(apiGetCached);
 const apiPostMock = vi.mocked(apiPost);
 
 const metaResponse = {
@@ -133,7 +135,7 @@ const compareResponse = {
 
 describe("Sentimiento page", () => {
   beforeEach(() => {
-    apiGetMock.mockImplementation((path: string) => {
+    const handleGet = (path: string) => {
       if (path.startsWith("/reputation/meta")) {
         return Promise.resolve(metaResponse);
       }
@@ -147,7 +149,9 @@ describe("Sentimiento page", () => {
         return Promise.resolve({ groups: [], advanced_options: [] });
       }
       return Promise.resolve({ items: [] });
-    });
+    };
+    apiGetMock.mockImplementation(handleGet);
+    apiGetCachedMock.mockImplementation(handleGet);
     apiPostMock.mockImplementation((path: string) => {
       if (path === "/reputation/items/compare") {
         return Promise.resolve(compareResponse);

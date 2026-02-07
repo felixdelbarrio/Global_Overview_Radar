@@ -22,7 +22,7 @@ import {
   X,
   SlidersHorizontal,
 } from "lucide-react";
-import { apiGet, apiPost } from "@/lib/api";
+import { apiGet, apiGetCached, apiPost } from "@/lib/api";
 import {
   dispatchIngestStarted,
   dispatchIngestSuccess,
@@ -222,7 +222,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let alive = true;
-    apiGet<ProfileOptionsResponse>("/reputation/profiles")
+    apiGetCached<ProfileOptionsResponse>("/reputation/profiles", { ttlMs: 60000 })
       .then((data) => {
         if (!alive) return;
         setProfileOptions(data);
@@ -588,9 +588,10 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
       setProfilesOpen(false);
 
-      const profiles = await apiGet<ProfileOptionsResponse>("/reputation/profiles").catch(
-        () => null
-      );
+      const profiles = await apiGetCached<ProfileOptionsResponse>("/reputation/profiles", {
+        ttlMs: 60000,
+        force: true,
+      }).catch(() => null);
       if (profiles) {
         setProfileOptions(profiles);
         setProfileSelection(profiles.active.profiles ?? []);
