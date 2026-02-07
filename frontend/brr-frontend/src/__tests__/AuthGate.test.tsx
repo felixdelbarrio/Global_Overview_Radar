@@ -4,6 +4,20 @@ import React from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+type GoogleCredentialResponse = { credential?: string };
+type GoogleIdApi = {
+  disableAutoSelect?: () => void;
+  initialize?: (config: { callback: (response: GoogleCredentialResponse) => void }) => void;
+  renderButton?: () => void;
+};
+type GoogleAccounts = { id?: GoogleIdApi };
+type GoogleStub = { accounts?: GoogleAccounts };
+type WindowWithGoogle = Window & { google?: GoogleStub };
+
+const setGoogle = (value?: GoogleStub) => {
+  (window as WindowWithGoogle).google = value;
+};
+
 const replaceMock = vi.fn();
 const usePathnameMock = vi.fn();
 
@@ -12,13 +26,15 @@ vi.mock("next/navigation", () => ({
   usePathname: () => usePathnameMock(),
 }));
 
+const ScriptMock = ({ onLoad }: { onLoad?: () => void }) => {
+  React.useEffect(() => {
+    onLoad?.();
+  }, [onLoad]);
+  return null;
+};
+
 vi.mock("next/script", () => ({
-  default: ({ onLoad }: { onLoad?: () => void }) => {
-    React.useEffect(() => {
-      onLoad?.();
-    }, [onLoad]);
-    return null;
-  },
+  default: ScriptMock,
 }));
 
 const authMocks = {
@@ -62,7 +78,7 @@ beforeEach(() => {
   authMocks.getStoredToken.mockReturnValue(null);
   apiMocks.apiGet.mockReset();
   apiMocks.apiGet.mockResolvedValue({ email: "user@bbva.com" });
-  (window as any).google = undefined;
+  setGoogle(undefined);
   window.history.pushState({}, "", "/");
 });
 
@@ -201,9 +217,9 @@ describe("AuthGate", () => {
     authMocks.getStoredToken.mockReturnValue("token");
     const disableAutoSelect = vi.fn();
     const initialize = vi.fn();
-    (window as any).google = {
+    setGoogle({
       accounts: { id: { disableAutoSelect, initialize } },
-    };
+    });
 
     const AuthGate = await loadAuthGate({
       NEXT_PUBLIC_AUTH_ENABLED: "true",
@@ -338,9 +354,9 @@ describe("AuthGate", () => {
       captured = callback;
     });
     const renderButton = vi.fn();
-    (window as any).google = {
+    setGoogle({
       accounts: { id: { initialize, renderButton } },
-    };
+    });
 
     const AuthGate = await loadAuthGate({
       NEXT_PUBLIC_AUTH_ENABLED: "true",

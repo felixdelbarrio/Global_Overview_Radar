@@ -1,46 +1,17 @@
 {
-  "schema_version": "1.0",
+  "schema_version": "1.2",
   "name": "banking_bbva_retail",
-  "description": "Configuración de reputación y news para BBVA Retail (ES + MX) con IDs verificados y feeds RSS curados.",
+  "description": "Configuración de reputación y news para BBVA Retail (ES + MX) con IDs verificados (retail-only) y exclusiones explícitas de apps Empresas/Net Cash/Corporate. Incluye snapshot de evidencia para evitar confusiones en demos.",
   "generated_by": "chatgpt",
-  "generated_at": "2026-02-04T15:04:43.145178Z",
-  "geografias": [
-    "España",
-    "México",
-    "Global"
-  ],
+  "generated_at": "2026-02-07T00:00:00Z",
+  "geografias": ["España", "México", "Global"],
   "geografias_aliases": {
-    "España": [
-      "Spain",
-      "España",
-      "ES",
-      "Madrid",
-      "Barcelona",
-      "Valencia"
-    ],
-    "México": [
-      "Mexico",
-      "México",
-      "MX",
-      "CDMX",
-      "Ciudad de México",
-      "Guadalajara",
-      "Monterrey"
-    ],
-    "Global": [
-      "Global",
-      "Internacional",
-      "Worldwide"
-    ]
+    "España": ["Spain", "España", "ES", "Madrid", "Barcelona", "Valencia"],
+    "México": ["Mexico", "México", "MX", "CDMX", "Ciudad de México", "Guadalajara", "Monterrey"],
+    "Global": ["Global", "Internacional", "Worldwide"]
   },
   "actor_principal": {
-    "BBVA": [
-      "BBVA",
-      "BBVA España",
-      "BBVA Mexico",
-      "BBVA México",
-      "BBVA Bancomer"
-    ]
+    "BBVA": ["BBVA", "BBVA España", "BBVA Mexico", "BBVA México", "BBVA Bancomer"]
   },
   "actor_principal_aliases": {
     "BBVA": [
@@ -54,92 +25,23 @@
     ]
   },
   "otros_actores_aliases": {
-    "Santander": [
-      "Banco Santander",
-      "Santander España",
-      "Santander México",
-      "Santander MX",
-      "Supermovil",
-      "Santander App"
-    ],
-    "CaixaBank": [
-      "La Caixa",
-      "Caixa",
-      "Imagin",
-      "imaginBank"
-    ],
-    "Sabadell": [
-      "Banco Sabadell"
-    ],
-    "Bankinter": [
-      "EVO Banco",
-      "EVO"
-    ],
-    "ING": [
-      "ING España",
-      "ING Direct",
-      "ING Bank"
-    ],
-    "Openbank": [
-      "Open Bank"
-    ],
-    "Revolut": [
-      "Revolut Bank"
-    ],
-    "N26": [
-      "N26 Bank"
-    ],
-    "Wise": [
-      "TransferWise",
-      "Wise Bank"
-    ],
-    "Banorte": [
-      "Grupo Financiero Banorte",
-      "Banorte Móvil"
-    ],
-    "Citibanamex": [
-      "Banamex",
-      "Citibanamex Móvil"
-    ],
-    "HSBC": [
-      "HSBC México",
-      "HSBC España"
-    ],
-    "BBVA Empresas": [
-      "BBVA Empresas",
-      "BBVA Empresas México"
-    ]
+    "Santander": ["Banco Santander", "Santander España", "Santander México", "Santander MX", "Supermovil", "SuperMóvil", "Santander App"],
+    "CaixaBank": ["La Caixa", "Caixa", "CaixaBankNow", "imagin", "imaginBank"],
+    "Sabadell": ["Banco Sabadell", "App Banco Sabadell"],
+    "Bankinter": ["Bankinter"],
+    "ING": ["ING España", "ING Direct", "ING Bank"],
+    "Openbank": ["Open Bank", "Openbank"],
+    "Revolut": ["Revolut Bank", "Revolut"],
+    "N26": ["N26 Bank", "N26"],
+    "Wise": ["TransferWise", "Wise"],
+    "Banorte": ["Grupo Financiero Banorte", "Banorte Móvil"],
+    "Citibanamex": ["Banamex", "Citibanamex Móvil", "App Banamex"],
+    "HSBC": ["HSBC México", "HSBC"]
   },
-  "otros_actores_globales": [
-    "Santander",
-    "CaixaBank",
-    "Sabadell",
-    "Bankinter",
-    "ING",
-    "Openbank",
-    "Revolut",
-    "N26",
-    "Wise"
-  ],
+  "otros_actores_globales": ["Santander", "CaixaBank", "Sabadell", "Bankinter", "ING", "Openbank", "Revolut", "N26", "Wise"],
   "otros_actores_por_geografia": {
-    "España": [
-      "Santander",
-      "CaixaBank",
-      "Sabadell",
-      "Bankinter",
-      "ING",
-      "Openbank",
-      "Revolut",
-      "N26"
-    ],
-    "México": [
-      "Santander",
-      "Banorte",
-      "Citibanamex",
-      "HSBC",
-      "Revolut",
-      "N26"
-    ]
+    "España": ["Santander", "CaixaBank", "Sabadell", "Bankinter", "ING", "Openbank", "Revolut", "N26", "Wise"],
+    "México": ["Santander", "Banorte", "Citibanamex", "HSBC", "Revolut", "N26", "Wise"]
   },
   "keywords": [
     "BBVA",
@@ -167,6 +69,7 @@
   "segment_terms": [
     "retail",
     "particular",
+    "personas",
     "cuenta",
     "tarjeta",
     "bizum",
@@ -180,6 +83,12 @@
     "phishing",
     "scam"
   ],
+  "segment_guard": {
+    "enabled": true,
+    "default_terms": ["Banca", "Banco", "Móvil", "Movil", "Mobile", "App", "Online", "Personal", "Particular", "Retail", "Cuenta", "Bizum", "Banca Online"],
+    "hard_exclude_terms": ["Empresas", "Net Cash", "Corporate", "Business", "Nómina", "Cash Management", "GEMA", "Provinet"]
+  },
+
   "markets": {
     "ios_app_ids": {
       "España": "325813155",
@@ -200,257 +109,108 @@
       }
     }
   },
+
+  "verification": {
+    "scope": "retail-only",
+    "verified_at": "2026-02-07",
+    "rules": [
+      "Solo apps de banca de particulares (retail/personas).",
+      "Cualquier app con términos Empresas/Net Cash/Corporate/Business se lista en excluded_enterprise_apps y NO se usa para reputación retail.",
+      "Si una fuente devuelve un match ambiguo (p.ej. 'BBVA Empresas'), se descarta por defecto salvo whitelist explícita retail."
+    ],
+    "store_snapshot_key_examples": {
+      "bbva_retail_es_ios_rating": {
+        "app_id": "325813155",
+        "rating_value": 4.7,
+        "evidence": "https://apps.apple.com/es/app/id325813155"
+      },
+      "bbva_enterprise_new_es_ios_rating": {
+        "app_id": "1590189082",
+        "rating_value": 3.3,
+        "evidence": "https://apps.apple.com/es/app/bbva-empresas/id1590189082"
+      },
+      "bbva_enterprise_netcash_pe_ios_rating": {
+        "app_id": "1198146011",
+        "rating_value": 1.3,
+        "evidence": "https://apps.apple.com/pe/app/bbva-net-cash-pe/id1198146011"
+      }
+    }
+  },
+
+  "excluded_enterprise_apps": {
+    "bbva": {
+      "ios_app_ids": [
+        "698168058",
+        "1198146011",
+        "1590189082"
+      ],
+      "android_package_ids": [
+        "com.bbva.netcash",
+        "pe.bbvacontinental.netcash",
+        "com.bbva.GEMA.global",
+        "com.bbva.GEMA"
+      ],
+      "evidence": {
+        "bbva_empresas_es_pt_appstore": "https://apps.apple.com/es/app/bbva-empresas-es-pt/id698168058",
+        "bbva_empresas_es_pt_play": "https://play.google.com/store/apps/details?id=com.bbva.netcash",
+        "bbva_net_cash_pe_appstore": "https://apps.apple.com/pe/app/bbva-net-cash-pe/id1198146011",
+        "bbva_net_cash_pe_play": "https://play.google.com/store/apps/details?id=pe.bbvacontinental.netcash",
+        "bbva_empresas_new_appstore": "https://apps.apple.com/es/app/bbva-empresas/id1590189082",
+        "bbva_empresas_new_play": "https://play.google.com/store/apps/details?id=com.bbva.GEMA.global"
+      }
+    },
+    "santander": {
+      "ios_app_ids": ["976662821"],
+      "android_package_ids": ["es.bancosantander.empresas"],
+      "evidence": {
+        "santander_empresas_appstore": "https://apps.apple.com/mx/app/santander-empresas/id976662821",
+        "santander_empresas_play": "https://play.google.com/store/apps/details?id=es.bancosantander.empresas"
+      }
+    },
+    "notes": "Si en el futuro añadimos otras fuentes (CaixaBank/Sabadell/etc) y detectamos apps de firma/TPV/empresa, se listarán aquí como exclusión para evitar contaminar 'retail'."
+  },
+
   "output": {
     "cache_ttl_hours": 12,
     "max_items_total": 1200
   },
-  "reddit": {
-    "subreddits": [
-      "spain",
-      "mexico",
-      "personalfinance",
-      "eupersonalfinance",
-      "finanzas",
-      "androidapps",
-      "ios"
-    ],
-    "query_templates": [
-      "{entity}",
-      "\"{entity}\" app",
-      "\"{entity}\" banca",
-      "\"{entity}\" fraude",
-      "\"{entity}\" no funciona"
-    ]
-  },
+
   "news": {
     "rss_geo_map": {
-      "España": {
-        "gl": "ES",
-        "hl": "es-ES",
-        "ceid": "ES:es"
-      },
-      "México": {
-        "gl": "MX",
-        "hl": "es-419",
-        "ceid": "MX:es-419"
-      },
-      "Global": {
-        "gl": "US",
-        "hl": "en-US",
-        "ceid": "US:en"
-      }
+      "España": { "gl": "ES", "hl": "es-ES", "ceid": "ES:es" },
+      "México": { "gl": "MX", "hl": "es-419", "ceid": "MX:es-419" },
+      "Global": { "gl": "US", "hl": "en-US", "ceid": "US:en" }
     },
     "rss_urls": [
-      {
-        "url": "https://d500.epimg.net/rss/cincodias/portada.xml",
-        "geo": "España",
-        "domain": "cincodias.elpais.com"
-      },
-      {
-        "url": "https://cincodias.elpais.com/rss/cincodias/ultimas_noticias.xml",
-        "geo": "España",
-        "domain": "cincodias.elpais.com",
-        "topic": "ultimas"
-      },
-      {
-        "url": "https://www.eleconomista.es/rss/rss-economia.php",
-        "geo": "España",
-        "domain": "eleconomista.es",
-        "topic": "economia"
-      },
-      {
-        "url": "https://www.eleconomista.es/rss/rss-categoria.php?category=banca-finanzas",
-        "geo": "España",
-        "domain": "eleconomista.es",
-        "topic": "banca-finanzas"
-      },
-      {
-        "url": "https://www.europapress.es/rss/rss.aspx?ch=00136",
-        "geo": "España",
-        "domain": "europapress.es",
-        "topic": "economia-finanzas"
-      },
-      {
-        "url": "https://www.eleconomista.com.mx/rss/ultimas-noticias",
-        "geo": "México",
-        "domain": "eleconomista.com.mx",
-        "topic": "ultimas"
-      },
-      {
-        "url": "https://expansion.mx/rss/economia",
-        "geo": "México",
-        "domain": "expansion.mx",
-        "topic": "economia"
-      },
-      {
-        "url": "https://feeds.bbci.co.uk/news/business/rss.xml",
-        "geo": "Global",
-        "domain": "bbc.co.uk",
-        "topic": "business"
-      },
-      {
-        "url": "https://news.google.com/rss/search?q=%22BBVA%22+app+when:7d&hl=es-ES&gl=ES&ceid=ES:es",
-        "geo": "España",
-        "entity": "BBVA",
-        "type": "gnews_query"
-      },
-      {
-        "url": "https://news.google.com/rss/search?q=%22BBVA%22+fraude+OR+phishing+when:14d&hl=es-419&gl=MX&ceid=MX:es-419",
-        "geo": "México",
-        "entity": "BBVA",
-        "topic": "fraude",
-        "type": "gnews_query"
-      },
-      {
-        "url": "https://news.google.com/rss/search?q=%22BBVA%22+banca+m%C3%B3vil+when:14d&hl=es-ES&gl=ES&ceid=ES:es",
-        "geo": "España",
-        "entity": "BBVA",
-        "topic": "app",
-        "type": "gnews_query"
-      },
-      {
-        "url": "https://news.google.com/rss/search?q=%22BBVA%22+outage+OR+down+OR+incident+when:30d&hl=en-US&gl=US&ceid=US:en",
-        "geo": "Global",
-        "entity": "BBVA",
-        "topic": "incident",
-        "type": "gnews_query"
-      },
-      {
-        "url": "https://news.google.com/rss/search?q=site:bbva.com+%22press+releases%22+BBVA+when:30d&hl=en-US&gl=US&ceid=US:en",
-        "geo": "Global",
-        "entity": "BBVA",
-        "topic": "press",
-        "type": "gnews_query"
-      }
-    ],
-    "site_sources_by_geo": {
-      "España": [
-        {
-          "domain": "cincodias.elpais.com"
-        },
-        {
-          "domain": "eleconomista.es"
-        },
-        {
-          "domain": "europapress.es"
-        }
-      ],
-      "México": [
-        {
-          "domain": "eleconomista.com.mx"
-        },
-        {
-          "domain": "expansion.mx"
-        }
-      ],
-      "Global": [
-        {
-          "domain": "bbc.co.uk"
-        },
-        {
-          "domain": "news.google.com"
-        },
-        {
-          "domain": "bbva.com"
-        }
-      ]
-    }
-  },
-  "forums": {
-    "rss_urls": [
-      {
-        "url": "https://www.rankia.com/foros/bancos/temas.rss",
-        "geo": "España",
-        "domain": "rankia.com",
-        "topic": "bancos"
-      },
-      {
-        "url": "https://news.ycombinator.com/rss",
-        "geo": "Global",
-        "domain": "news.ycombinator.com",
-        "topic": "tech"
-      },
-      {
-        "url": "https://news.google.com/rss/search?q=site:rankia.com+BBVA+when:30d&hl=es-ES&gl=ES&ceid=ES:es",
-        "geo": "España",
-        "entity": "BBVA",
-        "type": "gnews_query"
-      }
+      { "url": "https://d500.epimg.net/rss/cincodias/portada.xml", "geo": "España", "domain": "cincodias.elpais.com" },
+      { "url": "https://cincodias.elpais.com/rss/cincodias/ultimas_noticias.xml", "geo": "España", "domain": "cincodias.elpais.com", "topic": "ultimas" },
+      { "url": "https://www.eleconomista.es/rss/rss-economia.php", "geo": "España", "domain": "eleconomista.es", "topic": "economia" },
+      { "url": "https://www.eleconomista.es/rss/rss-categoria.php?category=banca-finanzas", "geo": "España", "domain": "eleconomista.es", "topic": "banca-finanzas" },
+      { "url": "https://www.europapress.es/rss/rss.aspx?ch=00136", "geo": "España", "domain": "europapress.es", "topic": "economia-finanzas" },
+      { "url": "https://www.eleconomista.com.mx/rss/ultimas-noticias", "geo": "México", "domain": "eleconomista.com.mx", "topic": "ultimas" },
+      { "url": "https://expansion.mx/rss/economia", "geo": "México", "domain": "expansion.mx", "topic": "economia" },
+      { "url": "https://feeds.bbci.co.uk/news/business/rss.xml", "geo": "Global", "domain": "bbc.co.uk", "topic": "business" },
+
+      { "url": "https://news.google.com/rss/search?q=%22BBVA%22+app+when:7d&hl=es-ES&gl=ES&ceid=ES:es", "geo": "España", "entity": "BBVA", "type": "gnews_query" },
+      { "url": "https://news.google.com/rss/search?q=%22BBVA%22+fraude+OR+phishing+when:14d&hl=es-419&gl=MX&ceid=MX:es-419", "geo": "México", "entity": "BBVA", "topic": "fraude", "type": "gnews_query" },
+      { "url": "https://news.google.com/rss/search?q=%22BBVA%22+banca+m%C3%B3vil+when:14d&hl=es-ES&gl=ES&ceid=ES:es", "geo": "España", "entity": "BBVA", "topic": "app", "type": "gnews_query" },
+      { "url": "https://news.google.com/rss/search?q=%22BBVA%22+outage+OR+down+OR+incident+when:30d&hl=en-US&gl=US&ceid=US:en", "geo": "Global", "entity": "BBVA", "topic": "incident", "type": "gnews_query" },
+      { "url": "https://news.google.com/rss/search?q=site:bbva.com+%22press+releases%22+BBVA+when:30d&hl=en-US&gl=US&ceid=US:en", "geo": "Global", "entity": "BBVA", "topic": "press", "type": "gnews_query" }
     ]
   },
-  "blogs": {
-    "rss_urls": [
-      {
-        "url": "https://www.bbva.com/es/rss/notas-de-prensa/",
-        "geo": "España",
-        "domain": "bbva.com",
-        "topic": "press-releases-es"
-      },
-      {
-        "url": "https://www.bbva.com/en/rss/press-releases/",
-        "geo": "Global",
-        "domain": "bbva.com",
-        "topic": "press-releases-en"
-      },
-      {
-        "url": "https://www.bbva.com/es/rss/data-historias/",
-        "geo": "España",
-        "domain": "bbva.com",
-        "topic": "data-historias"
-      },
-      {
-        "url": "https://www.bbva.com/es/rss/blink/",
-        "geo": "España",
-        "domain": "bbva.com",
-        "topic": "podcast-blink"
-      }
-    ]
-  },
+
   "appstore": {
-    "app_ids": [
-      "325813155",
-      "374824226",
-      "408043474",
-      "356160865",
-      "318806094",
-      "347887638",
-      "774858627",
-      "1217874244",
-      "956857223",
-      "932493382",
-      "612261027"
-    ],
+    "country_by_geo": { "España": "es", "México": "mx", "Global": "us" },
     "app_ids_by_geo": {
-      "España": [
-        "325813155",
-        "408043474",
-        "356160865",
-        "318806094",
-        "347887638",
-        "774858627",
-        "1217874244",
-        "956857223",
-        "932493382",
-        "612261027"
-      ],
-      "México": [
-        "374824226"
-      ],
-      "Global": [
-        "325813155",
-        "374824226",
-        "408043474"
-      ]
-    },
-    "country_by_geo": {
-      "España": "es",
-      "México": "mx",
-      "Global": "us"
+      "España": ["325813155", "408043474", "356160865", "318806094", "347887638", "774858627", "1217874244", "956857223", "932493382", "612261027"],
+      "México": ["374824226", "498944221", "374817863", "498483038", "1453854471", "956857223", "932493382", "612261027"],
+      "Global": ["325813155", "374824226", "956857223", "932493382", "612261027"]
     },
     "app_id_to_actor": {
       "325813155": "BBVA",
       "374824226": "BBVA",
       "408043474": "Santander",
+      "498944221": "Santander",
       "356160865": "Bankinter",
       "318806094": "CaixaBank",
       "347887638": "Sabadell",
@@ -458,23 +218,33 @@
       "1217874244": "Openbank",
       "956857223": "N26",
       "932493382": "Revolut",
-      "612261027": "Wise"
+      "612261027": "Wise",
+      "374817863": "Banorte",
+      "498483038": "Citibanamex",
+      "1453854471": "HSBC"
+    },
+    "evidence_by_app_id": {
+      "325813155": "https://apps.apple.com/es/app/id325813155",
+      "374824226": "https://apps.apple.com/mx/app/id374824226",
+      "408043474": "https://apps.apple.com/es/app/santander-espa%C3%B1a/id408043474",
+      "498944221": "https://apps.apple.com/mx/app/santander-superm%C3%B3vil/id498944221",
+      "356160865": "https://apps.apple.com/es/app/bankinter-m%C3%B3vil/id356160865",
+      "318806094": "https://apps.apple.com/es/app/caixabanknow-tu-banco-online/id318806094",
+      "347887638": "https://apps.apple.com/es/app/app-banco-sabadell/id347887638",
+      "774858627": "https://apps.apple.com/es/app/ing-banca-m%C3%B3vil-y-finanzas/id774858627",
+      "1217874244": "https://apps.apple.com/es/app/openbank-banca-m%C3%B3vil/id1217874244",
+      "956857223": "https://apps.apple.com/es/app/n26-love-your-bank/id956857223",
+      "932493382": "https://apps.apple.com/es/app/revolut/id932493382",
+      "612261027": "https://apps.apple.com/es/app/wise/id612261027",
+      "374817863": "https://apps.apple.com/mx/app/banorte-m%C3%B3vil/id374817863",
+      "498483038": "https://apps.apple.com/mx/app/app-banamex/id498483038",
+      "1453854471": "https://apps.apple.com/mx/app/hsbc-m%C3%A9xico/id1453854471"
     }
   },
+
   "google_play": {
-    "package_ids": [
-      "com.bbva.bbvacontigo",
-      "com.bancomer.mbanking",
-      "es.bancosantander.apps",
-      "com.bankinter.launcher",
-      "es.lacaixa.mobile.android.newwapicon",
-      "net.inverline.bancosabadell.officelocator.android",
-      "www.ingdirect.nativeframe",
-      "es.openbank.mobile",
-      "de.number26.android",
-      "com.revolut.revolut",
-      "com.transferwise.android"
-    ],
+    "geo_to_gl": { "España": "ES", "México": "MX", "Global": "US" },
+    "geo_to_hl": { "España": "es", "México": "es-419", "Global": "en" },
     "package_ids_by_geo": {
       "España": [
         "com.bbva.bbvacontigo",
@@ -489,28 +259,28 @@
         "com.transferwise.android"
       ],
       "México": [
-        "com.bancomer.mbanking"
+        "com.bancomer.mbanking",
+        "mx.bancosantander.supermovil",
+        "org.microemu.android.model.common.VTUserApplicationBNRTMB",
+        "com.citibanamex.banamexmobile",
+        "mx.hsbc.hsbcmexico",
+        "de.number26.android",
+        "com.revolut.revolut",
+        "com.transferwise.android"
       ],
       "Global": [
         "com.bbva.bbvacontigo",
         "com.bancomer.mbanking",
-        "es.bancosantander.apps"
+        "de.number26.android",
+        "com.revolut.revolut",
+        "com.transferwise.android"
       ]
-    },
-    "geo_to_gl": {
-      "España": "ES",
-      "México": "MX",
-      "Global": "US"
-    },
-    "geo_to_hl": {
-      "España": "es",
-      "México": "es-419",
-      "Global": "en"
     },
     "package_id_to_actor": {
       "com.bbva.bbvacontigo": "BBVA",
       "com.bancomer.mbanking": "BBVA",
       "es.bancosantander.apps": "Santander",
+      "mx.bancosantander.supermovil": "Santander",
       "com.bankinter.launcher": "Bankinter",
       "es.lacaixa.mobile.android.newwapicon": "CaixaBank",
       "net.inverline.bancosabadell.officelocator.android": "Sabadell",
@@ -518,36 +288,64 @@
       "es.openbank.mobile": "Openbank",
       "de.number26.android": "N26",
       "com.revolut.revolut": "Revolut",
-      "com.transferwise.android": "Wise"
+      "com.transferwise.android": "Wise",
+      "org.microemu.android.model.common.VTUserApplicationBNRTMB": "Banorte",
+      "com.citibanamex.banamexmobile": "Citibanamex",
+      "mx.hsbc.hsbcmexico": "HSBC"
+    },
+    "evidence_by_package_id": {
+      "com.bbva.bbvacontigo": "https://play.google.com/store/apps/details?id=com.bbva.bbvacontigo",
+      "com.bancomer.mbanking": "https://play.google.com/store/apps/details?id=com.bancomer.mbanking",
+      "es.bancosantander.apps": "https://play.google.com/store/apps/details?id=es.bancosantander.apps",
+      "mx.bancosantander.supermovil": "https://play.google.com/store/apps/details?id=mx.bancosantander.supermovil",
+      "com.bankinter.launcher": "https://play.google.com/store/apps/details?id=com.bankinter.launcher",
+      "es.lacaixa.mobile.android.newwapicon": "https://play.google.com/store/apps/details?id=es.lacaixa.mobile.android.newwapicon",
+      "net.inverline.bancosabadell.officelocator.android": "https://play.google.com/store/apps/details?id=net.inverline.bancosabadell.officelocator.android",
+      "www.ingdirect.nativeframe": "https://play.google.com/store/apps/details?id=www.ingdirect.nativeframe",
+      "es.openbank.mobile": "https://play.google.com/store/apps/details?id=es.openbank.mobile",
+      "de.number26.android": "https://play.google.com/store/apps/details?id=de.number26.android",
+      "com.revolut.revolut": "https://play.google.com/store/apps/details?id=com.revolut.revolut",
+      "com.transferwise.android": "https://play.google.com/store/apps/details?id=com.transferwise.android",
+      "org.microemu.android.model.common.VTUserApplicationBNRTMB": "https://play.google.com/store/apps/details?id=org.microemu.android.model.common.VTUserApplicationBNRTMB",
+      "com.citibanamex.banamexmobile": "https://play.google.com/store/apps/details?id=com.citibanamex.banamexmobile",
+      "mx.hsbc.hsbcmexico": "https://play.google.com/store/apps/details?id=mx.hsbc.hsbcmexico"
     }
   },
-  "trustpilot": {
+
+  "reddit": {
+    "subreddits": ["spain", "mexico", "personalfinance", "eupersonalfinance", "finanzas", "androidapps", "ios"],
+    "query_templates": ["{entity}", "\"{entity}\" app", "\"{entity}\" banca", "\"{entity}\" fraude", "\"{entity}\" no funciona"]
+  },
+
+  "forums": {
     "rss_urls": [
-      {
-        "url": "https://news.google.com/rss/search?q=site:trustpilot.com+BBVA+review+when:90d&hl=en-US&gl=US&ceid=US:en",
-        "geo": "Global",
-        "entity": "BBVA",
-        "type": "gnews_query"
-      }
+      { "url": "https://www.rankia.com/foros/bancos/temas.rss", "geo": "España", "domain": "rankia.com", "topic": "bancos" },
+      { "url": "https://news.ycombinator.com/rss", "geo": "Global", "domain": "news.ycombinator.com", "topic": "tech" },
+      { "url": "https://news.google.com/rss/search?q=site:rankia.com+BBVA+when:30d&hl=es-ES&gl=ES&ceid=ES:es", "geo": "España", "entity": "BBVA", "type": "gnews_query" }
     ]
   },
-  "google_reviews": {
-    "place_ids": []
+
+  "blogs": {
+    "rss_urls": [
+      { "url": "https://www.bbva.com/es/rss/notas-de-prensa/", "geo": "España", "domain": "bbva.com", "topic": "press-releases-es" },
+      { "url": "https://www.bbva.com/en/rss/press-releases/", "geo": "Global", "domain": "bbva.com", "topic": "press-releases-en" },
+      { "url": "https://www.bbva.com/es/rss/data-historias/", "geo": "España", "domain": "bbva.com", "topic": "data-historias" },
+      { "url": "https://www.bbva.com/es/rss/blink/", "geo": "España", "domain": "bbva.com", "topic": "podcast-blink" }
+    ]
   },
+
+  "trustpilot": {
+    "rss_urls": [
+      { "url": "https://news.google.com/rss/search?q=site:trustpilot.com+BBVA+review+when:90d&hl=en-US&gl=US&ceid=US:en", "geo": "Global", "entity": "BBVA", "type": "gnews_query" }
+    ]
+  },
+
+  "google_reviews": { "place_ids": [] },
+
   "downdetector": {
     "rss_urls": [
-      {
-        "url": "https://news.google.com/rss/search?q=Downdetector+BBVA+when:30d&hl=es-ES&gl=ES&ceid=ES:es",
-        "geo": "España",
-        "entity": "BBVA",
-        "type": "gnews_query"
-      },
-      {
-        "url": "https://news.google.com/rss/search?q=Downdetector+BBVA+when:30d&hl=es-419&gl=MX&ceid=MX:es-419",
-        "geo": "México",
-        "entity": "BBVA",
-        "type": "gnews_query"
-      }
+      { "url": "https://news.google.com/rss/search?q=Downdetector+BBVA+when:30d&hl=es-ES&gl=ES&ceid=ES:es", "geo": "España", "entity": "BBVA", "type": "gnews_query" },
+      { "url": "https://news.google.com/rss/search?q=Downdetector+BBVA+when:30d&hl=es-419&gl=MX&ceid=MX:es-419", "geo": "México", "entity": "BBVA", "type": "gnews_query" }
     ]
   }
 }

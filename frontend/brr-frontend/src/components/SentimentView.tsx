@@ -1467,7 +1467,11 @@ function StoreRatingRow({
         : "text-[color:var(--text-45)]";
   return (
     <div className="group relative grid grid-cols-[28px_1fr_auto] items-center gap-3 rounded-xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-2">
-      <div className={tone === "apple" ? "text-white" : "text-[color:var(--aqua)]"}>
+      <div
+        className={
+          tone === "apple" ? "text-[color:var(--ink)]" : "text-[color:var(--aqua)]"
+        }
+      >
         {icon}
       </div>
       <div

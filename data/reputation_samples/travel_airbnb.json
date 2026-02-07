@@ -185,6 +185,20 @@
     "tasa turistica",
     "tasa turística"
   ],
+  "hard_exclude_terms": [],
+  "segment_guard": {
+    "enabled": true,
+    "default_terms": [
+      "Airbnb",
+      "Booking",
+      "Booking.com",
+      "Vrbo",
+      "HomeAway",
+      "Expedia",
+      "Tripadvisor",
+      "Agoda"
+    ]
+  },
   "reddit": {
     "subreddits": [
       "spain",

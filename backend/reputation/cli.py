@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import sys
 
+from reputation.config import settings
 from reputation.logging_utils import configure_logging, get_logger
 from reputation.services.ingest_service import ReputationIngestService
-from reputation.config import settings
 
 
 def main() -> None:
