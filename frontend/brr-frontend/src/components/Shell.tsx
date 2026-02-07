@@ -816,16 +816,16 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen">
-      {anyPanelOpen && (
-        <button
-          type="button"
-          aria-label="Cerrar panel"
-          onClick={closeAllPanels}
-          className="fixed inset-0 z-[45] bg-transparent sm:hidden"
-        />
-      )}
       {/* Barra superior */}
       <header className="sticky top-0 z-40">
+        {anyPanelOpen && (
+          <button
+            type="button"
+            aria-label="Cerrar panel"
+            onClick={closeAllPanels}
+            className="fixed inset-0 z-[45] bg-transparent sm:hidden"
+          />
+        )}
         <div
           className="relative mobile-header-showcase min-h-16 px-4 sm:px-6 py-4 sm:py-0 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4 text-white shadow-[var(--shadow-header)]"
           style={{
