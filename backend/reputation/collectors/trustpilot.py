@@ -4,13 +4,15 @@ from typing import Any, Iterable
 
 from reputation.collectors.base import ReputationCollector
 from reputation.collectors.utils import (
+    compile_keywords,
     http_get_text,
-    match_keywords,
+    match_compiled,
     parse_datetime,
     parse_rss,
     rss_debug_enabled,
     rss_is_query_feed,
     rss_source,
+    tokenize,
 )
 from reputation.logging_utils import get_logger
 from reputation.models import ReputationItem
@@ -30,6 +32,7 @@ class TrustpilotCollector(ReputationCollector):
     ) -> None:
         self._rss_urls = rss_urls
         self._keywords = [k.lower() for k in keywords if k]
+        self._compiled_keywords = compile_keywords(self._keywords)
         self._scraping_enabled = scraping_enabled
         self._max_items = max(0, max_items)
 
@@ -69,7 +72,10 @@ class TrustpilotCollector(ReputationCollector):
         if meta and (meta.get("query") or meta.get("entity")):
             return True
         text = f"{entry.get('title', '')} {entry.get('summary', '')}"
-        return match_keywords(text, self._keywords)
+        if not text:
+            return False
+        tokens = set(tokenize(text))
+        return match_compiled(tokens, self._compiled_keywords)
 
     def _map_entry(
         self, entry: dict[str, Any], rss_url: str, meta: dict[str, str]
