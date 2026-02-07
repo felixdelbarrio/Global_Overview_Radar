@@ -10,14 +10,12 @@ import {
   getStoredToken,
   isEmailAllowed,
   isTokenExpired,
-  storeToken,
 } from "@/lib/auth";
-
-type CredentialResponse = { credential?: string };
 
 const AUTH_ENABLED = process.env.NEXT_PUBLIC_AUTH_ENABLED === "true";
 const CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "";
 const FALLBACK_ROUTE = "/";
+const LOGIN_NEXT_COOKIE = "gor-login-next";
 
 type AuthMeResponse = {
   email: string;
@@ -102,36 +100,13 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!AUTH_ENABLED || !CLIENT_ID || !ready) return;
     if (!window.google?.accounts?.id) return;
+    const loginUri = `${window.location.origin}/login/callback`;
 
     window.google.accounts.id.initialize({
       client_id: CLIENT_ID,
-      callback: (response: CredentialResponse) => {
-        const credential = response?.credential;
-        if (!credential) {
-          setError("No se pudo obtener el token de Google.");
-          return;
-        }
-        if (isTokenExpired(credential)) {
-          setError("El token de Google ha expirado. Inténtalo de nuevo.");
-          return;
-        }
-        const nextEmail = getEmailFromToken(credential);
-        if (!nextEmail) {
-          setError("No se pudo leer el email del token.");
-          return;
-        }
-        if (!isEmailAllowed(nextEmail)) {
-          clearStoredToken();
-          setAuth({ token: null, email: null, shouldClear: false });
-          setError(`El correo ${nextEmail} no está autorizado.`);
-          return;
-        }
-        storeToken(credential, nextEmail);
-        setAuth({ token: credential, email: nextEmail, shouldClear: false });
-        setError(null);
-      },
       auto_select: false,
-      ux_mode: "popup",
+      ux_mode: "redirect",
+      login_uri: loginUri,
     });
 
     if (buttonRef.current) {
@@ -143,6 +118,19 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
       });
     }
   }, [ready]);
+
+  useEffect(() => {
+    if (!AUTH_ENABLED) return;
+    if (!isLoginPage) return;
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const nextParam = params.get("next");
+    const sanitized = sanitizeNextPath(nextParam);
+    const secure = window.location.protocol === "https:" ? "; Secure" : "";
+    document.cookie = `${LOGIN_NEXT_COOKIE}=${encodeURIComponent(
+      sanitized
+    )}; Path=/; Max-Age=300; SameSite=Lax${secure}`;
+  }, [isLoginPage]);
 
   useEffect(() => {
     if (!AUTH_ENABLED) return;
