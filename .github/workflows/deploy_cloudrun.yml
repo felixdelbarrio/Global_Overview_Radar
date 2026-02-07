@@ -138,6 +138,15 @@ jobs:
             --cpu-throttling \
             --env-vars-file backend/reputation/cloudrun.env
 
+      - name: Allow frontend service account to invoke backend
+        run: |
+          set -euo pipefail
+          gcloud run services add-iam-policy-binding "$BACKEND_SERVICE" \
+            --project "$GCP_PROJECT" \
+            --region "$GCP_REGION" \
+            --member="serviceAccount:${FRONTEND_SA}" \
+            --role="roles/run.invoker"
+
       - name: Deploy frontend (Cloud Run)
         env:
           AUTH_GOOGLE_CLIENT_ID: ${{ secrets.AUTH_GOOGLE_CLIENT_ID }}
@@ -166,8 +175,8 @@ jobs:
             --cpu "$FRONTEND_CPU" \
             --memory "$FRONTEND_MEMORY" \
             --cpu-throttling \
-            --set-env-vars "API_PROXY_TARGET=${BACKEND_URL},USE_SERVER_PROXY=true,NEXT_PUBLIC_AUTH_ENABLED=true,NEXT_PUBLIC_GOOGLE_CLIENT_ID=${AUTH_GOOGLE_CLIENT_ID},NEXT_PUBLIC_ALLOWED_EMAILS=${AUTH_ALLOWED_EMAILS},NEXT_PUBLIC_ALLOWED_DOMAINS=${AUTH_ALLOWED_DOMAINS}" \
-            --set-build-env-vars "NEXT_PUBLIC_AUTH_ENABLED=true,NEXT_PUBLIC_GOOGLE_CLIENT_ID=${AUTH_GOOGLE_CLIENT_ID},NEXT_PUBLIC_ALLOWED_EMAILS=${AUTH_ALLOWED_EMAILS},NEXT_PUBLIC_ALLOWED_DOMAINS=${AUTH_ALLOWED_DOMAINS}"
+            --set-env-vars "API_PROXY_TARGET=${BACKEND_URL},USE_SERVER_PROXY=true,NEXT_PUBLIC_API_BASE_URL=/api,NEXT_PUBLIC_AUTH_ENABLED=true,NEXT_PUBLIC_GOOGLE_CLIENT_ID=${AUTH_GOOGLE_CLIENT_ID},NEXT_PUBLIC_ALLOWED_EMAILS=${AUTH_ALLOWED_EMAILS},NEXT_PUBLIC_ALLOWED_DOMAINS=${AUTH_ALLOWED_DOMAINS}" \
+            --set-build-env-vars "USE_SERVER_PROXY=true,API_PROXY_TARGET=${BACKEND_URL},NEXT_PUBLIC_API_BASE_URL=/api,NEXT_PUBLIC_AUTH_ENABLED=true,NEXT_PUBLIC_GOOGLE_CLIENT_ID=${AUTH_GOOGLE_CLIENT_ID},NEXT_PUBLIC_ALLOWED_EMAILS=${AUTH_ALLOWED_EMAILS},NEXT_PUBLIC_ALLOWED_DOMAINS=${AUTH_ALLOWED_DOMAINS}"
 
       - name: Ensure frontend is public (Cloud Run)
         run: |

@@ -441,6 +441,20 @@
     "tour economy",
     "youtube music"
   ],
+  "hard_exclude_terms": [],
+  "segment_guard": {
+    "enabled": true,
+    "default_terms": [
+      "Taylor Swift",
+      "Eras Tour",
+      "Ticketmaster",
+      "AXS",
+      "Eventim",
+      "See Tickets",
+      "StubHub",
+      "Viagogo"
+    ]
+  },
   "reddit": {
     "subreddits": [
       "TaylorSwift",

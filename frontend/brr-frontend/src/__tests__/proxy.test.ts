@@ -1,5 +1,6 @@
 /** Tests del proxy (sustituye middleware). */
 
+import type { NextRequest } from "next/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const nextSpy = vi.fn(() => new Response("ok"));
@@ -31,7 +32,7 @@ describe("proxy", () => {
       nextUrl: { pathname: "/" },
       method: "GET",
     };
-    const res = proxy(req as any);
+    const res = proxy(req as unknown as NextRequest);
     expect(res).toBeInstanceOf(Response);
     expect(nextSpy).toHaveBeenCalled();
   });
@@ -50,7 +51,7 @@ describe("proxy", () => {
       method: "GET",
       ip: "9.9.9.9",
     };
-    proxy(req as any);
+    proxy(req as unknown as NextRequest);
     expect(logSpy).toHaveBeenCalled();
   });
 
@@ -62,7 +63,7 @@ describe("proxy", () => {
       nextUrl: { pathname: "/empty" },
       method: "POST",
     };
-    proxy(req as any);
+    proxy(req as unknown as NextRequest);
     expect(logSpy).toHaveBeenCalled();
   });
 });

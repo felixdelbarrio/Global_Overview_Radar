@@ -216,6 +216,23 @@
     "recall",
     "software"
   ],
+  "hard_exclude_terms": [],
+  "segment_guard": {
+    "enabled": true,
+    "default_terms": [
+      "Hyundai",
+      "IONIQ",
+      "BlueLink",
+      "Kia",
+      "Toyota",
+      "Volkswagen",
+      "Renault",
+      "Ford",
+      "Tesla",
+      "BYD",
+      "Togg"
+    ]
+  },
   "reddit": {
     "subreddits": [
       "spain",
