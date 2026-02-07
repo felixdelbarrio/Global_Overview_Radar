@@ -163,6 +163,9 @@ jobs:
             echo "Failed to resolve backend URL."
             exit 1
           fi
+          BACKEND_URL="${BACKEND_URL%/}"
+          RUNTIME_ENV_VARS="API_PROXY_TARGET=${BACKEND_URL},USE_SERVER_PROXY=true,NEXT_PUBLIC_API_BASE_URL=/api,NEXT_PUBLIC_AUTH_ENABLED=true,NEXT_PUBLIC_GOOGLE_CLIENT_ID=${AUTH_GOOGLE_CLIENT_ID},NEXT_PUBLIC_ALLOWED_EMAILS=${AUTH_ALLOWED_EMAILS},NEXT_PUBLIC_ALLOWED_DOMAINS=${AUTH_ALLOWED_DOMAINS}"
+          BUILD_ENV_VARS="USE_SERVER_PROXY=true,API_PROXY_TARGET=${BACKEND_URL},NEXT_PUBLIC_API_BASE_URL=/api,NEXT_PUBLIC_AUTH_ENABLED=true,NEXT_PUBLIC_GOOGLE_CLIENT_ID=${AUTH_GOOGLE_CLIENT_ID},NEXT_PUBLIC_ALLOWED_EMAILS=${AUTH_ALLOWED_EMAILS},NEXT_PUBLIC_ALLOWED_DOMAINS=${AUTH_ALLOWED_DOMAINS}"
           gcloud run deploy "$FRONTEND_SERVICE" \
             --project "$GCP_PROJECT" \
             --region "$GCP_REGION" \
@@ -175,8 +178,18 @@ jobs:
             --cpu "$FRONTEND_CPU" \
             --memory "$FRONTEND_MEMORY" \
             --cpu-throttling \
-            --set-env-vars "API_PROXY_TARGET=${BACKEND_URL},USE_SERVER_PROXY=true,NEXT_PUBLIC_API_BASE_URL=/api,NEXT_PUBLIC_AUTH_ENABLED=true,NEXT_PUBLIC_GOOGLE_CLIENT_ID=${AUTH_GOOGLE_CLIENT_ID},NEXT_PUBLIC_ALLOWED_EMAILS=${AUTH_ALLOWED_EMAILS},NEXT_PUBLIC_ALLOWED_DOMAINS=${AUTH_ALLOWED_DOMAINS}" \
-            --set-build-env-vars "USE_SERVER_PROXY=true,API_PROXY_TARGET=${BACKEND_URL},NEXT_PUBLIC_API_BASE_URL=/api,NEXT_PUBLIC_AUTH_ENABLED=true,NEXT_PUBLIC_GOOGLE_CLIENT_ID=${AUTH_GOOGLE_CLIENT_ID},NEXT_PUBLIC_ALLOWED_EMAILS=${AUTH_ALLOWED_EMAILS},NEXT_PUBLIC_ALLOWED_DOMAINS=${AUTH_ALLOWED_DOMAINS}"
+            --set-env-vars "${RUNTIME_ENV_VARS}" \
+            --set-build-env-vars "${BUILD_ENV_VARS}"
+          FRONTEND_URL="$(gcloud run services describe "$FRONTEND_SERVICE" --project "$GCP_PROJECT" --region "$GCP_REGION" --format 'value(status.url)')"
+          if [ -z "$FRONTEND_URL" ]; then
+            echo "Failed to resolve frontend URL."
+            exit 1
+          fi
+          STATUS="$(curl -s -o /dev/null -w "%{http_code}" "${FRONTEND_URL}/api/auth/me")"
+          if [ "$STATUS" -ge 500 ]; then
+            echo "Frontend proxy check failed: /api/auth/me returned ${STATUS}."
+            exit 1
+          fi
 
       - name: Ensure frontend is public (Cloud Run)
         run: |
