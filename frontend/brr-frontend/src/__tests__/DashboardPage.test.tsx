@@ -18,15 +18,17 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@/lib/api", () => ({
   apiGet: vi.fn(),
+  apiGetCached: vi.fn(),
 }));
 
-import { apiGet } from "@/lib/api";
+import { apiGet, apiGetCached } from "@/lib/api";
 import DashboardPage from "@/app/page";
 
 const apiGetMock = vi.mocked(apiGet);
+const apiGetCachedMock = vi.mocked(apiGetCached);
 
 it("renders dashboard header and combined mentions", async () => {
-  apiGetMock.mockImplementation((path: string) => {
+  const handleGet = (path: string) => {
     if (path.startsWith("/reputation/meta")) {
       return Promise.resolve({
         actor_principal: { canonical: "BBVA" },
@@ -78,7 +80,9 @@ it("renders dashboard header and combined mentions", async () => {
       });
     }
     return Promise.resolve({});
-  });
+  };
+  apiGetMock.mockImplementation(handleGet);
+  apiGetCachedMock.mockImplementation(handleGet);
 
   render(<DashboardPage />);
 

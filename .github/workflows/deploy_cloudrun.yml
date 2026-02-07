@@ -159,5 +159,13 @@ jobs:
             --cpu "$FRONTEND_CPU" \
             --memory "$FRONTEND_MEMORY" \
             --cpu-throttling \
-            --set-env-vars "API_PROXY_TARGET=${BACKEND_URL},USE_SERVER_PROXY=true" \
+            --set-env-vars "API_PROXY_TARGET=${BACKEND_URL},USE_SERVER_PROXY=true,NEXT_PUBLIC_AUTH_ENABLED=true,NEXT_PUBLIC_GOOGLE_CLIENT_ID=${AUTH_GOOGLE_CLIENT_ID},NEXT_PUBLIC_ALLOWED_EMAILS=${AUTH_ALLOWED_EMAILS},NEXT_PUBLIC_ALLOWED_DOMAINS=${AUTH_ALLOWED_DOMAINS}" \
             --set-build-env-vars "NEXT_PUBLIC_AUTH_ENABLED=true,NEXT_PUBLIC_GOOGLE_CLIENT_ID=${AUTH_GOOGLE_CLIENT_ID},NEXT_PUBLIC_ALLOWED_EMAILS=${AUTH_ALLOWED_EMAILS},NEXT_PUBLIC_ALLOWED_DOMAINS=${AUTH_ALLOWED_DOMAINS}"
+
+      - name: Ensure frontend is public (Cloud Run)
+        run: |
+          gcloud run services add-iam-policy-binding "$FRONTEND_SERVICE" \
+            --project "$GCP_PROJECT" \
+            --region "$GCP_REGION" \
+            --member="allUsers" \
+            --role="roles/run.invoker"

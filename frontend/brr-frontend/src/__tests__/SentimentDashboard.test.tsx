@@ -18,13 +18,15 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@/lib/api", () => ({
   apiGet: vi.fn(),
+  apiGetCached: vi.fn(),
   apiPost: vi.fn(),
 }));
 
-import { apiGet, apiPost } from "@/lib/api";
+import { apiGet, apiGetCached, apiPost } from "@/lib/api";
 import { SentimentView } from "@/components/SentimentView";
 
 const apiGetMock = vi.mocked(apiGet);
+const apiGetCachedMock = vi.mocked(apiGetCached);
 const apiPostMock = vi.mocked(apiPost);
 
 const metaResponse = {
@@ -66,7 +68,7 @@ const profilesResponse = {
 
 describe("SentimentView dashboard", () => {
   beforeEach(() => {
-    apiGetMock.mockImplementation((path: string) => {
+    const handleGet = (path: string) => {
       if (path.startsWith("/reputation/meta")) {
         return Promise.resolve(metaResponse);
       }
@@ -80,7 +82,9 @@ describe("SentimentView dashboard", () => {
         return Promise.resolve({ groups: [], advanced_options: [] });
       }
       return Promise.resolve({});
-    });
+    };
+    apiGetMock.mockImplementation(handleGet);
+    apiGetCachedMock.mockImplementation(handleGet);
     apiPostMock.mockResolvedValue({});
   });
 
