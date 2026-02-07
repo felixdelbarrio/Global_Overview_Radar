@@ -309,7 +309,7 @@ typecheck-back:
 
 typecheck-front:
 	@echo "==> Typecheck frontend (next / tsc)..."
-	cd $(FRONTDIR) && $(NPM) run build --if-present || true
+	cd $(FRONTDIR) && NEXT_DISABLE_TURBOPACK=1 $(NPM) run build --if-present || true
 	# si tienes tsc configurado: cd $(FRONTDIR) && $(NPM) run typecheck
 
 check: format lint typecheck
