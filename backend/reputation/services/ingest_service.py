@@ -203,6 +203,8 @@ class ReputationIngestService:
                 item for item in items if (item.source or "").strip().lower() in enabled_sources
             ]
 
+        guard_audit: dict[str, Any] = {}
+
         # Reutiliza cache si aplica y no hay collectors activos
         if (
             not force
@@ -217,10 +219,10 @@ class ReputationIngestService:
                 filter_enabled(existing.items),
                 notes,
             )
-            guard_audit: dict[str, Any] = {}
             filtered_items = self._apply_segment_guard(
                 cfg, filtered_items, notes, audit=guard_audit
             )
+            filtered_items = self._filter_hard_exclude_items(cfg, filtered_items, notes)
             filtered_ratings = [
                 entry
                 for entry in existing.market_ratings
@@ -283,8 +285,8 @@ class ReputationIngestService:
             report("Mapeando Google Play", 66)
         else:
             report("Mapeo Google Play omitido", 66)
-        guard_audit: dict[str, Any] = {}
         items = self._apply_segment_guard(cfg, items, notes, audit=guard_audit)
+        items = self._filter_hard_exclude_items(cfg, items, notes)
         report("Validando fichas", 70)
         items = self._apply_sentiment(cfg, items, existing.items if existing else None, notes)
         report("Analizando sentimiento", 74)
@@ -298,6 +300,7 @@ class ReputationIngestService:
             notes,
             sources_enabled,
         )
+        items = self._filter_hard_exclude_items(cfg, items, notes)
         report("Balanceando señales", 90)
         existing_items = (
             self._drop_invalid_items(filter_enabled(existing.items), notes) if existing else []
@@ -306,6 +309,7 @@ class ReputationIngestService:
             existing_items = self._apply_segment_guard(
                 cfg, existing_items, notes, audit=guard_audit, log=False
             )
+            existing_items = self._filter_hard_exclude_items(cfg, existing_items, notes)
         merged_items = self._merge_items(existing_items, items)
         merged_items = filter_enabled(merged_items)
         report("Fusionando items", 94)
@@ -1247,6 +1251,28 @@ class ReputationIngestService:
         return result
 
     @classmethod
+    def _filter_hard_exclude_items(
+        cls,
+        cfg: dict[str, Any],
+        items: list[ReputationItem],
+        notes: list[str],
+    ) -> list[ReputationItem]:
+        terms = cls._load_hard_exclude_terms(cfg)
+        if not terms or not items:
+            return items
+        filtered: list[ReputationItem] = []
+        dropped = 0
+        for item in items:
+            text = f"{item.title or ''} {item.text or ''}".strip()
+            if text and match_keywords(text, terms):
+                dropped += 1
+                continue
+            filtered.append(item)
+        if dropped:
+            notes.append(f"hard_exclude: dropped {dropped} items")
+        return filtered
+
+    @classmethod
     def _filter_noise_items(
         cls,
         cfg: dict[str, Any],
@@ -1533,6 +1559,13 @@ class ReputationIngestService:
     @staticmethod
     def _load_noise_terms(cfg: dict[str, Any]) -> list[str]:
         raw = cfg.get("noise_terms") or []
+        if not isinstance(raw, list):
+            return []
+        return [term.strip() for term in raw if isinstance(term, str) and term.strip()]
+
+    @staticmethod
+    def _load_hard_exclude_terms(cfg: dict[str, Any]) -> list[str]:
+        raw = cfg.get("hard_exclude_terms") or []
         if not isinstance(raw, list):
             return []
         return [term.strip() for term in raw if isinstance(term, str) and term.strip()]

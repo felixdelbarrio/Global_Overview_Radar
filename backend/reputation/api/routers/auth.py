@@ -16,7 +16,7 @@ router = APIRouter(dependencies=[Depends(_refresh_settings)])
 
 
 @router.get("/me")
-def auth_me(user: AuthUser = Depends(require_google_user)) -> dict[str, Any]:
+def auth_me(user: AuthUser = Depends(require_google_user)) -> dict[str, Any]:  # noqa: B008
     return {
         "email": user.email,
         "name": user.name,

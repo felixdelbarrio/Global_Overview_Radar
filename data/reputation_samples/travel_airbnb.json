@@ -185,6 +185,7 @@
     "tasa turistica",
     "tasa turística"
   ],
+  "hard_exclude_terms": [],
   "segment_guard": {
     "enabled": true,
     "default_terms": [

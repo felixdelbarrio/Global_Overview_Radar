@@ -166,6 +166,7 @@
     "sponsor",
     "ticketing"
   ],
+  "hard_exclude_terms": [],
   "segment_guard": {
     "enabled": true,
     "default_terms": [

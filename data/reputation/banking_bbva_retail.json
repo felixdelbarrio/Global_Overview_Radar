@@ -180,6 +180,17 @@
     "phishing",
     "scam"
   ],
+  "hard_exclude_terms": [
+    "empresas",
+    "empresarial",
+    "corporate",
+    "business",
+    "net cash",
+    "netcash",
+    "cash management",
+    "banca empresas",
+    "bancanet empresarial"
+  ],
   "segment_guard": {
     "enabled": true,
     "default_terms": [

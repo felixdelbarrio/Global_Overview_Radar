@@ -441,6 +441,7 @@
     "tour economy",
     "youtube music"
   ],
+  "hard_exclude_terms": [],
   "segment_guard": {
     "enabled": true,
     "default_terms": [

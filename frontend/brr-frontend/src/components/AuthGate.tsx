@@ -42,9 +42,8 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [ready, setReady] = useState(false);
   const lastVerifiedToken = useRef<string | null>(null);
-  const [serverStatus, setServerStatus] = useState<"idle" | "checking" | "ok" | "error">(
-    "idle"
-  );
+  const [verifiedToken, setVerifiedToken] = useState<string | null>(null);
+  const [verificationErrorToken, setVerificationErrorToken] = useState<string | null>(null);
   const [auth, setAuth] = useState<{
     token: string | null;
     email: string | null;
@@ -66,6 +65,15 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   const { token, email } = auth;
   const [error, setError] = useState<string | null>(null);
   const isLoginPage = pathname === "/login";
+  const isVerified = Boolean(token) && verifiedToken === token;
+  const hasVerificationError = Boolean(token) && verificationErrorToken === token;
+  const serverStatus: "idle" | "checking" | "ok" | "error" = !token
+    ? "idle"
+    : isVerified
+      ? "ok"
+      : hasVerificationError
+        ? "error"
+        : "checking";
 
   useEffect(() => {
     if (!auth.shouldClear) return;
@@ -140,27 +148,24 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     if (!AUTH_ENABLED) return;
     if (!token) {
       lastVerifiedToken.current = null;
-      setServerStatus("idle");
       return;
     }
-    if (lastVerifiedToken.current === token) {
-      setServerStatus("ok");
-      return;
-    }
+    if (lastVerifiedToken.current === token) return;
     let alive = true;
-    setServerStatus("checking");
     apiGet<AuthMeResponse>("/auth/me")
       .then(() => {
         if (!alive) return;
         lastVerifiedToken.current = token;
-        setServerStatus("ok");
+        setVerifiedToken(token);
+        setVerificationErrorToken(null);
       })
       .catch(() => {
         if (!alive) return;
         clearStoredToken();
         setAuth({ token: null, email: null, shouldClear: false });
         setError("No se pudo validar permisos con el backend.");
-        setServerStatus("error");
+        setVerifiedToken(null);
+        setVerificationErrorToken(token);
       });
     return () => {
       alive = false;

@@ -1,5 +1,6 @@
 /** Tests del proxy /api/[...path] */
 
+import type { NextRequest } from "next/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const originalEnv = { ...process.env };
@@ -35,7 +36,7 @@ describe("proxy route", () => {
         connection: "keep-alive",
       },
     });
-    const res = await GET(req as any, {
+    const res = await GET(req as unknown as NextRequest, {
       params: Promise.resolve({ path: ["kpis"] }),
     });
 
@@ -69,7 +70,7 @@ describe("proxy route", () => {
     });
 
     const req = new Request("http://localhost/api/log", { method: "GET" });
-    await GET(req as any, {
+    await GET(req as unknown as NextRequest, {
       params: Promise.resolve({ path: ["log"] }),
     });
 
@@ -93,7 +94,7 @@ describe("proxy route", () => {
     });
 
     const req = new Request("http://localhost/api?x=1", { method: "GET" });
-    await GET(req as any, {
+    await GET(req as unknown as NextRequest, {
       params: Promise.resolve({} as { path?: string[] }),
     });
 
@@ -118,7 +119,7 @@ describe("proxy route", () => {
       method: "POST",
       body: "payload",
     });
-    await POST(req as any, {
+    await POST(req as unknown as NextRequest, {
       params: Promise.resolve({ path: ["items"] }),
     });
 
@@ -141,7 +142,7 @@ describe("proxy route", () => {
 
     const req = new Request("http://localhost/api/log", { method: "GET" });
     await expect(
-      GET(req as any, {
+      GET(req as unknown as NextRequest, {
         params: Promise.resolve({ path: ["log"] }),
       })
     ).rejects.toThrow("metadata identity token failed");

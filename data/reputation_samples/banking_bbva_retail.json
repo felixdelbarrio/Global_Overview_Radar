@@ -110,12 +110,6 @@
     "HSBC": [
       "HSBC México",
       "HSBC"
-    ],
-    "BBVA Empresas": [
-      "BBVA Empresas",
-      "BBVA Net Cash",
-      "BBVA net cash",
-      "BBVA Empresas México"
     ]
   },
   "otros_actores_globales": [
@@ -190,6 +184,17 @@
     "fraude",
     "phishing",
     "scam"
+  ],
+  "hard_exclude_terms": [
+    "empresas",
+    "empresarial",
+    "corporate",
+    "business",
+    "net cash",
+    "netcash",
+    "cash management",
+    "banca empresas",
+    "bancanet empresarial"
   ],
   "segment_guard": {
     "enabled": true,

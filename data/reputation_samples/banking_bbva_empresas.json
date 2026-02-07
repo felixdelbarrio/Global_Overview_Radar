@@ -237,6 +237,7 @@
     "incidencia",
     "outage"
   ],
+  "hard_exclude_terms": ["Personal", "Particular", "Retail"],
   "segment_guard": {
     "enabled": true,
     "default_terms": [
