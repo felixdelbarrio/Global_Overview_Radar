@@ -2,6 +2,9 @@
 # Uso: make <target>
 SHELL := /bin/bash
 
+# Carga opcional de variables locales para Cloud Run (no versionado)
+-include .env.cloudrun
+
 # --- Configuración general ---
 VENV := .venv
 PY := $(VENV)/bin/python
@@ -38,7 +41,8 @@ AUTH_GOOGLE_CLIENT_ID ?=
 AUTH_ALLOWED_EMAILS ?=
 AUTH_ALLOWED_DOMAINS ?= gmail.com
 AUTH_ALLOWED_GROUPS ?=
-NEXT_PUBLIC_ALLOWED_DOMAINS ?=
+NEXT_PUBLIC_ALLOWED_EMAILS ?= $(AUTH_ALLOWED_EMAILS)
+NEXT_PUBLIC_ALLOWED_DOMAINS ?= $(AUTH_ALLOWED_DOMAINS)
 BENCH_DIR ?= docs/benchmarks
 BENCH_ITERATIONS ?= 40
 BENCH_WARMUP ?= 5
@@ -51,7 +55,7 @@ VISUAL_QA_OUT ?= docs/visual-qa
 
 .DEFAULT_GOAL := help
 
-.PHONY: help venv install install-backend install-front env ensure-backend ensure-front ingest ingest-filtered reputation-ingest reputation-ingest-filtered serve serve-back dev-back dev-front build-front start-front lint lint-back lint-front typecheck typecheck-back typecheck-front format format-back format-front check test test-back test-front test-coverage test-coverage-back test-coverage-front bench bench-baseline visual-qa clean reset cloudrun-env deploy-cloudrun-back deploy-cloudrun-front deploy-cloudrun
+.PHONY: help venv install install-backend install-front env ensure-backend ensure-front ingest ingest-filtered reputation-ingest reputation-ingest-filtered serve serve-back dev-back dev-front build-front start-front lint lint-back lint-front typecheck typecheck-back typecheck-front format format-back format-front check test test-back test-front test-coverage test-coverage-back test-coverage-front bench bench-baseline visual-qa clean reset cloudrun-config cloudrun-env deploy-cloudrun-back deploy-cloudrun-front deploy-cloudrun
 
 help:
 	@echo "Make targets disponibles:"
@@ -84,6 +88,7 @@ help:
 	@echo "  make bench-baseline  - Generar baseline backend"
 	@echo "  make visual-qa       - Capturas headless mobile (frontend)"
 	@echo "  make clean           - Eliminar venv, caches, node_modules (frontend)"
+	@echo "  make cloudrun-config - Crear .env.cloudrun (preguntas interactivas)"
 	@echo "  make cloudrun-env    - Generar backend/reputation/cloudrun.env desde .env.reputation"
 	@echo "  make deploy-cloudrun-back  - Deploy backend en Cloud Run (usa env vars)"
 	@echo "  make deploy-cloudrun-front - Deploy frontend en Cloud Run (usa env vars)"
@@ -132,17 +137,61 @@ ensure-front: install-front
 # -------------------------
 # Cloud Run helpers
 # -------------------------
+cloudrun-config:
+	@echo "==> Configurando .env.cloudrun (se guarda local, gitignored)..."
+	@read -r -p "GCP_PROJECT [$(GCP_PROJECT)]: " GCP_PROJECT_IN; \
+	GCP_PROJECT_VAL=$${GCP_PROJECT_IN:-$(GCP_PROJECT)}; \
+	read -r -p "GCP_REGION [$(GCP_REGION)]: " GCP_REGION_IN; \
+	GCP_REGION_VAL=$${GCP_REGION_IN:-$(GCP_REGION)}; \
+	read -r -p "BACKEND_SERVICE [$(BACKEND_SERVICE)]: " BACKEND_SERVICE_IN; \
+	BACKEND_SERVICE_VAL=$${BACKEND_SERVICE_IN:-$(BACKEND_SERVICE)}; \
+	read -r -p "FRONTEND_SERVICE [$(FRONTEND_SERVICE)]: " FRONTEND_SERVICE_IN; \
+	FRONTEND_SERVICE_VAL=$${FRONTEND_SERVICE_IN:-$(FRONTEND_SERVICE)}; \
+	DEFAULT_FRONTEND_SA="gor-frontend-sa@$${GCP_PROJECT_VAL}.iam.gserviceaccount.com"; \
+	read -r -p "FRONTEND_SA [$${DEFAULT_FRONTEND_SA}]: " FRONTEND_SA_IN; \
+	FRONTEND_SA_VAL=$${FRONTEND_SA_IN:-$${DEFAULT_FRONTEND_SA}}; \
+	read -r -p "AUTH_GOOGLE_CLIENT_ID (required): " AUTH_GOOGLE_CLIENT_ID_VAL; \
+	if [ -z "$$AUTH_GOOGLE_CLIENT_ID_VAL" ]; then \
+		echo "Falta AUTH_GOOGLE_CLIENT_ID."; \
+		exit 1; \
+	fi; \
+	read -r -p "AUTH_ALLOWED_EMAILS (coma separada, opcional): " AUTH_ALLOWED_EMAILS_VAL; \
+	read -r -p "AUTH_ALLOWED_DOMAINS [$(AUTH_ALLOWED_DOMAINS)]: " AUTH_ALLOWED_DOMAINS_IN; \
+	AUTH_ALLOWED_DOMAINS_VAL=$${AUTH_ALLOWED_DOMAINS_IN:-$(AUTH_ALLOWED_DOMAINS)}; \
+	read -r -p "AUTH_ALLOWED_GROUPS (coma separada, opcional): " AUTH_ALLOWED_GROUPS_VAL; \
+	{ printf '%s\n' \
+		"GCP_PROJECT=$${GCP_PROJECT_VAL}" \
+		"GCP_REGION=$${GCP_REGION_VAL}" \
+		"BACKEND_SERVICE=$${BACKEND_SERVICE_VAL}" \
+		"FRONTEND_SERVICE=$${FRONTEND_SERVICE_VAL}" \
+		"FRONTEND_SA=$${FRONTEND_SA_VAL}" \
+		"AUTH_GOOGLE_CLIENT_ID=$${AUTH_GOOGLE_CLIENT_ID_VAL}" \
+		"AUTH_ALLOWED_EMAILS=$${AUTH_ALLOWED_EMAILS_VAL}" \
+		"AUTH_ALLOWED_DOMAINS=$${AUTH_ALLOWED_DOMAINS_VAL}" \
+		"AUTH_ALLOWED_GROUPS=$${AUTH_ALLOWED_GROUPS_VAL}" \
+		"NEXT_PUBLIC_ALLOWED_EMAILS=$${AUTH_ALLOWED_EMAILS_VAL}" \
+		"NEXT_PUBLIC_ALLOWED_DOMAINS=$${AUTH_ALLOWED_DOMAINS_VAL}"; \
+	} > .env.cloudrun
+	@echo "==> .env.cloudrun generado. Ahora puedes ejecutar: make deploy-cloudrun"
+
 cloudrun-env:
 	@echo "==> Generando backend/reputation/cloudrun.env..."
 	@awk -F= '$$0 !~ /^[[:space:]]*#/ && $$0 ~ /=/ {print $$0}' backend/reputation/.env.reputation > backend/reputation/cloudrun.env
-	@echo "==> cloudrun.env generado."
-
-deploy-cloudrun-back: cloudrun-env
-	@echo "==> Deploy backend en Cloud Run..."
 	@if [ -z "$(AUTH_GOOGLE_CLIENT_ID)" ]; then \
 		echo "Falta AUTH_GOOGLE_CLIENT_ID (exporta la variable)."; \
 		exit 1; \
 	fi
+	@{ printf '%s\n' \
+		"AUTH_ENABLED=true" \
+		"AUTH_GOOGLE_CLIENT_ID=$(AUTH_GOOGLE_CLIENT_ID)" \
+		"AUTH_ALLOWED_EMAILS=$(AUTH_ALLOWED_EMAILS)" \
+		"AUTH_ALLOWED_DOMAINS=$(AUTH_ALLOWED_DOMAINS)" \
+		"AUTH_ALLOWED_GROUPS=$(AUTH_ALLOWED_GROUPS)"; \
+	} >> backend/reputation/cloudrun.env
+	@echo "==> cloudrun.env generado."
+
+deploy-cloudrun-back: cloudrun-env
+	@echo "==> Deploy backend en Cloud Run..."
 	@gcloud run deploy $(BACKEND_SERVICE) \
 		--project $(GCP_PROJECT) \
 		--region $(GCP_REGION) \
@@ -154,8 +203,7 @@ deploy-cloudrun-back: cloudrun-env
 		--cpu $(BACKEND_CPU) \
 		--memory $(BACKEND_MEMORY) \
 		--cpu-throttling \
-		--env-vars-file backend/reputation/cloudrun.env \
-		--update-env-vars AUTH_ENABLED=true,AUTH_GOOGLE_CLIENT_ID=$(AUTH_GOOGLE_CLIENT_ID),AUTH_ALLOWED_EMAILS=$(AUTH_ALLOWED_EMAILS),AUTH_ALLOWED_DOMAINS=$(AUTH_ALLOWED_DOMAINS),AUTH_ALLOWED_GROUPS=$(AUTH_ALLOWED_GROUPS)
+		--env-vars-file backend/reputation/cloudrun.env
 
 deploy-cloudrun-front:
 	@echo "==> Deploy frontend en Cloud Run..."
@@ -180,8 +228,8 @@ deploy-cloudrun-front:
 		--cpu $(FRONTEND_CPU) \
 		--memory $(FRONTEND_MEMORY) \
 		--cpu-throttling \
-		--set-env-vars API_PROXY_TARGET=$$BACKEND_URL,USE_SERVER_PROXY=true \
-		--set-build-env-vars NEXT_PUBLIC_AUTH_ENABLED=true,NEXT_PUBLIC_GOOGLE_CLIENT_ID=$(AUTH_GOOGLE_CLIENT_ID),NEXT_PUBLIC_ALLOWED_EMAILS=$(AUTH_ALLOWED_EMAILS),NEXT_PUBLIC_ALLOWED_DOMAINS=$(NEXT_PUBLIC_ALLOWED_DOMAINS)
+		--set-env-vars API_PROXY_TARGET=$$BACKEND_URL,USE_SERVER_PROXY=true,NEXT_PUBLIC_AUTH_ENABLED=true,NEXT_PUBLIC_GOOGLE_CLIENT_ID=$(AUTH_GOOGLE_CLIENT_ID),NEXT_PUBLIC_ALLOWED_EMAILS=$(NEXT_PUBLIC_ALLOWED_EMAILS),NEXT_PUBLIC_ALLOWED_DOMAINS=$(NEXT_PUBLIC_ALLOWED_DOMAINS) \
+		--set-build-env-vars NEXT_PUBLIC_AUTH_ENABLED=true,NEXT_PUBLIC_GOOGLE_CLIENT_ID=$(AUTH_GOOGLE_CLIENT_ID),NEXT_PUBLIC_ALLOWED_EMAILS=$(NEXT_PUBLIC_ALLOWED_EMAILS),NEXT_PUBLIC_ALLOWED_DOMAINS=$(NEXT_PUBLIC_ALLOWED_DOMAINS)
 
 deploy-cloudrun: deploy-cloudrun-back deploy-cloudrun-front
 	@true
