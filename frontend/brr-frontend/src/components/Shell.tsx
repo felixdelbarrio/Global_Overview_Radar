@@ -6,7 +6,7 @@
  * Incluye topbar, sidebar y contenedor de contenido.
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -16,7 +16,6 @@ import {
   Layers,
   Loader2,
   Moon,
-  ArrowUpRight,
   Search,
   Sun,
   Sparkles,
@@ -122,7 +121,6 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
   /** Ruta actual para resaltar la navegacion. */
   const pathname = usePathname();
-  const desktopCtaHref = pathname ? `${pathname}?view=desktop` : "/?view=desktop";
   const [ingestOpen, setIngestOpen] = useState(false);
   const [ingestError, setIngestError] = useState<string | null>(null);
   const [ingestBusy, setIngestBusy] = useState<Record<IngestJobKind, boolean>>({
@@ -161,6 +159,40 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const [advancedOptions, setAdvancedOptions] = useState<string[]>([]);
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
+  type FloatingPanel = "ingest" | "profiles" | "settings";
+
+  const closeAllPanels = () => {
+    setIngestOpen(false);
+    setProfilesOpen(false);
+    setSettingsOpen(false);
+    setTemplatesOpen(false);
+  };
+
+  const openPanel = useCallback((panel: FloatingPanel) => {
+    setIngestOpen(panel === "ingest");
+    setProfilesOpen(panel === "profiles");
+    setSettingsOpen(panel === "settings");
+    if (panel !== "profiles") {
+      setTemplatesOpen(false);
+    }
+  }, []);
+
+  const toggleIngestPanel = () => {
+    if (ingestOpen) {
+      setIngestOpen(false);
+      return;
+    }
+    openPanel("ingest");
+  };
+
+  const toggleSettingsPanel = () => {
+    if (settingsOpen) {
+      setSettingsOpen(false);
+      return;
+    }
+    openPanel("settings");
+  };
+
   const settingsFieldMap = useMemo(() => {
     const map = new Map<string, ReputationSettingsField>();
     settingsGroups?.forEach((group) => {
@@ -181,7 +213,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
         : "ambient-dark");
     setTheme(next);
     setThemeReady(true);
-  }, []);
+  }, [openPanel]);
 
   useEffect(() => {
     if (!themeReady) return;
@@ -291,13 +323,13 @@ export function Shell({ children }: { children: React.ReactNode }) {
       const detail = (event as CustomEvent<IngestJob>).detail;
       if (!detail) return;
       setIngestJobs((prev) => ({ ...prev, [detail.kind]: detail }));
-      setIngestOpen(true);
+      openPanel("ingest");
     };
     window.addEventListener(INGEST_STARTED_EVENT, handler as EventListener);
     return () => {
       window.removeEventListener(INGEST_STARTED_EVENT, handler as EventListener);
     };
-  }, []);
+  }, [openPanel]);
 
   const toggleTheme = () => {
     const nextTheme = theme === "ambient-light" ? "ambient-dark" : "ambient-light";
@@ -311,7 +343,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
     try {
       const job = await apiPost<IngestJob>(`/ingest/${kind}`, { force: false });
       setIngestJobs((prev) => ({ ...prev, [kind]: job }));
-      setIngestOpen(true);
+      openPanel("ingest");
     } catch (err) {
       setIngestError(err instanceof Error ? err.message : "No se pudo iniciar la ingesta");
     } finally {
@@ -497,9 +529,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
       setProfilesOpen(false);
       return;
     }
-    if (!profilesOpen) {
-      setProfilesOpen(true);
-    }
+    openPanel("profiles");
     setTemplatesOpen(true);
     resetProfileTemplateState();
   };
@@ -615,7 +645,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
       setSettingsError(
         err instanceof Error ? err.message : "No se pudo restablecer la configuración"
       );
-      setSettingsOpen(true);
+      openPanel("settings");
     } finally {
       setSettingsBusy(false);
     }
@@ -689,7 +719,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
       }
     } catch (err) {
       setSettingsError(err instanceof Error ? err.message : "No se pudo guardar la configuración");
-      setSettingsOpen(true);
+      openPanel("settings");
     } finally {
       setSettingsBusy(false);
     }
@@ -777,9 +807,18 @@ export function Shell({ children }: { children: React.ReactNode }) {
       description: "Histórico y análisis",
     },
   ];
+  const anyPanelOpen = ingestOpen || profilesOpen || settingsOpen;
 
   return (
     <div className="min-h-screen">
+      {anyPanelOpen && (
+        <button
+          type="button"
+          aria-label="Cerrar panel"
+          onClick={closeAllPanels}
+          className="fixed inset-0 z-[45] bg-transparent sm:hidden"
+        />
+      )}
       {/* Barra superior */}
       <header className="sticky top-0 z-40">
         <div
@@ -809,7 +848,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
                 <div className="relative">
                   <button
                     type="button"
-                    onClick={() => setIngestOpen((prev) => !prev)}
+                    onClick={toggleIngestPanel}
                     aria-label="Centro de ingestas"
                     title="Centro de ingestas"
                     className="relative h-8 w-8 sm:h-9 sm:w-9 rounded-full border border-[color:var(--border-15)] overflow-hidden"
@@ -829,7 +868,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
                   </button>
 
                   {ingestOpen && (
-                    <div className="absolute right-0 mt-3 w-[92vw] max-w-[360px] sm:w-[320px] rounded-[22px] border border-[color:var(--border-60)] bg-[color:var(--panel-strong)] shadow-[var(--shadow-lg)] backdrop-blur-xl overflow-hidden z-50">
+                    <div className="fixed left-1/2 top-[calc(env(safe-area-inset-top)+6.5rem)] z-50 mt-0 w-[92vw] max-w-[360px] -translate-x-1/2 rounded-[22px] border border-[color:var(--border-60)] bg-[color:var(--panel-strong)] shadow-[var(--shadow-lg)] backdrop-blur-xl overflow-hidden sm:absolute sm:left-auto sm:top-auto sm:translate-x-0 sm:right-0 sm:mt-3 sm:w-[320px]">
                       <div className="absolute -top-12 -right-12 h-32 w-32 rounded-full bg-[color:var(--aqua)]/20 blur-3xl" />
                       <div className="absolute -bottom-16 left-6 h-36 w-36 rounded-full bg-[color:var(--blue)]/10 blur-3xl" />
                       <div className="relative p-4 space-y-3">
@@ -1051,7 +1090,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
                 </span>
               )}
               {profilesOpen && (
-                <div className="absolute right-0 mt-3 w-[92vw] max-w-[420px] sm:w-[360px] rounded-[24px] border border-[color:var(--border-60)] bg-[color:var(--panel-strong)] shadow-[var(--shadow-lg)] backdrop-blur-xl overflow-hidden z-50">
+                <div className="fixed left-1/2 top-[calc(env(safe-area-inset-top)+6.5rem)] z-50 mt-0 w-[92vw] max-w-[420px] -translate-x-1/2 rounded-[24px] border border-[color:var(--border-60)] bg-[color:var(--panel-strong)] shadow-[var(--shadow-lg)] backdrop-blur-xl overflow-hidden sm:absolute sm:left-auto sm:top-auto sm:translate-x-0 sm:right-0 sm:mt-3 sm:w-[360px]">
                   <div className="absolute -top-10 right-6 h-24 w-24 rounded-full bg-[color:var(--aqua)]/20 blur-3xl" />
                   <div className="absolute -bottom-16 left-6 h-32 w-32 rounded-full bg-[color:var(--blue)]/20 blur-3xl" />
                   <div className="relative p-4">
@@ -1272,7 +1311,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
               <div className="relative">
                 <button
                   type="button"
-                  onClick={() => setSettingsOpen((prev) => !prev)}
+                  onClick={toggleSettingsPanel}
                   aria-label="Configuración"
                   title="Configuración"
                   className="h-8 sm:h-9 px-2 sm:px-3 rounded-full flex items-center gap-2 border border-[color:var(--border-15)] bg-[color:var(--surface-10)] text-[color:var(--text-inverse-80)] transition hover:bg-[color:var(--surface-15)] hover:text-white"
@@ -1281,7 +1320,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
                   <span className="text-xs hidden sm:inline">Config</span>
                 </button>
                 {settingsOpen && (
-                  <div className="settings-panel absolute right-0 mt-3 w-[92vw] max-w-[520px] sm:w-[420px] rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel-strong)] shadow-[var(--shadow-lg)] backdrop-blur-xl overflow-hidden z-50">
+                  <div className="settings-panel fixed left-1/2 top-[calc(env(safe-area-inset-top)+6.5rem)] z-50 mt-0 w-[92vw] max-w-[520px] -translate-x-1/2 rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel-strong)] shadow-[var(--shadow-lg)] backdrop-blur-xl overflow-hidden sm:absolute sm:left-auto sm:top-auto sm:translate-x-0 sm:right-0 sm:mt-3 sm:w-[420px]">
                     <div className="absolute -top-12 right-6 h-28 w-28 rounded-full bg-[color:var(--aqua)]/20 blur-3xl" />
                     <div className="absolute -bottom-16 left-10 h-32 w-32 rounded-full bg-[color:var(--blue)]/15 blur-3xl" />
                     <div className="relative p-4">
@@ -1877,44 +1916,6 @@ export function Shell({ children }: { children: React.ReactNode }) {
               </button>
             </div>
 
-            <div className="w-full sm:hidden order-3 basis-full">
-              <div className="mobile-hero mt-2">
-                <span className="mobile-hero-sheen" aria-hidden="true" />
-                <span className="mobile-hero-orb" aria-hidden="true" />
-                <div className="relative z-10">
-                  <div className="text-[8px] uppercase tracking-[0.5em] text-[color:var(--text-inverse-70)]">
-                    Pulso diario
-                  </div>
-                  <div className="mt-1.5 flex items-center justify-between gap-3">
-                    <div className="font-display text-[15px] font-semibold tracking-tight leading-tight">
-                      Radar reputacional
-                    </div>
-                    <span className="mobile-hero-pill">Live</span>
-                  </div>
-                  <div className="text-[11px] leading-snug text-[color:var(--text-inverse-80)]">
-                    Señales clave y sentimiento en un vistazo.
-                  </div>
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    <span className="mobile-hero-chip">Menciones</span>
-                    <span className="mobile-hero-chip">Tendencias</span>
-                    <span className="mobile-hero-chip">Alertas</span>
-                  </div>
-                  <div className="mt-3 flex items-center justify-between gap-2">
-                    <span className="text-[8px] uppercase tracking-[0.36em] text-[color:var(--text-inverse-70)]">
-                      Mejor en escritorio
-                    </span>
-                    <Link
-                      href={desktopCtaHref}
-                      className="mobile-hero-cta"
-                      aria-label="Ver en pantalla grande"
-                    >
-                      Ver en grande
-                      <ArrowUpRight className="h-3 w-3" />
-                    </Link>
-                  </div>
-                </div>
-              </div>
-            </div>
           </div>
         </div>
       </header>

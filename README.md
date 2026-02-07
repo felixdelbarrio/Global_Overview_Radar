@@ -1,7 +1,7 @@
 # Global Overview Radar
 
-[![CI / test_backend](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/backend.yml/badge.svg?branch=develop)](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/backend.yml)
-[![CI / test_frontend](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/frontend.yml/badge.svg?branch=develop)](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/frontend.yml)
+[![Test back](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/backend.yml/badge.svg?branch=develop&label=Test%20back)](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/backend.yml)
+[![Test front](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/frontend.yml/badge.svg?branch=develop&label=Test%20front)](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/frontend.yml)
 [![typecheck](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/typecheck.yml/badge.svg?branch=develop)](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/typecheck.yml)
 [![format](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/format.yml/badge.svg?branch=develop)](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/format.yml)
 [![deploy_hooks](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/deploy_hooks.yml/badge.svg?branch=develop)](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/deploy_hooks.yml)
