@@ -102,21 +102,29 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
 
       - name: Prepare backend env file
-        run: |
-          set -euo pipefail
-          awk -F= '$0 !~ /^[[:space:]]*#/ && $0 ~ /=/ {print $0}' backend/reputation/.env.reputation.example > backend/reputation/cloudrun.env
-
-      - name: Deploy backend (Cloud Run)
         env:
           AUTH_GOOGLE_CLIENT_ID: ${{ secrets.AUTH_GOOGLE_CLIENT_ID }}
           AUTH_ALLOWED_EMAILS: ${{ secrets.AUTH_ALLOWED_EMAILS }}
+          AUTH_ALLOWED_DOMAINS: ${{ secrets.AUTH_ALLOWED_DOMAINS }}
           AUTH_ALLOWED_GROUPS: ${{ secrets.AUTH_ALLOWED_GROUPS }}
         run: |
           set -euo pipefail
+          awk -F= '$0 !~ /^[[:space:]]*#/ && $0 ~ /=/ {print $0}' backend/reputation/.env.reputation.example > backend/reputation/cloudrun.env
           if [ -z "${AUTH_GOOGLE_CLIENT_ID:-}" ]; then
             echo "Missing AUTH_GOOGLE_CLIENT_ID secret."
             exit 1
           fi
+          cat >> backend/reputation/cloudrun.env <<EOF
+          AUTH_ENABLED=true
+          AUTH_GOOGLE_CLIENT_ID=${AUTH_GOOGLE_CLIENT_ID}
+          AUTH_ALLOWED_EMAILS=${AUTH_ALLOWED_EMAILS}
+          AUTH_ALLOWED_DOMAINS=${AUTH_ALLOWED_DOMAINS}
+          AUTH_ALLOWED_GROUPS=${AUTH_ALLOWED_GROUPS}
+          EOF
+
+      - name: Deploy backend (Cloud Run)
+        run: |
+          set -euo pipefail
           gcloud run deploy "$BACKEND_SERVICE" \
             --project "$GCP_PROJECT" \
             --region "$GCP_REGION" \
@@ -128,8 +136,7 @@ jobs:
             --cpu "$BACKEND_CPU" \
             --memory "$BACKEND_MEMORY" \
             --cpu-throttling \
-            --env-vars-file backend/reputation/cloudrun.env \
-            --update-env-vars "AUTH_ENABLED=true,AUTH_GOOGLE_CLIENT_ID=${AUTH_GOOGLE_CLIENT_ID},AUTH_ALLOWED_EMAILS=${AUTH_ALLOWED_EMAILS},AUTH_ALLOWED_DOMAINS=${AUTH_ALLOWED_DOMAINS},AUTH_ALLOWED_GROUPS=${AUTH_ALLOWED_GROUPS}"
+            --env-vars-file backend/reputation/cloudrun.env
 
       - name: Deploy frontend (Cloud Run)
         env:
