@@ -4,10 +4,13 @@ import React from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-type GoogleCredentialResponse = { credential?: string };
 type GoogleIdApi = {
   disableAutoSelect?: () => void;
-  initialize?: (config: { callback: (response: GoogleCredentialResponse) => void }) => void;
+  initialize?: (config: {
+    client_id?: string;
+    ux_mode?: string;
+    login_uri?: string;
+  }) => void;
   renderButton?: () => void;
 };
 type GoogleAccounts = { id?: GoogleIdApi };
@@ -345,14 +348,11 @@ describe("AuthGate", () => {
     });
   });
 
-  it("initializes google and surfaces callback errors", async () => {
+  it("initializes google in redirect mode", async () => {
     usePathnameMock.mockReturnValue("/login");
     authMocks.getStoredToken.mockReturnValue(null);
 
-    let captured: ((response: { credential?: string }) => void) | null = null;
-    const initialize = vi.fn(({ callback }: { callback: (r: { credential?: string }) => void }) => {
-      captured = callback;
-    });
+    const initialize = vi.fn();
     const renderButton = vi.fn();
     setGoogle({
       accounts: { id: { initialize, renderButton } },
@@ -374,33 +374,9 @@ describe("AuthGate", () => {
       expect(renderButton).toHaveBeenCalled();
     });
 
-    captured?.({});
-    expect(await screen.findByText("No se pudo obtener el token de Google."))
-      .toBeInTheDocument();
-
-    authMocks.isTokenExpired.mockReturnValueOnce(true);
-    captured?.({ credential: "token" });
-    expect(
-      await screen.findByText("El token de Google ha expirado. Inténtalo de nuevo.")
-    ).toBeInTheDocument();
-
-    authMocks.isTokenExpired.mockReturnValueOnce(false);
-    authMocks.getEmailFromToken.mockReturnValueOnce(null);
-    captured?.({ credential: "token" });
-    expect(await screen.findByText("No se pudo leer el email del token."))
-      .toBeInTheDocument();
-
-    authMocks.getEmailFromToken.mockReturnValueOnce("user@evil.com");
-    authMocks.isEmailAllowed.mockReturnValueOnce(false);
-    captured?.({ credential: "token" });
-    expect(
-      await screen.findByText("El correo user@evil.com no está autorizado.")
-    ).toBeInTheDocument();
-    expect(authMocks.clearStoredToken).toHaveBeenCalled();
-
-    authMocks.getEmailFromToken.mockReturnValueOnce("user@bbva.com");
-    authMocks.isEmailAllowed.mockReturnValueOnce(true);
-    captured?.({ credential: "token" });
-    expect(authMocks.storeToken).toHaveBeenCalledWith("token", "user@bbva.com");
+    const config = initialize.mock.calls[0]?.[0] ?? {};
+    expect(config.client_id).toBe("test-client");
+    expect(config.ux_mode).toBe("redirect");
+    expect(config.login_uri).toBe("http://localhost:3000/login/callback");
   });
 });
