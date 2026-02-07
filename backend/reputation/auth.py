@@ -175,17 +175,19 @@ def require_google_user(request: Request) -> AuthUser:
         raise HTTPException(status_code=403, detail="email not verified")
 
     allowed_emails = _split_list(settings.auth_allowed_emails)
-    if allowed_emails:
-        _enforce_allowed(email, allowed_emails, "email")
+    allowlisted = bool(allowed_emails) and email.lower() in allowed_emails
 
     allowed_domains = _split_list(settings.auth_allowed_domains)
-    if allowed_domains:
-        domain = email.split("@")[-1] if "@" in email else ""
-        _enforce_allowed(domain, allowed_domains, "domain")
-
     allowed_groups = _split_list(settings.auth_allowed_groups)
-    if allowed_groups:
-        _enforce_allowed_groups(email, allowed_groups)
+
+    if not allowlisted:
+        if allowed_domains:
+            domain = email.split("@")[-1] if "@" in email else ""
+            _enforce_allowed(domain, allowed_domains, "domain")
+        if allowed_groups:
+            _enforce_allowed_groups(email, allowed_groups)
+        if allowed_emails and not allowed_domains and not allowed_groups:
+            raise HTTPException(status_code=403, detail="email not allowed")
 
     logger.info("auth ok email=%s path=%s", email, request.url.path)
     return AuthUser(

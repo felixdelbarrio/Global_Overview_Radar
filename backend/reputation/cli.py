@@ -6,22 +6,28 @@ import sys
 
 from reputation.logging_utils import configure_logging, get_logger
 from reputation.services.ingest_service import ReputationIngestService
+from reputation.config import settings
 
 
 def main() -> None:
     """Punto de entrada para la ingesta de reputación.
 
-    Uso: brr-reputation [--force]
+    Uso: brr-reputation [--force] [--all-sources]
     """
     configure_logging(force=True)
     logger = get_logger(__name__)
 
     force = False
-    if len(sys.argv) > 1 and sys.argv[1] in ("--force", "-f"):
-        force = True
+    all_sources = False
+    for arg in sys.argv[1:]:
+        if arg in ("--force", "-f"):
+            force = True
+        elif arg in ("--all-sources", "--all"):
+            all_sources = True
 
     service = ReputationIngestService()
-    doc = service.run(force=force)
+    sources_override = settings.all_sources() if all_sources else None
+    doc = service.run(force=force, sources_override=sources_override)
 
     logger.info("Reputation generated_at: %s", doc.generated_at.isoformat())
     logger.info("config_hash: %s", doc.config_hash)

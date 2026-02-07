@@ -27,6 +27,23 @@ DEFAULT_CACHE_TTL_HOURS = 24
 
 logger = logging.getLogger(__name__)
 
+ALL_SOURCES = [
+    "reddit",
+    "twitter",
+    "news",
+    "newsapi",
+    "gdelt",
+    "guardian",
+    "forums",
+    "blogs",
+    "appstore",
+    "trustpilot",
+    "google_reviews",
+    "google_play",
+    "youtube",
+    "downdetector",
+]
+
 
 class ReputationSettings(BaseSettings):
     """Configuración de reputación (se carga desde .env.reputation)."""
@@ -118,6 +135,10 @@ class ReputationSettings(BaseSettings):
         if allowlist:
             return [source for source in result if source in allowlist]
         return result
+
+    def all_sources(self) -> List[str]:
+        """Devuelve todas las fuentes conocidas, ignorando toggles y allowlist."""
+        return list(ALL_SOURCES)
 
 
 def _ensure_env_file() -> None:

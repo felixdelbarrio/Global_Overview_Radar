@@ -32,6 +32,7 @@ _INGEST_LOCK = Lock()
 
 class IngestRequest(BaseModel):
     force: bool | None = None
+    all_sources: bool | None = None
 
 
 def _now_iso() -> str:
@@ -82,7 +83,7 @@ def _seed_reputation_cache() -> None:
     repo.save(doc)
 
 
-def _run_reputation_job(job_id: str, force: bool) -> None:
+def _run_reputation_job(job_id: str, force: bool, all_sources: bool) -> None:
     try:
         _update_job(job_id, status="running", progress=2, stage="starting")
         service = ReputationIngestService()
@@ -96,7 +97,8 @@ def _run_reputation_job(job_id: str, force: bool) -> None:
                 meta=meta or {},
             )
 
-        doc = service.run(force=force, progress=_progress)
+        sources_override = settings.all_sources() if all_sources else None
+        doc = service.run(force=force, progress=_progress, sources_override=sources_override)
         _update_job(
             job_id,
             status="success",
@@ -123,6 +125,7 @@ def _run_reputation_job(job_id: str, force: bool) -> None:
 @router.post("/reputation")
 def ingest_reputation(payload: IngestRequest) -> dict[str, Any]:
     force = bool(payload.force)
+    all_sources = bool(payload.all_sources)
     with _INGEST_LOCK:
         active = _find_active_job("reputation")
         if active:
@@ -140,7 +143,7 @@ def ingest_reputation(payload: IngestRequest) -> dict[str, Any]:
         "progress": 0,
         "stage": "queued",
         "started_at": _now_iso(),
-        "meta": {"force": force},
+        "meta": {"force": force, "all_sources": all_sources},
     }
     _record_job(job)
     try:
@@ -157,7 +160,7 @@ def ingest_reputation(payload: IngestRequest) -> dict[str, Any]:
         )
         return _record_job(job)
 
-    worker = Thread(target=_run_reputation_job, args=(job_id, force), daemon=True)
+    worker = Thread(target=_run_reputation_job, args=(job_id, force, all_sources), daemon=True)
     worker.start()
     return job
 

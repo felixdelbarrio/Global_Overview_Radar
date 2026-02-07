@@ -136,7 +136,10 @@ class ReputationIngestService:
         self._repo = ReputationCacheRepo(self._settings.cache_path)
 
     def run(
-        self, force: bool = False, progress: ProgressCallback | None = None
+        self,
+        force: bool = False,
+        progress: ProgressCallback | None = None,
+        sources_override: Sequence[str] | None = None,
     ) -> ReputationCacheDocument:
         def report(stage: str, pct: int, meta: dict[str, Any] | None = None) -> None:
             if not progress:
@@ -152,7 +155,10 @@ class ReputationIngestService:
         cfg = _as_dict(load_business_config())
         cfg_hash = compute_config_hash(cfg)
         ttl_hours = effective_ttl_hours(cfg)
-        raw_sources = list(self._settings.enabled_sources())
+        if sources_override is None:
+            raw_sources = list(self._settings.enabled_sources())
+        else:
+            raw_sources = [source for source in sources_override if source]
         sources_enabled: list[str] = []
         for source in raw_sources:
             normalized = source.strip().lower()

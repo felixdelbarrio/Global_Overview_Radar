@@ -90,6 +90,7 @@ const ADVANCED_LOG_KEYS = new Set([
   "advanced.log_file_name",
   "advanced.log_debug",
 ]);
+const AUTH_ENABLED = process.env.NEXT_PUBLIC_AUTH_ENABLED === "true";
 
 export function Shell({ children }: { children: React.ReactNode }) {
   const profileAppliedKey = "gor-profile-applied";
@@ -341,7 +342,10 @@ export function Shell({ children }: { children: React.ReactNode }) {
     setIngestError(null);
     setIngestBusy((prev) => ({ ...prev, [kind]: true }));
     try {
-      const job = await apiPost<IngestJob>(`/ingest/${kind}`, { force: false });
+      const job = await apiPost<IngestJob>(`/ingest/${kind}`, {
+        force: false,
+        all_sources: false,
+      });
       setIngestJobs((prev) => ({ ...prev, [kind]: job }));
       openPanel("ingest");
     } catch (err) {
@@ -791,7 +795,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
     return Math.round(total / active.length);
   }, [ingestJobs]);
 
-  const showIngestCenter = true;
+  const showIngestCenter = !AUTH_ENABLED;
 
   /** Definicion de items de navegacion. */
   const nav = [
