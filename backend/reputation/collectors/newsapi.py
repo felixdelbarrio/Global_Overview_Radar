@@ -23,6 +23,8 @@ class NewsApiCollector(ReputationCollector):
         domains: str | None = None,
         sort_by: str | None = None,
         search_in: str | None = None,
+        from_date: str | None = None,
+        to_date: str | None = None,
         endpoint: str | None = None,
     ) -> None:
         self._api_key = api_key
@@ -33,6 +35,8 @@ class NewsApiCollector(ReputationCollector):
         self._domains = domains
         self._sort_by = sort_by
         self._search_in = search_in
+        self._from_date = (from_date or "").strip()
+        self._to_date = (to_date or "").strip()
         self._endpoint = endpoint or "https://newsapi.org/v2/everything"
 
     def collect(self) -> Iterable[ReputationItem]:
@@ -64,6 +68,8 @@ class NewsApiCollector(ReputationCollector):
                 "domains": self._domains or None,
                 "sortBy": self._sort_by or None,
                 "searchIn": self._search_in or None,
+                "from": self._from_date or None,
+                "to": self._to_date or None,
             }
             url = build_url(self._endpoint, params)
             try:

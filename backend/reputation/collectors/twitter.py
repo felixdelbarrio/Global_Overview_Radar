@@ -15,10 +15,14 @@ class TwitterCollector(ReputationCollector):
         bearer_token: str,
         queries: list[str],
         max_results: int = 100,
+        start_time: str | None = None,
+        end_time: str | None = None,
     ) -> None:
         self._bearer_token = bearer_token
         self._queries = queries
         self._max_results = max(0, max_results)
+        self._start_time = (start_time or "").strip()
+        self._end_time = (end_time or "").strip()
 
     def collect(self) -> Iterable[ReputationItem]:
         if not self._bearer_token or not self._queries or self._max_results <= 0:
@@ -47,6 +51,10 @@ class TwitterCollector(ReputationCollector):
                 "user.fields": "username",
                 "next_token": next_token,
             }
+            if self._start_time:
+                params["start_time"] = self._start_time
+            if self._end_time:
+                params["end_time"] = self._end_time
             url = build_url("https://api.twitter.com/2/tweets/search/recent", params)
             data = http_get_json(url, headers={"Authorization": f"Bearer {self._bearer_token}"})
 

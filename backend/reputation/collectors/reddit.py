@@ -20,6 +20,7 @@ class RedditCollector(ReputationCollector):
         subreddits: list[str],
         queries: list[str],
         limit_per_query: int = 100,
+        time_filter: str | None = None,
     ) -> None:
         self._client_id = client_id
         self._client_secret = client_secret
@@ -27,6 +28,7 @@ class RedditCollector(ReputationCollector):
         self._subreddits = subreddits
         self._queries = queries
         self._limit_per_query = limit_per_query
+        self._time_filter = (time_filter or "").strip()
 
     def collect(self) -> Iterable[ReputationItem]:
         reddit = praw.Reddit(
@@ -39,11 +41,13 @@ class RedditCollector(ReputationCollector):
 
         for subreddit in self._subreddits:
             for query in self._queries:
-                for submission in reddit.subreddit(subreddit).search(
-                    query,
-                    sort="new",
-                    limit=self._limit_per_query,
-                ):
+                search_kwargs = {
+                    "sort": "new",
+                    "limit": self._limit_per_query,
+                }
+                if self._time_filter:
+                    search_kwargs["time_filter"] = self._time_filter
+                for submission in reddit.subreddit(subreddit).search(query, **search_kwargs):
                     sid = str(submission.id)
                     if sid in seen:
                         continue

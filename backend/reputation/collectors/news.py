@@ -36,6 +36,8 @@ class NewsCollector(ReputationCollector):
         rss_urls: list[dict[str, str] | str] | None = None,
         rss_only: bool = False,
         filter_terms: list[str] | None = None,
+        from_date: str | None = None,
+        to_date: str | None = None,
     ) -> None:
         self._api_key = api_key
         self._queries = queries
@@ -47,6 +49,8 @@ class NewsCollector(ReputationCollector):
         self._endpoint = endpoint or "https://newsapi.org/v2/everything"
         self._rss_urls = rss_urls or []
         self._rss_only = rss_only
+        self._from_date = (from_date or "").strip()
+        self._to_date = (to_date or "").strip()
 
     def collect(self) -> Iterable[ReputationItem]:
         if self._max_articles <= 0:
@@ -102,6 +106,8 @@ class NewsCollector(ReputationCollector):
                 "page": page,
                 "apiKey": self._api_key,
                 "sources": self._sources or None,
+                "from": self._from_date or None,
+                "to": self._to_date or None,
             }
             url = build_url(self._endpoint, params)
             data = http_get_json(url)
