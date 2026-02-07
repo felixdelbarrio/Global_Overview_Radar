@@ -1,9 +1,9 @@
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "name": "banking_bbva_retail",
-  "description": "Configuración de reputación y news para BBVA Retail (ES + MX) con IDs verificados y feeds RSS curados.",
+  "description": "Configuración de reputación y news para BBVA Retail (ES + MX) con IDs verificados (retail-only) y exclusiones explícitas de apps Empresas/Corporate.",
   "generated_by": "chatgpt",
-  "generated_at": "2026-02-04T15:04:43.145178Z",
+  "generated_at": "2026-02-07T00:00:00Z",
   "geografias": [
     "España",
     "México",
@@ -60,20 +60,22 @@
       "Santander México",
       "Santander MX",
       "Supermovil",
+      "SuperMóvil",
       "Santander App"
     ],
     "CaixaBank": [
       "La Caixa",
       "Caixa",
-      "Imagin",
+      "CaixaBankNow",
+      "imagin",
       "imaginBank"
     ],
     "Sabadell": [
-      "Banco Sabadell"
+      "Banco Sabadell",
+      "App Banco Sabadell"
     ],
     "Bankinter": [
-      "EVO Banco",
-      "EVO"
+      "Bankinter"
     ],
     "ING": [
       "ING España",
@@ -81,17 +83,20 @@
       "ING Bank"
     ],
     "Openbank": [
-      "Open Bank"
+      "Open Bank",
+      "Openbank"
     ],
     "Revolut": [
-      "Revolut Bank"
+      "Revolut Bank",
+      "Revolut"
     ],
     "N26": [
-      "N26 Bank"
+      "N26 Bank",
+      "N26"
     ],
     "Wise": [
       "TransferWise",
-      "Wise Bank"
+      "Wise"
     ],
     "Banorte": [
       "Grupo Financiero Banorte",
@@ -99,14 +104,17 @@
     ],
     "Citibanamex": [
       "Banamex",
-      "Citibanamex Móvil"
+      "Citibanamex Móvil",
+      "App Banamex"
     ],
     "HSBC": [
       "HSBC México",
-      "HSBC España"
+      "HSBC"
     ],
     "BBVA Empresas": [
       "BBVA Empresas",
+      "BBVA Net Cash",
+      "BBVA net cash",
       "BBVA Empresas México"
     ]
   },
@@ -130,7 +138,8 @@
       "ING",
       "Openbank",
       "Revolut",
-      "N26"
+      "N26",
+      "Wise"
     ],
     "México": [
       "Santander",
@@ -138,7 +147,8 @@
       "Citibanamex",
       "HSBC",
       "Revolut",
-      "N26"
+      "N26",
+      "Wise"
     ]
   },
   "keywords": [
@@ -167,6 +177,7 @@
   "segment_terms": [
     "retail",
     "particular",
+    "personas",
     "cuenta",
     "tarjeta",
     "bizum",
@@ -180,6 +191,24 @@
     "phishing",
     "scam"
   ],
+  "segment_guard": {
+    "enabled": true,
+    "default_terms": [
+      "Banca",
+      "Banco",
+      "Móvil",
+      "Movil",
+      "Mobile",
+      "App",
+      "Online",
+      "Personal",
+      "Particular",
+      "Retail",
+      "Cuenta",
+      "Bizum",
+      "Banca Online"
+    ]
+  },
   "markets": {
     "ios_app_ids": {
       "España": "325813155",
@@ -200,27 +229,47 @@
       }
     }
   },
+  "verification": {
+    "scope": "retail-only",
+    "verified_at": "2026-02-07",
+    "rules": [
+      "Solo apps de banca de particulares (retail).",
+      "Cualquier app con términos Empresas/Net Cash/Corporate se lista en excluded_enterprise_apps y NO se usa para reputación retail."
+    ]
+  },
+  "excluded_enterprise_apps": {
+    "bbva": {
+      "ios_app_ids": [
+        "698168058",
+        "1198146011"
+      ],
+      "android_package_ids": [
+        "com.bbva.netcash",
+        "pe.bbvacontinental.netcash"
+      ],
+      "evidence": {
+        "bbva_empresas_es_pt_appstore": "https://apps.apple.com/es/app/bbva-net-cash-es-pt/id698168058",
+        "bbva_empresas_es_pt_play": "https://play.google.com/store/apps/details?id=com.bbva.netcash",
+        "bbva_net_cash_pe_appstore": "https://apps.apple.com/pe/app/bbva-net-cash-pe/id1198146011",
+        "bbva_net_cash_pe_play": "https://play.google.com/store/apps/details?id=pe.bbvacontinental.netcash"
+      }
+    },
+    "santander": {
+      "ios_app_ids": [
+        "976662821"
+      ],
+      "android_package_ids": [
+        "es.bancosantander.empresas"
+      ],
+      "evidence": {
+        "santander_empresas_appstore": "https://apps.apple.com/mx/app/santander-empresas/id976662821",
+        "santander_empresas_play": "https://play.google.com/store/apps/details?id=es.bancosantander.empresas"
+      }
+    }
+  },
   "output": {
     "cache_ttl_hours": 12,
     "max_items_total": 1200
-  },
-  "reddit": {
-    "subreddits": [
-      "spain",
-      "mexico",
-      "personalfinance",
-      "eupersonalfinance",
-      "finanzas",
-      "androidapps",
-      "ios"
-    ],
-    "query_templates": [
-      "{entity}",
-      "\"{entity}\" app",
-      "\"{entity}\" banca",
-      "\"{entity}\" fraude",
-      "\"{entity}\" no funciona"
-    ]
   },
   "news": {
     "rss_geo_map": {
@@ -322,39 +371,174 @@
         "topic": "press",
         "type": "gnews_query"
       }
-    ],
-    "site_sources_by_geo": {
+    ]
+  },
+  "appstore": {
+    "country_by_geo": {
+      "España": "es",
+      "México": "mx",
+      "Global": "us"
+    },
+    "app_ids_by_geo": {
       "España": [
-        {
-          "domain": "cincodias.elpais.com"
-        },
-        {
-          "domain": "eleconomista.es"
-        },
-        {
-          "domain": "europapress.es"
-        }
+        "325813155",
+        "408043474",
+        "356160865",
+        "318806094",
+        "347887638",
+        "774858627",
+        "1217874244",
+        "956857223",
+        "932493382",
+        "612261027"
       ],
       "México": [
-        {
-          "domain": "eleconomista.com.mx"
-        },
-        {
-          "domain": "expansion.mx"
-        }
+        "374824226",
+        "498944221",
+        "374817863",
+        "498483038",
+        "1453854471",
+        "956857223",
+        "932493382",
+        "612261027"
       ],
       "Global": [
-        {
-          "domain": "bbc.co.uk"
-        },
-        {
-          "domain": "news.google.com"
-        },
-        {
-          "domain": "bbva.com"
-        }
+        "325813155",
+        "374824226",
+        "956857223",
+        "932493382",
+        "612261027"
       ]
+    },
+    "app_id_to_actor": {
+      "325813155": "BBVA",
+      "374824226": "BBVA",
+      "408043474": "Santander",
+      "498944221": "Santander",
+      "356160865": "Bankinter",
+      "318806094": "CaixaBank",
+      "347887638": "Sabadell",
+      "774858627": "ING",
+      "1217874244": "Openbank",
+      "956857223": "N26",
+      "932493382": "Revolut",
+      "612261027": "Wise",
+      "374817863": "Banorte",
+      "498483038": "Citibanamex",
+      "1453854471": "HSBC"
+    },
+    "evidence_by_app_id": {
+      "325813155": "https://apps.apple.com/es/app/id325813155",
+      "374824226": "https://apps.apple.com/mx/app/id374824226",
+      "408043474": "https://apps.apple.com/es/app/santander-espa%C3%B1a/id408043474",
+      "498944221": "https://apps.apple.com/mx/app/santander-superm%C3%B3vil/id498944221",
+      "356160865": "https://apps.apple.com/es/app/bankinter-m%C3%B3vil/id356160865",
+      "318806094": "https://apps.apple.com/es/app/id318806094",
+      "347887638": "https://apps.apple.com/es/app/id347887638",
+      "774858627": "https://apps.apple.com/es/app/ing-banca-m%C3%B3vil-y-finanzas/id774858627",
+      "1217874244": "https://apps.apple.com/es/app/openbank-banca-m%C3%B3vil/id1217874244",
+      "956857223": "https://apps.apple.com/es/app/n26-love-your-bank/id956857223",
+      "932493382": "https://apps.apple.com/es/app/revolut/id932493382",
+      "612261027": "https://apps.apple.com/es/app/wise/id612261027",
+      "374817863": "https://apps.apple.com/mx/app/banorte-m%C3%B3vil/id374817863",
+      "498483038": "https://apps.apple.com/mx/app/app-banamex/id498483038",
+      "1453854471": "https://apps.apple.com/mx/app/hsbc-m%C3%A9xico/id1453854471"
     }
+  },
+  "google_play": {
+    "geo_to_gl": {
+      "España": "ES",
+      "México": "MX",
+      "Global": "US"
+    },
+    "geo_to_hl": {
+      "España": "es",
+      "México": "es-419",
+      "Global": "en"
+    },
+    "package_ids_by_geo": {
+      "España": [
+        "com.bbva.bbvacontigo",
+        "es.bancosantander.apps",
+        "com.bankinter.launcher",
+        "es.lacaixa.mobile.android.newwapicon",
+        "net.inverline.bancosabadell.officelocator.android",
+        "www.ingdirect.nativeframe",
+        "es.openbank.mobile",
+        "de.number26.android",
+        "com.revolut.revolut",
+        "com.transferwise.android"
+      ],
+      "México": [
+        "com.bancomer.mbanking",
+        "mx.bancosantander.supermovil",
+        "org.microemu.android.model.common.VTUserApplicationBNRTMB",
+        "com.citibanamex.banamexmobile",
+        "mx.hsbc.hsbcmexico",
+        "de.number26.android",
+        "com.revolut.revolut",
+        "com.transferwise.android"
+      ],
+      "Global": [
+        "com.bbva.bbvacontigo",
+        "com.bancomer.mbanking",
+        "de.number26.android",
+        "com.revolut.revolut",
+        "com.transferwise.android"
+      ]
+    },
+    "package_id_to_actor": {
+      "com.bbva.bbvacontigo": "BBVA",
+      "com.bancomer.mbanking": "BBVA",
+      "es.bancosantander.apps": "Santander",
+      "mx.bancosantander.supermovil": "Santander",
+      "com.bankinter.launcher": "Bankinter",
+      "es.lacaixa.mobile.android.newwapicon": "CaixaBank",
+      "net.inverline.bancosabadell.officelocator.android": "Sabadell",
+      "www.ingdirect.nativeframe": "ING",
+      "es.openbank.mobile": "Openbank",
+      "de.number26.android": "N26",
+      "com.revolut.revolut": "Revolut",
+      "com.transferwise.android": "Wise",
+      "org.microemu.android.model.common.VTUserApplicationBNRTMB": "Banorte",
+      "com.citibanamex.banamexmobile": "Citibanamex",
+      "mx.hsbc.hsbcmexico": "HSBC"
+    },
+    "evidence_by_package_id": {
+      "com.bbva.bbvacontigo": "https://play.google.com/store/apps/details?id=com.bbva.bbvacontigo",
+      "com.bancomer.mbanking": "https://play.google.com/store/apps/details?id=com.bancomer.mbanking",
+      "es.bancosantander.apps": "https://play.google.com/store/apps/details?id=es.bancosantander.apps",
+      "mx.bancosantander.supermovil": "https://play.google.com/store/apps/details?id=mx.bancosantander.supermovil",
+      "com.bankinter.launcher": "https://play.google.com/store/apps/details?id=com.bankinter.launcher",
+      "es.lacaixa.mobile.android.newwapicon": "https://play.google.com/store/apps/details?id=es.lacaixa.mobile.android.newwapicon",
+      "net.inverline.bancosabadell.officelocator.android": "https://play.google.com/store/apps/details?id=net.inverline.bancosabadell.officelocator.android",
+      "www.ingdirect.nativeframe": "https://play.google.com/store/apps/details?id=www.ingdirect.nativeframe",
+      "es.openbank.mobile": "https://play.google.com/store/apps/details?id=es.openbank.mobile",
+      "de.number26.android": "https://play.google.com/store/apps/details?id=de.number26.android",
+      "com.revolut.revolut": "https://play.google.com/store/apps/details?id=com.revolut.revolut",
+      "com.transferwise.android": "https://play.google.com/store/apps/details?id=com.transferwise.android",
+      "org.microemu.android.model.common.VTUserApplicationBNRTMB": "https://play.google.com/store/apps/details?id=org.microemu.android.model.common.VTUserApplicationBNRTMB",
+      "com.citibanamex.banamexmobile": "https://play.google.com/store/apps/details?id=com.citibanamex.banamexmobile",
+      "mx.hsbc.hsbcmexico": "https://play.google.com/store/apps/details?id=mx.hsbc.hsbcmexico"
+    }
+  },
+  "reddit": {
+    "subreddits": [
+      "spain",
+      "mexico",
+      "personalfinance",
+      "eupersonalfinance",
+      "finanzas",
+      "androidapps",
+      "ios"
+    ],
+    "query_templates": [
+      "{entity}",
+      "\"{entity}\" app",
+      "\"{entity}\" banca",
+      "\"{entity}\" fraude",
+      "\"{entity}\" no funciona"
+    ]
   },
   "forums": {
     "rss_urls": [
@@ -405,121 +589,6 @@
         "topic": "podcast-blink"
       }
     ]
-  },
-  "appstore": {
-    "app_ids": [
-      "325813155",
-      "374824226",
-      "408043474",
-      "356160865",
-      "318806094",
-      "347887638",
-      "774858627",
-      "1217874244",
-      "956857223",
-      "932493382",
-      "612261027"
-    ],
-    "app_ids_by_geo": {
-      "España": [
-        "325813155",
-        "408043474",
-        "356160865",
-        "318806094",
-        "347887638",
-        "774858627",
-        "1217874244",
-        "956857223",
-        "932493382",
-        "612261027"
-      ],
-      "México": [
-        "374824226"
-      ],
-      "Global": [
-        "325813155",
-        "374824226",
-        "408043474"
-      ]
-    },
-    "country_by_geo": {
-      "España": "es",
-      "México": "mx",
-      "Global": "us"
-    },
-    "app_id_to_actor": {
-      "325813155": "BBVA",
-      "374824226": "BBVA",
-      "408043474": "Santander",
-      "356160865": "Bankinter",
-      "318806094": "CaixaBank",
-      "347887638": "Sabadell",
-      "774858627": "ING",
-      "1217874244": "Openbank",
-      "956857223": "N26",
-      "932493382": "Revolut",
-      "612261027": "Wise"
-    }
-  },
-  "google_play": {
-    "package_ids": [
-      "com.bbva.bbvacontigo",
-      "com.bancomer.mbanking",
-      "es.bancosantander.apps",
-      "com.bankinter.launcher",
-      "es.lacaixa.mobile.android.newwapicon",
-      "net.inverline.bancosabadell.officelocator.android",
-      "www.ingdirect.nativeframe",
-      "es.openbank.mobile",
-      "de.number26.android",
-      "com.revolut.revolut",
-      "com.transferwise.android"
-    ],
-    "package_ids_by_geo": {
-      "España": [
-        "com.bbva.bbvacontigo",
-        "es.bancosantander.apps",
-        "com.bankinter.launcher",
-        "es.lacaixa.mobile.android.newwapicon",
-        "net.inverline.bancosabadell.officelocator.android",
-        "www.ingdirect.nativeframe",
-        "es.openbank.mobile",
-        "de.number26.android",
-        "com.revolut.revolut",
-        "com.transferwise.android"
-      ],
-      "México": [
-        "com.bancomer.mbanking"
-      ],
-      "Global": [
-        "com.bbva.bbvacontigo",
-        "com.bancomer.mbanking",
-        "es.bancosantander.apps"
-      ]
-    },
-    "geo_to_gl": {
-      "España": "ES",
-      "México": "MX",
-      "Global": "US"
-    },
-    "geo_to_hl": {
-      "España": "es",
-      "México": "es-419",
-      "Global": "en"
-    },
-    "package_id_to_actor": {
-      "com.bbva.bbvacontigo": "BBVA",
-      "com.bancomer.mbanking": "BBVA",
-      "es.bancosantander.apps": "Santander",
-      "com.bankinter.launcher": "Bankinter",
-      "es.lacaixa.mobile.android.newwapicon": "CaixaBank",
-      "net.inverline.bancosabadell.officelocator.android": "Sabadell",
-      "www.ingdirect.nativeframe": "ING",
-      "es.openbank.mobile": "Openbank",
-      "de.number26.android": "N26",
-      "com.revolut.revolut": "Revolut",
-      "com.transferwise.android": "Wise"
-    }
   },
   "trustpilot": {
     "rss_urls": [

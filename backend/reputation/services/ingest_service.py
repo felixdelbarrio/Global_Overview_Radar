@@ -217,6 +217,10 @@ class ReputationIngestService:
                 filter_enabled(existing.items),
                 notes,
             )
+            guard_audit: dict[str, Any] = {}
+            filtered_items = self._apply_segment_guard(
+                cfg, filtered_items, notes, audit=guard_audit
+            )
             filtered_ratings = [
                 entry
                 for entry in existing.market_ratings
@@ -279,6 +283,9 @@ class ReputationIngestService:
             report("Mapeando Google Play", 66)
         else:
             report("Mapeo Google Play omitido", 66)
+        guard_audit: dict[str, Any] = {}
+        items = self._apply_segment_guard(cfg, items, notes, audit=guard_audit)
+        report("Validando fichas", 70)
         items = self._apply_sentiment(cfg, items, existing.items if existing else None, notes)
         report("Analizando sentimiento", 74)
         items = self._filter_noise_items(cfg, items, notes)
@@ -295,6 +302,10 @@ class ReputationIngestService:
         existing_items = (
             self._drop_invalid_items(filter_enabled(existing.items), notes) if existing else []
         )
+        if existing_items:
+            existing_items = self._apply_segment_guard(
+                cfg, existing_items, notes, audit=guard_audit, log=False
+            )
         merged_items = self._merge_items(existing_items, items)
         merged_items = filter_enabled(merged_items)
         report("Fusionando items", 94)
@@ -723,6 +734,334 @@ class ReputationIngestService:
                 item.signals["actor_source"] = "package_id"
         return items
 
+    @staticmethod
+    def _clear_sentiment(item: ReputationItem) -> None:
+        item.sentiment = None
+        if not item.signals:
+            return
+        for key in (
+            "sentiment_score",
+            "sentiment_provider",
+            "sentiment_model",
+            "sentiment_scale",
+        ):
+            item.signals.pop(key, None)
+
+    @staticmethod
+    def _is_invalid_segment(item: ReputationItem) -> bool:
+        return bool((item.signals or {}).get("invalid_segment"))
+
+    @staticmethod
+    def _segment_guard_term_match(name: str, term: str) -> bool:
+        if not name or not term:
+            return False
+        if match_keywords(name, [term]):
+            return True
+        normalized_term = normalize_text(term)
+        if " " not in normalized_term:
+            return False
+        compact_term = normalized_term.replace(" ", "")
+        if not compact_term:
+            return False
+        compact_name = normalize_text(name).replace(" ", "")
+        return compact_term in compact_name
+
+    @classmethod
+    def _segment_guard_matches(
+        cls,
+        name: str,
+        terms: list[str],
+        mode: str,
+        min_matches: int,
+    ) -> bool:
+        if not terms:
+            return True
+        if mode == "all":
+            return all(cls._segment_guard_term_match(name, term) for term in terms)
+        if min_matches <= 1:
+            return any(cls._segment_guard_term_match(name, term) for term in terms)
+        hits = 0
+        for term in terms:
+            if cls._segment_guard_term_match(name, term):
+                hits += 1
+                if hits >= min_matches:
+                    return True
+        return False
+
+    @staticmethod
+    def _load_segment_guard_cfg(
+        cfg: dict[str, Any],
+    ) -> tuple[bool, list[str], dict[str, list[str]], set[str], str, int]:
+        cfg_dict = cast(dict[str, object], cfg)
+        guard_cfg = _as_dict(cfg.get("segment_guard"))
+        raw_enabled = guard_cfg.get("enabled")
+        if isinstance(raw_enabled, bool):
+            enabled = raw_enabled
+        elif isinstance(raw_enabled, str):
+            enabled = _env_bool(raw_enabled)
+        else:
+            enabled = bool(guard_cfg)
+        env_enabled = os.getenv("REPUTATION_SEGMENT_GUARD_ENABLED", "").strip()
+        if env_enabled:
+            enabled = _env_bool(env_enabled)
+
+        default_terms = _get_list_str(guard_cfg, "default_terms")
+        if not default_terms:
+            default_terms = _get_list_str(guard_cfg, "terms")
+        if not default_terms:
+            default_terms = _get_list_str(cfg_dict, "segment_guard_terms")
+
+        terms_by_actor = _get_dict_str_list_str(guard_cfg, "terms_by_actor")
+        if not terms_by_actor:
+            terms_by_actor = _get_dict_str_list_str(cfg_dict, "segment_guard_terms_by_actor")
+
+        raw_sources = _get_list_str(guard_cfg, "sources")
+        if not raw_sources:
+            raw_sources = ["appstore", "google_play"]
+        sources = {source.lower() for source in raw_sources if source}
+
+        mode = str(guard_cfg.get("mode", "any") or "any").strip().lower()
+        if mode not in {"any", "all"}:
+            mode = "any"
+
+        min_matches = _config_int(guard_cfg.get("min_matches"), 1)
+        if min_matches <= 0:
+            min_matches = 1
+
+        if not default_terms and not terms_by_actor:
+            enabled = False
+
+        return enabled, default_terms, terms_by_actor, sources, mode, min_matches
+
+    @staticmethod
+    def _segment_guard_terms_for_actor(
+        actor: str | None,
+        default_terms: list[str],
+        terms_by_actor: dict[str, list[str]],
+        alias_map: dict[str, str],
+    ) -> list[str]:
+        terms: list[str] = list(default_terms)
+        if actor:
+            canonical = canonicalize_actor(actor, alias_map) if alias_map else actor.strip()
+            if canonical and canonical in terms_by_actor:
+                terms.extend(terms_by_actor[canonical])
+        seen: set[str] = set()
+        ordered: list[str] = []
+        for term in terms:
+            cleaned = term.strip()
+            if cleaned and cleaned not in seen:
+                ordered.append(cleaned)
+                seen.add(cleaned)
+        return ordered
+
+    @staticmethod
+    def _segment_guard_appstore_name(
+        app_id: str,
+        country: str,
+        timeout: int,
+        cache: dict[tuple[str, str], str | None],
+        notes: list[str],
+    ) -> str | None:
+        key = (app_id, country)
+        if key in cache:
+            return cache[key]
+        try:
+            rating_info = _fetch_appstore_rating(app_id, country, timeout)
+        except Exception as exc:  # pragma: no cover - defensive
+            notes.append(f"segment_guard appstore: error {app_id} {country}: {exc}")
+            cache[key] = None
+            return None
+        name = rating_info[3] if rating_info else None
+        cache[key] = name
+        return name
+
+    @staticmethod
+    def _segment_guard_google_play_name(
+        package_id: str,
+        gl: str,
+        hl: str,
+        timeout: int,
+        cache: dict[tuple[str, str, str], str | None],
+        notes: list[str],
+    ) -> str | None:
+        key = (package_id, gl, hl)
+        if key in cache:
+            return cache[key]
+        try:
+            rating_info = _fetch_google_play_rating(package_id, gl, hl, timeout)
+        except Exception as exc:  # pragma: no cover - defensive
+            notes.append(f"segment_guard google_play: error {package_id} {gl}/{hl}: {exc}")
+            cache[key] = None
+            return None
+        name = rating_info[3] if rating_info else None
+        cache[key] = name
+        return name
+
+    def _apply_segment_guard(
+        self,
+        cfg: dict[str, Any],
+        items: list[ReputationItem],
+        notes: list[str],
+        audit: dict[str, Any] | None = None,
+        log: bool = True,
+    ) -> list[ReputationItem]:
+        if not items:
+            return items
+        enabled, default_terms, terms_by_actor_raw, sources, mode, min_matches = (
+            self._load_segment_guard_cfg(cfg)
+        )
+        if not enabled or not sources:
+            return items
+
+        alias_map = build_actor_alias_map(cfg)
+        terms_by_actor: dict[str, list[str]] = {}
+        for actor_key, term_list in terms_by_actor_raw.items():
+            canonical = canonicalize_actor(actor_key, alias_map) if alias_map else actor_key
+            if not canonical or not term_list:
+                continue
+            bucket = terms_by_actor.setdefault(canonical, [])
+            for term in term_list:
+                cleaned = term.strip()
+                if cleaned and cleaned not in bucket:
+                    bucket.append(cleaned)
+
+        audit_state = audit if audit is not None else {}
+        appstore_cache = audit_state.setdefault("appstore_names", {})
+        google_play_cache = audit_state.setdefault("google_play_names", {})
+        logged_invalid = audit_state.setdefault("logged_invalid", set())
+
+        appstore_cfg = _as_dict(cfg.get("appstore"))
+        app_id_to_actor = appstore_cfg.get("app_id_to_actor") or {}
+        if not isinstance(app_id_to_actor, dict):
+            app_id_to_actor = {}
+        play_cfg = _as_dict(cfg.get("google_play"))
+        package_id_to_actor = play_cfg.get("package_id_to_actor") or {}
+        if not isinstance(package_id_to_actor, dict):
+            package_id_to_actor = {}
+
+        invalid_count = 0
+        checked = 0
+        missing_name = 0
+        invalid_by_source: dict[str, int] = {}
+
+        timeout_appstore = _env_int("APPSTORE_RATING_TIMEOUT", 12)
+        timeout_play = _env_int("GOOGLE_PLAY_RATING_TIMEOUT", 12)
+        default_country = os.getenv("APPSTORE_COUNTRY", "es").strip().lower() or "es"
+        default_gl = os.getenv("GOOGLE_PLAY_DEFAULT_COUNTRY", "ES").strip().upper() or "ES"
+        default_hl = os.getenv("GOOGLE_PLAY_DEFAULT_LANGUAGE", "es").strip().lower() or "es"
+
+        for item in items:
+            source = (item.source or "").strip().lower()
+            if source not in sources:
+                continue
+            signals = item.signals or {}
+            actor = item.actor
+            if not actor:
+                actors = signals.get("actors")
+                if isinstance(actors, list) and actors:
+                    first = actors[0]
+                    if isinstance(first, str):
+                        actor = first
+
+            name: str | None = None
+            guard_id: str | None = None
+
+            if source == "appstore":
+                app_id = signals.get("app_id")
+                if not isinstance(app_id, str) or not app_id.strip():
+                    continue
+                guard_id = app_id.strip()
+                if not actor:
+                    actor = app_id_to_actor.get(guard_id)
+                country = signals.get("country")
+                if not isinstance(country, str) or not country.strip():
+                    country = _guess_country_code(item.geo) or default_country
+                country = str(country).strip().lower()
+                name = self._segment_guard_appstore_name(
+                    guard_id,
+                    country,
+                    timeout_appstore,
+                    appstore_cache,
+                    notes,
+                )
+            elif source == "google_play":
+                package_id = signals.get("package_id")
+                if not isinstance(package_id, str) or not package_id.strip():
+                    continue
+                guard_id = package_id.strip()
+                if not actor:
+                    actor = package_id_to_actor.get(guard_id)
+                gl = signals.get("country")
+                hl = signals.get("language")
+                if not isinstance(gl, str) or not gl.strip():
+                    gl = default_gl
+                if not isinstance(hl, str) or not hl.strip():
+                    hl = default_hl
+                gl = str(gl).strip().upper()
+                hl = str(hl).strip().lower()
+                name = self._segment_guard_google_play_name(
+                    guard_id,
+                    gl,
+                    hl,
+                    timeout_play,
+                    google_play_cache,
+                    notes,
+                )
+            else:
+                continue
+
+            terms = self._segment_guard_terms_for_actor(
+                actor, default_terms, terms_by_actor, alias_map
+            )
+            if not terms:
+                continue
+
+            if not name:
+                missing_name += 1
+                continue
+
+            checked += 1
+            if self._segment_guard_matches(name, terms, mode, min_matches):
+                if "invalid_segment" in signals:
+                    signals.pop("invalid_segment", None)
+                    signals.pop("segment_guard_name", None)
+                    signals.pop("segment_guard_terms", None)
+                    signals.pop("segment_guard_actor", None)
+                continue
+
+            invalid_count += 1
+            invalid_by_source[source] = invalid_by_source.get(source, 0) + 1
+            signals["invalid_segment"] = True
+            signals["segment_guard_name"] = name
+            signals["segment_guard_terms"] = terms
+            if actor:
+                signals["segment_guard_actor"] = str(actor)
+            self._clear_sentiment(item)
+
+            if log and guard_id:
+                audit_key = (source, guard_id)
+                if audit_key not in logged_invalid:
+                    logged_invalid.add(audit_key)
+                    logger.info(
+                        "segment_guard: invalid %s id=%s actor=%s name=%s terms=%s",
+                        source,
+                        guard_id,
+                        actor,
+                        name,
+                        ", ".join(terms),
+                    )
+
+        if log and (invalid_count or missing_name):
+            detail = ", ".join(
+                f"{source}={count}" for source, count in sorted(invalid_by_source.items())
+            )
+            suffix = f" ({detail})" if detail else ""
+            notes.append(
+                f"segment_guard: checked {checked}, invalid {invalid_count}{suffix}, missing_name {missing_name}"
+            )
+
+        return items
+
     @classmethod
     def _apply_geo_hints(
         cls, cfg: dict[str, Any], items: list[ReputationItem]
@@ -866,6 +1205,11 @@ class ReputationIngestService:
         existing: list[ReputationItem] | None = None,
         notes: list[str] | None = None,
     ) -> list[ReputationItem]:
+        if not items:
+            return items
+        valid_items = [item for item in items if not self._is_invalid_segment(item)]
+        if not valid_items:
+            return items
         keywords = self._load_keywords(cfg)
         cfg_local = dict(cfg)
         cfg_local["keywords"] = keywords
@@ -873,19 +1217,33 @@ class ReputationIngestService:
         target_language = _resolve_translation_language()
         existing_keys = {(item.source, item.id) for item in existing} if existing else set()
         if existing_keys:
-            new_items = [item for item in items if (item.source, item.id) not in existing_keys]
+            new_items = [
+                item for item in valid_items if (item.source, item.id) not in existing_keys
+            ]
             if target_language:
                 new_items = service.translate_items(new_items, target_language)
             updated = service.analyze_items(new_items)
             updated_map = {(item.source, item.id): item for item in updated}
-            result = [updated_map.get((item.source, item.id), item) for item in items]
+            result_map = {
+                (item.source, item.id): updated_map.get((item.source, item.id), item)
+                for item in valid_items
+            }
         else:
             if target_language:
-                items = service.translate_items(items, target_language)
-            result = service.analyze_items(items)
+                valid_items = service.translate_items(valid_items, target_language)
+            updated = service.analyze_items(valid_items)
+            result_map = {(item.source, item.id): item for item in updated}
 
         if service.llm_warning and notes is not None:
             notes.append(service.llm_warning)
+        if not result_map:
+            return items
+        result: list[ReputationItem] = []
+        for item in items:
+            if self._is_invalid_segment(item):
+                result.append(item)
+            else:
+                result.append(result_map.get((item.source, item.id), item))
         return result
 
     @classmethod
@@ -2877,15 +3235,13 @@ def _fetch_appstore_rating(
     if not isinstance(first, dict):
         return None
     rating = first.get("averageUserRating") or first.get("averageUserRatingForCurrentVersion")
-    if rating is None:
-        return None
-    rating_value = _to_float(rating)
-    if rating_value is None:
-        return None
+    rating_value = _to_float(rating) if rating is not None else None
     rating_count = first.get("userRatingCount") or first.get("userRatingCountForCurrentVersion")
     count_value = _to_int(rating_count)
     url_value = first.get("trackViewUrl")
     name_value = first.get("trackName")
+    if rating_value is None and not url_value and not name_value:
+        return None
     return (
         rating_value,
         count_value,
@@ -2906,10 +3262,10 @@ def _fetch_google_play_rating(
         return None
 
     rating_value = _extract_rating_value(html)
-    if rating_value is None:
-        return None
     rating_count = _extract_rating_count(html)
     name_value = _extract_google_play_name(html)
+    if rating_value is None and not name_value:
+        return None
     return rating_value, rating_count, url, name_value
 
 

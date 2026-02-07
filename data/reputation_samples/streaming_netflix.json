@@ -201,6 +201,23 @@
     "suscripcion",
     "suscripción"
   ],
+  "segment_guard": {
+    "enabled": true,
+    "default_terms": [
+      "Netflix",
+      "Disney",
+      "Disney+",
+      "Prime Video",
+      "HBO",
+      "Max",
+      "Apple TV",
+      "Apple TV+",
+      "Paramount",
+      "Paramount+",
+      "YouTube",
+      "TikTok"
+    ]
+  },
   "reddit": {
     "subreddits": [
       "spain",

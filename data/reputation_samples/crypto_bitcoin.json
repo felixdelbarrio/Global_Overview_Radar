@@ -201,6 +201,23 @@
     "volatilidad",
     "wallet"
   ],
+  "segment_guard": {
+    "enabled": true,
+    "default_terms": [
+      "Bitcoin",
+      "BTC",
+      "Ethereum",
+      "ETH",
+      "Solana",
+      "Binance",
+      "Coinbase",
+      "Kraken",
+      "Tether",
+      "USDT",
+      "USDC",
+      "Lightning"
+    ]
+  },
   "reddit": {
     "subreddits": [
       "spain",

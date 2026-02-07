@@ -166,6 +166,20 @@
     "sponsor",
     "ticketing"
   ],
+  "segment_guard": {
+    "enabled": true,
+    "default_terms": [
+      "Atlético",
+      "Atletico",
+      "Atleti",
+      "Atlético de Madrid",
+      "Real Madrid",
+      "Barcelona",
+      "FC Barcelona",
+      "Sevilla",
+      "Valencia"
+    ]
+  },
   "reddit": {
     "subreddits": [
       "spain",

@@ -180,6 +180,24 @@
     "phishing",
     "scam"
   ],
+  "segment_guard": {
+    "enabled": true,
+    "default_terms": [
+      "Banca",
+      "Banco",
+      "Móvil",
+      "Movil",
+      "Mobile",
+      "App",
+      "Online",
+      "Personal",
+      "Particular",
+      "Retail",
+      "Cuenta",
+      "Bizum",
+      "Banca Online"
+    ]
+  },
   "markets": {
     "ios_app_ids": {
       "España": "325813155",

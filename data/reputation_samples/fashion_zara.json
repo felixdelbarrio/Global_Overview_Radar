@@ -202,6 +202,22 @@
     "tienda",
     "tracking"
   ],
+  "segment_guard": {
+    "enabled": true,
+    "default_terms": [
+      "Zara",
+      "Inditex",
+      "Zara Home",
+      "H&M",
+      "Uniqlo",
+      "Mango",
+      "Shein",
+      "Primark",
+      "Gap",
+      "LC Waikiki",
+      "Koton"
+    ]
+  },
   "reddit": {
     "subreddits": [
       "spain",
