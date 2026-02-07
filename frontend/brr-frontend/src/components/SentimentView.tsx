@@ -1571,6 +1571,7 @@ function MentionCard({
     const key = normalizeSourceKey(src.name);
     return MANUAL_OVERRIDE_BLOCKED_LABELS[key] ?? src.name;
   });
+  const primaryUrl = sanitizeExternalUrl(item.sources[0]?.url);
   if (!blockedLabels.length && ratingSourceKey) {
     blockedLabels.push(
       MANUAL_OVERRIDE_BLOCKED_LABELS[ratingSourceKey] ?? item.rating_source ?? "",
@@ -1784,13 +1785,14 @@ function MentionCard({
           <span className="text-[11px] uppercase tracking-[0.16em] text-[color:var(--text-40)]">
             Fuentes
           </span>
-          {item.sources.map((src) =>
-            src.url ? (
+          {item.sources.map((src) => {
+            const safeUrl = sanitizeExternalUrl(src.url);
+            return safeUrl ? (
               <a
                 key={src.name}
-                href={src.url}
+                href={safeUrl}
                 target="_blank"
-                rel="noreferrer"
+                rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 rounded-full border border-[color:var(--border-70)] bg-[color:var(--surface-80)] px-2.5 py-1 text-[11px] text-[color:var(--blue)] hover:text-[color:var(--brand-ink)] transition"
               >
                 {src.name}
@@ -1803,14 +1805,14 @@ function MentionCard({
               >
                 {src.name}
               </span>
-            ),
-          )}
+            );
+          })}
         </div>
-        {item.sources[0]?.url && (
+        {primaryUrl && (
           <a
-            href={item.sources[0].url}
+            href={primaryUrl}
             target="_blank"
-            rel="noreferrer"
+            rel="noopener noreferrer"
             className="inline-flex items-center gap-1 text-[color:var(--blue)] hover:text-[color:var(--brand-ink)] transition"
           >
             Ver detalle
@@ -1827,6 +1829,21 @@ function toDateInput(d: Date) {
     .toISOString()
     .slice(0, 10);
   return iso;
+}
+
+function sanitizeExternalUrl(value?: string | null): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  try {
+    const parsed = new URL(trimmed, "https://example.com");
+    if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+      return trimmed;
+    }
+  } catch {
+    // ignore malformed urls
+  }
+  return null;
 }
 
 function unique(values: string[]) {

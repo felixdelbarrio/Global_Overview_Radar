@@ -11,12 +11,23 @@ function isBrowser(): boolean {
   return typeof window !== "undefined";
 }
 
-function hasStorage(): boolean {
-  return (
-    typeof window !== "undefined" &&
-    typeof window.localStorage !== "undefined" &&
-    typeof window.localStorage.getItem === "function"
-  );
+function getAuthStorage(): Storage | null {
+  if (!isBrowser()) return null;
+  try {
+    if (window.sessionStorage && typeof window.sessionStorage.getItem === "function") {
+      return window.sessionStorage;
+    }
+  } catch {
+    // ignore storage access errors
+  }
+  try {
+    if (window.localStorage && typeof window.localStorage.getItem === "function") {
+      return window.localStorage;
+    }
+  } catch {
+    // ignore storage access errors
+  }
+  return null;
 }
 
 function decodeBase64Url(value: string): string | null {
@@ -57,27 +68,31 @@ export function isTokenExpired(token: string): boolean {
 }
 
 export function getStoredToken(): string | null {
-  if (!hasStorage()) return null;
-  return window.localStorage.getItem(TOKEN_KEY);
+  const storage = getAuthStorage();
+  if (!storage) return null;
+  return storage.getItem(TOKEN_KEY);
 }
 
 export function getStoredEmail(): string | null {
-  if (!hasStorage()) return null;
-  return window.localStorage.getItem(EMAIL_KEY);
+  const storage = getAuthStorage();
+  if (!storage) return null;
+  return storage.getItem(EMAIL_KEY);
 }
 
 export function storeToken(token: string, email: string | null): void {
-  if (!hasStorage()) return;
-  window.localStorage.setItem(TOKEN_KEY, token);
+  const storage = getAuthStorage();
+  if (!storage) return;
+  storage.setItem(TOKEN_KEY, token);
   if (email) {
-    window.localStorage.setItem(EMAIL_KEY, email);
+    storage.setItem(EMAIL_KEY, email);
   }
 }
 
 export function clearStoredToken(): void {
-  if (!hasStorage()) return;
-  window.localStorage.removeItem(TOKEN_KEY);
-  window.localStorage.removeItem(EMAIL_KEY);
+  const storage = getAuthStorage();
+  if (!storage) return;
+  storage.removeItem(TOKEN_KEY);
+  storage.removeItem(EMAIL_KEY);
 }
 
 export function readAllowedEmails(): string[] {

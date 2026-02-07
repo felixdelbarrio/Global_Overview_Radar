@@ -16,6 +16,17 @@ type CredentialResponse = { credential?: string };
 
 const AUTH_ENABLED = process.env.NEXT_PUBLIC_AUTH_ENABLED === "true";
 const CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "";
+const FALLBACK_ROUTE = "/";
+
+function sanitizeNextPath(value: string | null): string {
+  if (!value) return FALLBACK_ROUTE;
+  if (!value.startsWith("/")) return FALLBACK_ROUTE;
+  if (value.startsWith("//")) return FALLBACK_ROUTE;
+  if (value.toLowerCase().startsWith("/\\") || value.toLowerCase().includes("://")) {
+    return FALLBACK_ROUTE;
+  }
+  return value;
+}
 
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const buttonRef = useRef<HTMLDivElement>(null);
@@ -65,7 +76,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     const params =
       typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
     const nextParam = params?.get("next") || "/";
-    router.replace(nextParam);
+    router.replace(sanitizeNextPath(nextParam));
   }, [token, isLoginPage, router]);
 
   useEffect(() => {

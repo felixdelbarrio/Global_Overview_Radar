@@ -90,7 +90,8 @@ def _verify_google_token(token: str) -> Mapping[str, Any]:
         if google_id_token is None or google_requests is None:
             raise HTTPException(status_code=500, detail="auth dependency missing")
         requests_mod = cast(Any, google_requests)
-        payload = google_id_token.verify_oauth2_token(
+        id_token_mod = cast(Any, google_id_token)
+        payload = id_token_mod.verify_oauth2_token(
             token,
             requests_mod.Request(),
             audience=client_id,

@@ -12,6 +12,7 @@ dependencies = [
   "pydantic-settings>=2.2",
   "python-dotenv>=1.0",
   "google-auth>=2.29",
+  "typing-extensions>=4.12",
 ]
 
 [project.scripts]
