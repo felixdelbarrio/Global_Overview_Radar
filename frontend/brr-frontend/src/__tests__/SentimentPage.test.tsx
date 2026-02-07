@@ -214,7 +214,10 @@ describe("Sentimiento page", () => {
 
     fireEvent.click(screen.getByText("Iniciar ingesta"));
     await waitFor(() => {
-      expect(apiPostMock).toHaveBeenCalledWith("/ingest/reputation", { force: false });
+      expect(apiPostMock).toHaveBeenCalledWith("/ingest/reputation", {
+        force: false,
+        all_sources: false,
+      });
     });
 
     window.dispatchEvent(
