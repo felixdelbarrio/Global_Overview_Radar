@@ -122,7 +122,10 @@ describe("Shell settings and ingest", () => {
     fireEvent.click(startButtons[0]);
 
     await waitFor(() => {
-      expect(apiPostMock).toHaveBeenCalledWith("/ingest/reputation", { force: false });
+      expect(apiPostMock).toHaveBeenCalledWith("/ingest/reputation", {
+        force: false,
+        all_sources: false,
+      });
     });
 
     fireEvent.click(screen.getByLabelText(/Cambiar a modo (oscuro|claro)/));

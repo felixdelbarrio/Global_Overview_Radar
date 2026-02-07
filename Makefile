@@ -51,7 +51,7 @@ VISUAL_QA_OUT ?= docs/visual-qa
 
 .DEFAULT_GOAL := help
 
-.PHONY: help venv install install-backend install-front env ensure-backend ensure-front ingest reputation-ingest serve serve-back dev-back dev-front build-front start-front lint lint-back lint-front typecheck typecheck-back typecheck-front format format-back format-front check test test-back test-front test-coverage test-coverage-back test-coverage-front bench bench-baseline visual-qa clean reset cloudrun-env deploy-cloudrun-back deploy-cloudrun-front deploy-cloudrun
+.PHONY: help venv install install-backend install-front env ensure-backend ensure-front ingest ingest-filtered reputation-ingest reputation-ingest-filtered serve serve-back dev-back dev-front build-front start-front lint lint-back lint-front typecheck typecheck-back typecheck-front format format-back format-front check test test-back test-front test-coverage test-coverage-back test-coverage-front bench bench-baseline visual-qa clean reset cloudrun-env deploy-cloudrun-back deploy-cloudrun-front deploy-cloudrun
 
 help:
 	@echo "Make targets disponibles:"
@@ -64,6 +64,7 @@ help:
 	@echo "  make ensure-front    - Preparar entorno frontend (deps)"
 	@echo "  make reset           - Limpieza total + instalación completa"
 	@echo "  make ingest          - Ejecutar ingesta de reputación"
+	@echo "  make ingest-filtered - Ejecutar ingesta de reputación respetando toggles"
 	@echo "  make reputation-ingest - Ejecutar ingesta de reputación (backend)"
 	@echo "  make serve-back      - Iniciar API (uvicorn) en $(HOST):$(API_PORT)"
 	@echo "  make dev-back        - Atender solo backend (uvicorn --reload)"
@@ -193,6 +194,13 @@ ingest: reputation-ingest
 
 reputation-ingest:
 	@echo "==> Ejecutando ingesta de reputación..."
+	$(PY) -m reputation.cli --all-sources
+
+ingest-filtered: reputation-ingest-filtered
+	@echo "==> Ingesta reputacional finalizada."
+
+reputation-ingest-filtered:
+	@echo "==> Ejecutando ingesta de reputación (toggles .env.reputation)..."
 	$(PY) -m reputation.cli
 
 serve: serve-back
