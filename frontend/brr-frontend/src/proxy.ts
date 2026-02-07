@@ -13,7 +13,7 @@ function normalizeIapId(value: string | null): string | null {
   return value.replace(/^accounts\.google\.com:/, "");
 }
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   if (!AUTH_LOG_ENABLED) {
     return NextResponse.next();
   }
