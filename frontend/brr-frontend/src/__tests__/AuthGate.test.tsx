@@ -32,6 +32,12 @@ const authMocks = {
 
 vi.mock("@/lib/auth", () => authMocks);
 
+const apiMocks = {
+  apiGet: vi.fn(),
+};
+
+vi.mock("@/lib/api", () => apiMocks);
+
 const originalEnv = { ...process.env };
 
 const loadAuthGate = async (env: Record<string, string | undefined>) => {
@@ -54,6 +60,8 @@ beforeEach(() => {
   authMocks.isEmailAllowed.mockReturnValue(true);
   authMocks.getEmailFromToken.mockReturnValue("user@bbva.com");
   authMocks.getStoredToken.mockReturnValue(null);
+  apiMocks.apiGet.mockReset();
+  apiMocks.apiGet.mockResolvedValue({ email: "user@bbva.com" });
   (window as any).google = undefined;
   window.history.pushState({}, "", "/");
 });
@@ -208,7 +216,9 @@ describe("AuthGate", () => {
       </AuthGate>
     );
 
-    expect(screen.getByText("Conectado: user@bbva.com")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText("Conectado: user@bbva.com")).toBeInTheDocument();
+    });
     fireEvent.click(screen.getByRole("button", { name: "Salir" }));
     expect(authMocks.clearStoredToken).toHaveBeenCalled();
     expect(disableAutoSelect).toHaveBeenCalled();

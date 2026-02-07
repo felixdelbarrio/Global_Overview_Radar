@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Script from "next/script";
 import { usePathname, useRouter } from "next/navigation";
+import { apiGet } from "@/lib/api";
 import {
   clearStoredToken,
   getEmailFromToken,
@@ -17,6 +18,13 @@ type CredentialResponse = { credential?: string };
 const AUTH_ENABLED = process.env.NEXT_PUBLIC_AUTH_ENABLED === "true";
 const CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "";
 const FALLBACK_ROUTE = "/";
+
+type AuthMeResponse = {
+  email: string;
+  name?: string | null;
+  picture?: string | null;
+  subject?: string | null;
+};
 
 function sanitizeNextPath(value: string | null): string {
   if (!value) return FALLBACK_ROUTE;
@@ -33,6 +41,10 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const [ready, setReady] = useState(false);
+  const lastVerifiedToken = useRef<string | null>(null);
+  const [serverStatus, setServerStatus] = useState<"idle" | "checking" | "ok" | "error">(
+    "idle"
+  );
   const [auth, setAuth] = useState<{
     token: string | null;
     email: string | null;
@@ -124,6 +136,37 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     }
   }, [ready]);
 
+  useEffect(() => {
+    if (!AUTH_ENABLED) return;
+    if (!token) {
+      lastVerifiedToken.current = null;
+      setServerStatus("idle");
+      return;
+    }
+    if (lastVerifiedToken.current === token) {
+      setServerStatus("ok");
+      return;
+    }
+    let alive = true;
+    setServerStatus("checking");
+    apiGet<AuthMeResponse>("/auth/me")
+      .then(() => {
+        if (!alive) return;
+        lastVerifiedToken.current = token;
+        setServerStatus("ok");
+      })
+      .catch(() => {
+        if (!alive) return;
+        clearStoredToken();
+        setAuth({ token: null, email: null, shouldClear: false });
+        setError("No se pudo validar permisos con el backend.");
+        setServerStatus("error");
+      });
+    return () => {
+      alive = false;
+    };
+  }, [token]);
+
   const handleLogout = () => {
     clearStoredToken();
     setAuth({ token: null, email: null, shouldClear: false });
@@ -147,7 +190,24 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (token) {
+  if (token && serverStatus === "checking") {
+    return (
+      <>
+        <Script
+          src="https://accounts.google.com/gsi/client"
+          strategy="afterInteractive"
+          onLoad={() => setReady(true)}
+        />
+        <div className="min-h-screen grid place-items-center bg-[color:var(--surface-90)] px-6">
+          <div className="w-full max-w-md rounded-3xl border border-[color:var(--border-70)] bg-[color:var(--surface-85)] p-6 text-sm text-[color:var(--text-60)]">
+            Validando permisos...
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  if (token && serverStatus === "ok") {
     return (
       <>
         <Script
