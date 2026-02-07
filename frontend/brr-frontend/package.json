@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "lucide-react": "^0.563.0",
-    "next": "16.1.4",
+    "next": "16.1.6",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "recharts": "^3.7.0"
@@ -29,13 +29,13 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^5.0.2",
-    "@vitest/coverage-v8": "^2.1.5",
+    "@vitest/coverage-v8": "^4.0.18",
     "eslint": "^9",
-    "eslint-config-next": "16.1.4",
+    "eslint-config-next": "16.1.6",
     "jsdom": "^25.0.1",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vite": "^6.0.0",
-    "vitest": "^2.1.5"
+    "vitest": "^4.0.18"
   }
 }

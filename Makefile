@@ -19,6 +19,26 @@ endif
 HOST ?= 127.0.0.1
 API_PORT ?= 8000
 FRONT_PORT ?= 3000
+
+# --- Cloud Run defaults (override via env) ---
+GCP_PROJECT ?= global-overview-radar
+GCP_REGION ?= europe-southwest1
+BACKEND_SERVICE ?= gor-backend
+FRONTEND_SERVICE ?= gor-frontend
+FRONTEND_SA ?= gor-frontend-sa@$(GCP_PROJECT).iam.gserviceaccount.com
+BACKEND_MAX_INSTANCES ?= 1
+FRONTEND_MAX_INSTANCES ?= 1
+BACKEND_CONCURRENCY ?= 2
+FRONTEND_CONCURRENCY ?= 2
+BACKEND_MEMORY ?= 768Mi
+FRONTEND_MEMORY ?= 768Mi
+BACKEND_CPU ?= 1
+FRONTEND_CPU ?= 1
+AUTH_GOOGLE_CLIENT_ID ?=
+AUTH_ALLOWED_EMAILS ?=
+AUTH_ALLOWED_DOMAINS ?= gmail.com
+AUTH_ALLOWED_GROUPS ?=
+NEXT_PUBLIC_ALLOWED_DOMAINS ?=
 BENCH_DIR ?= docs/benchmarks
 BENCH_ITERATIONS ?= 40
 BENCH_WARMUP ?= 5
@@ -31,7 +51,7 @@ VISUAL_QA_OUT ?= docs/visual-qa
 
 .DEFAULT_GOAL := help
 
-.PHONY: help venv install install-backend install-front env ensure-backend ensure-front ingest reputation-ingest serve serve-back dev-back dev-front build-front start-front lint lint-back lint-front typecheck typecheck-back typecheck-front format format-back format-front check test test-back test-front test-coverage test-coverage-back test-coverage-front bench bench-baseline visual-qa clean reset
+.PHONY: help venv install install-backend install-front env ensure-backend ensure-front ingest reputation-ingest serve serve-back dev-back dev-front build-front start-front lint lint-back lint-front typecheck typecheck-back typecheck-front format format-back format-front check test test-back test-front test-coverage test-coverage-back test-coverage-front bench bench-baseline visual-qa clean reset cloudrun-env deploy-cloudrun-back deploy-cloudrun-front deploy-cloudrun
 
 help:
 	@echo "Make targets disponibles:"
@@ -63,6 +83,10 @@ help:
 	@echo "  make bench-baseline  - Generar baseline backend"
 	@echo "  make visual-qa       - Capturas headless mobile (frontend)"
 	@echo "  make clean           - Eliminar venv, caches, node_modules (frontend)"
+	@echo "  make cloudrun-env    - Generar backend/reputation/cloudrun.env desde .env.reputation"
+	@echo "  make deploy-cloudrun-back  - Deploy backend en Cloud Run (usa env vars)"
+	@echo "  make deploy-cloudrun-front - Deploy frontend en Cloud Run (usa env vars)"
+	@echo "  make deploy-cloudrun       - Deploy backend + frontend (Cloud Run)"
 	@echo ""
 	@echo "Notas:"
 	@echo " - Levanta backend: make venv && make install-backend && make env && make dev-back"
@@ -102,6 +126,63 @@ env:
 ensure-backend: install-backend
 
 ensure-front: install-front
+	@true
+
+# -------------------------
+# Cloud Run helpers
+# -------------------------
+cloudrun-env:
+	@echo "==> Generando backend/reputation/cloudrun.env..."
+	@awk -F= '$$0 !~ /^[[:space:]]*#/ && $$0 ~ /=/ {print $$0}' backend/reputation/.env.reputation > backend/reputation/cloudrun.env
+	@echo "==> cloudrun.env generado."
+
+deploy-cloudrun-back: cloudrun-env
+	@echo "==> Deploy backend en Cloud Run..."
+	@if [ -z "$(AUTH_GOOGLE_CLIENT_ID)" ]; then \
+		echo "Falta AUTH_GOOGLE_CLIENT_ID (exporta la variable)."; \
+		exit 1; \
+	fi
+	@gcloud run deploy $(BACKEND_SERVICE) \
+		--project $(GCP_PROJECT) \
+		--region $(GCP_REGION) \
+		--source . \
+		--no-allow-unauthenticated \
+		--min-instances 0 \
+		--max-instances $(BACKEND_MAX_INSTANCES) \
+		--concurrency $(BACKEND_CONCURRENCY) \
+		--cpu $(BACKEND_CPU) \
+		--memory $(BACKEND_MEMORY) \
+		--cpu-throttling \
+		--env-vars-file backend/reputation/cloudrun.env \
+		--update-env-vars AUTH_ENABLED=true,AUTH_GOOGLE_CLIENT_ID=$(AUTH_GOOGLE_CLIENT_ID),AUTH_ALLOWED_EMAILS=$(AUTH_ALLOWED_EMAILS),AUTH_ALLOWED_DOMAINS=$(AUTH_ALLOWED_DOMAINS),AUTH_ALLOWED_GROUPS=$(AUTH_ALLOWED_GROUPS)
+
+deploy-cloudrun-front:
+	@echo "==> Deploy frontend en Cloud Run..."
+	@if [ -z "$(AUTH_GOOGLE_CLIENT_ID)" ]; then \
+		echo "Falta AUTH_GOOGLE_CLIENT_ID (exporta la variable)."; \
+		exit 1; \
+	fi
+	@BACKEND_URL=$$(gcloud run services describe $(BACKEND_SERVICE) --project $(GCP_PROJECT) --region $(GCP_REGION) --format 'value(status.url)'); \
+	if [ -z "$$BACKEND_URL" ]; then \
+		echo "No se pudo obtener BACKEND_URL. Deploy del backend primero."; \
+		exit 1; \
+	fi; \
+	gcloud run deploy $(FRONTEND_SERVICE) \
+		--project $(GCP_PROJECT) \
+		--region $(GCP_REGION) \
+		--source frontend/brr-frontend \
+		--service-account $(FRONTEND_SA) \
+		--allow-unauthenticated \
+		--min-instances 0 \
+		--max-instances $(FRONTEND_MAX_INSTANCES) \
+		--concurrency $(FRONTEND_CONCURRENCY) \
+		--cpu $(FRONTEND_CPU) \
+		--memory $(FRONTEND_MEMORY) \
+		--cpu-throttling \
+		--set-env-vars API_PROXY_TARGET=$$BACKEND_URL,USE_SERVER_PROXY=true \
+		--set-build-env-vars NEXT_PUBLIC_AUTH_ENABLED=true,NEXT_PUBLIC_GOOGLE_CLIENT_ID=$(AUTH_GOOGLE_CLIENT_ID),NEXT_PUBLIC_ALLOWED_EMAILS=$(AUTH_ALLOWED_EMAILS),NEXT_PUBLIC_ALLOWED_DOMAINS=$(NEXT_PUBLIC_ALLOWED_DOMAINS)
+
+deploy-cloudrun: deploy-cloudrun-back deploy-cloudrun-front
 	@true
 
 # -------------------------
@@ -167,7 +248,7 @@ typecheck: typecheck-back typecheck-front
 
 typecheck-back:
 	@echo "==> Typecheck backend (mypy + pyright)..."
-	$(PY) -m mypy .
+	$(PY) -m mypy --config-file backend/pyproject.toml backend
 	$(PY) -m pyright
 
 typecheck-front:

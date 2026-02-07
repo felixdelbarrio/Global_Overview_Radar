@@ -8,6 +8,7 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from reputation.auth import require_google_user
 from reputation.config import (
     compute_config_hash,
     load_business_config,
@@ -23,7 +24,7 @@ def _refresh_settings() -> None:
     reload_reputation_settings()
 
 
-router = APIRouter(dependencies=[Depends(_refresh_settings)])
+router = APIRouter(dependencies=[Depends(_refresh_settings), Depends(require_google_user)])
 
 _INGEST_JOBS: dict[str, dict[str, Any]] = {}
 _INGEST_LOCK = Lock()

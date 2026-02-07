@@ -2,7 +2,7 @@
 
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { expect, it, vi } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 
 vi.mock("next/font/google", () => ({
   Space_Grotesk: () => ({ variable: "--font-display" }),
@@ -15,13 +15,44 @@ vi.mock("next/script", () => ({
   ),
 }));
 
-import RootLayout from "@/app/layout";
+vi.mock("@/components/AuthGate", () => ({
+  AuthGate: ({ children }: { children: React.ReactNode }) => (
+    <div data-auth-gate>{children}</div>
+  ),
+}));
 
-it("renders root layout with children", () => {
+const originalEnv = { ...process.env };
+
+const loadLayout = async (authEnabled: boolean) => {
+  vi.resetModules();
+  process.env = {
+    ...originalEnv,
+    NEXT_PUBLIC_AUTH_ENABLED: authEnabled ? "true" : "false",
+  };
+  return (await import("@/app/layout")).default;
+};
+
+afterEach(() => {
+  process.env = { ...originalEnv };
+});
+
+it("renders root layout with children when auth disabled", async () => {
+  const RootLayout = await loadLayout(false);
   const html = renderToStaticMarkup(
     <RootLayout>
       <div>Hola</div>
     </RootLayout>
   );
   expect(html).toContain("Hola");
+  expect(html).not.toContain("data-auth-gate");
+});
+
+it("wraps children with AuthGate when auth enabled", async () => {
+  const RootLayout = await loadLayout(true);
+  const html = renderToStaticMarkup(
+    <RootLayout>
+      <div>Hola</div>
+    </RootLayout>
+  );
+  expect(html).toContain("data-auth-gate");
 });

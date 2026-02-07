@@ -147,7 +147,7 @@ def configure_logging(force: bool = False) -> None:
         logger.addHandler(handler)
 
 
-class _HotReloadingLoggerAdapter(logging.LoggerAdapter):
+class _HotReloadingLoggerAdapter(logging.LoggerAdapter[logging.Logger]):
     def isEnabledFor(self, level: int) -> bool:  # noqa: N802
         configure_logging()
         return self.logger.isEnabledFor(level)
@@ -180,7 +180,7 @@ class _HotReloadingLoggerAdapter(logging.LoggerAdapter):
         )
 
 
-def get_logger(name: str | None = None) -> logging.LoggerAdapter:
+def get_logger(name: str | None = None) -> logging.LoggerAdapter[logging.Logger]:
     """Devuelve un logger configurado para el paquete."""
     configure_logging()
     return _HotReloadingLoggerAdapter(logging.getLogger(name or "reputation"), {})

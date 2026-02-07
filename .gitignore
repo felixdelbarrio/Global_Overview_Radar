@@ -4,6 +4,15 @@
 .env
 .env.*
 !**/.env*.example
+**/cloudrun.env
+**/cloudrun*.env
+**/client_secret*.json
+**/oauth_client*.json
+**/service-account*.json
+**/*credentials*.json
+**/*.key
+**/*.pem
+**/*.p12
 
 ########################################
 # Python
