@@ -18,13 +18,15 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@/lib/api", () => ({
   apiGet: vi.fn(),
+  apiGetCached: vi.fn(),
   apiPost: vi.fn(),
 }));
 
-import { apiGet, apiPost } from "@/lib/api";
+import { apiGet, apiGetCached, apiPost } from "@/lib/api";
 import { Shell } from "@/components/Shell";
 
 const apiGetMock = vi.mocked(apiGet);
+const apiGetCachedMock = vi.mocked(apiGetCached);
 const apiPostMock = vi.mocked(apiPost);
 
 const settingsResponse = {
@@ -49,7 +51,7 @@ const settingsResponse = {
 
 describe("Shell settings and ingest", () => {
   beforeEach(() => {
-    apiGetMock.mockImplementation((path: string) => {
+    const handleGet = (path: string) => {
       if (path.startsWith("/reputation/profiles")) {
         return Promise.resolve({
           active: { source: "default", profiles: ["banking"], profile_key: "banking" },
@@ -60,7 +62,9 @@ describe("Shell settings and ingest", () => {
         return Promise.resolve(settingsResponse);
       }
       return Promise.resolve({});
-    });
+    };
+    apiGetMock.mockImplementation(handleGet);
+    apiGetCachedMock.mockImplementation(handleGet);
 
     apiPostMock.mockImplementation((path: string) => {
       if (path === "/ingest/reputation") {

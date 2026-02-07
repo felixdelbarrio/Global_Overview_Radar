@@ -6,19 +6,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import {
-  CartesianGrid,
-  Legend,
-  Line,
-  LineChart,
-  ReferenceLine,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
-import type { Formatter } from "recharts/types/component/DefaultTooltipContent";
-import type { ValueType } from "recharts/types/component/DefaultTooltipContent";
+import dynamic from "next/dynamic";
 import {
   ArrowUpRight,
   Building2,
@@ -38,7 +26,7 @@ import {
   X,
 } from "lucide-react";
 import { Shell } from "@/components/Shell";
-import { apiGet, apiPost } from "@/lib/api";
+import { apiGet, apiGetCached, apiPost } from "@/lib/api";
 import {
   dispatchIngestStarted,
   INGEST_SUCCESS_EVENT,
@@ -86,6 +74,15 @@ type DashboardMode = "dashboard" | "sentiment";
 type SentimentViewProps = {
   mode?: DashboardMode;
 };
+
+const SentimentChart = dynamic(
+  () => import("@/components/SentimentCharts").then((mod) => mod.SentimentChart),
+  { ssr: false }
+);
+const DashboardChart = dynamic(
+  () => import("@/components/SentimentCharts").then((mod) => mod.DashboardChart),
+  { ssr: false }
+);
 
 type DashboardMention = {
   key: string;
@@ -140,10 +137,12 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
   const lastGeoRef = useRef<string | null>(null);
   const sentimentRef = useRef<SentimentFilter>(sentiment);
   const sourcesRef = useRef<string[]>([]);
+  const chartSectionRef = useRef<HTMLDivElement | null>(null);
   const [sources, setSources] = useState<string[]>([]);
   const [overrideRefresh, setOverrideRefresh] = useState(0);
   const [reputationRefresh, setReputationRefresh] = useState(0);
   const [profileRefresh, setProfileRefresh] = useState(0);
+  const [chartsVisible, setChartsVisible] = useState(false);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
   const [reputationIngesting, setReputationIngesting] = useState(false);
   const [reputationIngestNote, setReputationIngestNote] = useState<string | null>(null);
@@ -185,6 +184,26 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
     if (sentiment !== "all") setSentiment("all");
     if (actor !== "all") setActor("all");
   }, [isDashboard, sentiment, actor]);
+
+  useEffect(() => {
+    if (chartsVisible) return;
+    const node = chartSectionRef.current;
+    if (!node || typeof IntersectionObserver === "undefined") {
+      setChartsVisible(true);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setChartsVisible(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "200px" }
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [chartsVisible]);
 
   useEffect(() => {
     if (typeof window === "undefined") return undefined;
@@ -277,7 +296,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
 
   useEffect(() => {
     let alive = true;
-    apiGet<ReputationMeta>("/reputation/meta")
+    apiGetCached<ReputationMeta>("/reputation/meta", { ttlMs: 60000 })
       .then((meta) => {
         if (!alive) return;
         setActorPrincipal(meta.actor_principal ?? null);
@@ -1131,8 +1150,13 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
             </button>
           </div>
         )}
-        <div className="mt-3 h-72 min-h-[240px]">
-          {chartLoading ? (
+        <div
+          ref={chartSectionRef}
+          className="mt-3 h-72 min-h-[240px]"
+        >
+          {!chartsVisible ? (
+            <div className="h-full rounded-[22px] border border-[color:var(--border-60)] bg-[color:var(--surface-70)] animate-pulse" />
+          ) : chartLoading ? (
             <div className="h-full rounded-[22px] border border-[color:var(--border-60)] bg-[color:var(--surface-70)] animate-pulse" />
           ) : mode === "dashboard" ? (
             <DashboardChart
@@ -2460,131 +2484,6 @@ function buildComparativeSeries(
   }
 
   return result;
-}
-
-function SentimentChart({
-  data,
-  principalLabel,
-  actorLabel,
-}: {
-  data: { date: string; principal: number | null; actor: number | null }[];
-  principalLabel: string;
-  actorLabel: string;
-}) {
-  const tooltipFormatter: Formatter<ValueType, string | number> = (value) => {
-    if (typeof value === "number") {
-      return value.toFixed(2);
-    }
-    return value ?? "";
-  };
-
-  if (!data.length) {
-    return (
-      <div className="h-full grid place-items-center text-sm text-[color:var(--text-45)]">
-        No hay datos para el periodo seleccionado.
-      </div>
-    );
-  }
-
-  return (
-    <ResponsiveContainer width="100%" height="100%">
-      <LineChart data={data}>
-        <CartesianGrid stroke="var(--chart-grid)" vertical={false} />
-        <XAxis
-          dataKey="date"
-          tickFormatter={(d: string) => d.slice(5)}
-          fontSize={11}
-        />
-        <YAxis
-          domain={["auto", "auto"]}
-          fontSize={11}
-          tickFormatter={(v: number) => v.toFixed(2)}
-        />
-        <ReferenceLine y={0} stroke="var(--chart-reference)" strokeDasharray="3 3" />
-        <Tooltip
-          formatter={tooltipFormatter}
-          labelFormatter={(label) => `Fecha ${String(label ?? "")}`}
-          contentStyle={{
-            borderRadius: 16,
-            border: "1px solid var(--border)",
-            boxShadow: "var(--shadow-tooltip)",
-          }}
-        />
-        <Legend wrapperStyle={{ fontSize: 12 }} />
-        <Line
-          type="monotone"
-          dataKey="principal"
-          name={principalLabel}
-          stroke="#004481"
-          strokeWidth={2}
-          dot={false}
-          connectNulls
-        />
-        <Line
-          type="monotone"
-          dataKey="actor"
-          name={actorLabel}
-          stroke="#2dcccd"
-          strokeWidth={2}
-          dot={false}
-          strokeDasharray="6 4"
-          connectNulls
-        />
-      </LineChart>
-    </ResponsiveContainer>
-  );
-}
-
-function DashboardChart({
-  data,
-  sentimentLabel,
-}: {
-  data: { date: string; sentiment: number | null }[];
-  sentimentLabel: string;
-}) {
-  const tooltipFormatter: Formatter<ValueType, string | number> = (value) => {
-    if (typeof value === "number") {
-      return value.toFixed(2);
-    }
-    return value ?? "";
-  };
-
-  if (!data.length) {
-    return (
-      <div className="h-full grid place-items-center text-sm text-[color:var(--text-45)]">
-        No hay datos para el periodo seleccionado.
-      </div>
-    );
-  }
-
-  return (
-    <ResponsiveContainer width="100%" height="100%">
-      <LineChart data={data}>
-        <CartesianGrid stroke="var(--chart-grid)" vertical={false} />
-        <XAxis dataKey="date" tickFormatter={(d: string) => d.slice(5)} fontSize={11} />
-        <YAxis yAxisId="sentiment" fontSize={11} />
-        <Tooltip
-          formatter={tooltipFormatter}
-          contentStyle={{
-            borderRadius: 16,
-            border: "1px solid var(--border)",
-            boxShadow: "var(--shadow-tooltip)",
-          }}
-        />
-        <Legend wrapperStyle={{ fontSize: 12 }} />
-        <Line
-          type="monotone"
-          dataKey="sentiment"
-          name={sentimentLabel}
-          stroke="#004481"
-          strokeWidth={2.5}
-          dot={false}
-          yAxisId="sentiment"
-          connectNulls
-        />
-      </LineChart>
-    </ResponsiveContainer>
-  );
 }
 
 function DashboardMentionCard({

@@ -18,20 +18,23 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@/lib/api", () => ({
   apiGet: vi.fn(),
+  apiGetCached: vi.fn(),
   apiPost: vi.fn(),
 }));
 
 import { usePathname } from "next/navigation";
-import { apiGet } from "@/lib/api";
+import { apiGet, apiGetCached } from "@/lib/api";
 import { Shell } from "@/components/Shell";
 
 const usePathnameMock = vi.mocked(usePathname);
 const apiGetMock = vi.mocked(apiGet);
+const apiGetCachedMock = vi.mocked(apiGetCached);
 
 describe("Shell", () => {
   beforeEach(() => {
     usePathnameMock.mockReturnValue("/");
     apiGetMock.mockResolvedValue({});
+    apiGetCachedMock.mockResolvedValue({});
   });
 
   it("renders nav items and highlights active route", async () => {

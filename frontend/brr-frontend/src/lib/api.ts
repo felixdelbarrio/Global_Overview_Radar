@@ -10,6 +10,14 @@ import { getStoredToken } from "@/lib/auth";
 /** Base de la API; permite proxy local con /api. */
 export const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api";
 
+type CacheEntry = {
+  expiresAt: number;
+  value?: unknown;
+  promise?: Promise<unknown>;
+};
+
+const API_CACHE = new Map<string, CacheEntry>();
+
 /**
  * Ejecuta un GET y devuelve JSON tipado.
  * @param path Ruta relativa del endpoint.
@@ -32,6 +40,46 @@ export async function apiGet<T>(path: string): Promise<T> {
 
   logger.debug("apiGet -> ok", () => ({ path, status: res.status }));
   return (await res.json()) as T;
+}
+
+export async function apiGetCached<T>(
+  path: string,
+  options?: { ttlMs?: number; force?: boolean }
+): Promise<T> {
+  const ttlMs = options?.ttlMs ?? 60000;
+  const token = getStoredToken();
+  const url = `${API_BASE}${path.startsWith("/") ? path : `/${path}`}`;
+  const cacheKey = `${token ?? "anon"}:${url}`;
+  const now = Date.now();
+
+  if (!options?.force) {
+    const cached = API_CACHE.get(cacheKey);
+    if (cached) {
+      if (cached.value !== undefined && cached.expiresAt > now) {
+        return cached.value as T;
+      }
+      if (cached.promise) {
+        return cached.promise as Promise<T>;
+      }
+    }
+  }
+
+  const promise = apiGet<T>(path)
+    .then((value) => {
+      API_CACHE.set(cacheKey, { value, expiresAt: now + ttlMs });
+      return value;
+    })
+    .catch((err) => {
+      API_CACHE.delete(cacheKey);
+      throw err;
+    });
+
+  API_CACHE.set(cacheKey, { promise, expiresAt: now + ttlMs });
+  return promise;
+}
+
+export function clearApiCache(): void {
+  API_CACHE.clear();
 }
 
 /**
