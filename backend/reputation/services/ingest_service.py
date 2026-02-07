@@ -34,10 +34,14 @@ from reputation.collectors.reddit import RedditCollector
 from reputation.collectors.trustpilot import TrustpilotCollector
 from reputation.collectors.twitter import TwitterCollector
 from reputation.collectors.utils import (
+    CompiledKeywords,
+    compile_keywords,
     http_get_json,
     http_get_text,
+    match_compiled,
     match_keywords,
     normalize_text,
+    tokenize,
 )
 from reputation.collectors.youtube import YouTubeCollector
 from reputation.config import (
@@ -372,10 +376,12 @@ class ReputationIngestService:
             for collector in collector_list:
                 try:
                     started = time.perf_counter()
-                    batch = list(collector.collect())
+                    count = 0
+                    for entry in collector.collect():
+                        items.append(entry)
+                        count += 1
                     duration = time.perf_counter() - started
-                    items.extend(batch)
-                    maybe_note(collector, duration, len(batch))
+                    maybe_note(collector, duration, count)
                 except Exception as exc:  # pragma: no cover - defensive
                     notes.append(f"{collector.source_name}: error {exc}")
                     logger.warning("Collector %s failed: %s", collector.source_name, exc)
@@ -1378,11 +1384,16 @@ class ReputationIngestService:
         terms = cls._load_hard_exclude_terms(cfg)
         if not terms or not items:
             return items
+        compiled_terms = compile_keywords(terms)
         filtered: list[ReputationItem] = []
         dropped = 0
         for item in items:
             text = f"{item.title or ''} {item.text or ''}".strip()
-            if text and match_keywords(text, terms):
+            if not text:
+                filtered.append(item)
+                continue
+            tokens = cls._text_tokens(text)
+            if match_compiled(tokens, compiled_terms):
                 dropped += 1
                 continue
             filtered.append(item)
@@ -1412,6 +1423,10 @@ class ReputationIngestService:
         guard_actors = cls._load_guard_actors(cfg, alias_map)
         allowed_by_geo, known_actors = cls._build_actor_geo_allowlist(cfg, alias_map)
         source_context_terms: dict[str, list[str]] = {}
+        source_context_compiled: dict[str, CompiledKeywords] = {}
+        has_context_terms = bool(context_terms)
+        compiled_context_terms = compile_keywords(context_terms) if has_context_terms else None
+        compiled_noise_terms = compile_keywords(noise_terms) if noise_terms else None
         if require_context_sources:
             for source in require_context_sources:
                 extra_terms: list[str] = []
@@ -1424,6 +1439,8 @@ class ReputationIngestService:
                         ]
                 combined = list(dict.fromkeys([*context_terms, *extra_terms]))
                 source_context_terms[source] = combined
+                if combined:
+                    source_context_compiled[source] = compile_keywords(combined)
         filtered: list[ReputationItem] = []
         dropped_actor = 0
         dropped_actor_text = 0
@@ -1434,19 +1451,27 @@ class ReputationIngestService:
 
         for item in items:
             text = f"{item.title or ''} {item.text or ''}".strip()
+            has_text = bool(text)
+            text_tokens = cls._text_tokens(text) if has_text else set()
             if item.source in require_actor_sources and not cls._item_has_actor(item):
                 dropped_actor += 1
                 continue
             if item.source in require_actor_sources and not cls._item_actor_in_text(
-                item, alias_map, aliases_by_canonical
+                item, alias_map, aliases_by_canonical, text_tokens=text_tokens
             ):
                 dropped_actor_text += 1
                 continue
             if require_context_sources and item.source in require_context_sources:
                 terms = source_context_terms.get(item.source, context_terms)
-                if text and terms and not match_keywords(text, terms):
-                    dropped_context += 1
-                    continue
+                if has_text and terms:
+                    compiled_terms = source_context_compiled.get(item.source)
+                    if compiled_terms is None:
+                        compiled_terms = compiled_context_terms
+                    if compiled_terms is not None and not match_compiled(
+                        text_tokens, compiled_terms
+                    ):
+                        dropped_context += 1
+                        continue
             if (
                 allowed_by_geo
                 and item.geo
@@ -1459,18 +1484,26 @@ class ReputationIngestService:
             if (
                 guard_actors
                 and cls._item_has_guard_actor(item, guard_actors, alias_map)
-                and text
-                and context_terms
-                and not match_keywords(text, context_terms)
+                and has_text
+                and has_context_terms
+                and compiled_context_terms is not None
+                and not match_compiled(text_tokens, compiled_context_terms)
             ):
                 dropped_guard += 1
                 continue
             if (
                 noise_terms
                 and item.source in noise_sources
-                and text
-                and match_keywords(text, noise_terms)
-                and (not context_terms or not match_keywords(text, context_terms))
+                and has_text
+                and compiled_noise_terms is not None
+                and match_compiled(text_tokens, compiled_noise_terms)
+                and (
+                    not has_context_terms
+                    or (
+                        compiled_context_terms is not None
+                        and not match_compiled(text_tokens, compiled_context_terms)
+                    )
+                )
             ):
                 dropped_noise += 1
                 continue
@@ -1529,28 +1562,48 @@ class ReputationIngestService:
                     candidates.append(actor.strip())
         return list(dict.fromkeys(candidates))
 
+    @staticmethod
+    def _text_tokens(text: str) -> set[str]:
+        if not text:
+            return set()
+        return set(tokenize(text))
+
+    @staticmethod
+    def _tokens_match_keyword(tokens: set[str], keyword: str) -> bool:
+        compiled = compile_keywords([keyword])
+        return match_compiled(tokens, compiled)
+
     @classmethod
     def _item_actor_in_text(
         cls,
         item: ReputationItem,
         alias_map: dict[str, str],
         aliases_by_canonical: dict[str, list[str]],
+        text_tokens: set[str] | None = None,
     ) -> bool:
-        text = f"{item.title or ''} {item.text or ''}".strip()
-        if not text:
+        if text_tokens is None:
+            text = f"{item.title or ''} {item.text or ''}".strip()
+            if not text:
+                return False
+            text_tokens = cls._text_tokens(text)
+        if not text_tokens:
             return False
         candidates = cls._item_actor_candidates(item)
         if not candidates:
             return False
         for candidate in candidates:
-            if match_keywords(text, [candidate]):
+            if cls._tokens_match_keyword(text_tokens, candidate):
                 return True
             canonical = canonicalize_actor(candidate, alias_map) if alias_map else candidate
-            if canonical and canonical != candidate and match_keywords(text, [canonical]):
+            if (
+                canonical
+                and canonical != candidate
+                and cls._tokens_match_keyword(text_tokens, canonical)
+            ):
                 return True
             aliases = aliases_by_canonical.get(canonical) or []
             for alias in aliases:
-                if match_keywords(text, [alias]):
+                if cls._tokens_match_keyword(text_tokens, alias):
                     return True
         return False
 

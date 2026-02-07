@@ -8,6 +8,7 @@ import ssl
 import time
 import unicodedata
 from collections import OrderedDict
+from dataclasses import dataclass
 from datetime import datetime
 from email.utils import parsedate_to_datetime
 from threading import Lock
@@ -345,6 +346,35 @@ def normalize_text(text: str) -> str:
 
 def tokenize(text: str) -> list[str]:
     return normalize_text(text).split()
+
+
+@dataclass(frozen=True)
+class CompiledKeywords:
+    tokens: list[list[str]]
+    has_any: bool
+
+
+def compile_keywords(keywords: Iterable[str]) -> CompiledKeywords:
+    compiled: list[list[str]] = []
+    seen_any = False
+    for keyword in keywords:
+        seen_any = True
+        if not keyword:
+            continue
+        ktokens = [t for t in tokenize(keyword) if t not in _STOPWORDS and len(t) > 1]
+        if ktokens:
+            compiled.append(ktokens)
+    return CompiledKeywords(tokens=compiled, has_any=seen_any)
+
+
+def match_compiled(tokens: set[str], compiled: CompiledKeywords) -> bool:
+    if not compiled.has_any:
+        return True
+    if not tokens:
+        return False
+    if not compiled.tokens:
+        return False
+    return any(all(token in tokens for token in ktokens) for ktokens in compiled.tokens)
 
 
 def match_keywords(text: str | None, keywords: Iterable[str]) -> bool:

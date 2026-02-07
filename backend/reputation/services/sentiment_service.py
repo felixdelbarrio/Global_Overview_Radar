@@ -11,7 +11,13 @@ from typing import Any, Iterable
 import httpx
 
 from reputation.actors import actor_principal_canonicals, build_actor_aliases_by_canonical
-from reputation.collectors.utils import match_keywords, normalize_text
+from reputation.collectors.utils import (
+    CompiledKeywords,
+    compile_keywords,
+    match_compiled,
+    normalize_text,
+    tokenize,
+)
 from reputation.models import ReputationItem
 
 logger = logging.getLogger(__name__)
@@ -573,6 +579,8 @@ class ReputationSentimentService:
             )
             if cleaned:
                 self._actor_aliases[name] = cleaned
+        self._compiled_keyword_cache: dict[str, CompiledKeywords] = {}
+        self._prime_keyword_cache()
 
         self._geos = [
             g.strip() for g in cfg.get("geografias", []) if isinstance(g, str) and g.strip()
@@ -746,6 +754,42 @@ class ReputationSentimentService:
             )
         self._maybe_warn_llm_disabled()
 
+    def _prime_keyword_cache(self) -> None:
+        def add_keyword(value: str | None) -> None:
+            if not value:
+                return
+            cleaned = value.strip()
+            if not cleaned or cleaned in self._compiled_keyword_cache:
+                return
+            self._compiled_keyword_cache[cleaned] = compile_keywords([cleaned])
+
+        for name in self._principal_canonicals:
+            add_keyword(name)
+            for alias in self._actor_aliases.get(name, []):
+                add_keyword(alias)
+        for name in self._global_actors:
+            add_keyword(name)
+            for alias in self._actor_aliases.get(name, []):
+                add_keyword(alias)
+        for names in self._actors_by_geo.values():
+            for name in names:
+                add_keyword(name)
+                for alias in self._actor_aliases.get(name, []):
+                    add_keyword(alias)
+
+    def _compiled_keyword(self, value: str) -> CompiledKeywords:
+        cached = self._compiled_keyword_cache.get(value)
+        if cached is None:
+            cached = compile_keywords([value])
+            self._compiled_keyword_cache[value] = cached
+        return cached
+
+    @staticmethod
+    def _text_tokens(text: str) -> set[str]:
+        if not text:
+            return set()
+        return set(tokenize(text))
+
     def analyze_items(self, items: Iterable[ReputationItem]) -> list[ReputationItem]:
         items_list = list(items)
         if not items_list:
@@ -889,17 +933,21 @@ class ReputationSentimentService:
             return []
         if isinstance(item.signals, dict) and item.signals.get("actor_source"):
             return actors
+        text_tokens = self._text_tokens(text)
         kept: list[str] = []
         for actor in actors:
-            if self._actor_in_text(actor, text):
+            if self._actor_in_text(actor, text, text_tokens=text_tokens):
                 kept.append(actor)
         return kept
 
-    def _actor_in_text(self, actor: str, text: str) -> bool:
-        if match_keywords(text, [actor]):
+    def _actor_in_text(self, actor: str, text: str, text_tokens: set[str] | None = None) -> bool:
+        tokens = text_tokens if text_tokens is not None else self._text_tokens(text)
+        if not tokens:
+            return False
+        if match_compiled(tokens, self._compiled_keyword(actor)):
             return True
         aliases = self._actor_aliases.get(actor) or []
-        return any(match_keywords(text, [alias]) for alias in aliases)
+        return any(match_compiled(tokens, self._compiled_keyword(alias)) for alias in aliases)
 
     def _filter_actors_by_context(self, text: str, actors: list[str]) -> list[str]:
         if not actors or not self._context_guard_actors:
@@ -972,14 +1020,21 @@ class ReputationSentimentService:
         scoped.extend(self._global_actors)
         scoped.extend(self._principal_canonicals)
 
+        text_tokens = self._text_tokens(text)
+        hint_tokens = [self._text_tokens(hint) for hint in hints if hint]
+
+        def hint_matches(keyword: str) -> bool:
+            compiled = self._compiled_keyword(keyword)
+            return any(tokens and match_compiled(tokens, compiled) for tokens in hint_tokens)
+
         hint_actors: list[str] = []
         if hints:
             for name in scoped:
-                matched = any(match_keywords(hint, [name]) for hint in hints)
+                matched = hint_matches(name)
                 if not matched:
                     aliases = self._actor_aliases.get(name) or []
                     for alias in aliases:
-                        if any(match_keywords(hint, [alias]) for hint in hints):
+                        if hint_matches(alias):
                             matched = True
                             break
                 if matched:
@@ -991,25 +1046,24 @@ class ReputationSentimentService:
         for name in scoped:
             if name in actors:
                 continue
-            matched = match_keywords(text, [name])
+            matched = bool(text_tokens) and match_compiled(
+                text_tokens, self._compiled_keyword(name)
+            )
             if not matched:
                 aliases = self._actor_aliases.get(name) or []
                 for alias in aliases:
-                    if match_keywords(text, [alias]):
+                    if text_tokens and match_compiled(text_tokens, self._compiled_keyword(alias)):
                         matched = True
                         break
             if not matched and hints:
-                for hint in hints:
-                    if match_keywords(hint, [name]):
-                        matched = True
-                        break
+                if hint_matches(name):
+                    matched = True
+                else:
                     aliases = self._actor_aliases.get(name) or []
                     for alias in aliases:
-                        if isinstance(alias, str) and match_keywords(hint, [alias]):
+                        if isinstance(alias, str) and hint_matches(alias):
                             matched = True
                             break
-                    if matched:
-                        break
             if matched:
                 actors.append(name)
 

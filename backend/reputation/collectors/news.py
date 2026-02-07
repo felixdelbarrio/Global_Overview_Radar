@@ -5,14 +5,16 @@ from typing import Any, Iterable
 from reputation.collectors.base import ReputationCollector
 from reputation.collectors.utils import (
     build_url,
+    compile_keywords,
     http_get_json,
     http_get_text,
-    match_keywords,
+    match_compiled,
     parse_datetime,
     parse_rss,
     rss_debug_enabled,
     rss_is_query_feed,
     rss_source,
+    tokenize,
 )
 from reputation.logging_utils import get_logger
 from reputation.models import ReputationItem
@@ -38,6 +40,7 @@ class NewsCollector(ReputationCollector):
         self._api_key = api_key
         self._queries = queries
         self._filter_terms = filter_terms or queries
+        self._compiled_filter_terms = compile_keywords(self._filter_terms)
         self._language = language
         self._max_articles = max(0, max_articles)
         self._sources = sources
@@ -142,7 +145,10 @@ class NewsCollector(ReputationCollector):
         if meta and (meta.get("query") or meta.get("entity")):
             return True
         text = f"{entry.get('title', '')} {entry.get('summary', '')}"
-        return match_keywords(text, self._filter_terms)
+        if not text:
+            return False
+        tokens = set(tokenize(text))
+        return match_compiled(tokens, self._compiled_filter_terms)
 
     def _map_entry(
         self, entry: dict[str, Any], rss_url: str, meta: dict[str, str]
