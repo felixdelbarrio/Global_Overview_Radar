@@ -1,0 +1,97 @@
+name: deploy_cloudrun_backend
+
+on:
+  workflow_run:
+    workflows: ["CI - Backend"]
+    types: [completed]
+
+concurrency:
+  group: deploy-cloudrun-backend-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'master'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      GCP_PROJECT: global-overview-radar
+      GCP_REGION: europe-southwest1
+      BACKEND_SERVICE: gor-backend
+
+      BACKEND_MAX_INSTANCES: "1"
+      BACKEND_CONCURRENCY: "2"
+      BACKEND_MEMORY: 768Mi
+      BACKEND_CPU: "1"
+
+      FRONTEND_SERVICE: gor-frontend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Prepare backend env file
+        env:
+          AUTH_GOOGLE_CLIENT_ID: ${{ secrets.AUTH_GOOGLE_CLIENT_ID }}
+          AUTH_ALLOWED_EMAILS: ${{ secrets.AUTH_ALLOWED_EMAILS }}
+          AUTH_ALLOWED_DOMAINS: ${{ secrets.AUTH_ALLOWED_DOMAINS }}
+          AUTH_ALLOWED_GROUPS: ${{ secrets.AUTH_ALLOWED_GROUPS }}
+        run: |
+          set -euo pipefail
+
+          awk -F= '$0 !~ /^[[:space:]]*#/ && $0 ~ /=/ {print $0}' backend/reputation/.env.reputation.example > backend/reputation/cloudrun.env
+
+          if [ -z "${AUTH_GOOGLE_CLIENT_ID:-}" ]; then
+            echo "Missing AUTH_GOOGLE_CLIENT_ID secret."
+            exit 1
+          fi
+
+          # Allow the frontend Cloud Run URL pattern:
+          CORS_REGEX="^https://${FRONTEND_SERVICE}-.+\\.a\\.run\\.app$"
+
+          cat >> backend/reputation/cloudrun.env <<EOF
+          AUTH_ENABLED=true
+          AUTH_GOOGLE_CLIENT_ID=${AUTH_GOOGLE_CLIENT_ID}
+          AUTH_ALLOWED_EMAILS=${AUTH_ALLOWED_EMAILS}
+          AUTH_ALLOWED_DOMAINS=${AUTH_ALLOWED_DOMAINS}
+          AUTH_ALLOWED_GROUPS=${AUTH_ALLOWED_GROUPS}
+          CORS_ALLOWED_ORIGIN_REGEX=${CORS_REGEX}
+          EOF
+
+      - name: Deploy backend (Cloud Run)
+        run: |
+          set -euo pipefail
+          gcloud run deploy "$BACKEND_SERVICE" \
+            --project "$GCP_PROJECT" \
+            --region "$GCP_REGION" \
+            --source backend/reputation \
+            --no-allow-unauthenticated \
+            --min-instances 0 \
+            --max-instances "$BACKEND_MAX_INSTANCES" \
+            --concurrency "$BACKEND_CONCURRENCY" \
+            --cpu "$BACKEND_CPU" \
+            --memory "$BACKEND_MEMORY" \
+            --cpu-throttling \
+            --env-vars-file backend/reputation/cloudrun.env
+
+      - name: Show backend URL
+        run: |
+          set -euo pipefail
+          gcloud run services describe "$BACKEND_SERVICE" \
+            --project "$GCP_PROJECT" \
+            --region "$GCP_REGION" \
+            --format 'value(status.url)'
