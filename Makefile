@@ -3,7 +3,8 @@
 SHELL := /bin/bash
 
 # Carga opcional de variables locales para Cloud Run (no versionado)
--include .env.cloudrun
+# (Antes: .env.cloudrun y referencias a cloudrun.enc; ahora: .env.reputation)
+-include backend/reputation/.env.reputation
 
 # --- Configuración general ---
 VENV := .venv
@@ -37,12 +38,21 @@ BACKEND_MEMORY ?= 768Mi
 FRONTEND_MEMORY ?= 768Mi
 BACKEND_CPU ?= 1
 FRONTEND_CPU ?= 1
+
 AUTH_GOOGLE_CLIENT_ID ?=
 AUTH_ALLOWED_EMAILS ?=
 AUTH_ALLOWED_DOMAINS ?= gmail.com
 AUTH_ALLOWED_GROUPS ?=
 NEXT_PUBLIC_ALLOWED_EMAILS ?= $(AUTH_ALLOWED_EMAILS)
 NEXT_PUBLIC_ALLOWED_DOMAINS ?= $(AUTH_ALLOWED_DOMAINS)
+
+# CORS (Cloud Run backend)
+# Recomendación: setear en backend/reputation/.env.reputation
+# Ejemplos:
+#   CORS_ALLOWED_ORIGIN_REGEX=^https://.*\\.run\\.app$$
+#   CORS_ALLOWED_ORIGIN_REGEX=^https://(gor-frontend-[a-z0-9-]+\\.a\\.run\\.app|tu-dominio\\.com)$$
+CORS_ALLOWED_ORIGIN_REGEX ?=
+
 BENCH_DIR ?= docs/benchmarks
 BENCH_ITERATIONS ?= 40
 BENCH_WARMUP ?= 5
@@ -88,7 +98,7 @@ help:
 	@echo "  make bench-baseline  - Generar baseline backend"
 	@echo "  make visual-qa       - Capturas headless mobile (frontend)"
 	@echo "  make clean           - Eliminar venv, caches, node_modules (frontend)"
-	@echo "  make cloudrun-config - Crear .env.cloudrun (preguntas interactivas)"
+	@echo "  make cloudrun-config - Crear backend/reputation/.env.reputation (preguntas interactivas)"
 	@echo "  make cloudrun-env    - Generar backend/reputation/cloudrun.env desde .env.reputation"
 	@echo "  make deploy-cloudrun-back  - Deploy backend en Cloud Run (usa env vars)"
 	@echo "  make deploy-cloudrun-front - Deploy frontend en Cloud Run (usa env vars)"
@@ -135,10 +145,12 @@ ensure-front: install-front
 	@true
 
 # -------------------------
-# Cloud Run helpers
+# Cloud Run helpers (SIN cloudrun.enc; TODO sale de .env.reputation)
 # -------------------------
+
 cloudrun-config:
-	@echo "==> Configurando .env.cloudrun (se guarda local, gitignored)..."
+	@echo "==> Configurando backend/reputation/.env.reputation (se guarda local; idealmente gitignored)..."
+	@mkdir -p backend/reputation
 	@read -r -p "GCP_PROJECT [$(GCP_PROJECT)]: " GCP_PROJECT_IN; \
 	GCP_PROJECT_VAL=$${GCP_PROJECT_IN:-$(GCP_PROJECT)}; \
 	read -r -p "GCP_REGION [$(GCP_REGION)]: " GCP_REGION_IN; \
@@ -159,6 +171,11 @@ cloudrun-config:
 	read -r -p "AUTH_ALLOWED_DOMAINS [$(AUTH_ALLOWED_DOMAINS)]: " AUTH_ALLOWED_DOMAINS_IN; \
 	AUTH_ALLOWED_DOMAINS_VAL=$${AUTH_ALLOWED_DOMAINS_IN:-$(AUTH_ALLOWED_DOMAINS)}; \
 	read -r -p "AUTH_ALLOWED_GROUPS (coma separada, opcional): " AUTH_ALLOWED_GROUPS_VAL; \
+	read -r -p "CORS_ALLOWED_ORIGIN_REGEX (required para Cloud Run backend): " CORS_ALLOWED_ORIGIN_REGEX_VAL; \
+	if [ -z "$$CORS_ALLOWED_ORIGIN_REGEX_VAL" ]; then \
+		echo "Falta CORS_ALLOWED_ORIGIN_REGEX."; \
+		exit 1; \
+	fi; \
 	{ printf '%s\n' \
 		"GCP_PROJECT=$${GCP_PROJECT_VAL}" \
 		"GCP_REGION=$${GCP_REGION_VAL}" \
@@ -170,24 +187,50 @@ cloudrun-config:
 		"AUTH_ALLOWED_DOMAINS=$${AUTH_ALLOWED_DOMAINS_VAL}" \
 		"AUTH_ALLOWED_GROUPS=$${AUTH_ALLOWED_GROUPS_VAL}" \
 		"NEXT_PUBLIC_ALLOWED_EMAILS=$${AUTH_ALLOWED_EMAILS_VAL}" \
-		"NEXT_PUBLIC_ALLOWED_DOMAINS=$${AUTH_ALLOWED_DOMAINS_VAL}"; \
-	} > .env.cloudrun
-	@echo "==> .env.cloudrun generado. Ahora puedes ejecutar: make deploy-cloudrun"
+		"NEXT_PUBLIC_ALLOWED_DOMAINS=$${AUTH_ALLOWED_DOMAINS_VAL}" \
+		"CORS_ALLOWED_ORIGIN_REGEX=$${CORS_ALLOWED_ORIGIN_REGEX_VAL}"; \
+	} > backend/reputation/.env.reputation
+	@echo "==> backend/reputation/.env.reputation generado. Ahora puedes ejecutar: make deploy-cloudrun"
 
 cloudrun-env:
-	@echo "==> Generando backend/reputation/cloudrun.env..."
+	@echo "==> Generando backend/reputation/cloudrun.env desde backend/reputation/.env.reputation..."
+	@test -f backend/reputation/.env.reputation || (echo "Falta backend/reputation/.env.reputation (ejecuta: make env o make cloudrun-config)"; exit 1)
+	@mkdir -p backend/reputation
+	@# Copiamos pares KEY=VALUE ignorando comentarios y líneas vacías
 	@awk -F= '$$0 !~ /^[[:space:]]*#/ && $$0 ~ /=/ {print $$0}' backend/reputation/.env.reputation > backend/reputation/cloudrun.env
-	@if [ -z "$(AUTH_GOOGLE_CLIENT_ID)" ]; then \
-		echo "Falta AUTH_GOOGLE_CLIENT_ID (exporta la variable)."; \
+
+	@# Validación mínima: AUTH_GOOGLE_CLIENT_ID debe existir (bien en Make vars o en .env.reputation)
+	@if ! grep -qE '^AUTH_GOOGLE_CLIENT_ID=' backend/reputation/cloudrun.env && [ -z "$(AUTH_GOOGLE_CLIENT_ID)" ]; then \
+		echo "Falta AUTH_GOOGLE_CLIENT_ID (ponlo en backend/reputation/.env.reputation o exporta la variable)."; \
 		exit 1; \
 	fi
-	@{ printf '%s\n' \
-		"AUTH_ENABLED=true" \
-		"AUTH_GOOGLE_CLIENT_ID=$(AUTH_GOOGLE_CLIENT_ID)" \
-		"AUTH_ALLOWED_EMAILS=$(AUTH_ALLOWED_EMAILS)" \
-		"AUTH_ALLOWED_DOMAINS=$(AUTH_ALLOWED_DOMAINS)" \
-		"AUTH_ALLOWED_GROUPS=$(AUTH_ALLOWED_GROUPS)"; \
-	} >> backend/reputation/cloudrun.env
+
+	@# Validación mínima: CORS_ALLOWED_ORIGIN_REGEX debe existir (bien en Make vars o en .env.reputation)
+	@if ! grep -qE '^CORS_ALLOWED_ORIGIN_REGEX=' backend/reputation/cloudrun.env && [ -z "$(CORS_ALLOWED_ORIGIN_REGEX)" ]; then \
+		echo "Falta CORS_ALLOWED_ORIGIN_REGEX (ponlo en backend/reputation/.env.reputation o exporta la variable)."; \
+		exit 1; \
+	fi
+
+	@# Aseguramos vars de auth/cors en cloudrun.env (sin duplicar si ya venían en .env.reputation)
+	@grep -q '^AUTH_ENABLED=' backend/reputation/cloudrun.env || echo "AUTH_ENABLED=true" >> backend/reputation/cloudrun.env
+
+	@if [ -n "$(AUTH_GOOGLE_CLIENT_ID)" ] && ! grep -q '^AUTH_GOOGLE_CLIENT_ID=' backend/reputation/cloudrun.env; then \
+		echo "AUTH_GOOGLE_CLIENT_ID=$(AUTH_GOOGLE_CLIENT_ID)" >> backend/reputation/cloudrun.env; \
+	fi
+	@if [ -n "$(AUTH_ALLOWED_EMAILS)" ] && ! grep -q '^AUTH_ALLOWED_EMAILS=' backend/reputation/cloudrun.env; then \
+		echo "AUTH_ALLOWED_EMAILS=$(AUTH_ALLOWED_EMAILS)" >> backend/reputation/cloudrun.env; \
+	fi
+	@if [ -n "$(AUTH_ALLOWED_DOMAINS)" ] && ! grep -q '^AUTH_ALLOWED_DOMAINS=' backend/reputation/cloudrun.env; then \
+		echo "AUTH_ALLOWED_DOMAINS=$(AUTH_ALLOWED_DOMAINS)" >> backend/reputation/cloudrun.env; \
+	fi
+	@if [ -n "$(AUTH_ALLOWED_GROUPS)" ] && ! grep -q '^AUTH_ALLOWED_GROUPS=' backend/reputation/cloudrun.env; then \
+		echo "AUTH_ALLOWED_GROUPS=$(AUTH_ALLOWED_GROUPS)" >> backend/reputation/cloudrun.env; \
+	fi
+
+	@if [ -n "$(CORS_ALLOWED_ORIGIN_REGEX)" ] && ! grep -q '^CORS_ALLOWED_ORIGIN_REGEX=' backend/reputation/cloudrun.env; then \
+		echo "CORS_ALLOWED_ORIGIN_REGEX=$(CORS_ALLOWED_ORIGIN_REGEX)" >> backend/reputation/cloudrun.env; \
+	fi
+
 	@echo "==> cloudrun.env generado."
 
 deploy-cloudrun-back: cloudrun-env
@@ -207,8 +250,9 @@ deploy-cloudrun-back: cloudrun-env
 
 deploy-cloudrun-front:
 	@echo "==> Deploy frontend en Cloud Run..."
+	@# AUTH_GOOGLE_CLIENT_ID puede venir del make env (incluido backend/reputation/.env.reputation)
 	@if [ -z "$(AUTH_GOOGLE_CLIENT_ID)" ]; then \
-		echo "Falta AUTH_GOOGLE_CLIENT_ID (exporta la variable)."; \
+		echo "Falta AUTH_GOOGLE_CLIENT_ID (ponlo en backend/reputation/.env.reputation o exporta la variable)."; \
 		exit 1; \
 	fi
 	@BACKEND_URL=$$(gcloud run services describe $(BACKEND_SERVICE) --project $(GCP_PROJECT) --region $(GCP_REGION) --format 'value(status.url)'); \
