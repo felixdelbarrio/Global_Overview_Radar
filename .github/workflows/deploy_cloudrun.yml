@@ -2,7 +2,7 @@ name: deploy_cloudrun
 
 on:
   workflow_run:
-    workflows: ["CI", "typecheck", "format"]
+    workflows: ["CI - Backend", "CI - Frontend", "typecheck", "format"]
     types: [completed]
 
 concurrency:
@@ -14,7 +14,8 @@ jobs:
     if: >-
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
-      github.event.workflow_run.head_branch == 'master'
+      github.event.workflow_run.head_branch == 'master' &&
+      github.event.workflow_run.name == 'CI - Frontend'
     runs-on: ubuntu-latest
     permissions:
       actions: read
@@ -32,7 +33,9 @@ jobs:
             const owner = context.repo.owner;
             const repo = context.repo.repo;
             const headSha = context.payload.workflow_run.head_sha;
+
             let allOk = true;
+
             for (const wf of workflows) {
               const runs = await github.rest.actions.listWorkflowRuns({
                 owner,
@@ -51,6 +54,7 @@ jobs:
                 );
               }
             }
+
             const prs = await github.rest.repos.listPullRequestsAssociatedWithCommit({
               owner,
               repo,
@@ -63,6 +67,7 @@ jobs:
               allOk = false;
               core.info(`No merged PR found for ${headSha}. Skipping deploy.`);
             }
+
             core.setOutput("ok", allOk ? "true" : "false");
 
   deploy:
@@ -105,16 +110,6 @@ jobs:
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v2
 
-      # Opcional (pero útil si el proyecto es nuevo o se clona): asegura APIs
-      - name: Ensure required Google Cloud APIs are enabled
-        run: |
-          set -euo pipefail
-          gcloud services enable \
-            run.googleapis.com \
-            cloudbuild.googleapis.com \
-            artifactregistry.googleapis.com \
-            --project "$GCP_PROJECT"
-
       - name: Prepare backend env file
         env:
           AUTH_GOOGLE_CLIENT_ID: ${{ secrets.AUTH_GOOGLE_CLIENT_ID }}
@@ -124,7 +119,6 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Parte base desde el example (sin comentarios)
           awk -F= '$0 !~ /^[[:space:]]*#/ && $0 ~ /=/ {print $0}' backend/reputation/.env.reputation.example > backend/reputation/cloudrun.env
 
           if [ -z "${AUTH_GOOGLE_CLIENT_ID:-}" ]; then
@@ -132,7 +126,8 @@ jobs:
             exit 1
           fi
 
-          # Permite el patrón del frontend Cloud Run: https://gor-frontend-xxxxxx-<region>.a.run.app
+          # Allow production frontend Cloud Run URL pattern:
+          # https://gor-frontend-xxxxxxxx-<region>.a.run.app
           CORS_REGEX="^https://${FRONTEND_SERVICE}-.+\\.a\\.run\\.app$"
 
           cat >> backend/reputation/cloudrun.env <<EOF
@@ -184,7 +179,7 @@ jobs:
           echo "url=$BACKEND_URL" >> "$GITHUB_OUTPUT"
           echo "Resolved backend URL: $BACKEND_URL"
 
-      - name: Deploy frontend (Cloud Run) - USE PROXY (/api -> backend)
+      - name: Deploy frontend (Cloud Run) - proxy /api -> backend
         env:
           AUTH_GOOGLE_CLIENT_ID: ${{ secrets.AUTH_GOOGLE_CLIENT_ID }}
           AUTH_ALLOWED_EMAILS: ${{ secrets.AUTH_ALLOWED_EMAILS }}
@@ -197,7 +192,7 @@ jobs:
             exit 1
           fi
           if ! echo "${AUTH_GOOGLE_CLIENT_ID}" | grep -q '\.apps\.googleusercontent\.com$'; then
-            echo "ERROR: AUTH_GOOGLE_CLIENT_ID must be an OAuth Client ID ending in .apps.googleusercontent.com (got: ${AUTH_GOOGLE_CLIENT_ID})"
+            echo "ERROR: AUTH_GOOGLE_CLIENT_ID must end in .apps.googleusercontent.com (got: ${AUTH_GOOGLE_CLIENT_ID})"
             exit 1
           fi
 
@@ -207,9 +202,6 @@ jobs:
             exit 1
           fi
 
-          # Proxy mode (align with Makefile):
-          # - Frontend talks to /api
-          # - Server-side proxy forwards to API_PROXY_TARGET (backend URL)
           ENV_VARS_COMMON="USE_SERVER_PROXY=true,API_PROXY_TARGET=${BACKEND_URL},NEXT_PUBLIC_API_BASE_URL=/api,NEXT_PUBLIC_AUTH_ENABLED=true,NEXT_PUBLIC_GOOGLE_CLIENT_ID=${AUTH_GOOGLE_CLIENT_ID},NEXT_PUBLIC_ALLOWED_EMAILS=${AUTH_ALLOWED_EMAILS},NEXT_PUBLIC_ALLOWED_DOMAINS=${AUTH_ALLOWED_DOMAINS}"
 
           gcloud run deploy "$FRONTEND_SERVICE" \
