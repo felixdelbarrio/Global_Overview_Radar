@@ -15,10 +15,14 @@ class YouTubeCollector(ReputationCollector):
         api_key: str,
         queries: list[str],
         max_results: int = 50,
+        published_after: str | None = None,
+        published_before: str | None = None,
     ) -> None:
         self._api_key = api_key
         self._queries = queries
         self._max_results = max(0, max_results)
+        self._published_after = (published_after or "").strip()
+        self._published_before = (published_before or "").strip()
 
     def collect(self) -> Iterable[ReputationItem]:
         if not self._api_key or not self._queries or self._max_results <= 0:
@@ -47,6 +51,10 @@ class YouTubeCollector(ReputationCollector):
                 "key": self._api_key,
                 "pageToken": page_token,
             }
+            if self._published_after:
+                params["publishedAfter"] = self._published_after
+            if self._published_before:
+                params["publishedBefore"] = self._published_before
             url = build_url("https://www.googleapis.com/youtube/v3/search", params)
             data = http_get_json(url)
             items = data.get("items", [])
