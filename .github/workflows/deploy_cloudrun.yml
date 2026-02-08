@@ -114,12 +114,19 @@ jobs:
             echo "Missing AUTH_GOOGLE_CLIENT_ID secret."
             exit 1
           fi
+
+          # Regex to allow the production frontend Cloud Run URL pattern.
+          # e.g., https://gor-frontend-xxxxxxxx-ew.a.run.app
+          # Note: The backend code includes a default regex for localhost.
+          CORS_REGEX="^https://${FRONTEND_SERVICE}-.+\\.a\\.run\\.app$"
+
           cat >> backend/reputation/cloudrun.env <<EOF
           AUTH_ENABLED=true
           AUTH_GOOGLE_CLIENT_ID=${AUTH_GOOGLE_CLIENT_ID}
           AUTH_ALLOWED_EMAILS=${AUTH_ALLOWED_EMAILS}
           AUTH_ALLOWED_DOMAINS=${AUTH_ALLOWED_DOMAINS}
           AUTH_ALLOWED_GROUPS=${AUTH_ALLOWED_GROUPS}
+          CORS_ALLOWED_ORIGIN_REGEX=${CORS_REGEX}
           EOF
 
       - name: Deploy backend (Cloud Run)
