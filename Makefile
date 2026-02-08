@@ -101,14 +101,12 @@ help:
 	@echo "  make cloudrun-config - Crear backend/reputation/.env.reputation (preguntas interactivas)"
 	@echo "  make cloudrun-env    - Generar backend/reputation/cloudrun.env desde .env.reputation"
 	@echo "  make deploy-cloudrun-back  - Deploy backend en Cloud Run (usa env vars)"
-	@echo "  make deploy-cloudrun-front - Deploy frontend en Cloud Run (usa env vars)"
+	@echo "  make deploy-cloudrun-front - Deploy frontend en Cloud Run (usa env vars + proxy /api)"
 	@echo "  make deploy-cloudrun       - Deploy backend + frontend (Cloud Run)"
 	@echo ""
 	@echo "Notas:"
-	@echo " - Levanta backend: make venv && make install-backend && make env && make dev-back"
-	@echo " - Para ingestas: prepara el backend una vez (make ensure-backend) y luego ejecuta reputation-ingest"
-	@echo " - Levanta frontend: cd $(FRONTDIR) && npm run dev"
-	@echo " - Para desarrollo fullstack usa dos terminales (backend + frontend)."
+	@echo " - Fullstack Cloud Run con backend privado: el frontend usa proxy /api hacia el backend"
+	@echo " - Login OAuth: revisa en Google Cloud que exista redirect URI: https://<frontend>/login/callback"
 
 # -------------------------
 # Virtualenv + Instalación
@@ -140,12 +138,11 @@ env:
 	@echo "==> .env files prepared (edit if needed)."
 
 ensure-backend: install-backend
-
 ensure-front: install-front
 	@true
 
 # -------------------------
-# Cloud Run helpers (SIN cloudrun.enc; TODO sale de .env.reputation)
+# Cloud Run helpers
 # -------------------------
 
 cloudrun-config:
@@ -196,22 +193,17 @@ cloudrun-env:
 	@echo "==> Generando backend/reputation/cloudrun.env desde backend/reputation/.env.reputation..."
 	@test -f backend/reputation/.env.reputation || (echo "Falta backend/reputation/.env.reputation (ejecuta: make env o make cloudrun-config)"; exit 1)
 	@mkdir -p backend/reputation
-	@# Copiamos pares KEY=VALUE ignorando comentarios y líneas vacías
 	@awk -F= '$$0 !~ /^[[:space:]]*#/ && $$0 ~ /=/ {print $$0}' backend/reputation/.env.reputation > backend/reputation/cloudrun.env
 
-	@# Validación mínima: AUTH_GOOGLE_CLIENT_ID debe existir (bien en Make vars o en .env.reputation)
 	@if ! grep -qE '^AUTH_GOOGLE_CLIENT_ID=' backend/reputation/cloudrun.env && [ -z "$(AUTH_GOOGLE_CLIENT_ID)" ]; then \
 		echo "Falta AUTH_GOOGLE_CLIENT_ID (ponlo en backend/reputation/.env.reputation o exporta la variable)."; \
 		exit 1; \
 	fi
-
-	@# Validación mínima: CORS_ALLOWED_ORIGIN_REGEX debe existir (bien en Make vars o en .env.reputation)
 	@if ! grep -qE '^CORS_ALLOWED_ORIGIN_REGEX=' backend/reputation/cloudrun.env && [ -z "$(CORS_ALLOWED_ORIGIN_REGEX)" ]; then \
 		echo "Falta CORS_ALLOWED_ORIGIN_REGEX (ponlo en backend/reputation/.env.reputation o exporta la variable)."; \
 		exit 1; \
 	fi
 
-	@# Aseguramos vars de auth/cors en cloudrun.env (sin duplicar si ya venían en .env.reputation)
 	@grep -q '^AUTH_ENABLED=' backend/reputation/cloudrun.env || echo "AUTH_ENABLED=true" >> backend/reputation/cloudrun.env
 
 	@if [ -n "$(AUTH_GOOGLE_CLIENT_ID)" ] && ! grep -q '^AUTH_GOOGLE_CLIENT_ID=' backend/reputation/cloudrun.env; then \
@@ -226,7 +218,6 @@ cloudrun-env:
 	@if [ -n "$(AUTH_ALLOWED_GROUPS)" ] && ! grep -q '^AUTH_ALLOWED_GROUPS=' backend/reputation/cloudrun.env; then \
 		echo "AUTH_ALLOWED_GROUPS=$(AUTH_ALLOWED_GROUPS)" >> backend/reputation/cloudrun.env; \
 	fi
-
 	@if [ -n "$(CORS_ALLOWED_ORIGIN_REGEX)" ] && ! grep -q '^CORS_ALLOWED_ORIGIN_REGEX=' backend/reputation/cloudrun.env; then \
 		echo "CORS_ALLOWED_ORIGIN_REGEX=$(CORS_ALLOWED_ORIGIN_REGEX)" >> backend/reputation/cloudrun.env; \
 	fi
@@ -249,13 +240,11 @@ deploy-cloudrun-back: cloudrun-env
 		--env-vars-file backend/reputation/cloudrun.env
 
 deploy-cloudrun-front:
-	@echo "==> Deploy frontend en Cloud Run..."
-	@# AUTH_GOOGLE_CLIENT_ID puede venir del make env (incluido backend/reputation/.env.reputation)
+	@echo "==> Deploy frontend en Cloud Run (proxy /api -> backend)..."
 	@if [ -z "$(AUTH_GOOGLE_CLIENT_ID)" ]; then \
 		echo "Falta AUTH_GOOGLE_CLIENT_ID (ponlo en backend/reputation/.env.reputation o exporta la variable)."; \
 		exit 1; \
 	fi
-	@# Fail-fast: debería ser un OAuth Client ID real (termina en .apps.googleusercontent.com)
 	@if ! echo "$(AUTH_GOOGLE_CLIENT_ID)" | grep -q '\.apps\.googleusercontent\.com$$'; then \
 		echo "ERROR: AUTH_GOOGLE_CLIENT_ID debe ser un OAuth Client ID (termina en .apps.googleusercontent.com). Valor actual: $(AUTH_GOOGLE_CLIENT_ID)"; \
 		exit 1; \
@@ -277,8 +266,8 @@ deploy-cloudrun-front:
 		--cpu $(FRONTEND_CPU) \
 		--memory $(FRONTEND_MEMORY) \
 		--cpu-throttling \
-		--set-env-vars USE_SERVER_PROXY=false,NEXT_PUBLIC_API_BASE_URL=$$BACKEND_URL,NEXT_PUBLIC_AUTH_ENABLED=true,NEXT_PUBLIC_GOOGLE_CLIENT_ID=$(AUTH_GOOGLE_CLIENT_ID),NEXT_PUBLIC_ALLOWED_EMAILS=$(NEXT_PUBLIC_ALLOWED_EMAILS),NEXT_PUBLIC_ALLOWED_DOMAINS=$(NEXT_PUBLIC_ALLOWED_DOMAINS) \
-		--set-build-env-vars USE_SERVER_PROXY=false,NEXT_PUBLIC_API_BASE_URL=$$BACKEND_URL,NEXT_PUBLIC_AUTH_ENABLED=true,NEXT_PUBLIC_GOOGLE_CLIENT_ID=$(AUTH_GOOGLE_CLIENT_ID),NEXT_PUBLIC_ALLOWED_EMAILS=$(NEXT_PUBLIC_ALLOWED_EMAILS),NEXT_PUBLIC_ALLOWED_DOMAINS=$(NEXT_PUBLIC_ALLOWED_DOMAINS)
+		--set-env-vars USE_SERVER_PROXY=true,API_PROXY_TARGET=$$BACKEND_URL,NEXT_PUBLIC_API_BASE_URL=/api,NEXT_PUBLIC_AUTH_ENABLED=true,NEXT_PUBLIC_GOOGLE_CLIENT_ID=$(AUTH_GOOGLE_CLIENT_ID),NEXT_PUBLIC_ALLOWED_EMAILS=$(NEXT_PUBLIC_ALLOWED_EMAILS),NEXT_PUBLIC_ALLOWED_DOMAINS=$(NEXT_PUBLIC_ALLOWED_DOMAINS) \
+		--set-build-env-vars USE_SERVER_PROXY=true,API_PROXY_TARGET=$$BACKEND_URL,NEXT_PUBLIC_API_BASE_URL=/api,NEXT_PUBLIC_AUTH_ENABLED=true,NEXT_PUBLIC_GOOGLE_CLIENT_ID=$(AUTH_GOOGLE_CLIENT_ID),NEXT_PUBLIC_ALLOWED_EMAILS=$(NEXT_PUBLIC_ALLOWED_EMAILS),NEXT_PUBLIC_ALLOWED_DOMAINS=$(NEXT_PUBLIC_ALLOWED_DOMAINS)
 
 deploy-cloudrun: deploy-cloudrun-back deploy-cloudrun-front
 	@true
@@ -359,7 +348,6 @@ typecheck-back:
 typecheck-front:
 	@echo "==> Typecheck frontend (next / tsc)..."
 	cd $(FRONTDIR) && NEXT_DISABLE_TURBOPACK=1 $(NPM) run build --if-present || true
-	# si tienes tsc configurado: cd $(FRONTDIR) && $(NPM) run typecheck
 
 check: format lint typecheck
 
@@ -414,20 +402,12 @@ clean:
 	rm -rf $(VENV) .mypy_cache .ruff_cache .pytest_cache .pytest_cache
 	rm -rf **/__pycache__ **/.pycache__
 	@true
-	# frontend
 	cd $(FRONTDIR) && rm -rf node_modules .next dist out || true
 	@echo "==> Limpieza completada."
 
-# -------------------------
-# Reset (clean + install)
-# -------------------------
 reset: clean install
 	@echo "==> Reset completo finalizado."
 
-# -------------------------
-# Utilidades / helpers
-# -------------------------
-# Dev fullstack: sugerencia de uso (no ejecuta ambos en background)
 dev:
 	@echo "==> Para desarrollo fullstack abre 2 terminales y ejecuta:"
 	@echo "- Terminal A: make dev-back"
