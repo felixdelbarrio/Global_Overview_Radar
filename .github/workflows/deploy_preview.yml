@@ -1,23 +1,20 @@
-name: deploy_demo
+name: deploy_preview
 
 on:
   workflow_run:
-    workflows: ["CI - Backend", "CI - Frontend"]
+    workflows: ["CI - Frontend"]
     types: [completed]
 
 concurrency:
-  group: deploy-demo-${{ github.event.workflow_run.head_sha }}
+  group: deploy-preview-${{ github.event.workflow_run.head_sha }}
   cancel-in-progress: true
 
 jobs:
   gate:
-    # Ejecuta solo cuando termina el CI de Frontend (reduce runs duplicados),
-    # pero valida que backend+frontend han pasado.
     if: >-
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
-      github.event.workflow_run.head_branch == 'master' &&
-      github.event.workflow_run.name == 'CI - Frontend'
+      github.event.workflow_run.head_branch == 'master'
     runs-on: ubuntu-latest
     permissions:
       actions: read
@@ -89,7 +86,7 @@ jobs:
       deployments: write
 
     steps:
-      - name: Create GitHub Deployment (demo)
+      - name: Create GitHub Deployment (Preview)
         id: create_deploy
         uses: actions/github-script@v7
         with:
@@ -102,10 +99,10 @@ jobs:
               owner,
               repo,
               ref: sha,
-              environment: "demo",
+              environment: "Preview",
               auto_merge: false,
               required_contexts: [],
-              description: "Demo deploy (Render/Vercel hooks)",
+              description: "Preview deploy (Render/Vercel hooks)",
               transient_environment: true,
               production_environment: false,
             });
@@ -119,14 +116,14 @@ jobs:
             const owner = context.repo.owner;
             const repo = context.repo.repo;
             const deployment_id = Number(`${{ steps.create_deploy.outputs.deployment_id }}`);
-            const demoUrl = "https://global-overview-radar.vercel.app/";
+            const previewUrl = "https://global-overview-radar.vercel.app/";
 
             await github.rest.repos.createDeploymentStatus({
               owner,
               repo,
               deployment_id,
               state: "in_progress",
-              environment_url: demoUrl,
+              environment_url: previewUrl,
               description: "Deploy in progress",
             });
 
@@ -166,25 +163,24 @@ jobs:
           cat /tmp/vercel_hook.out || true
           test "${code}" -ge 200 -a "${code}" -lt 400
 
-      - name: Demo health check (wait for Vercel)
+      - name: Preview health check (wait for Vercel)
         env:
-          DEMO_URL: https://global-overview-radar.vercel.app/
+          PREVIEW_URL: https://global-overview-radar.vercel.app/
         run: |
           set -euo pipefail
-          echo "Waiting for demo to become healthy: ${DEMO_URL}"
+          echo "Waiting for preview to become healthy: ${PREVIEW_URL}"
 
-          # Up to ~3 minutes: 18 tries * 10s
           for i in $(seq 1 18); do
-            code="$(curl -s -o /dev/null -w "%{http_code}" "${DEMO_URL}" || true)"
+            code="$(curl -s -o /dev/null -w "%{http_code}" "${PREVIEW_URL}" || true)"
             echo "Attempt ${i}/18 -> HTTP ${code}"
             if [ "${code}" = "200" ] || [ "${code}" = "301" ] || [ "${code}" = "302" ]; then
-              echo "Demo is reachable (HTTP ${code})."
+              echo "Preview is reachable (HTTP ${code})."
               exit 0
             fi
             sleep 10
           done
 
-          echo "Demo health check failed (no 200/301/302 after waiting)."
+          echo "Preview health check failed (no 200/301/302 after waiting)."
           exit 1
 
       - name: Mark deployment as success
@@ -194,15 +190,15 @@ jobs:
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
-            const deployment_id = Number(`${{ steps.create_deploy.outputs.deployment_id }}`);
-            const demoUrl = "https://global-overview-radar.vercel.app/";
+            const deployment_id = Number(`${{ steps.create_deploy.outputs.deployment_id }});
+            const previewUrl = "https://global-overview-radar.vercel.app/";
 
             await github.rest.repos.createDeploymentStatus({
               owner,
               repo,
               deployment_id,
               state: "success",
-              environment_url: demoUrl,
+              environment_url: previewUrl,
               description: "Deploy succeeded (health check passed)",
             });
 
@@ -213,14 +209,14 @@ jobs:
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
-            const deployment_id = Number(`${{ steps.create_deploy.outputs.deployment_id }}`);
-            const demoUrl = "https://global-overview-radar.vercel.app/";
+            const deployment_id = Number(`${{ steps.create_deploy.outputs.deployment_id }});
+            const previewUrl = "https://global-overview-radar.vercel.app/";
 
             await github.rest.repos.createDeploymentStatus({
               owner,
               repo,
               deployment_id,
               state: "failure",
-              environment_url: demoUrl,
+              environment_url: previewUrl,
               description: "Deploy failed (hooks or health check)",
             });

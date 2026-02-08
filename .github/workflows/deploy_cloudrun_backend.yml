@@ -75,6 +75,10 @@ jobs:
       - name: Deploy backend (Cloud Run)
         run: |
           set -euo pipefail
+
+          # Buildpacks: pin Python + set entrypoint for FastAPI
+          BUILD_VARS="GOOGLE_RUNTIME_VERSION=3.11,GOOGLE_ENTRYPOINT=gunicorn -k uvicorn.workers.UvicornWorker reputation.api.main:app --bind :8080 --workers 1"
+
           gcloud run deploy "$BACKEND_SERVICE" \
             --project "$GCP_PROJECT" \
             --region "$GCP_REGION" \
@@ -86,6 +90,7 @@ jobs:
             --cpu "$BACKEND_CPU" \
             --memory "$BACKEND_MEMORY" \
             --cpu-throttling \
+            --set-build-env-vars "${BUILD_VARS}" \
             --env-vars-file backend/reputation/cloudrun.env
 
       - name: Show backend URL
