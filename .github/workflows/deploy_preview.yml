@@ -190,7 +190,7 @@ jobs:
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
-            const deployment_id = Number(`${{ steps.create_deploy.outputs.deployment_id }});
+            const deployment_id = Number(`${{ steps.create_deploy.outputs.deployment_id }}`);
             const previewUrl = "https://global-overview-radar.vercel.app/";
 
             await github.rest.repos.createDeploymentStatus({
@@ -209,7 +209,7 @@ jobs:
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
-            const deployment_id = Number(`${{ steps.create_deploy.outputs.deployment_id }});
+            const deployment_id = Number(`${{ steps.create_deploy.outputs.deployment_id }}`);
             const previewUrl = "https://global-overview-radar.vercel.app/";
 
             await github.rest.repos.createDeploymentStatus({
