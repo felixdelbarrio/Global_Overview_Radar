@@ -1,0 +1,126 @@
+name: deploy_cloudrun_frontend
+
+on:
+  workflow_run:
+    workflows: ["CI - Frontend"]
+    types: [completed]
+
+concurrency:
+  group: deploy-cloudrun-frontend-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'master'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      GCP_PROJECT: global-overview-radar
+      GCP_REGION: europe-southwest1
+
+      BACKEND_SERVICE: gor-backend
+      FRONTEND_SERVICE: gor-frontend
+      FRONTEND_SA: gor-frontend-sa@global-overview-radar.iam.gserviceaccount.com
+
+      FRONTEND_MAX_INSTANCES: "1"
+      FRONTEND_CONCURRENCY: "2"
+      FRONTEND_MEMORY: 768Mi
+      FRONTEND_CPU: "1"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Resolve backend URL
+        id: backend_url
+        run: |
+          set -euo pipefail
+          BACKEND_URL="$(gcloud run services describe "$BACKEND_SERVICE" \
+            --project "$GCP_PROJECT" \
+            --region "$GCP_REGION" \
+            --format 'value(status.url)')"
+
+          if [ -z "${BACKEND_URL:-}" ]; then
+            echo "Failed to resolve backend URL. Is backend deployed?"
+            exit 1
+          fi
+
+          echo "url=$BACKEND_URL" >> "$GITHUB_OUTPUT"
+          echo "Resolved backend URL: $BACKEND_URL"
+
+      - name: Deploy frontend (Cloud Run) - proxy /api -> backend
+        env:
+          AUTH_GOOGLE_CLIENT_ID: ${{ secrets.AUTH_GOOGLE_CLIENT_ID }}
+          AUTH_ALLOWED_EMAILS: ${{ secrets.AUTH_ALLOWED_EMAILS }}
+          AUTH_ALLOWED_DOMAINS: ${{ secrets.AUTH_ALLOWED_DOMAINS }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${AUTH_GOOGLE_CLIENT_ID:-}" ]; then
+            echo "Missing AUTH_GOOGLE_CLIENT_ID secret."
+            exit 1
+          fi
+          if ! echo "${AUTH_GOOGLE_CLIENT_ID}" | grep -q '\.apps\.googleusercontent\.com$'; then
+            echo "ERROR: AUTH_GOOGLE_CLIENT_ID must end in .apps.googleusercontent.com (got: ${AUTH_GOOGLE_CLIENT_ID})"
+            exit 1
+          fi
+
+          BACKEND_URL="${{ steps.backend_url.outputs.url }}"
+
+          ENV_VARS_COMMON="USE_SERVER_PROXY=true,API_PROXY_TARGET=${BACKEND_URL},NEXT_PUBLIC_API_BASE_URL=/api,NEXT_PUBLIC_AUTH_ENABLED=true,NEXT_PUBLIC_GOOGLE_CLIENT_ID=${AUTH_GOOGLE_CLIENT_ID},NEXT_PUBLIC_ALLOWED_EMAILS=${AUTH_ALLOWED_EMAILS},NEXT_PUBLIC_ALLOWED_DOMAINS=${AUTH_ALLOWED_DOMAINS}"
+
+          gcloud run deploy "$FRONTEND_SERVICE" \
+            --project "$GCP_PROJECT" \
+            --region "$GCP_REGION" \
+            --source frontend/brr-frontend \
+            --service-account "$FRONTEND_SA" \
+            --allow-unauthenticated \
+            --min-instances 0 \
+            --max-instances "$FRONTEND_MAX_INSTANCES" \
+            --concurrency "$FRONTEND_CONCURRENCY" \
+            --cpu "$FRONTEND_CPU" \
+            --memory "$FRONTEND_MEMORY" \
+            --cpu-throttling \
+            --set-env-vars "${ENV_VARS_COMMON}" \
+            --set-build-env-vars "${ENV_VARS_COMMON}"
+
+          FRONTEND_URL="$(gcloud run services describe "$FRONTEND_SERVICE" \
+            --project "$GCP_PROJECT" \
+            --region "$GCP_REGION" \
+            --format 'value(status.url)')"
+
+          if [ -z "$FRONTEND_URL" ]; then
+            echo "Failed to resolve frontend URL."
+            exit 1
+          fi
+
+          STATUS="$(curl -s -o /dev/null -w "%{http_code}" "${FRONTEND_URL}")"
+          if [ "$STATUS" -ne 200 ]; then
+            echo "Frontend health check failed: ${FRONTEND_URL} returned status ${STATUS}."
+            exit 1
+          fi
+
+          echo "Deployment successful. Frontend available at: ${FRONTEND_URL}"
+
+      - name: Ensure frontend is public (Cloud Run)
+        run: |
+          set -euo pipefail
+          gcloud run services add-iam-policy-binding "$FRONTEND_SERVICE" \
+            --project "$GCP_PROJECT" \
+            --region "$GCP_REGION" \
+            --member="allUsers" \
+            --role="roles/run.invoker"
