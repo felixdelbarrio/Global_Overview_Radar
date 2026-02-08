@@ -39,14 +39,11 @@ jobs:
       - name: Authenticate to Google Cloud (WIF)
         uses: google-github-actions/auth@v2
         with:
-          # IMPORTANTÍSIMO:
-          # Esto NO debería ser secret. Guárdalo en:
-          # Settings > Secrets and variables > Actions > Variables
-          # con nombre: GCP_WORKLOAD_IDENTITY_PROVIDER
-          #
+         
+          # GCP_WORKLOAD_IDENTITY_PROVIDER
           # Formato esperado:
           # projects/PROJECT_NUMBER/locations/global/workloadIdentityPools/POOL_ID/providers/PROVIDER_ID
-          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
 
           # Tu service account “caller” (el que ya confirmaste)
           service_account: gor-github-deploy@global-overview-radar.iam.gserviceaccount.com
