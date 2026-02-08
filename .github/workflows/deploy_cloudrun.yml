@@ -101,6 +101,9 @@ jobs:
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v2
 
+      - name: Debug: Show active gcloud account
+        run: gcloud auth list
+
       - name: Prepare backend env file
         env:
           AUTH_GOOGLE_CLIENT_ID: ${{ secrets.AUTH_GOOGLE_CLIENT_ID }}
