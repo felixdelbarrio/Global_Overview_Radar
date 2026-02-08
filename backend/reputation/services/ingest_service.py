@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import os
 import re
 import time
@@ -169,16 +170,46 @@ class ReputationIngestService:
             if normalized and normalized not in sources_enabled:
                 sources_enabled.append(normalized)
         enabled_sources = set(sources_enabled)
+        existing = self._repo.load()
+        ingest_now = datetime.now(timezone.utc)
+        incremental_since: datetime | None = None
+        incremental_overlap_hours = 0
+        incremental_enabled = _env_bool(os.getenv("REPUTATION_INCREMENTAL_ENABLED", "true"))
+        if (
+            incremental_enabled
+            and not force
+            and existing
+            and existing.items
+            and existing.config_hash == cfg_hash
+            and enabled_sources.issubset(set(existing.sources_enabled))
+        ):
+            latest_ts = _latest_item_timestamp(existing.items)
+            if latest_ts is not None:
+                incremental_overlap_hours = max(
+                    0, _env_int("REPUTATION_INCREMENTAL_OVERLAP_HOURS", 6)
+                )
+                incremental_since = _ensure_utc(latest_ts) - timedelta(
+                    hours=incremental_overlap_hours
+                )
+                if incremental_since > ingest_now:
+                    incremental_since = ingest_now
+
         lookback_days = DEFAULT_LOOKBACK_DAYS
-        report(
-            "Preparando configuración",
-            4,
-            {"sources_enabled": len(sources_enabled), "lookback_days": lookback_days},
-        )
+        if incremental_since is not None:
+            delta_days = (ingest_now - incremental_since).total_seconds() / 86400.0
+            delta_days = max(0.0, delta_days)
+            lookback_days = max(1, min(DEFAULT_LOOKBACK_DAYS, int(math.ceil(delta_days))))
+
+        prep_meta: dict[str, Any] = {
+            "sources_enabled": len(sources_enabled),
+            "lookback_days": lookback_days,
+        }
+        if incremental_since is not None:
+            prep_meta["incremental_since"] = _format_rfc3339(incremental_since)
+            prep_meta["incremental_overlap_hours"] = incremental_overlap_hours
+        report("Preparando configuración", 4, prep_meta)
         logger.info("Reputation ingest started (force=%s)", force)
         logger.debug("Sources enabled: %s", sources_enabled)
-
-        existing = self._repo.load()
 
         def is_doc_fresh(doc: ReputationCacheDocument | None) -> bool:
             if not doc:
@@ -187,7 +218,17 @@ class ReputationIngestService:
             age_hours = (now - doc.generated_at).total_seconds() / 3600.0
             return age_hours <= ttl_hours
 
-        collectors, notes = self._build_collectors(cfg, sources_enabled)
+        collectors, notes = self._build_collectors(
+            cfg,
+            sources_enabled,
+            since=incremental_since,
+            until=ingest_now,
+        )
+        if incremental_since is not None:
+            notes.append(
+                "incremental: since "
+                f"{_format_rfc3339(incremental_since)} overlap={incremental_overlap_hours}h"
+            )
         if enabled_sources and collectors:
             before = len(collectors)
             collectors = [
@@ -274,7 +315,7 @@ class ReputationIngestService:
         report("Señales recolectadas", 45, {"items": len(items)})
         items = filter_enabled(items)
 
-        items = self._normalize_items(items, lookback_days)
+        items = self._normalize_items(items, lookback_days, incremental_since)
         report("Normalizando señales", 52, {"items": len(items)})
         items = self._apply_geo_hints(cfg, items)
         report("Aplicando geografía", 58)
@@ -303,6 +344,7 @@ class ReputationIngestService:
             lookback_days,
             notes,
             sources_enabled,
+            min_dt=incremental_since,
         )
         items = self._filter_hard_exclude_items(cfg, items, notes)
         report("Balanceando señales", 90)
@@ -511,9 +553,18 @@ class ReputationIngestService:
         return items
 
     @staticmethod
-    def _normalize_items(items: list[ReputationItem], lookback_days: int) -> list[ReputationItem]:
+    def _normalize_items(
+        items: list[ReputationItem],
+        lookback_days: int,
+        min_dt: datetime | None = None,
+    ) -> list[ReputationItem]:
         now = datetime.now(timezone.utc)
-        min_dt = now - timedelta(days=max(0, lookback_days))
+        if min_dt is None:
+            min_dt = now - timedelta(days=max(0, lookback_days))
+        else:
+            min_dt = _ensure_utc(min_dt)
+            if min_dt > now:
+                min_dt = now
         filtered: list[ReputationItem] = []
 
         for item in items:
@@ -1881,6 +1932,7 @@ class ReputationIngestService:
         lookback_days: int,
         notes: list[str],
         sources_enabled: list[str],
+        min_dt: datetime | None = None,
     ) -> list[ReputationItem]:
         balance_cfg = self._load_balance_cfg()
         if not balance_cfg.get("enabled", False):
@@ -1920,7 +1972,9 @@ class ReputationIngestService:
         actors = self._all_actors(cfg, alias_map)
 
         existing_recent = (
-            self._normalize_items(list(existing_items), lookback_days) if existing_items else []
+            self._normalize_items(list(existing_items), lookback_days, min_dt)
+            if existing_items
+            else []
         )
         combined = self._merge_items(existing_recent, items)
 
@@ -2026,7 +2080,7 @@ class ReputationIngestService:
                 )
                 break
 
-            new_items = self._normalize_items(new_items, lookback_days)
+            new_items = self._normalize_items(new_items, lookback_days, min_dt)
             new_items = self._apply_sentiment(cfg, new_items)
             items = self._merge_items(items, new_items)
             combined = self._merge_items(existing_recent, items)
@@ -2056,6 +2110,8 @@ class ReputationIngestService:
         self,
         cfg: dict[str, Any],
         sources_enabled: list[str],
+        since: datetime | None = None,
+        until: datetime | None = None,
     ) -> tuple[list[ReputationCollector], list[str]]:
         collectors: list[ReputationCollector] = []
         notes: list[str] = []
@@ -2065,6 +2121,12 @@ class ReputationIngestService:
         segment_terms = self._load_segment_terms(cfg)
         segment_mode = self._segment_query_mode(cfg)
         news_geo_map = (cfg.get("news") or {}).get("rss_geo_map") or {}
+        since_dt = _ensure_utc(since) if since else None
+        until_dt = _ensure_utc(until) if until else None
+        if since_dt and until_dt and since_dt > until_dt:
+            since_dt = until_dt
+        auto_since = since_dt
+        auto_until = until_dt if since_dt else None
 
         if "appstore" in sources_enabled:
             handled_sources.add("appstore")
@@ -2180,6 +2242,9 @@ class ReputationIngestService:
             subreddits = _get_list_str(reddit_cfg, "subreddits")
             query_templates = _get_list_str(reddit_cfg, "query_templates")
             limit_per_query = _env_int("REDDIT_LIMIT_PER_QUERY", 150)
+            time_filter = os.getenv("REDDIT_TIME_FILTER", "").strip() or None
+            if not time_filter and auto_since and auto_until:
+                time_filter = _infer_reddit_time_filter(auto_since, auto_until)
 
             queries = self._expand_queries(query_templates, entity_terms)
 
@@ -2194,6 +2259,7 @@ class ReputationIngestService:
                         subreddits=subreddits,
                         queries=queries,
                         limit_per_query=limit_per_query,
+                        time_filter=time_filter,
                     )
                 )
 
@@ -2201,6 +2267,19 @@ class ReputationIngestService:
             handled_sources.add("twitter")
             bearer = os.getenv("TWITTER_BEARER_TOKEN", "").strip()
             max_results = _env_int("TWITTER_MAX_RESULTS", 100)
+            start_time = os.getenv("TWITTER_START_TIME", "").strip() or None
+            end_time = os.getenv("TWITTER_END_TIME", "").strip() or None
+            if not start_time and auto_since:
+                start_dt = auto_since
+                if auto_until:
+                    min_start = auto_until - timedelta(days=7)
+                    if start_dt < min_start:
+                        start_dt = min_start
+                    if start_dt > auto_until:
+                        start_dt = auto_until
+                start_time = _format_rfc3339(start_dt)
+            if not end_time and auto_until:
+                end_time = _format_rfc3339(auto_until)
 
             queries = self._build_search_queries(
                 entity_terms,
@@ -2211,7 +2290,15 @@ class ReputationIngestService:
             if not bearer:
                 notes.append("twitter: missing TWITTER_BEARER_TOKEN")
             else:
-                collectors.append(TwitterCollector(bearer, queries, max_results=max_results))
+                collectors.append(
+                    TwitterCollector(
+                        bearer,
+                        queries,
+                        max_results=max_results,
+                        start_time=start_time,
+                        end_time=end_time,
+                    )
+                )
 
         if "news" in sources_enabled:
             handled_sources.add("news")
@@ -2227,6 +2314,12 @@ class ReputationIngestService:
             sources = os.getenv("NEWS_SOURCES", "").strip() or None
             news_endpoint = os.getenv("NEWS_API_ENDPOINT", "").strip() or None
             rss_only = _env_bool(os.getenv("NEWS_RSS_ONLY", "true"))
+            from_date = os.getenv("NEWS_FROM_DATE", "").strip() or None
+            to_date = os.getenv("NEWS_TO_DATE", "").strip() or None
+            if not from_date and auto_since:
+                from_date = _format_rfc3339(auto_since)
+            if not to_date and auto_until:
+                to_date = _format_rfc3339(auto_until)
 
             queries = self._build_search_queries(
                 entity_terms,
@@ -2255,6 +2348,8 @@ class ReputationIngestService:
                         rss_urls=rss_sources,
                         rss_only=rss_only,
                         filter_terms=entity_terms,
+                        from_date=from_date,
+                        to_date=to_date,
                     )
                 )
 
@@ -2273,6 +2368,12 @@ class ReputationIngestService:
                 "title,description" if raw_search_in is None else raw_search_in.strip() or None
             )
             newsapi_endpoint = os.getenv("NEWSAPI_ENDPOINT", "").strip() or None
+            from_date = os.getenv("NEWSAPI_FROM_DATE", "").strip() or None
+            to_date = os.getenv("NEWSAPI_TO_DATE", "").strip() or None
+            if not from_date and auto_since:
+                from_date = _format_rfc3339(auto_since)
+            if not to_date and auto_until:
+                to_date = _format_rfc3339(auto_until)
 
             queries = self._build_search_queries(
                 entity_terms,
@@ -2293,6 +2394,8 @@ class ReputationIngestService:
                         domains=domains,
                         sort_by=sort_by,
                         search_in=search_in,
+                        from_date=from_date,
+                        to_date=to_date,
                         endpoint=newsapi_endpoint,
                     )
                 )
@@ -2307,6 +2410,9 @@ class ReputationIngestService:
             query_suffix = os.getenv("GDELT_QUERY_SUFFIX", "").strip() or None
             start_datetime = os.getenv("GDELT_START_DATETIME", "").strip() or None
             end_datetime = os.getenv("GDELT_END_DATETIME", "").strip() or None
+            if not start_datetime and not end_datetime and auto_since and auto_until:
+                start_datetime = _format_gdelt_datetime(auto_since)
+                end_datetime = _format_gdelt_datetime(auto_until)
 
             queries = self._build_search_queries(
                 entity_terms,
@@ -2342,6 +2448,12 @@ class ReputationIngestService:
             to_date = os.getenv("GUARDIAN_TO_DATE", "").strip() or None
             section = os.getenv("GUARDIAN_SECTION", "").strip() or None
             tag = os.getenv("GUARDIAN_TAG", "").strip() or None
+            if not from_date and auto_since:
+                from_date = _format_date(auto_since)
+            if not to_date and auto_until:
+                to_date = _format_date(auto_until)
+            if from_date and to_date and from_date > to_date:
+                from_date = to_date
 
             queries = self._build_search_queries(
                 entity_terms,
@@ -2478,6 +2590,12 @@ class ReputationIngestService:
             handled_sources.add("youtube")
             api_key = os.getenv("YOUTUBE_API_KEY", "").strip()
             max_results = _env_int("YOUTUBE_MAX_RESULTS", 50)
+            published_after = os.getenv("YOUTUBE_PUBLISHED_AFTER", "").strip() or None
+            published_before = os.getenv("YOUTUBE_PUBLISHED_BEFORE", "").strip() or None
+            if not published_after and auto_since:
+                published_after = _format_rfc3339(auto_since)
+            if not published_before and auto_until:
+                published_before = _format_rfc3339(auto_until)
 
             queries = self._build_search_queries(
                 entity_terms,
@@ -2493,6 +2611,8 @@ class ReputationIngestService:
                         api_key=api_key,
                         queries=queries,
                         max_results=max_results,
+                        published_after=published_after,
+                        published_before=published_before,
                     )
                 )
 
@@ -3570,6 +3690,51 @@ def _market_rating_is_same(left: MarketRating, right: MarketRating) -> bool:
     if abs(left.rating - right.rating) > 0.0001:
         return False
     return left.rating_count == right.rating_count
+
+
+def _ensure_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def _latest_item_timestamp(items: Sequence[ReputationItem]) -> datetime | None:
+    latest: datetime | None = None
+    for item in items:
+        candidate = item.published_at or item.collected_at
+        if candidate is None:
+            continue
+        candidate = _ensure_utc(candidate)
+        if latest is None or candidate > latest:
+            latest = candidate
+    return latest
+
+
+def _format_rfc3339(value: datetime) -> str:
+    return _ensure_utc(value).isoformat().replace("+00:00", "Z")
+
+
+def _format_date(value: datetime) -> str:
+    return _ensure_utc(value).date().isoformat()
+
+
+def _format_gdelt_datetime(value: datetime) -> str:
+    return _ensure_utc(value).strftime("%Y%m%d%H%M%S")
+
+
+def _infer_reddit_time_filter(since: datetime, until: datetime) -> str:
+    delta = _ensure_utc(until) - _ensure_utc(since)
+    if delta <= timedelta(hours=1):
+        return "hour"
+    if delta <= timedelta(days=1):
+        return "day"
+    if delta <= timedelta(days=7):
+        return "week"
+    if delta <= timedelta(days=31):
+        return "month"
+    if delta <= timedelta(days=366):
+        return "year"
+    return "all"
 
 
 def _env_bool(value: str | None) -> bool:

@@ -10,6 +10,8 @@ import { getStoredToken } from "@/lib/auth";
 /** Base de la API; permite proxy local con /api. */
 export const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api";
 
+logger.info("API_BASE", { apiBase: API_BASE });
+
 type CacheEntry = {
   expiresAt: number;
   value?: unknown;

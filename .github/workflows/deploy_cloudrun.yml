@@ -114,12 +114,19 @@ jobs:
             echo "Missing AUTH_GOOGLE_CLIENT_ID secret."
             exit 1
           fi
+
+          # Regex to allow the production frontend Cloud Run URL pattern.
+          # e.g., https://gor-frontend-xxxxxxxx-ew.a.run.app
+          # Note: The backend code includes a default regex for localhost.
+          CORS_REGEX="^https://${FRONTEND_SERVICE}-.+\\.a\\.run\\.app$"
+
           cat >> backend/reputation/cloudrun.env <<EOF
           AUTH_ENABLED=true
           AUTH_GOOGLE_CLIENT_ID=${AUTH_GOOGLE_CLIENT_ID}
           AUTH_ALLOWED_EMAILS=${AUTH_ALLOWED_EMAILS}
           AUTH_ALLOWED_DOMAINS=${AUTH_ALLOWED_DOMAINS}
           AUTH_ALLOWED_GROUPS=${AUTH_ALLOWED_GROUPS}
+          CORS_ALLOWED_ORIGIN_REGEX=${CORS_REGEX}
           EOF
 
       - name: Deploy backend (Cloud Run)
@@ -152,20 +159,21 @@ jobs:
           AUTH_GOOGLE_CLIENT_ID: ${{ secrets.AUTH_GOOGLE_CLIENT_ID }}
           AUTH_ALLOWED_EMAILS: ${{ secrets.AUTH_ALLOWED_EMAILS }}
           AUTH_ALLOWED_DOMAINS: ${{ secrets.AUTH_ALLOWED_DOMAINS }}
+          NEXT_PUBLIC_API_BASE_URL: ${{ secrets.NEXT_PUBLIC_API_BASE_URL }}
         run: |
           set -euo pipefail
           if [ -z "${AUTH_GOOGLE_CLIENT_ID:-}" ]; then
             echo "Missing AUTH_GOOGLE_CLIENT_ID secret."
             exit 1
           fi
-          BACKEND_URL="$(gcloud run services describe "$BACKEND_SERVICE" --project "$GCP_PROJECT" --region "$GCP_REGION" --format 'value(status.url)')"
-          if [ -z "$BACKEND_URL" ]; then
-            echo "Failed to resolve backend URL."
+          if [ -z "${NEXT_PUBLIC_API_BASE_URL:-}" ]; then
+            echo "Missing NEXT_PUBLIC_API_BASE_URL secret. It must be set to the public URL of the backend."
             exit 1
           fi
-          BACKEND_URL="${BACKEND_URL%/}"
-          RUNTIME_ENV_VARS="API_PROXY_TARGET=${BACKEND_URL},USE_SERVER_PROXY=true,NEXT_PUBLIC_API_BASE_URL=/api,NEXT_PUBLIC_AUTH_ENABLED=true,NEXT_PUBLIC_GOOGLE_CLIENT_ID=${AUTH_GOOGLE_CLIENT_ID},NEXT_PUBLIC_ALLOWED_EMAILS=${AUTH_ALLOWED_EMAILS},NEXT_PUBLIC_ALLOWED_DOMAINS=${AUTH_ALLOWED_DOMAINS}"
-          BUILD_ENV_VARS="USE_SERVER_PROXY=true,API_PROXY_TARGET=${BACKEND_URL},NEXT_PUBLIC_API_BASE_URL=/api,NEXT_PUBLIC_AUTH_ENABLED=true,NEXT_PUBLIC_GOOGLE_CLIENT_ID=${AUTH_GOOGLE_CLIENT_ID},NEXT_PUBLIC_ALLOWED_EMAILS=${AUTH_ALLOWED_EMAILS},NEXT_PUBLIC_ALLOWED_DOMAINS=${AUTH_ALLOWED_DOMAINS}"
+          # The backend proxy is not needed when we have the direct URL.
+          # NEXT_PUBLIC_API_BASE_URL is set to the full backend URL for production builds from the GitHub secret.
+          ENV_VARS_COMMON="NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL},NEXT_PUBLIC_AUTH_ENABLED=true,NEXT_PUBLIC_GOOGLE_CLIENT_ID=${AUTH_GOOGLE_CLIENT_ID},NEXT_PUBLIC_ALLOWED_EMAILS=${AUTH_ALLOWED_EMAILS},NEXT_PUBLIC_ALLOWED_DOMAINS=${AUTH_ALLOWED_DOMAINS}"
+
           gcloud run deploy "$FRONTEND_SERVICE" \
             --project "$GCP_PROJECT" \
             --region "$GCP_REGION" \
@@ -178,18 +186,21 @@ jobs:
             --cpu "$FRONTEND_CPU" \
             --memory "$FRONTEND_MEMORY" \
             --cpu-throttling \
-            --set-env-vars "${RUNTIME_ENV_VARS}" \
-            --set-build-env-vars "${BUILD_ENV_VARS}"
+            --set-env-vars "${ENV_VARS_COMMON}" \
+            --set-build-env-vars "${ENV_VARS_COMMON}"
+
+          # After deployment, check if the frontend is accessible
           FRONTEND_URL="$(gcloud run services describe "$FRONTEND_SERVICE" --project "$GCP_PROJECT" --region "$GCP_REGION" --format 'value(status.url)')"
           if [ -z "$FRONTEND_URL" ]; then
             echo "Failed to resolve frontend URL."
             exit 1
           fi
-          STATUS="$(curl -s -o /dev/null -w "%{http_code}" "${FRONTEND_URL}/api/auth/me")"
-          if [ "$STATUS" -ge 500 ]; then
-            echo "Frontend proxy check failed: /api/auth/me returned ${STATUS}."
+          STATUS="$(curl -s -o /dev/null -w "%{http_code}" "${FRONTEND_URL}")"
+          if [ "$STATUS" -ne 200 ]; then
+            echo "Frontend health check failed: ${FRONTEND_URL} returned status ${STATUS}."
             exit 1
           fi
+          echo "Deployment successful. Frontend available at: ${FRONTEND_URL}"
 
       - name: Ensure frontend is public (Cloud Run)
         run: |
