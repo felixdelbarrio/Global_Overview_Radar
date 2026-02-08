@@ -255,6 +255,11 @@ deploy-cloudrun-front:
 		echo "Falta AUTH_GOOGLE_CLIENT_ID (ponlo en backend/reputation/.env.reputation o exporta la variable)."; \
 		exit 1; \
 	fi
+	@# Fail-fast: debería ser un OAuth Client ID real (termina en .apps.googleusercontent.com)
+	@if ! echo "$(AUTH_GOOGLE_CLIENT_ID)" | grep -q '\.apps\.googleusercontent\.com$$'; then \
+		echo "ERROR: AUTH_GOOGLE_CLIENT_ID debe ser un OAuth Client ID (termina en .apps.googleusercontent.com). Valor actual: $(AUTH_GOOGLE_CLIENT_ID)"; \
+		exit 1; \
+	fi
 	@BACKEND_URL=$$(gcloud run services describe $(BACKEND_SERVICE) --project $(GCP_PROJECT) --region $(GCP_REGION) --format 'value(status.url)'); \
 	if [ -z "$$BACKEND_URL" ]; then \
 		echo "No se pudo obtener BACKEND_URL. Deploy del backend primero."; \
@@ -272,8 +277,8 @@ deploy-cloudrun-front:
 		--cpu $(FRONTEND_CPU) \
 		--memory $(FRONTEND_MEMORY) \
 		--cpu-throttling \
-		--set-env-vars API_PROXY_TARGET=$$BACKEND_URL,USE_SERVER_PROXY=true,NEXT_PUBLIC_API_BASE_URL=/api,NEXT_PUBLIC_AUTH_ENABLED=true,NEXT_PUBLIC_GOOGLE_CLIENT_ID=$(AUTH_GOOGLE_CLIENT_ID),NEXT_PUBLIC_ALLOWED_EMAILS=$(NEXT_PUBLIC_ALLOWED_EMAILS),NEXT_PUBLIC_ALLOWED_DOMAINS=$(NEXT_PUBLIC_ALLOWED_DOMAINS) \
-		--set-build-env-vars USE_SERVER_PROXY=true,API_PROXY_TARGET=$$BACKEND_URL,NEXT_PUBLIC_API_BASE_URL=/api,NEXT_PUBLIC_AUTH_ENABLED=true,NEXT_PUBLIC_GOOGLE_CLIENT_ID=$(AUTH_GOOGLE_CLIENT_ID),NEXT_PUBLIC_ALLOWED_EMAILS=$(NEXT_PUBLIC_ALLOWED_EMAILS),NEXT_PUBLIC_ALLOWED_DOMAINS=$(NEXT_PUBLIC_ALLOWED_DOMAINS)
+		--set-env-vars USE_SERVER_PROXY=false,NEXT_PUBLIC_API_BASE_URL=$$BACKEND_URL,NEXT_PUBLIC_AUTH_ENABLED=true,NEXT_PUBLIC_GOOGLE_CLIENT_ID=$(AUTH_GOOGLE_CLIENT_ID),NEXT_PUBLIC_ALLOWED_EMAILS=$(NEXT_PUBLIC_ALLOWED_EMAILS),NEXT_PUBLIC_ALLOWED_DOMAINS=$(NEXT_PUBLIC_ALLOWED_DOMAINS) \
+		--set-build-env-vars USE_SERVER_PROXY=false,NEXT_PUBLIC_API_BASE_URL=$$BACKEND_URL,NEXT_PUBLIC_AUTH_ENABLED=true,NEXT_PUBLIC_GOOGLE_CLIENT_ID=$(AUTH_GOOGLE_CLIENT_ID),NEXT_PUBLIC_ALLOWED_EMAILS=$(NEXT_PUBLIC_ALLOWED_EMAILS),NEXT_PUBLIC_ALLOWED_DOMAINS=$(NEXT_PUBLIC_ALLOWED_DOMAINS)
 
 deploy-cloudrun: deploy-cloudrun-back deploy-cloudrun-front
 	@true
