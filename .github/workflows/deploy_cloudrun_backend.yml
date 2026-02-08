@@ -76,8 +76,9 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Buildpacks: pin Python + set entrypoint for FastAPI
-          BUILD_VARS="GOOGLE_RUNTIME_VERSION=3.11,GOOGLE_ENTRYPOINT=gunicorn -k uvicorn.workers.UvicornWorker reputation.api.main:app --bind :8080 --workers 1"
+          # Buildpacks: pin Python + force entrypoint to uvicorn (matches local: uvicorn reputation.api.main:app)
+          # NOTE: \$PORT is escaped so GitHub Actions shell doesn't expand it.
+          BUILD_VARS="GOOGLE_RUNTIME_VERSION=3.11,GOOGLE_ENTRYPOINT=uvicorn reputation.api.main:app --host 0.0.0.0 --port \\$PORT"
 
           gcloud run deploy "$BACKEND_SERVICE" \
             --project "$GCP_PROJECT" \
@@ -90,6 +91,7 @@ jobs:
             --cpu "$BACKEND_CPU" \
             --memory "$BACKEND_MEMORY" \
             --cpu-throttling \
+            --timeout 300 \
             --set-build-env-vars "${BUILD_VARS}" \
             --env-vars-file backend/reputation/cloudrun.env
 
