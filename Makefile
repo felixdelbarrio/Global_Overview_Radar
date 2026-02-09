@@ -224,15 +224,12 @@ cloudrun-env:
 
 	@echo "==> cloudrun.env generado."
 
-# ✅ AJUSTADO: --source backend/reputation + build env vars (runtime + entrypoint)
 deploy-cloudrun-back: cloudrun-env
 	@echo "==> Deploy backend en Cloud Run..."
-	@set -euo pipefail; \
-	BUILD_VARS="GOOGLE_RUNTIME_VERSION=3.11,GOOGLE_ENTRYPOINT=gunicorn -k uvicorn.workers.UvicornWorker reputation.api.main:app --bind :8080 --workers 1"; \
-	gcloud run deploy $(BACKEND_SERVICE) \
+	@gcloud run deploy $(BACKEND_SERVICE) \
 		--project $(GCP_PROJECT) \
 		--region $(GCP_REGION) \
-		--source backend/reputation \
+		--source . \
 		--no-allow-unauthenticated \
 		--min-instances 0 \
 		--max-instances $(BACKEND_MAX_INSTANCES) \
@@ -240,7 +237,6 @@ deploy-cloudrun-back: cloudrun-env
 		--cpu $(BACKEND_CPU) \
 		--memory $(BACKEND_MEMORY) \
 		--cpu-throttling \
-		--set-build-env-vars "$$BUILD_VARS" \
 		--env-vars-file backend/reputation/cloudrun.env
 
 deploy-cloudrun-front:
