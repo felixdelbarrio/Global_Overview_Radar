@@ -76,10 +76,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Buildpacks: pin Python + force entrypoint to uvicorn (matches local: uvicorn reputation.api.main:app)
-          # NOTE: \$PORT is escaped so GitHub Actions shell doesn't expand it.
-          BUILD_VARS="GOOGLE_RUNTIME_VERSION=3.11,GOOGLE_ENTRYPOINT=uvicorn reputation.api.main:app --host 0.0.0.0 --port \\$PORT"
-
+          # Buildpacks: pin Python + force entrypoint to uvicorn
+          # Important: we pass $PORT literally (no expansion in the runner)
           gcloud run deploy "$BACKEND_SERVICE" \
             --project "$GCP_PROJECT" \
             --region "$GCP_REGION" \
@@ -92,7 +90,7 @@ jobs:
             --memory "$BACKEND_MEMORY" \
             --cpu-throttling \
             --timeout 300 \
-            --set-build-env-vars "${BUILD_VARS}" \
+            --set-build-env-vars 'GOOGLE_RUNTIME_VERSION=3.11,GOOGLE_ENTRYPOINT=uvicorn reputation.api.main:app --host 0.0.0.0 --port ${PORT:-8080}' \
             --env-vars-file backend/reputation/cloudrun.env
 
       - name: Show backend URL
