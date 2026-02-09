@@ -125,6 +125,10 @@ install: install-backend install-front
 install-backend: venv
 	@echo "==> Instalando dependencias Python (requirements / pyproject editable)..."
 	$(PIP) install -r requirements.txt || true
+	@if [ -f requirements-dev.txt ]; then \
+		echo "==> Instalando dependencias dev (requirements-dev.txt)..."; \
+		$(PIP) install -r requirements-dev.txt; \
+	fi
 	$(PIP) install -e backend
 
 install-front:
@@ -226,10 +230,12 @@ cloudrun-env:
 
 deploy-cloudrun-back: cloudrun-env
 	@echo "==> Deploy backend en Cloud Run..."
-	@gcloud run deploy $(BACKEND_SERVICE) \
+	@set -euo pipefail; \
+	BUILD_VARS="GOOGLE_RUNTIME_VERSION=3.11,GOOGLE_ENTRYPOINT=gunicorn -k uvicorn.workers.UvicornWorker reputation.api.main:app --bind :8080 --workers 1"; \
+	gcloud run deploy $(BACKEND_SERVICE) \
 		--project $(GCP_PROJECT) \
 		--region $(GCP_REGION) \
-		--source . \
+		--source backend/reputation \
 		--no-allow-unauthenticated \
 		--min-instances 0 \
 		--max-instances $(BACKEND_MAX_INSTANCES) \
@@ -237,6 +243,7 @@ deploy-cloudrun-back: cloudrun-env
 		--cpu $(BACKEND_CPU) \
 		--memory $(BACKEND_MEMORY) \
 		--cpu-throttling \
+		--set-build-env-vars "$$BUILD_VARS" \
 		--env-vars-file backend/reputation/cloudrun.env
 
 deploy-cloudrun-front:
