@@ -18,6 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      deployments: write
       id-token: write
     env:
       GCP_PROJECT: global-overview-radar
@@ -34,6 +35,45 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Create GitHub Deployment (Production - Backend)
+        id: create_deploy
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const sha = context.payload.workflow_run.head_sha;
+
+            const res = await github.rest.repos.createDeployment({
+              owner,
+              repo,
+              ref: sha,
+              environment: "Production",
+              auto_merge: false,
+              required_contexts: [],
+              description: "Cloud Run backend deployment",
+              transient_environment: false,
+              production_environment: true,
+            });
+
+            core.setOutput("deployment_id", String(res.data.id));
+
+      - name: Mark deployment as in_progress
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const deployment_id = Number(`${{ steps.create_deploy.outputs.deployment_id }}`);
+
+            await github.rest.repos.createDeploymentStatus({
+              owner,
+              repo,
+              deployment_id,
+              state: "in_progress",
+              description: "Deploying backend to Cloud Run",
+            });
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
@@ -76,12 +116,12 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Buildpacks: pin Python + force entrypoint to uvicorn
-          # Important: we pass $PORT literally (no expansion in the runner)
+          # Buildpacks: source must include backend pyproject for dependency install.
+          # Entry point binds explicitly to 8080 (Cloud Run default container port).
           gcloud run deploy "$BACKEND_SERVICE" \
             --project "$GCP_PROJECT" \
             --region "$GCP_REGION" \
-            --source backend/reputation \
+            --source backend \
             --no-allow-unauthenticated \
             --min-instances 0 \
             --max-instances "$BACKEND_MAX_INSTANCES" \
@@ -90,13 +130,54 @@ jobs:
             --memory "$BACKEND_MEMORY" \
             --cpu-throttling \
             --timeout 300 \
-            --set-build-env-vars 'GOOGLE_RUNTIME_VERSION=3.11,GOOGLE_ENTRYPOINT=uvicorn reputation.api.main:app --host 0.0.0.0 --port ${PORT:-8080}' \
+            --set-build-env-vars 'GOOGLE_RUNTIME_VERSION=3.11,GOOGLE_ENTRYPOINT=python -m uvicorn reputation.api.main:app --host 0.0.0.0 --port 8080' \
             --env-vars-file backend/reputation/cloudrun.env
 
       - name: Show backend URL
+        id: backend_url
         run: |
           set -euo pipefail
-          gcloud run services describe "$BACKEND_SERVICE" \
+          BACKEND_URL="$(gcloud run services describe "$BACKEND_SERVICE" \
             --project "$GCP_PROJECT" \
             --region "$GCP_REGION" \
-            --format 'value(status.url)'
+            --format 'value(status.url)')"
+          echo "url=$BACKEND_URL" >> "$GITHUB_OUTPUT"
+          echo "$BACKEND_URL"
+
+      - name: Mark deployment as success
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const deployment_id = Number(`${{ steps.create_deploy.outputs.deployment_id }}`);
+            const backendUrl = `${{ steps.backend_url.outputs.url }}`;
+
+            const payload = {
+              owner,
+              repo,
+              deployment_id,
+              state: "success",
+              description: "Backend deployed to Cloud Run",
+            };
+            if (backendUrl) payload.environment_url = backendUrl;
+
+            await github.rest.repos.createDeploymentStatus(payload);
+
+      - name: Mark deployment as failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const deployment_id = Number(`${{ steps.create_deploy.outputs.deployment_id }}`);
+
+            await github.rest.repos.createDeploymentStatus({
+              owner,
+              repo,
+              deployment_id,
+              state: "failure",
+              description: "Backend deploy failed",
+            });

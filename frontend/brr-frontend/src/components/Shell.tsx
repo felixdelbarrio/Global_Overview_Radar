@@ -818,14 +818,6 @@ export function Shell({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen">
       {/* Barra superior */}
       <header className="sticky top-0 z-40">
-        {anyPanelOpen && (
-          <button
-            type="button"
-            aria-label="Cerrar panel"
-            onClick={closeAllPanels}
-            className="fixed inset-0 z-[45] bg-transparent sm:hidden"
-          />
-        )}
         <div
           className="relative mobile-header-showcase min-h-16 px-4 sm:px-6 py-4 sm:py-0 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4 text-white shadow-[var(--shadow-header)]"
           style={{
@@ -848,6 +840,14 @@ export function Shell({ children }: { children: React.ReactNode }) {
           </div>
 
           <div className="ml-0 sm:ml-auto w-full sm:w-auto flex flex-wrap items-center justify-end sm:justify-start gap-2 sm:gap-3 text-xs text-[color:var(--text-inverse-80)]">
+            {anyPanelOpen && (
+              <button
+                type="button"
+                aria-label="Cerrar panel"
+                onClick={closeAllPanels}
+                className="fixed inset-0 z-[45] bg-transparent sm:hidden"
+              />
+            )}
             <div className="flex items-center gap-2 order-1 w-auto sm:order-none">
               {showIngestCenter && (
                 <div className="relative">

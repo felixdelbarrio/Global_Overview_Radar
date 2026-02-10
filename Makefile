@@ -45,6 +45,11 @@ AUTH_ALLOWED_DOMAINS ?= gmail.com
 AUTH_ALLOWED_GROUPS ?=
 NEXT_PUBLIC_ALLOWED_EMAILS ?= $(AUTH_ALLOWED_EMAILS)
 NEXT_PUBLIC_ALLOWED_DOMAINS ?= $(AUTH_ALLOWED_DOMAINS)
+CALLER_SERVICE_ACCOUNT ?= gor-github-deploy@$(GCP_PROJECT).iam.gserviceaccount.com
+INGEST_FORCE ?= true
+INGEST_ALL_SOURCES ?= false
+INGEST_POLL_SECONDS ?= 10
+INGEST_POLL_ATTEMPTS ?= 60
 
 # CORS (Cloud Run backend)
 # Recomendación: setear en backend/reputation/.env.reputation
@@ -65,7 +70,7 @@ VISUAL_QA_OUT ?= docs/visual-qa
 
 .DEFAULT_GOAL := help
 
-.PHONY: help venv install install-backend install-front env ensure-backend ensure-front ingest ingest-filtered reputation-ingest reputation-ingest-filtered serve serve-back dev-back dev-front build-front start-front lint lint-back lint-front typecheck typecheck-back typecheck-front format format-back format-front check test test-back test-front test-coverage test-coverage-back test-coverage-front bench bench-baseline visual-qa clean reset cloudrun-config cloudrun-env deploy-cloudrun-back deploy-cloudrun-front deploy-cloudrun
+.PHONY: help venv install install-backend install-front env ensure-backend ensure-front ingest ingest-filtered reputation-ingest reputation-ingest-filtered serve serve-back dev-back dev-front build-front start-front lint lint-back lint-front typecheck typecheck-back typecheck-front format format-back format-front check test test-back test-front test-coverage test-coverage-back test-coverage-front bench bench-baseline visual-qa clean reset cloudrun-config cloudrun-env deploy-cloudrun-back deploy-cloudrun-front deploy-cloudrun ingest-cloudrun
 
 help:
 	@echo "Make targets disponibles:"
@@ -103,6 +108,7 @@ help:
 	@echo "  make deploy-cloudrun-back  - Deploy backend en Cloud Run (usa env vars)"
 	@echo "  make deploy-cloudrun-front - Deploy frontend en Cloud Run (usa env vars + proxy /api)"
 	@echo "  make deploy-cloudrun       - Deploy backend + frontend (Cloud Run)"
+	@echo "  make ingest-cloudrun       - Lanzar ingesta remota en Cloud Run y esperar resultado"
 	@echo ""
 	@echo "Notas:"
 	@echo " - Fullstack Cloud Run con backend privado: el frontend usa proxy /api hacia el backend"
@@ -231,11 +237,11 @@ cloudrun-env:
 deploy-cloudrun-back: cloudrun-env
 	@echo "==> Deploy backend en Cloud Run..."
 	@set -euo pipefail; \
-	BUILD_VARS="GOOGLE_RUNTIME_VERSION=3.11,GOOGLE_ENTRYPOINT=gunicorn -k uvicorn.workers.UvicornWorker reputation.api.main:app --bind :8080 --workers 1"; \
+	BUILD_VARS="GOOGLE_RUNTIME_VERSION=3.11,GOOGLE_ENTRYPOINT=python -m uvicorn reputation.api.main:app --host 0.0.0.0 --port 8080"; \
 	gcloud run deploy $(BACKEND_SERVICE) \
 		--project $(GCP_PROJECT) \
 		--region $(GCP_REGION) \
-		--source backend/reputation \
+		--source backend \
 		--no-allow-unauthenticated \
 		--min-instances 0 \
 		--max-instances $(BACKEND_MAX_INSTANCES) \
@@ -278,6 +284,63 @@ deploy-cloudrun-front:
 
 deploy-cloudrun: deploy-cloudrun-back deploy-cloudrun-front
 	@true
+
+ingest-cloudrun:
+	@echo "==> Lanzando ingesta remota en Cloud Run ($(BACKEND_SERVICE))..."
+	@set -euo pipefail; \
+	if [ -z "$(AUTH_GOOGLE_CLIENT_ID)" ]; then \
+		echo "Falta AUTH_GOOGLE_CLIENT_ID (ponlo en backend/reputation/.env.reputation o exporta la variable)."; \
+		exit 1; \
+	fi; \
+	BACKEND_URL=$$(gcloud run services describe $(BACKEND_SERVICE) --project $(GCP_PROJECT) --region $(GCP_REGION) --format 'value(status.url)'); \
+	if [ -z "$$BACKEND_URL" ]; then \
+		echo "No se pudo obtener BACKEND_URL. Verifica deploy del backend y permisos."; \
+		exit 1; \
+	fi; \
+	TOKEN_FLAGS=(); \
+	if [ -n "$(CALLER_SERVICE_ACCOUNT)" ]; then \
+		TOKEN_FLAGS+=(--impersonate-service-account "$(CALLER_SERVICE_ACCOUNT)"); \
+		echo "Usando impersonacion SA: $(CALLER_SERVICE_ACCOUNT)"; \
+	fi; \
+	RUN_TOKEN=$$(gcloud auth print-identity-token "$${TOKEN_FLAGS[@]}" --audiences="$$BACKEND_URL"); \
+	USER_TOKEN=$$(gcloud auth print-identity-token "$${TOKEN_FLAGS[@]}" --audiences="$(AUTH_GOOGLE_CLIENT_ID)" --include-email); \
+	PAYLOAD="{\"force\":$(INGEST_FORCE),\"all_sources\":$(INGEST_ALL_SOURCES)}"; \
+	RESPONSE=$$(curl -sS -f -X POST "$$BACKEND_URL/ingest/reputation" \
+		-H "Authorization: Bearer $$RUN_TOKEN" \
+		-H "x-user-id-token: $$USER_TOKEN" \
+		-H "Content-Type: application/json" \
+		-d "$$PAYLOAD"); \
+	JOB_ID=$$(printf '%s' "$$RESPONSE" | python3 -c 'import json,sys; print((json.loads(sys.stdin.read() or "{}")).get("id",""))'); \
+	if [ -z "$$JOB_ID" ]; then \
+		echo "No se recibio job id. Respuesta:"; \
+		echo "$$RESPONSE"; \
+		exit 1; \
+	fi; \
+	echo "Ingest job id: $$JOB_ID"; \
+	ATTEMPT=1; \
+	while [ "$$ATTEMPT" -le "$(INGEST_POLL_ATTEMPTS)" ]; do \
+		JOB=$$(curl -sS -f "$$BACKEND_URL/ingest/jobs/$$JOB_ID" \
+			-H "Authorization: Bearer $$RUN_TOKEN" \
+			-H "x-user-id-token: $$USER_TOKEN"); \
+		STATUS=$$(printf '%s' "$$JOB" | python3 -c 'import json,sys; print((json.loads(sys.stdin.read() or "{}")).get("status",""))'); \
+		PROGRESS=$$(printf '%s' "$$JOB" | python3 -c 'import json,sys; print((json.loads(sys.stdin.read() or "{}")).get("progress",""))'); \
+		STAGE=$$(printf '%s' "$$JOB" | python3 -c 'import json,sys; print((json.loads(sys.stdin.read() or "{}")).get("stage",""))'); \
+		echo "[$$ATTEMPT/$(INGEST_POLL_ATTEMPTS)] status=$$STATUS progress=$$PROGRESS stage=$$STAGE"; \
+		if [ "$$STATUS" = "success" ]; then \
+			echo "==> Ingesta completada."; \
+			echo "$$JOB"; \
+			exit 0; \
+		fi; \
+		if [ "$$STATUS" = "error" ]; then \
+			echo "==> Ingesta fallida."; \
+			echo "$$JOB"; \
+			exit 1; \
+		fi; \
+		ATTEMPT=$$((ATTEMPT + 1)); \
+		sleep $(INGEST_POLL_SECONDS); \
+	done; \
+	echo "Timeout esperando la ingesta remota."; \
+	exit 1
 
 # -------------------------
 # Backend runtime

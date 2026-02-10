@@ -31,6 +31,7 @@ jobs:
       GCP_PROJECT: global-overview-radar
       GCP_REGION: europe-southwest1
       BACKEND_SERVICE: gor-backend
+      CALLER_SERVICE_ACCOUNT: gor-github-deploy@global-overview-radar.iam.gserviceaccount.com
 
       # OAuth client id (si tu política lo trata como secret, déjalo en secrets)
       AUTH_GOOGLE_CLIENT_ID: ${{ secrets.AUTH_GOOGLE_CLIENT_ID }}
@@ -83,10 +84,15 @@ jobs:
           fi
 
           # Token para invocar Cloud Run (audience = URL del servicio)
-          RUN_TOKEN="$(gcloud auth print-identity-token --audiences="$BACKEND_URL")"
+          RUN_TOKEN="$(gcloud auth print-identity-token \
+            --impersonate-service-account="$CALLER_SERVICE_ACCOUNT" \
+            --audiences="$BACKEND_URL")"
 
           # Token “usuario” para tu capa de auth (audience = OAuth client id)
-          USER_TOKEN="$(gcloud auth print-identity-token --audiences="$AUTH_GOOGLE_CLIENT_ID" --include-email)"
+          USER_TOKEN="$(gcloud auth print-identity-token \
+            --impersonate-service-account="$CALLER_SERVICE_ACCOUNT" \
+            --audiences="$AUTH_GOOGLE_CLIENT_ID" \
+            --include-email)"
 
           api_get() {
             curl -sS -f "$BACKEND_URL$1" \

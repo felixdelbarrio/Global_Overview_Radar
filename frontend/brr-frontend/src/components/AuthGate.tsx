@@ -209,10 +209,13 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
           onLoad={() => setReady(true)}
         />
         <div className="min-h-screen">
-          <div className="fixed right-4 top-4 z-50 rounded-full border border-[color:var(--border-70)] bg-[color:var(--surface-90)] px-3 py-1.5 text-xs text-[color:var(--text-55)] shadow-[var(--shadow-pill)]">
-            {email ? `Conectado: ${email}` : "Conectado"}
+          <div className="fixed right-3 top-[calc(env(safe-area-inset-top)+6.75rem)] z-30 flex max-w-[calc(100vw-1.5rem)] items-center gap-2 rounded-full border border-[color:var(--border-70)] bg-[color:var(--surface-90)] px-3 py-1.5 text-xs text-[color:var(--text-55)] shadow-[var(--shadow-pill)] backdrop-blur sm:right-4 sm:top-[calc(env(safe-area-inset-top)+4.75rem)] sm:max-w-[420px]">
+            <span className="min-w-0 truncate">
+              {email ? `Conectado: ${email}` : "Conectado"}
+            </span>
             <button
-              className="ml-3 text-[color:var(--aqua)] hover:text-[color:var(--blue)]"
+              type="button"
+              className="shrink-0 text-[color:var(--aqua)] hover:text-[color:var(--blue)]"
               onClick={handleLogout}
             >
               Salir

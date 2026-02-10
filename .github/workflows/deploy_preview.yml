@@ -14,7 +14,7 @@ jobs:
     if: >-
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
-      github.event.workflow_run.head_branch == 'master'
+      github.event.workflow_run.head_branch == 'develop'
     runs-on: ubuntu-latest
     permissions:
       actions: read
@@ -55,14 +55,14 @@ jobs:
               }
             }
 
-            // Solo desplegar merges a master
+            // Solo desplegar merges a develop
             const prs = await github.rest.repos.listPullRequestsAssociatedWithCommit({
               owner,
               repo,
               commit_sha: headSha,
             });
             const mergedPr = prs.data.find(
-              (pr) => pr.merged_at && pr.base && pr.base.ref === "master"
+              (pr) => pr.merged_at && pr.base && pr.base.ref === "develop"
             );
             if (!mergedPr) {
               allOk = false;
