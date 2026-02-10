@@ -120,15 +120,15 @@ jobs:
               --secret AUTH_BYPASS_MUTATION_KEY \
               --project "$GCP_PROJECT" 2>/dev/null || true)"
             BYPASS_MUTATION_KEY="$(echo "$BYPASS_MUTATION_KEY" | tr -d '\r\n')"
-            if [ -z "${BYPASS_MUTATION_KEY}" ]; then
-              echo "Missing AUTH_BYPASS_MUTATION_KEY secret while GOOGLE_CLOUD_LOGIN_REQUESTED=true."
-              exit 1
-            fi
-            if [ "${#BYPASS_MUTATION_KEY}" -lt 32 ]; then
+            if [ -n "${BYPASS_MUTATION_KEY}" ] && [ "${#BYPASS_MUTATION_KEY}" -lt 32 ]; then
               echo "AUTH_BYPASS_MUTATION_KEY must be at least 32 characters."
               exit 1
             fi
-            BYPASS_ALLOW_MUTATIONS="true"
+            if [ -n "${BYPASS_MUTATION_KEY}" ]; then
+              BYPASS_ALLOW_MUTATIONS="true"
+            else
+              echo "::warning::AUTH_BYPASS_MUTATION_KEY missing while GOOGLE_CLOUD_LOGIN_REQUESTED=true. Deploying backend in bypass read-only mode (mutations disabled)."
+            fi
           fi
 
           if [ "${LOGIN_REQUESTED}" != "true" ] && [ -z "${AUTH_GOOGLE_CLIENT_ID:-}" ]; then
