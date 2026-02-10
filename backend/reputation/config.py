@@ -92,6 +92,12 @@ class ReputationSettings(BaseSettings):
     source_downdetector: bool = Field(default=False, alias="REPUTATION_SOURCE_DOWNDETECTOR")
     sources_allowlist: str = Field(default="", alias="REPUTATION_SOURCES_ALLOWLIST")
 
+    # UI
+    ui_show_comparisons: bool = Field(
+        default=False,
+        alias="REPUTATION_UI_SHOW_COMPARISONS",
+    )
+
     # Auth (Google ID tokens)
     auth_enabled: bool = Field(default=False, alias="AUTH_ENABLED")
     # Compat: when true, Cloud Run can bypass interactive login and impersonate an allowed email.

@@ -147,9 +147,12 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
   const [reputationIngesting, setReputationIngesting] = useState(false);
   const [reputationIngestNote, setReputationIngestNote] = useState<string | null>(null);
   const [cacheNoticeDismissed, setCacheNoticeDismissed] = useState(false);
+  const defaultGeoAppliedRef = useRef(false);
   const isDashboard = mode === "dashboard";
   const effectiveSentiment = isDashboard ? "all" : sentiment;
   const effectiveActor = isDashboard ? "all" : actor;
+  const comparisonsEnabled = !isDashboard && Boolean(meta?.ui_show_comparisons);
+  const actorForSeries = comparisonsEnabled ? effectiveActor : "all";
   const effectiveFromDate = isDashboard ? dashboardFrom : fromDate;
   const effectiveToDate = isDashboard ? dashboardTo : toDate;
   const entityParam = useMemo(
@@ -184,6 +187,13 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
     if (sentiment !== "all") setSentiment("all");
     if (actor !== "all") setActor("all");
   }, [isDashboard, sentiment, actor]);
+
+  useEffect(() => {
+    if (comparisonsEnabled) return;
+    if (actor !== "all") {
+      setActor("all");
+    }
+  }, [comparisonsEnabled, actor]);
 
   useEffect(() => {
     if (chartsVisible) return;
@@ -325,7 +335,11 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
     // If comparing actor principal vs another actor, request both datasets and combine them.
     const fetchCombinedIfComparing = async () => {
       setItemsLoading(true);
-      if (effectiveActor !== "all" && !isPrincipalName(effectiveActor, principalAliasKeys)) {
+      if (
+        comparisonsEnabled &&
+        effectiveActor !== "all" &&
+        !isPrincipalName(effectiveActor, principalAliasKeys)
+      ) {
         const makeFilter = (overrides: Partial<Record<string, unknown>>) => {
           const f: Record<string, unknown> = {};
           if (effectiveFromDate) f.from_date = effectiveFromDate;
@@ -388,6 +402,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
     effectiveFromDate,
     effectiveToDate,
     effectiveSentiment,
+    comparisonsEnabled,
     entityParam,
     geo,
     effectiveActor,
@@ -469,6 +484,20 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
     const fromItems = items.map((i) => i.geo).filter(Boolean) as string[];
     return unique([...fromMeta, ...fromItems]).sort((a, b) => a.localeCompare(b));
   }, [items, meta]);
+  const preferredGeo = useMemo(
+    () => findDefaultGeoOption(geoOptions),
+    [geoOptions],
+  );
+
+  useEffect(() => {
+    if (defaultGeoAppliedRef.current) return;
+    if (!geoOptions.length) return;
+    defaultGeoAppliedRef.current = true;
+    if (geo === "all" && preferredGeo) {
+      setGeo(preferredGeo);
+    }
+  }, [geoOptions, preferredGeo, geo]);
+
   const availableActorSet = useMemo(() => {
     const values = chartItems
       .map((i) => i.actor)
@@ -591,12 +620,12 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
     () =>
       buildComparativeSeries(
         chartItems,
-        effectiveActor,
+        actorForSeries,
         principalAliasKeys,
         effectiveFromDate,
         effectiveToDate,
       ),
-    [chartItems, effectiveActor, principalAliasKeys, effectiveFromDate, effectiveToDate],
+    [chartItems, actorForSeries, principalAliasKeys, effectiveFromDate, effectiveToDate],
   );
   const dashboardSeries = useMemo(
     () =>
@@ -637,10 +666,12 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
   );
   const selectedActor = useMemo(
     () =>
-      effectiveActor !== "all" && !isPrincipalName(effectiveActor, principalAliasKeys)
+      comparisonsEnabled &&
+      effectiveActor !== "all" &&
+      !isPrincipalName(effectiveActor, principalAliasKeys)
         ? effectiveActor
         : null,
-    [effectiveActor, principalAliasKeys],
+    [comparisonsEnabled, effectiveActor, principalAliasKeys],
   );
   const selectedActorKey = useMemo(
     () => (selectedActor ? normalizeKey(selectedActor) : null),
@@ -710,10 +741,11 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
       .slice(0, 20);
   }, [groupedMentions, isDashboard, principalAliasKeys]);
   const [mentionsTab, setMentionsTab] = useState<"principal" | "actor">("principal");
+  const effectiveMentionsTab = comparisonsEnabled ? mentionsTab : "principal";
 
   const mentionsToShow =
-    mentionsTab === "principal" ? principalMentions : actorMentions;
-  const mentionsLabel = mentionsTab === "principal" ? principalLabel : actorLabel;
+    effectiveMentionsTab === "principal" ? principalMentions : actorMentions;
+  const mentionsLabel = effectiveMentionsTab === "principal" ? principalLabel : actorLabel;
   const errorMessage = error || chartError;
   const mentionsLoading = itemsLoading || chartLoading;
   const headerEyebrow = mode === "dashboard" ? "Dashboard" : "Panorama reputacional";
@@ -722,7 +754,9 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
   const headerSubtitle =
     mode === "dashboard"
       ? "Señales de percepción y salud operativa en un mismo vistazo."
-      : "Analiza la conversación por país, periodo y fuente. Detecta señales tempranas y compara impacto entre entidades.";
+      : comparisonsEnabled
+        ? "Analiza la conversación por país, periodo y fuente. Detecta señales tempranas y compara impacto entre entidades."
+        : "Analiza la conversación por país, periodo y fuente para el actor principal.";
 
   return (
     <Shell>
@@ -885,7 +919,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
                 ))}
               </select>
             </FilterField>
-            {!isDashboard && (
+            {!isDashboard && comparisonsEnabled && (
               <FilterField label="Otros actores del mercado">
                 <select
                   value={actor}
@@ -989,7 +1023,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
                 history={marketRatingsHistory}
               />
             )}
-            {showStoreRatingsForGeo && !isDashboard && (
+            {showStoreRatingsForGeo && !isDashboard && comparisonsEnabled && (
               <StoreRatingCard
                 label="Rating oficial competencia"
                 ratings={actorStoreRatings}
@@ -1051,7 +1085,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
               </div>
             </div>
           )}
-          {!isDashboard && (
+          {!isDashboard && comparisonsEnabled && (
             <div className="mt-4">
               <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
                 TOP OTROS ACTORES DEL MERCADO
@@ -1133,7 +1167,9 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
           <div className="text-xs text-[color:var(--text-55)]">
             {mode === "dashboard"
               ? `${principalLabel} · ${rangeLabel}`
-              : `Comparativa ${principalLabel} vs ${actorLabel} · ${rangeLabel}`}
+              : comparisonsEnabled
+                ? `Comparativa ${principalLabel} vs ${actorLabel} · ${rangeLabel}`
+                : `${principalLabel} · ${rangeLabel}`}
           </div>
         </div>
         {showDownloads && (
@@ -1145,6 +1181,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
                   principalLabel,
                   actorLabel,
                   buildDownloadName("sentimiento_grafico", fromDate, toDate),
+                  comparisonsEnabled,
                 )
               }
               className="inline-flex items-center gap-2 rounded-full border border-[color:var(--border-70)] bg-[color:var(--surface-80)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--brand-ink)] shadow-[var(--shadow-pill)] transition hover:-translate-y-0.5 hover:shadow-[var(--shadow-pill-hover)]"
@@ -1171,6 +1208,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
               data={sentimentSeries}
               principalLabel={principalLabel}
               actorLabel={actorLabel}
+              showActor={comparisonsEnabled}
             />
           )}
         </div>
@@ -1236,7 +1274,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
                 onClick={() => setMentionsTab("principal")}
                 className={
                   "group w-full sm:w-auto flex flex-col items-start gap-1 sm:flex-row sm:items-center sm:gap-2 rounded-full px-3 py-1.5 text-xs font-semibold transition sm:hover:-translate-y-0.5 " +
-                  (mentionsTab === "principal"
+                  (effectiveMentionsTab === "principal"
                     ? "bg-[color:var(--surface-solid)] text-[color:var(--ink)] shadow-[var(--shadow-sm)] ring-1 ring-[color:var(--aqua)]/30"
                     : "text-[color:var(--text-50)] hover:text-[color:var(--ink)] hover:bg-[color:var(--surface-80)]")
                 }
@@ -1253,27 +1291,29 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
                   </span>
                 </span>
               </button>
-              <button
-                onClick={() => setMentionsTab("actor")}
-                className={
-                  "group w-full sm:w-auto flex flex-col items-start gap-1 sm:flex-row sm:items-center sm:gap-2 rounded-full px-3 py-1.5 text-xs font-semibold transition sm:hover:-translate-y-0.5 " +
-                  (mentionsTab === "actor"
-                    ? "bg-[color:var(--surface-solid)] text-[color:var(--ink)] shadow-[var(--shadow-sm)] ring-1 ring-[color:var(--aqua)]/30"
-                    : "text-[color:var(--text-50)] hover:text-[color:var(--ink)] hover:bg-[color:var(--surface-80)]")
-                }
-              >
-                <span className="flex items-center gap-2">
-                  <span className="inline-block h-[3px] w-7 rounded-full border-t-2 border-dashed border-[#2dcccd]" />
-                  {actorLabel}
-                </span>
-                <span className="flex items-center gap-2 text-[10px] text-[color:var(--text-40)]">
-                  {actorMentions.length} resultados
-                  <span className="hidden sm:flex items-center gap-1 text-[9px] uppercase tracking-[0.2em] text-[color:var(--text-40)] opacity-0 transition group-hover:opacity-100 group-focus-visible:opacity-100">
-                    <ArrowUpRight className="h-3 w-3" />
-                    Clic
+              {comparisonsEnabled && (
+                <button
+                  onClick={() => setMentionsTab("actor")}
+                  className={
+                    "group w-full sm:w-auto flex flex-col items-start gap-1 sm:flex-row sm:items-center sm:gap-2 rounded-full px-3 py-1.5 text-xs font-semibold transition sm:hover:-translate-y-0.5 " +
+                    (effectiveMentionsTab === "actor"
+                      ? "bg-[color:var(--surface-solid)] text-[color:var(--ink)] shadow-[var(--shadow-sm)] ring-1 ring-[color:var(--aqua)]/30"
+                      : "text-[color:var(--text-50)] hover:text-[color:var(--ink)] hover:bg-[color:var(--surface-80)]")
+                  }
+                >
+                  <span className="flex items-center gap-2">
+                    <span className="inline-block h-[3px] w-7 rounded-full border-t-2 border-dashed border-[#2dcccd]" />
+                    {actorLabel}
                   </span>
-                </span>
-              </button>
+                  <span className="flex items-center gap-2 text-[10px] text-[color:var(--text-40)]">
+                    {actorMentions.length} resultados
+                    <span className="hidden sm:flex items-center gap-1 text-[9px] uppercase tracking-[0.2em] text-[color:var(--text-40)] opacity-0 transition group-hover:opacity-100 group-focus-visible:opacity-100">
+                      <ArrowUpRight className="h-3 w-3" />
+                      Clic
+                    </span>
+                  </span>
+                </button>
+              )}
             </div>
             {showDownloads && (
               <button
@@ -1284,7 +1324,8 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
                     principalLabel,
                     actorLabel,
                     filename: buildDownloadName("sentimiento_listado", fromDate, toDate),
-                    activeTab: mentionsTab,
+                    activeTab: effectiveMentionsTab,
+                    includeActorSheet: comparisonsEnabled,
                   })
                 }
                 className="inline-flex w-full sm:w-auto items-center justify-center gap-2 rounded-full border border-[color:var(--border-70)] bg-[color:var(--surface-80)] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--brand-ink)] shadow-[var(--shadow-pill)] transition sm:hover:-translate-y-0.5 hover:shadow-[var(--shadow-pill-hover)] sm:ml-auto"
@@ -1903,6 +1944,16 @@ function normalizeKey(value: string) {
 
 function normalizeSourceKey(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+function findDefaultGeoOption(options: string[]): string | null {
+  for (const option of options) {
+    const key = normalizeKey(option);
+    if (key === "españa" || key === "espana" || key === "spain") {
+      return option;
+    }
+  }
+  return null;
 }
 
 type ActorStoreRatings = {
@@ -2556,13 +2607,20 @@ function downloadChartCsv(
   principalLabel: string,
   actorLabel: string,
   filename: string,
+  includeActor = true,
 ) {
-  const headers = ["Fecha", principalLabel, actorLabel];
-  const rows = data.map((row) => [
-    row.date,
-    typeof row.principal === "number" ? row.principal.toFixed(3) : "",
-    typeof row.actor === "number" ? row.actor.toFixed(3) : "",
-  ]);
+  const headers = includeActor
+    ? ["Fecha", principalLabel, actorLabel]
+    : ["Fecha", principalLabel];
+  const rows = data.map((row) =>
+    includeActor
+      ? [
+          row.date,
+          typeof row.principal === "number" ? row.principal.toFixed(3) : "",
+          typeof row.actor === "number" ? row.actor.toFixed(3) : "",
+        ]
+      : [row.date, typeof row.principal === "number" ? row.principal.toFixed(3) : ""],
+  );
   downloadCsv(filename, headers, rows);
 }
 
@@ -2612,6 +2670,7 @@ function downloadMentionsWorkbook({
   actorLabel,
   filename,
   activeTab,
+  includeActorSheet = true,
 }: {
   principalItems: MentionGroup[];
   actorItems: MentionGroup[];
@@ -2619,6 +2678,7 @@ function downloadMentionsWorkbook({
   actorLabel: string;
   filename: string;
   activeTab: "principal" | "actor";
+  includeActorSheet?: boolean;
 }) {
   const principalName = sanitizeSheetName(principalLabel || "Principal", "Principal");
   let actorName = sanitizeSheetName(actorLabel || "Actor", "Actor");
@@ -2637,7 +2697,11 @@ function downloadMentionsWorkbook({
     headers: MENTIONS_HEADERS,
     rows: buildMentionsRows(actorItems),
   };
-  const sheets = activeTab === "actor" ? [actorSheet, principalSheet] : [principalSheet, actorSheet];
+  const sheets = includeActorSheet
+    ? activeTab === "actor"
+      ? [actorSheet, principalSheet]
+      : [principalSheet, actorSheet]
+    : [principalSheet];
 
   const workbook = buildWorkbookXml(sheets);
   downloadWorkbook(filename, workbook);

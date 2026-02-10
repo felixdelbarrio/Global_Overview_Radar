@@ -154,7 +154,7 @@ class ReputationIngestService:
             safe_pct = max(0, min(100, int(pct)))
             progress(stage, safe_pct, meta or {})
 
-        # Relee .env.reputation para que los toggles activos se apliquen siempre.
+        # Relee .env.reputation para aplicar credenciales y configuración dinámica.
         reload_reputation_settings()
         # Refresca el repo por si cambió la ruta del cache/perfil.
         self._repo = ReputationCacheRepo(self._settings.cache_path)
@@ -163,8 +163,10 @@ class ReputationIngestService:
         cfg = _as_dict(load_business_config())
         cfg_hash = compute_config_hash(cfg)
         ttl_hours = effective_ttl_hours(cfg)
+        # La ingesta usa siempre el catálogo completo salvo override explícito.
+        # Los toggles REPUTATION_SOURCE_* se usan para visibilidad en frontend.
         if sources_override is None:
-            raw_sources = list(self._settings.enabled_sources())
+            raw_sources = list(self._settings.all_sources())
         else:
             raw_sources = [source for source in sources_override if source]
         sources_enabled: list[str] = []

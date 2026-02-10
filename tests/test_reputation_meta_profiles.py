@@ -47,7 +47,22 @@ def _client(
     monkeypatch.setattr(rep_config.settings, "cache_path", cache_path)
     monkeypatch.setattr(rep_config.settings, "config_path", config_path)
     monkeypatch.setattr(rep_config.settings, "profiles", profiles)
+    # Asegura determinismo: los tests en este módulo usan items con source="news".
+    # Fuerza todos los toggles de fuentes a false salvo news.
+    monkeypatch.setattr(rep_config.settings, "source_reddit", False)
+    monkeypatch.setattr(rep_config.settings, "source_twitter", False)
     monkeypatch.setattr(rep_config.settings, "source_news", True)
+    monkeypatch.setattr(rep_config.settings, "source_newsapi", False)
+    monkeypatch.setattr(rep_config.settings, "source_gdelt", False)
+    monkeypatch.setattr(rep_config.settings, "source_guardian", False)
+    monkeypatch.setattr(rep_config.settings, "source_forums", False)
+    monkeypatch.setattr(rep_config.settings, "source_blogs", False)
+    monkeypatch.setattr(rep_config.settings, "source_appstore", False)
+    monkeypatch.setattr(rep_config.settings, "source_trustpilot", False)
+    monkeypatch.setattr(rep_config.settings, "source_google_reviews", False)
+    monkeypatch.setattr(rep_config.settings, "source_google_play", False)
+    monkeypatch.setattr(rep_config.settings, "source_youtube", False)
+    monkeypatch.setattr(rep_config.settings, "source_downdetector", False)
     app = create_app()
     app.dependency_overrides[reputation_router._refresh_settings] = lambda: None
     return TestClient(app)
