@@ -49,7 +49,6 @@ const MANUAL_OVERRIDE_BLOCKED_LABELS: Record<string, string> = {
   appstore: "App Store",
   googlereviews: "Google Reviews",
 };
-const AUTH_ENABLED = process.env.NEXT_PUBLIC_AUTH_ENABLED === "true";
 
 type SentimentFilter = (typeof SENTIMENTS)[number];
 type SentimentValue = Exclude<SentimentFilter, "all">;
@@ -725,8 +724,6 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
       ? "Señales de percepción y salud operativa en un mismo vistazo."
       : "Analiza la conversación por país, periodo y fuente. Detecta señales tempranas y compara impacto entre entidades.";
 
-  const showManualIngest = !AUTH_ENABLED;
-
   return (
     <Shell>
       <section className="relative overflow-hidden rounded-[28px] border border-[color:var(--border-60)] bg-[color:var(--panel-strong)] p-6 shadow-[var(--shadow-lg)] animate-rise">
@@ -786,9 +783,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
                 Sin cache de reputación
               </div>
               <div className="text-xs text-[color:var(--text-55)]">
-                {showManualIngest
-                  ? "Aún no hay datos disponibles. Lanza una ingesta para generar el histórico."
-                  : "Aún no hay datos disponibles. La ingesta manual está deshabilitada en este entorno."}
+                Aún no hay datos disponibles. Lanza una ingesta para generar el histórico.
               </div>
               {reputationIngestNote && (
                 <div className="mt-1 text-[10px] text-[color:var(--text-50)]">
@@ -796,17 +791,15 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
                 </div>
               )}
             </div>
-            {showManualIngest && (
-              <button
-                type="button"
-                onClick={handleStartReputationIngest}
-                disabled={reputationIngesting}
-                className="inline-flex items-center gap-2 rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[color:var(--ink)] transition hover:shadow-[var(--shadow-soft)] disabled:opacity-70"
-              >
-                {reputationIngesting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                Iniciar ingesta
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={handleStartReputationIngest}
+              disabled={reputationIngesting}
+              className="inline-flex items-center gap-2 rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[color:var(--ink)] transition hover:shadow-[var(--shadow-soft)] disabled:opacity-70"
+            >
+              {reputationIngesting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              Iniciar ingesta
+            </button>
           </div>
         </div>
       )}

@@ -90,7 +90,6 @@ const ADVANCED_LOG_KEYS = new Set([
   "advanced.log_file_name",
   "advanced.log_debug",
 ]);
-const AUTH_ENABLED = process.env.NEXT_PUBLIC_AUTH_ENABLED === "true";
 
 export function Shell({ children }: { children: React.ReactNode }) {
   const profileAppliedKey = "gor-profile-applied";
@@ -795,8 +794,6 @@ export function Shell({ children }: { children: React.ReactNode }) {
     return Math.round(total / active.length);
   }, [ingestJobs]);
 
-  const showIngestCenter = !AUTH_ENABLED;
-
   /** Definicion de items de navegacion. */
   const nav = [
     {
@@ -849,8 +846,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
               />
             )}
             <div className="flex items-center gap-2 order-1 w-auto sm:order-none">
-              {showIngestCenter && (
-                <div className="relative">
+              <div className="relative">
                   <button
                     type="button"
                     onClick={toggleIngestPanel}
@@ -1020,8 +1016,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
                       </div>
                     </div>
                   )}
-                </div>
-              )}
+              </div>
             </div>
             <div className="relative w-full sm:w-auto basis-full sm:basis-auto order-2 sm:order-none">
               <div className="group relative flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 rounded-[24px] sm:rounded-full border border-[color:var(--border-15)] bg-[color:var(--surface-10)] px-3 py-2 sm:px-2 sm:py-1 sm:pr-1 text-[color:var(--text-inverse-80)] shadow-[var(--shadow-pill)] backdrop-blur-sm w-full sm:w-auto">
