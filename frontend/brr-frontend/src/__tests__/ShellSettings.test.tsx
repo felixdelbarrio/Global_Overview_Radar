@@ -122,6 +122,10 @@ describe("Shell settings and ingest", () => {
     fireEvent.click(startButtons[0]);
 
     await waitFor(() => {
+      expect(screen.queryByText("CENTRO DE INGESTA")).not.toBeInTheDocument();
+    });
+
+    await waitFor(() => {
       expect(apiPostMock).toHaveBeenCalledWith("/ingest/reputation", {
         force: false,
         all_sources: false,
