@@ -845,7 +845,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
                 type="button"
                 aria-label="Cerrar panel"
                 onClick={closeAllPanels}
-                className="fixed inset-0 z-[45] bg-transparent sm:hidden"
+                className="fixed inset-0 z-[65] bg-transparent sm:hidden"
               />
             )}
             <div className="flex items-center gap-2 order-1 w-auto sm:order-none">
@@ -873,10 +873,10 @@ export function Shell({ children }: { children: React.ReactNode }) {
                   </button>
 
                   {ingestOpen && (
-                    <div className="fixed left-1/2 top-[calc(env(safe-area-inset-top)+6.5rem)] z-50 mt-0 w-[92vw] max-w-[360px] -translate-x-1/2 rounded-[22px] border border-[color:var(--border-60)] bg-[color:var(--panel-strong)] shadow-[var(--shadow-lg)] backdrop-blur-xl overflow-hidden sm:absolute sm:left-auto sm:top-auto sm:translate-x-0 sm:right-0 sm:mt-3 sm:w-[320px]">
+                    <div className="fixed left-1/2 top-[calc(env(safe-area-inset-top)+6.5rem)] bottom-[calc(env(safe-area-inset-bottom)+5.5rem)] z-[70] mt-0 w-[92vw] max-w-[360px] -translate-x-1/2 rounded-[22px] border border-[color:var(--border-60)] bg-[color:var(--panel-strong)] shadow-[var(--shadow-lg)] backdrop-blur-xl overflow-y-auto overflow-x-hidden overscroll-contain touch-pan-y sm:absolute sm:left-auto sm:top-auto sm:bottom-auto sm:max-h-none sm:translate-x-0 sm:right-0 sm:mt-3 sm:w-[320px]">
                       <div className="absolute -top-12 -right-12 h-32 w-32 rounded-full bg-[color:var(--aqua)]/20 blur-3xl" />
                       <div className="absolute -bottom-16 left-6 h-36 w-36 rounded-full bg-[color:var(--blue)]/10 blur-3xl" />
-                      <div className="relative p-4 space-y-3">
+                      <div className="relative p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:pb-4 space-y-3">
                         <div className="flex items-center justify-between">
                           <div>
                             <div className="text-xs font-semibold tracking-[0.3em] text-[color:var(--blue)]">
@@ -1095,7 +1095,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
                 </span>
               )}
               {profilesOpen && (
-                <div className="fixed left-1/2 top-[calc(env(safe-area-inset-top)+6.5rem)] z-50 mt-0 w-[92vw] max-w-[420px] -translate-x-1/2 rounded-[24px] border border-[color:var(--border-60)] bg-[color:var(--panel-strong)] shadow-[var(--shadow-lg)] backdrop-blur-xl overflow-hidden sm:absolute sm:left-auto sm:top-auto sm:translate-x-0 sm:right-0 sm:mt-3 sm:w-[360px]">
+                <div className="fixed left-1/2 top-[calc(env(safe-area-inset-top)+6.5rem)] bottom-[calc(env(safe-area-inset-bottom)+5.5rem)] z-[70] mt-0 w-[92vw] max-w-[420px] -translate-x-1/2 rounded-[24px] border border-[color:var(--border-60)] bg-[color:var(--panel-strong)] shadow-[var(--shadow-lg)] backdrop-blur-xl overflow-y-auto overflow-x-hidden overscroll-contain touch-pan-y sm:absolute sm:left-auto sm:top-auto sm:bottom-auto sm:max-h-none sm:translate-x-0 sm:right-0 sm:mt-3 sm:w-[360px]">
                   <div className="absolute -top-10 right-6 h-24 w-24 rounded-full bg-[color:var(--aqua)]/20 blur-3xl" />
                   <div className="absolute -bottom-16 left-6 h-32 w-32 rounded-full bg-[color:var(--blue)]/20 blur-3xl" />
                   <div className="relative p-4">
@@ -1276,7 +1276,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
                         )}
                       </div>
 
-                      <div className="border-t border-[color:var(--border-60)] p-4 space-y-2">
+                      <div className="border-t border-[color:var(--border-60)] p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:pb-4 space-y-2">
                         <div className="flex items-center justify-end">
                           <button
                             type="button"
@@ -1325,7 +1325,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
                   <span className="text-xs hidden sm:inline">Config</span>
                 </button>
                 {settingsOpen && (
-                  <div className="settings-panel fixed left-1/2 top-[calc(env(safe-area-inset-top)+6.5rem)] z-50 mt-0 w-[92vw] max-w-[520px] -translate-x-1/2 rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel-strong)] shadow-[var(--shadow-lg)] backdrop-blur-xl overflow-hidden sm:absolute sm:left-auto sm:top-auto sm:translate-x-0 sm:right-0 sm:mt-3 sm:w-[420px]">
+                  <div className="settings-panel fixed left-1/2 top-[calc(env(safe-area-inset-top)+6.5rem)] bottom-[calc(env(safe-area-inset-bottom)+5.5rem)] z-[70] mt-0 w-[92vw] max-w-[520px] -translate-x-1/2 rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel-strong)] shadow-[var(--shadow-lg)] backdrop-blur-xl overflow-y-auto overflow-x-hidden overscroll-contain touch-pan-y sm:absolute sm:left-auto sm:top-auto sm:bottom-auto sm:max-h-none sm:translate-x-0 sm:right-0 sm:mt-3 sm:w-[420px]">
                     <div className="absolute -top-12 right-6 h-28 w-28 rounded-full bg-[color:var(--aqua)]/20 blur-3xl" />
                     <div className="absolute -bottom-16 left-10 h-32 w-32 rounded-full bg-[color:var(--blue)]/15 blur-3xl" />
                     <div className="relative p-4">
@@ -1366,7 +1366,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
                       </div>
                     </div>
 
-                  <div className="max-h-[60vh] overflow-auto px-4 pb-4 space-y-3">
+                  <div className="max-h-none overflow-visible px-4 pb-24 space-y-3 sm:max-h-[60vh] sm:overflow-auto sm:pb-4">
                     {settingsGroups ? (
                       settingsGroups.map((group) => {
                         const isAdvanced = group.id === "advanced";
@@ -1848,7 +1848,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
                     </div>
                   )}
 
-                  <div className="border-t border-[color:var(--border-60)] p-4 flex items-center justify-between">
+                  <div className="sticky bottom-0 z-10 border-t border-[color:var(--border-60)] bg-[color:var(--panel-strong)]/95 backdrop-blur p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:static sm:backdrop-blur-none sm:bg-transparent sm:pb-4 flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <button
                         type="button"
