@@ -5,8 +5,8 @@ import type { ReactNode } from "react";
 import Script from "next/script";
 import { AuthGate } from "@/components/AuthGate";
 
-const AUTH_BYPASS = process.env.NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED === "true";
-const AUTH_ENABLED = process.env.NEXT_PUBLIC_AUTH_ENABLED === "true" && !AUTH_BYPASS;
+const LOGIN_REQUIRED = process.env.NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED === "true";
+const AUTH_ENABLED = process.env.NEXT_PUBLIC_AUTH_ENABLED === "true" && LOGIN_REQUIRED;
 
 /** Metadata base para SEO y titulo de la app. */
 export const metadata = {

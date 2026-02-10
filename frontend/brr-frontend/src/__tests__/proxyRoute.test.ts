@@ -22,7 +22,7 @@ describe("proxy route", () => {
     global.fetch = fetchMock as typeof fetch;
 
     const { POST } = await loadRoute({
-      NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED: "true",
+      NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED: "false",
       AUTH_BYPASS_READ_ONLY: "true",
       USE_SERVER_PROXY: "true",
       API_PROXY_TARGET: "https://api.example.com",
@@ -49,7 +49,7 @@ describe("proxy route", () => {
     global.fetch = fetchMock as typeof fetch;
 
     const { POST } = await loadRoute({
-      NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED: "true",
+      NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED: "false",
       AUTH_BYPASS_READ_ONLY: "false",
       USE_SERVER_PROXY: "false",
       API_PROXY_TARGET: "https://api.example.com",
@@ -164,6 +164,7 @@ describe("proxy route", () => {
     global.fetch = fetchMock as typeof fetch;
 
     const { POST } = await loadRoute({
+      NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED: "true",
       USE_SERVER_PROXY: "false",
       API_PROXY_TARGET: "https://api.example.com",
     });

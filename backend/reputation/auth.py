@@ -77,7 +77,10 @@ def _cloud_bypass_user() -> AuthUser:
 
 
 def _is_auth_bypass_active() -> bool:
-    return settings.auth_enabled and settings.google_cloud_login_requested
+    # When GOOGLE_CLOUD_LOGIN_REQUESTED=false, the system runs in "bypass" mode:
+    # requests are authenticated at the infrastructure layer (Cloud Run invoker),
+    # and the app does not require an end-user Google ID token.
+    return settings.auth_enabled and not settings.google_cloud_login_requested
 
 
 def _cache_get(cache: dict[Any, tuple[Any, float]], key: Any) -> Any | None:
@@ -198,8 +201,7 @@ def require_google_user(request: Request) -> AuthUser:
     if not settings.auth_enabled:
         return AuthUser(email="anonymous")
 
-    # Backward-compatible toggle name:
-    # when GOOGLE_CLOUD_LOGIN_REQUESTED=true, interactive login is bypassed.
+    # When GOOGLE_CLOUD_LOGIN_REQUESTED=false, interactive login is bypassed.
     if _is_auth_bypass_active():
         user = _cloud_bypass_user()
         logger.warning("auth bypass active email=%s path=%s", user.email, request.url.path)

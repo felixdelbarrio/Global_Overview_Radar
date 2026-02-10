@@ -209,7 +209,7 @@ cloudrun-env:
 
 	@LOGIN_REQUESTED_VAL=$$(awk -F= '/^GOOGLE_CLOUD_LOGIN_REQUESTED=/{print tolower($$2)}' backend/reputation/cloudrun.env | tr -d '[:space:]' | tail -n1); \
 	if [ -z "$$LOGIN_REQUESTED_VAL" ]; then LOGIN_REQUESTED_VAL="$$(echo "$(GOOGLE_CLOUD_LOGIN_REQUESTED)" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"; fi; \
-	if [ "$$LOGIN_REQUESTED_VAL" != "true" ] && ! grep -qE '^AUTH_GOOGLE_CLIENT_ID=' backend/reputation/cloudrun.env && [ -z "$(AUTH_GOOGLE_CLIENT_ID)" ]; then \
+	if [ "$$LOGIN_REQUESTED_VAL" = "true" ] && ! grep -qE '^AUTH_GOOGLE_CLIENT_ID=' backend/reputation/cloudrun.env && [ -z "$(AUTH_GOOGLE_CLIENT_ID)" ]; then \
 		echo "Falta AUTH_GOOGLE_CLIENT_ID (ponlo en backend/reputation/.env.reputation o exporta la variable)."; \
 		exit 1; \
 	fi
@@ -262,12 +262,12 @@ deploy-cloudrun-back: cloudrun-env
 deploy-cloudrun-front:
 	@echo "==> Deploy frontend en Cloud Run (proxy /api -> backend)..."
 	@LOGIN_REQUESTED_VAL=$$(echo "$(GOOGLE_CLOUD_LOGIN_REQUESTED)" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]'); \
-	if [ "$$LOGIN_REQUESTED_VAL" != "true" ] && [ -z "$(AUTH_GOOGLE_CLIENT_ID)" ]; then \
+	if [ "$$LOGIN_REQUESTED_VAL" = "true" ] && [ -z "$(AUTH_GOOGLE_CLIENT_ID)" ]; then \
 		echo "Falta AUTH_GOOGLE_CLIENT_ID (ponlo en backend/reputation/.env.reputation o exporta la variable)."; \
 		exit 1; \
 	fi
 	@LOGIN_REQUESTED_VAL=$$(echo "$(GOOGLE_CLOUD_LOGIN_REQUESTED)" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]'); \
-	if [ "$$LOGIN_REQUESTED_VAL" != "true" ] && ! echo "$(AUTH_GOOGLE_CLIENT_ID)" | grep -q '\.apps\.googleusercontent\.com$$'; then \
+	if [ "$$LOGIN_REQUESTED_VAL" = "true" ] && ! echo "$(AUTH_GOOGLE_CLIENT_ID)" | grep -q '\.apps\.googleusercontent\.com$$'; then \
 		echo "ERROR: AUTH_GOOGLE_CLIENT_ID debe ser un OAuth Client ID (termina en .apps.googleusercontent.com). Valor actual: $(AUTH_GOOGLE_CLIENT_ID)"; \
 		exit 1; \
 	fi
@@ -278,7 +278,7 @@ deploy-cloudrun-front:
 	fi; \
 	FRONT_AUTH_ENABLED=true; \
 	LOGIN_REQUESTED_VAL=$$(echo "$(GOOGLE_CLOUD_LOGIN_REQUESTED)" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]'); \
-	if [ "$$LOGIN_REQUESTED_VAL" = "true" ]; then FRONT_AUTH_ENABLED=false; fi; \
+	if [ "$$LOGIN_REQUESTED_VAL" != "true" ]; then FRONT_AUTH_ENABLED=false; fi; \
 	gcloud run deploy $(FRONTEND_SERVICE) \
 		--project $(GCP_PROJECT) \
 		--region $(GCP_REGION) \
@@ -300,9 +300,23 @@ deploy-cloudrun: deploy-cloudrun-back deploy-cloudrun-front
 ingest-cloudrun:
 	@echo "==> Lanzando ingesta remota en Cloud Run ($(BACKEND_SERVICE))..."
 	@set -euo pipefail; \
-	if [ -z "$(AUTH_GOOGLE_CLIENT_ID)" ]; then \
-		echo "Falta AUTH_GOOGLE_CLIENT_ID (ponlo en backend/reputation/.env.reputation o exporta la variable)."; \
-		exit 1; \
+	LOGIN_REQUESTED_VAL=$$(echo "$(GOOGLE_CLOUD_LOGIN_REQUESTED)" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]'); \
+	ADMIN_KEY=""; \
+	if [ "$$LOGIN_REQUESTED_VAL" = "true" ]; then \
+		if [ -z "$(AUTH_GOOGLE_CLIENT_ID)" ]; then \
+			echo "Falta AUTH_GOOGLE_CLIENT_ID (ponlo en backend/reputation/.env.reputation o exporta la variable)."; \
+			exit 1; \
+		fi; \
+	else \
+		ADMIN_KEY="$(AUTH_BYPASS_MUTATION_KEY)"; \
+		if [ -z "$$ADMIN_KEY" ]; then \
+			echo "Falta AUTH_BYPASS_MUTATION_KEY para mutaciones mientras GOOGLE_CLOUD_LOGIN_REQUESTED=false."; \
+			exit 1; \
+		fi; \
+		if [ "$${#ADMIN_KEY}" -lt 32 ]; then \
+			echo "AUTH_BYPASS_MUTATION_KEY debe tener al menos 32 caracteres."; \
+			exit 1; \
+		fi; \
 	fi; \
 	BACKEND_URL=$$(gcloud run services describe $(BACKEND_SERVICE) --project $(GCP_PROJECT) --region $(GCP_REGION) --format 'value(status.url)'); \
 	if [ -z "$$BACKEND_URL" ]; then \
@@ -315,11 +329,16 @@ ingest-cloudrun:
 		echo "Usando impersonacion SA: $(CALLER_SERVICE_ACCOUNT)"; \
 	fi; \
 	RUN_TOKEN=$$(gcloud auth print-identity-token "$${TOKEN_FLAGS[@]}" --audiences="$$BACKEND_URL"); \
-	USER_TOKEN=$$(gcloud auth print-identity-token "$${TOKEN_FLAGS[@]}" --audiences="$(AUTH_GOOGLE_CLIENT_ID)" --include-email); \
+	USER_TOKEN=""; \
+	if [ "$$LOGIN_REQUESTED_VAL" = "true" ]; then \
+		USER_TOKEN=$$(gcloud auth print-identity-token "$${TOKEN_FLAGS[@]}" --audiences="$(AUTH_GOOGLE_CLIENT_ID)" --include-email); \
+	fi; \
 	PAYLOAD="{\"force\":$(INGEST_FORCE),\"all_sources\":$(INGEST_ALL_SOURCES)}"; \
+	CURL_HEADERS=(-H "Authorization: Bearer $$RUN_TOKEN"); \
+	if [ -n "$$USER_TOKEN" ]; then CURL_HEADERS+=(-H "x-user-id-token: $$USER_TOKEN"); fi; \
+	if [ -n "$$ADMIN_KEY" ]; then CURL_HEADERS+=(-H "x-gor-admin-key: $$ADMIN_KEY"); fi; \
 	RESPONSE=$$(curl -sS -f -X POST "$$BACKEND_URL/ingest/reputation" \
-		-H "Authorization: Bearer $$RUN_TOKEN" \
-		-H "x-user-id-token: $$USER_TOKEN" \
+		"$${CURL_HEADERS[@]}" \
 		-H "Content-Type: application/json" \
 		-d "$$PAYLOAD"); \
 	JOB_ID=$$(printf '%s' "$$RESPONSE" | python3 -c 'import json,sys; print((json.loads(sys.stdin.read() or "{}")).get("id",""))'); \
@@ -332,8 +351,7 @@ ingest-cloudrun:
 	ATTEMPT=1; \
 	while [ "$$ATTEMPT" -le "$(INGEST_POLL_ATTEMPTS)" ]; do \
 		JOB=$$(curl -sS -f "$$BACKEND_URL/ingest/jobs/$$JOB_ID" \
-			-H "Authorization: Bearer $$RUN_TOKEN" \
-			-H "x-user-id-token: $$USER_TOKEN"); \
+			"$${CURL_HEADERS[@]}"); \
 		STATUS=$$(printf '%s' "$$JOB" | python3 -c 'import json,sys; print((json.loads(sys.stdin.read() or "{}")).get("status",""))'); \
 		PROGRESS=$$(printf '%s' "$$JOB" | python3 -c 'import json,sys; print((json.loads(sys.stdin.read() or "{}")).get("progress",""))'); \
 		STAGE=$$(printf '%s' "$$JOB" | python3 -c 'import json,sys; print((json.loads(sys.stdin.read() or "{}")).get("stage",""))'); \

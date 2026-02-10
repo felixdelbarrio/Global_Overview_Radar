@@ -90,7 +90,7 @@ def test_settings_endpoint_requires_admin_key_in_auth_bypass(
 
     monkeypatch.setattr(rep_config.settings, "auth_enabled", True, raising=False)
     monkeypatch.setattr(
-        rep_config.settings, "google_cloud_login_requested", True, raising=False
+        rep_config.settings, "google_cloud_login_requested", False, raising=False
     )
     monkeypatch.setattr(
         rep_config.settings, "auth_allowed_emails", "owner@example.com", raising=False
