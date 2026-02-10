@@ -52,6 +52,20 @@ jobs:
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v2
 
+      - name: Resolve login bypass toggle (Secret Manager)
+        id: login_toggle
+        run: |
+          set -euo pipefail
+          raw="$(gcloud secrets versions access latest \
+            --secret GOOGLE_CLOUD_LOGIN_REQUESTED \
+            --project "$GCP_PROJECT" 2>/dev/null || true)"
+          value="$(echo "${raw:-false}" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
+          if [ "$value" != "true" ]; then
+            value="false"
+          fi
+          echo "value=${value}" >> "$GITHUB_OUTPUT"
+          echo "GOOGLE_CLOUD_LOGIN_REQUESTED=${value}"
+
       # Debug seguro (no imprime secretos). Si no lo necesitas, puedes borrarlo.
       - name: Debug identity
         run: |
@@ -67,7 +81,25 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [ -z "${AUTH_GOOGLE_CLIENT_ID:-}" ]; then
+          LOGIN_REQUESTED="${{ steps.login_toggle.outputs.value }}"
+          ADMIN_KEY=""
+
+          if [ "${LOGIN_REQUESTED}" = "true" ]; then
+            ADMIN_KEY="$(gcloud secrets versions access latest \
+              --secret AUTH_BYPASS_MUTATION_KEY \
+              --project "$GCP_PROJECT" 2>/dev/null || true)"
+            ADMIN_KEY="$(echo "$ADMIN_KEY" | tr -d '\r\n')"
+            if [ -z "${ADMIN_KEY}" ]; then
+              echo "Missing AUTH_BYPASS_MUTATION_KEY secret while GOOGLE_CLOUD_LOGIN_REQUESTED=true."
+              exit 1
+            fi
+            if [ "${#ADMIN_KEY}" -lt 32 ]; then
+              echo "AUTH_BYPASS_MUTATION_KEY must be at least 32 characters."
+              exit 1
+            fi
+          fi
+
+          if [ "${LOGIN_REQUESTED}" != "true" ] && [ -z "${AUTH_GOOGLE_CLIENT_ID:-}" ]; then
             echo "Missing AUTH_GOOGLE_CLIENT_ID secret."
             exit 1
           fi
@@ -88,24 +120,33 @@ jobs:
             --impersonate-service-account="$CALLER_SERVICE_ACCOUNT" \
             --audiences="$BACKEND_URL")"
 
-          # Token “usuario” para tu capa de auth (audience = OAuth client id)
-          USER_TOKEN="$(gcloud auth print-identity-token \
-            --impersonate-service-account="$CALLER_SERVICE_ACCOUNT" \
-            --audiences="$AUTH_GOOGLE_CLIENT_ID" \
-            --include-email)"
+          USER_TOKEN=""
+          if [ "${LOGIN_REQUESTED}" != "true" ]; then
+            # Token “usuario” para tu capa de auth (audience = OAuth client id)
+            USER_TOKEN="$(gcloud auth print-identity-token \
+              --impersonate-service-account="$CALLER_SERVICE_ACCOUNT" \
+              --audiences="$AUTH_GOOGLE_CLIENT_ID" \
+              --include-email)"
+          fi
+
+          COMMON_HEADERS=(-H "Authorization: Bearer ${RUN_TOKEN}")
+          if [ -n "${USER_TOKEN:-}" ]; then
+            COMMON_HEADERS+=(-H "x-user-id-token: ${USER_TOKEN}")
+          fi
+          if [ -n "${ADMIN_KEY:-}" ]; then
+            COMMON_HEADERS+=(-H "x-gor-admin-key: ${ADMIN_KEY}")
+          fi
 
           api_get() {
             curl -sS -f "$BACKEND_URL$1" \
-              -H "Authorization: Bearer ${RUN_TOKEN}" \
-              -H "x-user-id-token: ${USER_TOKEN}"
+              "${COMMON_HEADERS[@]}"
           }
 
           api_post() {
             local path="$1"
             local payload="$2"
             curl -sS -f -X POST "$BACKEND_URL$path" \
-              -H "Authorization: Bearer ${RUN_TOKEN}" \
-              -H "x-user-id-token: ${USER_TOKEN}" \
+              "${COMMON_HEADERS[@]}" \
               -H "Content-Type: application/json" \
               -d "$payload"
           }

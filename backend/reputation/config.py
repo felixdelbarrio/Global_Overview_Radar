@@ -94,6 +94,21 @@ class ReputationSettings(BaseSettings):
 
     # Auth (Google ID tokens)
     auth_enabled: bool = Field(default=False, alias="AUTH_ENABLED")
+    # Compat: when true, Cloud Run can bypass interactive login and impersonate an allowed email.
+    google_cloud_login_requested: bool = Field(
+        default=False,
+        alias="GOOGLE_CLOUD_LOGIN_REQUESTED",
+    )
+    # If auth bypass is enabled, mutation endpoints stay blocked unless explicitly enabled.
+    auth_bypass_allow_mutations: bool = Field(
+        default=False,
+        alias="AUTH_BYPASS_ALLOW_MUTATIONS",
+    )
+    # Shared secret required for mutation endpoints while auth bypass is enabled.
+    auth_bypass_mutation_key: str = Field(
+        default="",
+        alias="AUTH_BYPASS_MUTATION_KEY",
+    )
     auth_google_client_id: str = Field(default="", alias="AUTH_GOOGLE_CLIENT_ID")
     auth_allowed_emails: str = Field(default="", alias="AUTH_ALLOWED_EMAILS")
     auth_allowed_domains: str = Field(default="", alias="AUTH_ALLOWED_DOMAINS")

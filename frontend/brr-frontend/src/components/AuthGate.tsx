@@ -12,7 +12,8 @@ import {
   isTokenExpired,
 } from "@/lib/auth";
 
-const AUTH_ENABLED = process.env.NEXT_PUBLIC_AUTH_ENABLED === "true";
+const AUTH_BYPASS = process.env.NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED === "true";
+const AUTH_ENABLED = process.env.NEXT_PUBLIC_AUTH_ENABLED === "true" && !AUTH_BYPASS;
 const CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "";
 const FALLBACK_ROUTE = "/";
 const LOGIN_NEXT_COOKIE = "gor-login-next";
