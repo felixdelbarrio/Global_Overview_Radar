@@ -11,7 +11,7 @@ from pathlib import Path
 from queue import Queue
 from threading import Lock
 from types import TracebackType
-from typing import Mapping, Optional
+from typing import TYPE_CHECKING, Mapping, Optional
 
 from reputation.config import REPO_ROOT, REPUTATION_ENV_PATH, ReputationSettings
 
@@ -147,7 +147,14 @@ def configure_logging(force: bool = False) -> None:
         logger.addHandler(handler)
 
 
-class _HotReloadingLoggerAdapter(logging.LoggerAdapter):
+if TYPE_CHECKING:
+    _LoggerAdapterBase = logging.LoggerAdapter[logging.Logger]
+else:
+    # Python 3.9 runtime does not allow subscripting LoggerAdapter.
+    _LoggerAdapterBase = logging.LoggerAdapter
+
+
+class _HotReloadingLoggerAdapter(_LoggerAdapterBase):
     def isEnabledFor(self, level: int) -> bool:  # noqa: N802
         configure_logging()
         return self.logger.isEnabledFor(level)
