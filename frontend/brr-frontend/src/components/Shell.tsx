@@ -31,6 +31,7 @@ import {
   INGEST_STARTED_EVENT,
 } from "@/lib/events";
 import type { IngestJob, IngestJobKind } from "@/lib/types";
+import { clearStoredAdminKey, getStoredAdminKey, storeAdminKey } from "@/lib/auth";
 
 type ProfileOptionsResponse = {
   active: {
@@ -90,6 +91,8 @@ const ADVANCED_LOG_KEYS = new Set([
   "advanced.log_file_name",
   "advanced.log_debug",
 ]);
+const LOGIN_REQUIRED = process.env.NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED === "true";
+const AUTH_BYPASS = !LOGIN_REQUIRED;
 
 export function Shell({ children }: { children: React.ReactNode }) {
   const profileAppliedKey = "gor-profile-applied";
@@ -158,6 +161,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const [advancedError, setAdvancedError] = useState<string | null>(null);
   const [advancedOptions, setAdvancedOptions] = useState<string[]>([]);
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [adminKeyDraft, setAdminKeyDraft] = useState("");
+  const [adminKeySavedAt, setAdminKeySavedAt] = useState(0);
 
   type FloatingPanel = "ingest" | "profiles" | "settings";
 
@@ -308,7 +313,12 @@ export function Shell({ children }: { children: React.ReactNode }) {
     return () => {
       alive = false;
     };
-  }, [settingsOpen]);
+  }, [settingsOpen, adminKeySavedAt]);
+
+  useEffect(() => {
+    if (!AUTH_BYPASS) return;
+    setAdminKeyDraft(getStoredAdminKey() ?? "");
+  }, []);
 
   const ingestJobsRef = useRef(ingestJobs);
 
@@ -1361,6 +1371,47 @@ export function Shell({ children }: { children: React.ReactNode }) {
                           Menciones
                         </span>
                       </div>
+
+                      {AUTH_BYPASS && (
+                        <div className="mt-3 rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-3 py-2">
+                          <div className="text-[10px] uppercase tracking-[0.22em] text-[color:var(--text-55)]">
+                            Modo sin login
+                          </div>
+                          <div className="mt-1 text-[11px] text-[color:var(--text-60)]">
+                            Para operar (guardar configuración, ingestas), introduce la clave admin.
+                          </div>
+                          <div className="mt-2 flex flex-wrap items-center gap-2">
+                            <input
+                              type="password"
+                              value={adminKeyDraft}
+                              onChange={(event) => setAdminKeyDraft(event.target.value)}
+                              placeholder="AUTH_BYPASS_MUTATION_KEY"
+                              className="flex-1 min-w-[220px] rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-60)] px-3 py-1 text-xs text-[color:var(--ink)]"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                storeAdminKey(adminKeyDraft);
+                                setAdminKeySavedAt(Date.now());
+                              }}
+                              className="rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-solid)] px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-[color:var(--ink)]"
+                            >
+                              Guardar clave
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                clearStoredAdminKey();
+                                setAdminKeyDraft("");
+                                setAdminKeySavedAt(Date.now());
+                              }}
+                              className="rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-[color:var(--text-55)] hover:text-rose-500"
+                            >
+                              Quitar
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                   <div className="max-h-none overflow-visible px-4 pb-24 space-y-3 sm:max-h-[60vh] sm:overflow-auto sm:pb-4">
@@ -1422,7 +1473,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
                                   }
                                   className={`settings-toggle ${
                                     settingsDraft[advancedLogField.key] ? "is-on" : "is-off"
-                                  } relative inline-flex h-6 w-11 items-center rounded-full border transition ${
+                                  } relative inline-flex shrink-0 h-6 w-11 items-center rounded-full border transition ${
                                     settingsDraft[advancedLogField.key]
                                       ? "border-[color:var(--aqua)] bg-[color:var(--gradient-chip)]"
                                       : "border-[color:var(--border-60)] bg-[color:var(--surface-60)]"
@@ -1466,7 +1517,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
                                           disabled={advancedLocked}
                                           className={`settings-toggle ${
                                             fieldValue ? "is-on" : "is-off"
-                                          } relative inline-flex h-6 w-11 items-center rounded-full border transition ${
+                                          } relative inline-flex shrink-0 h-6 w-11 items-center rounded-full border transition ${
                                             fieldValue
                                               ? "border-[color:var(--aqua)] bg-[color:var(--gradient-chip)]"
                                               : "border-[color:var(--border-60)] bg-[color:var(--surface-60)]"
@@ -1523,7 +1574,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
                                   onClick={() => setAdvancedOpen((prev) => !prev)}
                                   className={`settings-toggle ${
                                     advancedOpen ? "is-on" : "is-off"
-                                  } relative inline-flex h-6 w-11 items-center rounded-full border transition ${
+                                  } relative inline-flex shrink-0 h-6 w-11 items-center rounded-full border transition ${
                                     advancedOpen
                                       ? "border-[color:var(--aqua)] bg-[color:var(--gradient-chip)]"
                                       : "border-[color:var(--border-60)] bg-[color:var(--surface-60)]"
@@ -1570,7 +1621,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
                                           }
                                           className={`settings-toggle ${
                                             enabled ? "is-on" : "is-off"
-                                          } relative inline-flex h-6 w-11 items-center rounded-full border transition ${
+                                          } relative inline-flex shrink-0 h-6 w-11 items-center rounded-full border transition ${
                                             enabled
                                               ? "border-[color:var(--aqua)] bg-[color:var(--gradient-chip)]"
                                               : "border-[color:var(--border-60)] bg-[color:var(--surface-60)]"
@@ -1741,7 +1792,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
                                         disabled={fieldDisabled}
                                         className={`settings-toggle ${
                                           fieldValue ? "is-on" : "is-off"
-                                        } relative inline-flex h-6 w-11 items-center rounded-full border transition ${
+                                        } relative inline-flex shrink-0 h-6 w-11 items-center rounded-full border transition ${
                                           fieldValue
                                             ? "border-[color:var(--aqua)] bg-[color:var(--gradient-chip)]"
                                             : "border-[color:var(--border-60)] bg-[color:var(--surface-60)]"

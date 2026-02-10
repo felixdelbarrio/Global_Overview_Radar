@@ -5,11 +5,16 @@
  */
 
 import { logger } from "@/lib/logger";
-import { clearStoredToken, getStoredToken } from "@/lib/auth";
+import {
+  clearStoredToken,
+  getStoredAdminKey,
+  getStoredToken,
+} from "@/lib/auth";
 
 /** Base de la API; permite proxy local con /api. */
 export const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api";
 const LOGIN_REQUIRED = process.env.NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED === "true";
+const AUTH_BYPASS = !LOGIN_REQUIRED;
 const AUTH_ENABLED = process.env.NEXT_PUBLIC_AUTH_ENABLED === "true" && LOGIN_REQUIRED;
 
 function resolveUserToken(): string | null {
@@ -18,6 +23,11 @@ function resolveUserToken(): string | null {
     return null;
   }
   return getStoredToken();
+}
+
+function resolveAdminKey(): string | null {
+  if (!AUTH_BYPASS) return null;
+  return getStoredAdminKey();
 }
 
 logger.info("API_BASE", { apiBase: API_BASE });
@@ -37,11 +47,18 @@ const API_CACHE = new Map<string, CacheEntry>();
 export async function apiGet<T>(path: string): Promise<T> {
   const url = `${API_BASE}${path.startsWith("/") ? path : `/${path}`}`;
   const token = resolveUserToken();
+  const adminKey = resolveAdminKey();
 
   logger.debug("apiGet -> request", () => ({ path, url }));
   const res = await fetch(url, {
     cache: "no-store",
-    headers: token ? { "x-user-id-token": token } : undefined,
+    headers:
+      token || adminKey
+        ? {
+            ...(token ? { "x-user-id-token": token } : {}),
+            ...(adminKey ? { "x-gor-admin-key": adminKey } : {}),
+          }
+        : undefined,
   });
 
   if (!res.ok) {
@@ -100,6 +117,7 @@ export function clearApiCache(): void {
 export async function apiPost<T>(path: string, body: unknown): Promise<T> {
   const url = `${API_BASE}${path.startsWith("/") ? path : `/${path}`}`;
   const token = resolveUserToken();
+  const adminKey = resolveAdminKey();
 
   logger.debug("apiPost -> request", () => ({ path, url, body }));
   const res = await fetch(url, {
@@ -107,6 +125,7 @@ export async function apiPost<T>(path: string, body: unknown): Promise<T> {
     headers: {
       "Content-Type": "application/json",
       ...(token ? { "x-user-id-token": token } : {}),
+      ...(adminKey ? { "x-gor-admin-key": adminKey } : {}),
     },
     body: JSON.stringify(body),
     cache: "no-store",
