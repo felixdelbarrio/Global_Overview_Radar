@@ -18,7 +18,7 @@ const loadProxy = async (enabled: boolean, bypass = false) => {
   process.env = {
     ...originalEnv,
     NEXT_PUBLIC_AUTH_ENABLED: enabled ? "true" : "false",
-    NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED: bypass ? "true" : "false",
+    NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED: bypass ? "false" : "true",
   };
   return import("@/proxy");
 };

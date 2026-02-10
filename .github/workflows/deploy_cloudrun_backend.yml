@@ -115,7 +115,7 @@ jobs:
           LOGIN_REQUESTED="${{ steps.login_toggle.outputs.value }}"
           BYPASS_ALLOW_MUTATIONS="false"
           BYPASS_MUTATION_KEY=""
-          if [ "${LOGIN_REQUESTED}" = "true" ]; then
+          if [ "${LOGIN_REQUESTED}" != "true" ]; then
             BYPASS_MUTATION_KEY="$(gcloud secrets versions access latest \
               --secret AUTH_BYPASS_MUTATION_KEY \
               --project "$GCP_PROJECT" 2>/dev/null || true)"
@@ -127,11 +127,11 @@ jobs:
             if [ -n "${BYPASS_MUTATION_KEY}" ]; then
               BYPASS_ALLOW_MUTATIONS="true"
             else
-              echo "::warning::AUTH_BYPASS_MUTATION_KEY missing while GOOGLE_CLOUD_LOGIN_REQUESTED=true. Deploying backend in bypass read-only mode (mutations disabled)."
+              echo "::warning::AUTH_BYPASS_MUTATION_KEY missing while GOOGLE_CLOUD_LOGIN_REQUESTED=false. Deploying backend in bypass read-only mode (mutations disabled)."
             fi
           fi
 
-          if [ "${LOGIN_REQUESTED}" != "true" ] && [ -z "${AUTH_GOOGLE_CLIENT_ID:-}" ]; then
+          if [ "${LOGIN_REQUESTED}" = "true" ] && [ -z "${AUTH_GOOGLE_CLIENT_ID:-}" ]; then
             echo "Missing AUTH_GOOGLE_CLIENT_ID secret."
             exit 1
           fi

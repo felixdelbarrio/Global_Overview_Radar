@@ -8,7 +8,8 @@ const METADATA_IDENTITY_URL =
 
 const DEFAULT_LOCAL_API = "http://127.0.0.1:8000";
 const DEFAULT_RENDER_API = "https://global-overview-radar.onrender.com";
-const AUTH_BYPASS = process.env.NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED === "true";
+const LOGIN_REQUIRED = process.env.NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED === "true";
+const AUTH_BYPASS = !LOGIN_REQUIRED;
 const AUTH_BYPASS_READ_ONLY = process.env.AUTH_BYPASS_READ_ONLY !== "false";
 const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 const PROXY_AUTH_HEADER = "x-gor-proxy-auth";
@@ -78,7 +79,7 @@ async function proxyRequest(request: NextRequest, path: string[]): Promise<Respo
     return NextResponse.json(
       {
         detail:
-          "Mutating API routes are disabled while GOOGLE_CLOUD_LOGIN_REQUESTED=true (read-only mode).",
+          "Mutating API routes are disabled while GOOGLE_CLOUD_LOGIN_REQUESTED=false (read-only mode).",
       },
       { status: 403 },
     );

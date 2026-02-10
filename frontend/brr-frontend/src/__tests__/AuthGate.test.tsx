@@ -107,7 +107,7 @@ describe("AuthGate", () => {
   it("renders children when login bypass is enabled", async () => {
     const AuthGate = await loadAuthGate({
       NEXT_PUBLIC_AUTH_ENABLED: "true",
-      NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED: "true",
+      NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED: "false",
       NEXT_PUBLIC_GOOGLE_CLIENT_ID: "",
     });
 
@@ -123,6 +123,7 @@ describe("AuthGate", () => {
   it("shows missing client id message when enabled without client id", async () => {
     const AuthGate = await loadAuthGate({
       NEXT_PUBLIC_AUTH_ENABLED: "true",
+      NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED: "true",
       NEXT_PUBLIC_GOOGLE_CLIENT_ID: "",
     });
 
@@ -141,6 +142,7 @@ describe("AuthGate", () => {
     usePathnameMock.mockReturnValue("/login");
     const AuthGate = await loadAuthGate({
       NEXT_PUBLIC_AUTH_ENABLED: "true",
+      NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED: "true",
       NEXT_PUBLIC_GOOGLE_CLIENT_ID: "test-client",
     });
 
@@ -157,6 +159,7 @@ describe("AuthGate", () => {
     usePathnameMock.mockReturnValue("/dashboard");
     const AuthGate = await loadAuthGate({
       NEXT_PUBLIC_AUTH_ENABLED: "true",
+      NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED: "true",
       NEXT_PUBLIC_GOOGLE_CLIENT_ID: "test-client",
     });
 
@@ -176,6 +179,7 @@ describe("AuthGate", () => {
     window.history.pushState({}, "", "/dashboard?foo=1");
     const AuthGate = await loadAuthGate({
       NEXT_PUBLIC_AUTH_ENABLED: "true",
+      NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED: "true",
       NEXT_PUBLIC_GOOGLE_CLIENT_ID: "test-client",
     });
 
@@ -196,6 +200,7 @@ describe("AuthGate", () => {
 
     const AuthGate = await loadAuthGate({
       NEXT_PUBLIC_AUTH_ENABLED: "true",
+      NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED: "true",
       NEXT_PUBLIC_GOOGLE_CLIENT_ID: "test-client",
     });
 
@@ -218,6 +223,7 @@ describe("AuthGate", () => {
 
     const AuthGate = await loadAuthGate({
       NEXT_PUBLIC_AUTH_ENABLED: "true",
+      NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED: "true",
       NEXT_PUBLIC_GOOGLE_CLIENT_ID: "test-client",
     });
 
@@ -242,6 +248,7 @@ describe("AuthGate", () => {
 
     const AuthGate = await loadAuthGate({
       NEXT_PUBLIC_AUTH_ENABLED: "true",
+      NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED: "true",
       NEXT_PUBLIC_GOOGLE_CLIENT_ID: "test-client",
     });
 
@@ -266,6 +273,7 @@ describe("AuthGate", () => {
 
     const AuthGate = await loadAuthGate({
       NEXT_PUBLIC_AUTH_ENABLED: "true",
+      NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED: "true",
       NEXT_PUBLIC_GOOGLE_CLIENT_ID: "test-client",
     });
 
@@ -287,6 +295,7 @@ describe("AuthGate", () => {
 
     const AuthGate = await loadAuthGate({
       NEXT_PUBLIC_AUTH_ENABLED: "true",
+      NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED: "true",
       NEXT_PUBLIC_GOOGLE_CLIENT_ID: "test-client",
     });
 
@@ -308,6 +317,7 @@ describe("AuthGate", () => {
 
     const AuthGate = await loadAuthGate({
       NEXT_PUBLIC_AUTH_ENABLED: "true",
+      NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED: "true",
       NEXT_PUBLIC_GOOGLE_CLIENT_ID: "test-client",
     });
 
@@ -329,6 +339,7 @@ describe("AuthGate", () => {
 
     const AuthGate = await loadAuthGate({
       NEXT_PUBLIC_AUTH_ENABLED: "true",
+      NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED: "true",
       NEXT_PUBLIC_GOOGLE_CLIENT_ID: "test-client",
     });
 
@@ -350,6 +361,7 @@ describe("AuthGate", () => {
 
     const AuthGate = await loadAuthGate({
       NEXT_PUBLIC_AUTH_ENABLED: "true",
+      NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED: "true",
       NEXT_PUBLIC_GOOGLE_CLIENT_ID: "test-client",
     });
 
@@ -376,6 +388,7 @@ describe("AuthGate", () => {
 
     const AuthGate = await loadAuthGate({
       NEXT_PUBLIC_AUTH_ENABLED: "true",
+      NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED: "true",
       NEXT_PUBLIC_GOOGLE_CLIENT_ID: "test-client",
     });
 
