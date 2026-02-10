@@ -39,7 +39,9 @@ def test_settings_snapshot_redacts_secret_values(
     )
 
     monkeypatch.setattr(user_settings, "REPUTATION_ENV_PATH", env_path, raising=False)
-    monkeypatch.setattr(user_settings, "REPUTATION_ENV_EXAMPLE", example_path, raising=False)
+    monkeypatch.setattr(
+        user_settings, "REPUTATION_ENV_EXAMPLE", example_path, raising=False
+    )
 
     snapshot = user_settings.get_user_settings_snapshot()
     fields = _collect_fields(snapshot)
@@ -69,7 +71,9 @@ def test_update_settings_ignores_secret_mask_marker(
     env_path.write_text("OPENAI_API_KEY=super-secret-openai\n", encoding="utf-8")
 
     monkeypatch.setattr(user_settings, "REPUTATION_ENV_PATH", env_path, raising=False)
-    monkeypatch.setattr(user_settings, "REPUTATION_ENV_EXAMPLE", example_path, raising=False)
+    monkeypatch.setattr(
+        user_settings, "REPUTATION_ENV_EXAMPLE", example_path, raising=False
+    )
 
     user_settings.update_user_settings({"llm.openai_key": "********"})
     updated = user_settings._parse_env_file(env_path)
@@ -85,10 +89,18 @@ def test_settings_endpoint_requires_admin_key_in_auth_bypass(
     key = "32chars-minimum-admin-key-12345678"
 
     monkeypatch.setattr(rep_config.settings, "auth_enabled", True, raising=False)
-    monkeypatch.setattr(rep_config.settings, "google_cloud_login_requested", True, raising=False)
-    monkeypatch.setattr(rep_config.settings, "auth_allowed_emails", "owner@example.com", raising=False)
-    monkeypatch.setattr(rep_config.settings, "auth_bypass_allow_mutations", True, raising=False)
-    monkeypatch.setattr(rep_config.settings, "auth_bypass_mutation_key", key, raising=False)
+    monkeypatch.setattr(
+        rep_config.settings, "google_cloud_login_requested", True, raising=False
+    )
+    monkeypatch.setattr(
+        rep_config.settings, "auth_allowed_emails", "owner@example.com", raising=False
+    )
+    monkeypatch.setattr(
+        rep_config.settings, "auth_bypass_allow_mutations", True, raising=False
+    )
+    monkeypatch.setattr(
+        rep_config.settings, "auth_bypass_mutation_key", key, raising=False
+    )
 
     app = create_app()
     app.dependency_overrides[reputation_router._refresh_settings] = lambda: None

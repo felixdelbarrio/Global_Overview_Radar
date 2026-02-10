@@ -418,7 +418,7 @@ lint-back:
 
 lint-front:
 	@echo "==> Lint frontend (eslint)..."
-	cd $(FRONTDIR) && $(NPM) run lint || true
+	cd $(FRONTDIR) && $(NPM) run lint
 
 typecheck: typecheck-back typecheck-front
 
@@ -428,8 +428,8 @@ typecheck-back:
 	$(PY) -m pyright
 
 typecheck-front:
-	@echo "==> Typecheck frontend (next / tsc)..."
-	cd $(FRONTDIR) && NEXT_DISABLE_TURBOPACK=1 $(NPM) run build --if-present || true
+	@echo "==> Typecheck frontend (tsc --noEmit)..."
+	cd $(FRONTDIR) && npx tsc --noEmit
 
 check: format lint typecheck
 

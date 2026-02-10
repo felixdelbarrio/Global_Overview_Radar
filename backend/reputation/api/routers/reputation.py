@@ -353,7 +353,7 @@ def reputation_items(
 @router.post("/items/override")
 def reputation_items_override(
     payload: OverrideRequest,
-    _: None = Depends(require_mutation_access),  # noqa: B008
+    _: None = Depends(require_mutation_access),
 ) -> dict[str, Any]:
     if not payload.ids:
         raise HTTPException(status_code=400, detail="ids is required")
@@ -526,7 +526,7 @@ def reputation_profiles() -> dict[str, Any]:
 @router.post("/profiles")
 def reputation_profiles_update(
     payload: ProfilesUpdateRequest,
-    _: None = Depends(require_mutation_access),  # noqa: B008
+    _: None = Depends(require_mutation_access),
 ) -> dict[str, Any]:
     source = normalize_profile_source(payload.source)
     profiles = payload.profiles or []
@@ -541,7 +541,7 @@ def reputation_profiles_update(
 
 @router.get("/settings")
 def reputation_settings(
-    _: None = Depends(require_mutation_access),  # noqa: B008
+    _: None = Depends(require_mutation_access),
 ) -> dict[str, Any]:
     return get_user_settings_snapshot()
 
@@ -549,7 +549,7 @@ def reputation_settings(
 @router.post("/settings")
 def reputation_settings_update(
     payload: SettingsUpdateRequest,
-    _: None = Depends(require_mutation_access),  # noqa: B008
+    _: None = Depends(require_mutation_access),
 ) -> dict[str, Any]:
     try:
         return update_user_settings(payload.values or {})
@@ -559,6 +559,6 @@ def reputation_settings_update(
 
 @router.post("/settings/reset")
 def reputation_settings_reset(
-    _: None = Depends(require_mutation_access),  # noqa: B008
+    _: None = Depends(require_mutation_access),
 ) -> dict[str, Any]:
     return reset_user_settings_to_example()

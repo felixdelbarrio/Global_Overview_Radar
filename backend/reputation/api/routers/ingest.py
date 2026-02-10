@@ -125,7 +125,7 @@ def _run_reputation_job(job_id: str, force: bool, all_sources: bool) -> None:
 @router.post("/reputation")
 def ingest_reputation(
     payload: IngestRequest,
-    _: None = Depends(require_mutation_access),  # noqa: B008
+    _: None = Depends(require_mutation_access),
 ) -> dict[str, Any]:
     force = bool(payload.force)
     all_sources = bool(payload.all_sources)

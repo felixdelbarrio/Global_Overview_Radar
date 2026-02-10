@@ -10,7 +10,9 @@ from reputation.services.ingest_service import ReputationIngestService
 from reputation.services.sentiment_service import ReputationSentimentService
 
 
-def _service(monkeypatch: pytest.MonkeyPatch, *, llm_enabled: bool) -> ReputationSentimentService:
+def _service(
+    monkeypatch: pytest.MonkeyPatch, *, llm_enabled: bool
+) -> ReputationSentimentService:
     monkeypatch.setenv("LLM_ENABLED", "true" if llm_enabled else "false")
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     cfg = {
@@ -43,7 +45,9 @@ def test_non_client_item_defaults_to_neutral_when_llm_disabled(
     assert result.signals.get("sentiment_provider") is None
 
 
-def test_google_play_rating_uses_stars_and_skips_llm(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_google_play_rating_uses_stars_and_skips_llm(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     service = _service(monkeypatch, llm_enabled=True)
 
     def _unexpected_call(*args: object, **kwargs: object) -> str:
@@ -65,11 +69,15 @@ def test_google_play_rating_uses_stars_and_skips_llm(monkeypatch: pytest.MonkeyP
     assert result.signals.get("client_sentiment") is True
 
 
-def test_existing_star_classification_is_not_reprocessed(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_existing_star_classification_is_not_reprocessed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     service = _service(monkeypatch, llm_enabled=True)
 
     def _unexpected_call(*args: object, **kwargs: object) -> str:
-        raise AssertionError("LLM no debe ejecutarse para items ya clasificados por cliente")
+        raise AssertionError(
+            "LLM no debe ejecutarse para items ya clasificados por cliente"
+        )
 
     monkeypatch.setattr(service, "_send_llm_request", _unexpected_call)
     item = ReputationItem(
@@ -86,10 +94,14 @@ def test_existing_star_classification_is_not_reprocessed(monkeypatch: pytest.Mon
     assert result.signals.get("sentiment_score") == 0.0
 
 
-def test_manual_sentiment_lock_is_never_overwritten(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_manual_sentiment_lock_is_never_overwritten(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     service = _service(monkeypatch, llm_enabled=True)
 
-    def _mock_llm(payload_items: list[dict[str, object]], *_: object, **__: object) -> str:
+    def _mock_llm(
+        payload_items: list[dict[str, object]], *_: object, **__: object
+    ) -> str:
         assert [str(item.get("id")) for item in payload_items] == ["open"]
         return json.dumps(
             {

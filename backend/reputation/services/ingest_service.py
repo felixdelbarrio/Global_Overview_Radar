@@ -1388,8 +1388,6 @@ class ReputationIngestService:
         for item_id, override_data in loaded.items():
             if not isinstance(item_id, str) or not item_id:
                 continue
-            if not isinstance(override_data, dict):
-                continue
             raw_sentiment = override_data.get("sentiment")
             if not isinstance(raw_sentiment, str):
                 continue

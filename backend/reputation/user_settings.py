@@ -756,7 +756,7 @@ def get_user_settings_snapshot() -> dict[str, Any]:
             for env_key in sorted(extras.keys()):
                 raw_value = extras.get(env_key, "")
                 is_secret_extra = _is_sensitive_env_name(env_key)
-                payload = {
+                payload: dict[str, Any] = {
                     "key": f"advanced.{env_key}",
                     "label": env_key,
                     "description": "Variable avanzada",
