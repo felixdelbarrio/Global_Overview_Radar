@@ -198,7 +198,7 @@ class ReputationIngestService:
         if incremental_since is not None:
             delta_days = (ingest_now - incremental_since).total_seconds() / 86400.0
             delta_days = max(0.0, delta_days)
-            lookback_days = max(1, min(DEFAULT_LOOKBACK_DAYS, int(math.ceil(delta_days))))
+            lookback_days = max(1, min(DEFAULT_LOOKBACK_DAYS, math.ceil(delta_days)))
 
         prep_meta: dict[str, Any] = {
             "sources_enabled": len(sources_enabled),

@@ -1,10 +1,12 @@
 # Global Overview Radar
 
-[![Test back](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/backend.yml/badge.svg?branch=develop&label=Test%20back)](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/backend.yml)
-[![Test front](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/frontend.yml/badge.svg?branch=develop&label=Test%20front)](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/frontend.yml)
+[![Test back (develop)](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/backend.yml/badge.svg?branch=develop&label=Test%20back)](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/backend.yml)
+[![Test front (develop)](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/frontend.yml/badge.svg?branch=develop&label=Test%20front)](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/frontend.yml)
 [![typecheck](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/typecheck.yml/badge.svg?branch=develop)](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/typecheck.yml)
 [![format](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/format.yml/badge.svg?branch=develop)](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/format.yml)
-[![deploy_hooks](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/deploy_hooks.yml/badge.svg?branch=develop)](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/deploy_hooks.yml)
+[![Preview deploy (develop)](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/deploy_preview.yml/badge.svg?branch=develop)](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/deploy_preview.yml)
+[![Production deploy backend (master)](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/deploy_cloudrun_backend.yml/badge.svg?branch=master)](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/deploy_cloudrun_backend.yml)
+[![Production deploy frontend (master)](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/deploy_cloudrun_frontend.yml/badge.svg?branch=master)](https://github.com/felixdelbarrio/Global_Overview_Radar/actions/workflows/deploy_cloudrun_frontend.yml)
 [![Sponsor](https://img.shields.io/badge/Sponsor-GitHub%20Sponsors-2ea44f.svg)](https://github.com/sponsors/felixdelbarrio)
 [![Donate](https://img.shields.io/badge/Donate-PayPal-blue.svg)](https://paypal.me/felixdelbarrio)
 
