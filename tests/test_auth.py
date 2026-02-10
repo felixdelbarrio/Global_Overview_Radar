@@ -54,12 +54,32 @@ def test_require_google_user_ignores_cloud_run_proxy_authorization(
     assert exc.value.detail == "missing auth token"
 
 
-def test_require_google_user_domain_denied(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_require_google_user_ignores_authorization_on_cloud_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("K_SERVICE", "gor-backend")
     monkeypatch.setattr(settings, "auth_enabled", True, raising=False)
     monkeypatch.setattr(settings, "google_cloud_login_requested", True, raising=False)
-    monkeypatch.setattr(settings, "auth_allowed_emails", "", raising=False)
-    monkeypatch.setattr(settings, "auth_allowed_domains", "bbva.com", raising=False)
-    monkeypatch.setattr(settings, "auth_allowed_groups", "", raising=False)
+    with pytest.raises(HTTPException) as exc:
+        auth.require_google_user(
+            _make_request(
+                {
+                    "authorization": "Bearer cloud-run-id-token",
+                }
+            )
+        )
+    assert exc.value.status_code == 401
+    assert exc.value.detail == "missing auth token"
+
+
+def test_require_google_user_denies_when_email_not_allowed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "auth_enabled", True, raising=False)
+    monkeypatch.setattr(settings, "google_cloud_login_requested", True, raising=False)
+    monkeypatch.setattr(
+        settings, "auth_allowed_emails", "allowed@example.com", raising=False
+    )
 
     def fake_verify(_: str) -> dict[str, Any]:
         return {"email": "user@gmail.com", "email_verified": True}
@@ -69,14 +89,13 @@ def test_require_google_user_domain_denied(monkeypatch: pytest.MonkeyPatch) -> N
     with pytest.raises(HTTPException) as exc:
         auth.require_google_user(_make_request({"x-user-id-token": "token"}))
     assert exc.value.status_code == 403
+    assert exc.value.detail == "email not allowed"
 
 
 def test_require_google_user_allows(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "auth_enabled", True, raising=False)
     monkeypatch.setattr(settings, "google_cloud_login_requested", True, raising=False)
     monkeypatch.setattr(settings, "auth_allowed_emails", "", raising=False)
-    monkeypatch.setattr(settings, "auth_allowed_domains", "", raising=False)
-    monkeypatch.setattr(settings, "auth_allowed_groups", "", raising=False)
 
     def fake_verify(_: str) -> dict[str, Any]:
         return {

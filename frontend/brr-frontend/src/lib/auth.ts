@@ -119,31 +119,3 @@ export function clearStoredAdminKey(): void {
   if (!storage) return;
   storage.removeItem(ADMIN_KEY);
 }
-
-export function readAllowedEmails(): string[] {
-  const raw = process.env.NEXT_PUBLIC_ALLOWED_EMAILS || "";
-  return raw
-    .split(",")
-    .map((item) => item.trim().toLowerCase())
-    .filter(Boolean);
-}
-
-export function readAllowedDomains(): string[] {
-  const raw = process.env.NEXT_PUBLIC_ALLOWED_DOMAINS || "";
-  return raw
-    .split(",")
-    .map((item) => item.trim().toLowerCase())
-    .filter(Boolean);
-}
-
-export function isEmailAllowed(email: string | null): boolean {
-  if (!email) return false;
-  const allowedEmails = readAllowedEmails();
-  const allowedDomains = readAllowedDomains();
-  if (!allowedEmails.length && !allowedDomains.length) return true;
-  const normalized = email.toLowerCase();
-  if (allowedEmails.includes(normalized)) return true;
-  const domain = normalized.split("@")[1] || "";
-  if (!domain) return false;
-  return allowedDomains.includes(domain);
-}
