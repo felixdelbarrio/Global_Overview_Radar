@@ -31,6 +31,10 @@ function sanitizeHeaders(headers: Headers): Headers {
   sanitized.delete("host");
   sanitized.delete("content-length");
   sanitized.delete("x-gor-admin-key");
+  if (AUTH_BYPASS) {
+    sanitized.delete("x-user-id-token");
+    sanitized.delete("x-user-token");
+  }
   return sanitized;
 }
 
