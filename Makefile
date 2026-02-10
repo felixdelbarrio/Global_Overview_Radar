@@ -44,6 +44,7 @@ AUTH_GOOGLE_CLIENT_ID ?=
 AUTH_ALLOWED_EMAILS ?=
 AUTH_ALLOWED_DOMAINS ?= gmail.com
 AUTH_ALLOWED_GROUPS ?=
+GOOGLE_CLOUD_LOGIN_REQUESTED ?= false
 NEXT_PUBLIC_ALLOWED_EMAILS ?= $(AUTH_ALLOWED_EMAILS)
 NEXT_PUBLIC_ALLOWED_DOMAINS ?= $(AUTH_ALLOWED_DOMAINS)
 CALLER_SERVICE_ACCOUNT ?= gor-github-deploy@$(GCP_PROJECT).iam.gserviceaccount.com
@@ -206,7 +207,9 @@ cloudrun-env:
 	@mkdir -p backend/reputation
 	@awk -F= '$$0 !~ /^[[:space:]]*#/ && $$0 ~ /=/ {print $$0}' backend/reputation/.env.reputation > backend/reputation/cloudrun.env
 
-	@if ! grep -qE '^AUTH_GOOGLE_CLIENT_ID=' backend/reputation/cloudrun.env && [ -z "$(AUTH_GOOGLE_CLIENT_ID)" ]; then \
+	@LOGIN_REQUESTED_VAL=$$(awk -F= '/^GOOGLE_CLOUD_LOGIN_REQUESTED=/{print tolower($$2)}' backend/reputation/cloudrun.env | tr -d '[:space:]' | tail -n1); \
+	if [ -z "$$LOGIN_REQUESTED_VAL" ]; then LOGIN_REQUESTED_VAL="$$(echo "$(GOOGLE_CLOUD_LOGIN_REQUESTED)" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"; fi; \
+	if [ "$$LOGIN_REQUESTED_VAL" != "true" ] && ! grep -qE '^AUTH_GOOGLE_CLIENT_ID=' backend/reputation/cloudrun.env && [ -z "$(AUTH_GOOGLE_CLIENT_ID)" ]; then \
 		echo "Falta AUTH_GOOGLE_CLIENT_ID (ponlo en backend/reputation/.env.reputation o exporta la variable)."; \
 		exit 1; \
 	fi
@@ -228,6 +231,9 @@ cloudrun-env:
 	fi
 	@if [ -n "$(AUTH_ALLOWED_GROUPS)" ] && ! grep -q '^AUTH_ALLOWED_GROUPS=' backend/reputation/cloudrun.env; then \
 		echo "AUTH_ALLOWED_GROUPS=$(AUTH_ALLOWED_GROUPS)" >> backend/reputation/cloudrun.env; \
+	fi
+	@if [ -n "$(GOOGLE_CLOUD_LOGIN_REQUESTED)" ] && ! grep -q '^GOOGLE_CLOUD_LOGIN_REQUESTED=' backend/reputation/cloudrun.env; then \
+		echo "GOOGLE_CLOUD_LOGIN_REQUESTED=$(GOOGLE_CLOUD_LOGIN_REQUESTED)" >> backend/reputation/cloudrun.env; \
 	fi
 	@if [ -n "$(CORS_ALLOWED_ORIGIN_REGEX)" ] && ! grep -q '^CORS_ALLOWED_ORIGIN_REGEX=' backend/reputation/cloudrun.env; then \
 		echo "CORS_ALLOWED_ORIGIN_REGEX=$(CORS_ALLOWED_ORIGIN_REGEX)" >> backend/reputation/cloudrun.env; \
@@ -255,11 +261,13 @@ deploy-cloudrun-back: cloudrun-env
 
 deploy-cloudrun-front:
 	@echo "==> Deploy frontend en Cloud Run (proxy /api -> backend)..."
-	@if [ -z "$(AUTH_GOOGLE_CLIENT_ID)" ]; then \
+	@LOGIN_REQUESTED_VAL=$$(echo "$(GOOGLE_CLOUD_LOGIN_REQUESTED)" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]'); \
+	if [ "$$LOGIN_REQUESTED_VAL" != "true" ] && [ -z "$(AUTH_GOOGLE_CLIENT_ID)" ]; then \
 		echo "Falta AUTH_GOOGLE_CLIENT_ID (ponlo en backend/reputation/.env.reputation o exporta la variable)."; \
 		exit 1; \
 	fi
-	@if ! echo "$(AUTH_GOOGLE_CLIENT_ID)" | grep -q '\.apps\.googleusercontent\.com$$'; then \
+	@LOGIN_REQUESTED_VAL=$$(echo "$(GOOGLE_CLOUD_LOGIN_REQUESTED)" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]'); \
+	if [ "$$LOGIN_REQUESTED_VAL" != "true" ] && ! echo "$(AUTH_GOOGLE_CLIENT_ID)" | grep -q '\.apps\.googleusercontent\.com$$'; then \
 		echo "ERROR: AUTH_GOOGLE_CLIENT_ID debe ser un OAuth Client ID (termina en .apps.googleusercontent.com). Valor actual: $(AUTH_GOOGLE_CLIENT_ID)"; \
 		exit 1; \
 	fi
@@ -268,6 +276,9 @@ deploy-cloudrun-front:
 		echo "No se pudo obtener BACKEND_URL. Deploy del backend primero."; \
 		exit 1; \
 	fi; \
+	FRONT_AUTH_ENABLED=true; \
+	LOGIN_REQUESTED_VAL=$$(echo "$(GOOGLE_CLOUD_LOGIN_REQUESTED)" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]'); \
+	if [ "$$LOGIN_REQUESTED_VAL" = "true" ]; then FRONT_AUTH_ENABLED=false; fi; \
 	gcloud run deploy $(FRONTEND_SERVICE) \
 		--project $(GCP_PROJECT) \
 		--region $(GCP_REGION) \
@@ -280,8 +291,8 @@ deploy-cloudrun-front:
 		--cpu $(FRONTEND_CPU) \
 		--memory $(FRONTEND_MEMORY) \
 		--cpu-throttling \
-		--set-env-vars USE_SERVER_PROXY=true,API_PROXY_TARGET=$$BACKEND_URL,NEXT_PUBLIC_API_BASE_URL=/api,NEXT_PUBLIC_AUTH_ENABLED=true,NEXT_PUBLIC_GOOGLE_CLIENT_ID=$(AUTH_GOOGLE_CLIENT_ID),NEXT_PUBLIC_ALLOWED_EMAILS=$(NEXT_PUBLIC_ALLOWED_EMAILS),NEXT_PUBLIC_ALLOWED_DOMAINS=$(NEXT_PUBLIC_ALLOWED_DOMAINS) \
-		--set-build-env-vars USE_SERVER_PROXY=true,API_PROXY_TARGET=$$BACKEND_URL,NEXT_PUBLIC_API_BASE_URL=/api,NEXT_PUBLIC_AUTH_ENABLED=true,NEXT_PUBLIC_GOOGLE_CLIENT_ID=$(AUTH_GOOGLE_CLIENT_ID),NEXT_PUBLIC_ALLOWED_EMAILS=$(NEXT_PUBLIC_ALLOWED_EMAILS),NEXT_PUBLIC_ALLOWED_DOMAINS=$(NEXT_PUBLIC_ALLOWED_DOMAINS)
+		--set-env-vars USE_SERVER_PROXY=true,API_PROXY_TARGET=$$BACKEND_URL,NEXT_PUBLIC_API_BASE_URL=/api,NEXT_PUBLIC_AUTH_ENABLED=$$FRONT_AUTH_ENABLED,NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED=$(GOOGLE_CLOUD_LOGIN_REQUESTED),NEXT_PUBLIC_GOOGLE_CLIENT_ID=$(AUTH_GOOGLE_CLIENT_ID),NEXT_PUBLIC_ALLOWED_EMAILS=$(NEXT_PUBLIC_ALLOWED_EMAILS),NEXT_PUBLIC_ALLOWED_DOMAINS=$(NEXT_PUBLIC_ALLOWED_DOMAINS) \
+		--set-build-env-vars USE_SERVER_PROXY=true,API_PROXY_TARGET=$$BACKEND_URL,NEXT_PUBLIC_API_BASE_URL=/api,NEXT_PUBLIC_AUTH_ENABLED=$$FRONT_AUTH_ENABLED,NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED=$(GOOGLE_CLOUD_LOGIN_REQUESTED),NEXT_PUBLIC_GOOGLE_CLIENT_ID=$(AUTH_GOOGLE_CLIENT_ID),NEXT_PUBLIC_ALLOWED_EMAILS=$(NEXT_PUBLIC_ALLOWED_EMAILS),NEXT_PUBLIC_ALLOWED_DOMAINS=$(NEXT_PUBLIC_ALLOWED_DOMAINS)
 
 deploy-cloudrun: deploy-cloudrun-back deploy-cloudrun-front
 	@true

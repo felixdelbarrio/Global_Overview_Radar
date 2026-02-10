@@ -8,6 +8,23 @@ const USE_SERVER_PROXY = process.env.USE_SERVER_PROXY === "true";
 
 const nextConfig: NextConfig = {
   outputFileTracingRoot: __dirname,
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          {
+            key: "Permissions-Policy",
+            value: "camera=(), microphone=(), geolocation=(), interest-cohort=()",
+          },
+          { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
+        ],
+      },
+    ];
+  },
   async rewrites() {
     if (USE_SERVER_PROXY) {
       return [];

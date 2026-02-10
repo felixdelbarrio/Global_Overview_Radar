@@ -8,7 +8,7 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from reputation.auth import require_google_user
+from reputation.auth import require_google_user, require_mutation_access
 from reputation.config import (
     compute_config_hash,
     load_business_config,
@@ -123,7 +123,10 @@ def _run_reputation_job(job_id: str, force: bool, all_sources: bool) -> None:
 
 
 @router.post("/reputation")
-def ingest_reputation(payload: IngestRequest) -> dict[str, Any]:
+def ingest_reputation(
+    payload: IngestRequest,
+    _: None = Depends(require_mutation_access),  # noqa: B008
+) -> dict[str, Any]:
     force = bool(payload.force)
     all_sources = bool(payload.all_sources)
     with _INGEST_LOCK:

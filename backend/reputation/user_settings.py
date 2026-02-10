@@ -502,6 +502,46 @@ ADVANCED_ENV_CANDIDATES = {
 }
 
 
+_SENSITIVE_ENV_MARKERS = (
+    "SECRET",
+    "TOKEN",
+    "PASSWORD",
+    "PRIVATE",
+    "CREDENTIAL",
+    "API_KEY",
+)
+_SENSITIVE_ENV_EXACT_ALLOWLIST = {
+    "AUTH_GOOGLE_CLIENT_ID",
+}
+_SECRET_MASK = "********"
+
+
+def _is_sensitive_env_name(name: str) -> bool:
+    normalized = name.strip().upper()
+    if not normalized:
+        return False
+    if normalized in _SENSITIVE_ENV_EXACT_ALLOWLIST:
+        return False
+    return any(marker in normalized for marker in _SENSITIVE_ENV_MARKERS)
+
+
+def _field_payload(field: UserSettingField, value: Any) -> dict[str, Any]:
+    is_secret = field.kind == "secret"
+    raw_text = str(value).strip() if value is not None else ""
+    payload: dict[str, Any] = {
+        "key": field.key,
+        "label": field.label,
+        "description": field.description,
+        "type": field.kind,
+        "value": (_SECRET_MASK if raw_text else "") if is_secret else value,
+        "options": field.options,
+        "placeholder": field.placeholder,
+    }
+    if is_secret:
+        payload["configured"] = bool(raw_text)
+    return payload
+
+
 def _strip_quotes(value: str) -> str:
     if (value.startswith('"') and value.endswith('"')) or (
         value.startswith("'") and value.endswith("'")
@@ -711,40 +751,29 @@ def get_user_settings_snapshot() -> dict[str, Any]:
         if group["id"] == "advanced":
             for field in [f for f in FIELDS if f.group == group["id"]]:
                 group_fields.append(
-                    {
-                        "key": field.key,
-                        "label": field.label,
-                        "description": field.description,
-                        "type": field.kind,
-                        "value": values_by_key.get(field.key, field.default),
-                        "options": field.options,
-                        "placeholder": field.placeholder,
-                    }
+                    _field_payload(field, values_by_key.get(field.key, field.default))
                 )
             for env_key in sorted(extras.keys()):
-                group_fields.append(
-                    {
-                        "key": f"advanced.{env_key}",
-                        "label": env_key,
-                        "description": "Variable avanzada",
-                        "type": "string",
-                        "value": extras.get(env_key, ""),
-                        "options": None,
-                        "placeholder": "",
-                    }
-                )
+                raw_value = extras.get(env_key, "")
+                is_secret_extra = _is_sensitive_env_name(env_key)
+                payload = {
+                    "key": f"advanced.{env_key}",
+                    "label": env_key,
+                    "description": "Variable avanzada",
+                    "type": "secret" if is_secret_extra else "string",
+                    "value": (_SECRET_MASK if str(raw_value).strip() else "")
+                    if is_secret_extra
+                    else raw_value,
+                    "options": None,
+                    "placeholder": "",
+                }
+                if is_secret_extra:
+                    payload["configured"] = bool(str(raw_value).strip())
+                group_fields.append(payload)
         else:
             for field in [f for f in FIELDS if f.group == group["id"]]:
                 group_fields.append(
-                    {
-                        "key": field.key,
-                        "label": field.label,
-                        "description": field.description,
-                        "type": field.kind,
-                        "value": values_by_key.get(field.key, field.default),
-                        "options": field.options,
-                        "placeholder": field.placeholder,
-                    }
+                    _field_payload(field, values_by_key.get(field.key, field.default))
                 )
         groups_payload.append(
             {
@@ -784,10 +813,16 @@ def update_user_settings(values: dict[str, Any]) -> dict[str, Any]:
                 env_key = key.split(".", 1)[1].strip()
                 if not env_key:
                     continue
+                if _is_sensitive_env_name(env_key) and str(value).strip() == _SECRET_MASK:
+                    # Keep current secret value when client sends masked marker.
+                    continue
                 if value is None or (isinstance(value, str) and not value.strip()):
                     env_values.pop(env_key, None)
                 else:
                     env_values[env_key] = str(value).strip()
+            continue
+        if field.kind == "secret" and isinstance(value, str) and value.strip() == _SECRET_MASK:
+            # Keep current secret value when client sends masked marker.
             continue
         coerced = _coerce_update(value, field)
         env_values[field.env] = _format_env_value(coerced, field)

@@ -60,6 +60,7 @@ from reputation.models import (
     ReputationItem,
 )
 from reputation.repositories.cache_repo import ReputationCacheRepo
+from reputation.repositories.overrides_repo import ReputationOverridesRepo
 from reputation.services.sentiment_service import ReputationSentimentService
 
 logger = get_logger(__name__)
@@ -139,6 +140,7 @@ class ReputationIngestService:
     def __init__(self) -> None:
         self._settings = settings
         self._repo = ReputationCacheRepo(self._settings.cache_path)
+        self._manual_sentiment_overrides: dict[str, str] | None = None
 
     def run(
         self,
@@ -156,6 +158,7 @@ class ReputationIngestService:
         reload_reputation_settings()
         # Refresca el repo por si cambió la ruta del cache/perfil.
         self._repo = ReputationCacheRepo(self._settings.cache_path)
+        self._manual_sentiment_overrides = None
 
         cfg = _as_dict(load_business_config())
         cfg_hash = compute_config_hash(cfg)
@@ -175,14 +178,11 @@ class ReputationIngestService:
         incremental_since: datetime | None = None
         incremental_overlap_hours = 0
         incremental_enabled = _env_bool(os.getenv("REPUTATION_INCREMENTAL_ENABLED", "true"))
-        if (
-            incremental_enabled
-            and not force
-            and existing
-            and existing.items
-            and existing.config_hash == cfg_hash
-            and enabled_sources.issubset(set(existing.sources_enabled))
-        ):
+        incremental_cache_hash_match = bool(existing and existing.config_hash == cfg_hash)
+        incremental_sources_subset = bool(
+            existing and enabled_sources.issubset(set(existing.sources_enabled))
+        )
+        if incremental_enabled and not force and existing and existing.items:
             latest_ts = _latest_item_timestamp(existing.items)
             if latest_ts is not None:
                 incremental_overlap_hours = max(
@@ -207,6 +207,8 @@ class ReputationIngestService:
         if incremental_since is not None:
             prep_meta["incremental_since"] = _format_rfc3339(incremental_since)
             prep_meta["incremental_overlap_hours"] = incremental_overlap_hours
+            prep_meta["incremental_cache_hash_match"] = incremental_cache_hash_match
+            prep_meta["incremental_sources_subset"] = incremental_sources_subset
         report("Preparando configuración", 4, prep_meta)
         logger.info("Reputation ingest started (force=%s)", force)
         logger.debug("Sources enabled: %s", sources_enabled)
@@ -1377,6 +1379,42 @@ class ReputationIngestService:
                 current.signals = merged_signals
         return list(merged.values())
 
+    def _load_manual_sentiment_overrides(self) -> dict[str, str]:
+        if self._manual_sentiment_overrides is not None:
+            return self._manual_sentiment_overrides
+        repo = ReputationOverridesRepo(self._settings.overrides_path)
+        loaded = repo.load()
+        mapped: dict[str, str] = {}
+        for item_id, override_data in loaded.items():
+            if not isinstance(item_id, str) or not item_id:
+                continue
+            if not isinstance(override_data, dict):
+                continue
+            raw_sentiment = override_data.get("sentiment")
+            if not isinstance(raw_sentiment, str):
+                continue
+            sentiment = raw_sentiment.strip().lower()
+            if sentiment in {"positive", "neutral", "negative"}:
+                mapped[item_id] = sentiment
+        self._manual_sentiment_overrides = mapped
+        return mapped
+
+    def _lock_manual_sentiment_items(self, items: list[ReputationItem]) -> None:
+        if not items:
+            return
+        overrides = self._load_manual_sentiment_overrides()
+        if not overrides:
+            return
+        for item in items:
+            sentiment = overrides.get(item.id)
+            if not sentiment:
+                continue
+            item.sentiment = sentiment
+            item.signals["manual_sentiment"] = True
+            item.signals["sentiment_locked"] = True
+            item.signals["sentiment_provider"] = "manual_override"
+            item.signals.pop("sentiment_model", None)
+
     def _apply_sentiment(
         self,
         cfg: dict[str, Any],
@@ -1389,6 +1427,7 @@ class ReputationIngestService:
         valid_items = [item for item in items if not self._is_invalid_segment(item)]
         if not valid_items:
             return items
+        self._lock_manual_sentiment_items(valid_items)
         keywords = self._load_keywords(cfg)
         cfg_local = dict(cfg)
         cfg_local["keywords"] = keywords
