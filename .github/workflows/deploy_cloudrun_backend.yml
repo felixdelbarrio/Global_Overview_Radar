@@ -196,9 +196,11 @@ jobs:
             --project "$GCP_PROJECT" \
             --region "$GCP_REGION" \
             --format 'yaml(id,status,createTime,finishTime,statusDetail,logUrl,steps.id,steps.status,steps.exitCode)'
-          gcloud builds log "$BUILD_ID" \
+          if ! gcloud builds log "$BUILD_ID" \
             --project "$GCP_PROJECT" \
-            --region "$GCP_REGION"
+            --region "$GCP_REGION"; then
+            echo "::warning::Unable to stream Cloud Build logs for ${BUILD_ID}. Check the logUrl above and ensure the CI service account has log-view permissions."
+          fi
 
       - name: Show backend URL
         id: backend_url
