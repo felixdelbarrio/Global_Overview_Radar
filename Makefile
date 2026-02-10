@@ -38,6 +38,7 @@ BACKEND_MEMORY ?= 768Mi
 FRONTEND_MEMORY ?= 768Mi
 BACKEND_CPU ?= 1
 FRONTEND_CPU ?= 1
+BACKEND_PYTHON_RUNTIME ?= 3.13
 
 AUTH_GOOGLE_CLIENT_ID ?=
 AUTH_ALLOWED_EMAILS ?=
@@ -237,7 +238,7 @@ cloudrun-env:
 deploy-cloudrun-back: cloudrun-env
 	@echo "==> Deploy backend en Cloud Run..."
 	@set -euo pipefail; \
-	BUILD_VARS="GOOGLE_RUNTIME_VERSION=3.11,GOOGLE_ENTRYPOINT=python -m uvicorn reputation.api.main:app --host 0.0.0.0 --port 8080"; \
+	BUILD_VARS="GOOGLE_RUNTIME_VERSION=$(BACKEND_PYTHON_RUNTIME),GOOGLE_ENTRYPOINT=python -m uvicorn reputation.api.main:app --host 0.0.0.0 --port 8080"; \
 	gcloud run deploy $(BACKEND_SERVICE) \
 		--project $(GCP_PROJECT) \
 		--region $(GCP_REGION) \

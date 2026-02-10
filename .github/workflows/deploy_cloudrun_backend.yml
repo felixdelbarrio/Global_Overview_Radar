@@ -24,6 +24,7 @@ jobs:
       GCP_PROJECT: global-overview-radar
       GCP_REGION: europe-southwest1
       BACKEND_SERVICE: gor-backend
+      BACKEND_PYTHON_RUNTIME: "3.13"
 
       BACKEND_MAX_INSTANCES: "1"
       BACKEND_CONCURRENCY: "2"
@@ -35,6 +36,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Create GitHub Deployment (Production - Backend)
         id: create_deploy
@@ -115,6 +118,7 @@ jobs:
       - name: Deploy backend (Cloud Run)
         run: |
           set -euo pipefail
+          BUILD_VARS="GOOGLE_RUNTIME_VERSION=${BACKEND_PYTHON_RUNTIME},GOOGLE_ENTRYPOINT=python -m uvicorn reputation.api.main:app --host 0.0.0.0 --port 8080"
 
           # Buildpacks: source must include backend pyproject for dependency install.
           # Entry point binds explicitly to 8080 (Cloud Run default container port).
@@ -130,8 +134,35 @@ jobs:
             --memory "$BACKEND_MEMORY" \
             --cpu-throttling \
             --timeout 300 \
-            --set-build-env-vars 'GOOGLE_RUNTIME_VERSION=3.11,GOOGLE_ENTRYPOINT=python -m uvicorn reputation.api.main:app --host 0.0.0.0 --port 8080' \
+            --set-build-env-vars "${BUILD_VARS}" \
             --env-vars-file backend/reputation/cloudrun.env
+
+      - name: Show latest failed Cloud Build details
+        if: failure()
+        run: |
+          set -euo pipefail
+          SERVICE_TAG="service_${BACKEND_SERVICE}"
+          BUILD_ID="$(gcloud builds list \
+            --project "$GCP_PROJECT" \
+            --region "$GCP_REGION" \
+            --filter "tags:${SERVICE_TAG} AND status=FAILURE" \
+            --sort-by '~createTime' \
+            --limit 1 \
+            --format 'value(id)')"
+
+          if [ -z "${BUILD_ID:-}" ]; then
+            echo "No failed Cloud Build found for ${BACKEND_SERVICE}."
+            exit 0
+          fi
+
+          echo "Latest failed Cloud Build ID: ${BUILD_ID}"
+          gcloud builds describe "$BUILD_ID" \
+            --project "$GCP_PROJECT" \
+            --region "$GCP_REGION" \
+            --format 'yaml(id,status,createTime,finishTime,statusDetail,logUrl,steps.id,steps.status,steps.exitCode)'
+          gcloud builds log "$BUILD_ID" \
+            --project "$GCP_PROJECT" \
+            --region "$GCP_REGION"
 
       - name: Show backend URL
         id: backend_url
