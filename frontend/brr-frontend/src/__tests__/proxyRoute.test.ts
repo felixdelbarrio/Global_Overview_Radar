@@ -130,6 +130,7 @@ describe("proxy route", () => {
     const [, options] = fetchMock.mock.calls[1];
     const headers = (options as RequestInit).headers as Headers;
     expect(headers.get("authorization")).toBe("Bearer token");
+    expect(headers.get("x-gor-proxy-auth")).toBe("cloudrun-idtoken");
   });
 
   it("uses render fallback when proxy target is not set", async () => {

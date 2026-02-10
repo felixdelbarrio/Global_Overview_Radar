@@ -11,6 +11,8 @@ const DEFAULT_RENDER_API = "https://global-overview-radar.onrender.com";
 const AUTH_BYPASS = process.env.NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED === "true";
 const AUTH_BYPASS_READ_ONLY = process.env.AUTH_BYPASS_READ_ONLY !== "false";
 const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+const PROXY_AUTH_HEADER = "x-gor-proxy-auth";
+const PROXY_AUTH_CLOUD_RUN = "cloudrun-idtoken";
 
 const HOP_BY_HOP_HEADERS = new Set([
   "connection",
@@ -31,6 +33,8 @@ function sanitizeHeaders(headers: Headers): Headers {
   sanitized.delete("host");
   sanitized.delete("content-length");
   sanitized.delete("x-gor-admin-key");
+  // Internal marker added by the server proxy (never forward client-supplied values).
+  sanitized.delete(PROXY_AUTH_HEADER);
   if (AUTH_BYPASS) {
     sanitized.delete("x-user-id-token");
     sanitized.delete("x-user-token");
@@ -87,6 +91,7 @@ async function proxyRequest(request: NextRequest, path: string[]): Promise<Respo
   if (shouldUseIdToken()) {
     const idToken = await fetchIdToken(target);
     headers.set("authorization", `Bearer ${idToken}`);
+    headers.set(PROXY_AUTH_HEADER, PROXY_AUTH_CLOUD_RUN);
   }
 
   const body =

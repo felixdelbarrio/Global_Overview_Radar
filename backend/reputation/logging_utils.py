@@ -147,7 +147,7 @@ def configure_logging(force: bool = False) -> None:
         logger.addHandler(handler)
 
 
-class _HotReloadingLoggerAdapter(logging.LoggerAdapter[logging.Logger]):
+class _HotReloadingLoggerAdapter(logging.LoggerAdapter):
     def isEnabledFor(self, level: int) -> bool:  # noqa: N802
         configure_logging()
         return self.logger.isEnabledFor(level)

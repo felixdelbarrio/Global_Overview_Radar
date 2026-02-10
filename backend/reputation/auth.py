@@ -26,6 +26,8 @@ from reputation.config import settings
 
 logger = logging.getLogger(__name__)
 _MIN_MUTATION_KEY_LENGTH = 32
+_PROXY_AUTH_HEADER = "x-gor-proxy-auth"
+_PROXY_AUTH_CLOUD_RUN = "cloudrun-idtoken"
 
 _GROUP_SCOPE = "https://www.googleapis.com/auth/cloud-identity.groups.readonly"
 _GROUP_LOOKUP_URL = "https://cloudidentity.googleapis.com/v1/groups:lookup"
@@ -99,6 +101,11 @@ def _extract_token(request: Request) -> str | None:
     token = request.headers.get("x-user-id-token") or request.headers.get("x-user-token")
     if token:
         return token.strip()
+    # When requests are proxied through the Next.js server route, the `Authorization`
+    # header is used for Cloud Run service-to-service invocation (ID token), not for
+    # end-user auth. Treat it as infrastructure auth and ignore it here.
+    if request.headers.get(_PROXY_AUTH_HEADER) == _PROXY_AUTH_CLOUD_RUN:
+        return None
     auth = request.headers.get("authorization", "")
     if auth.lower().startswith("bearer "):
         return auth[7:].strip()

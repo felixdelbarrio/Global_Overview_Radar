@@ -17,10 +17,12 @@ export function SentimentChart({
   data,
   principalLabel,
   actorLabel,
+  showActor = true,
 }: {
   data: { date: string; principal: number | null; actor: number | null }[];
   principalLabel: string;
   actorLabel: string;
+  showActor?: boolean;
 }) {
   const tooltipFormatter: Formatter<ValueType, string | number> = (value) => {
     if (typeof value === "number") {
@@ -63,16 +65,18 @@ export function SentimentChart({
           dot={false}
           connectNulls
         />
-        <Line
-          type="monotone"
-          dataKey="actor"
-          name={actorLabel}
-          stroke="#2dcccd"
-          strokeWidth={2}
-          dot={false}
-          strokeDasharray="6 4"
-          connectNulls
-        />
+        {showActor && (
+          <Line
+            type="monotone"
+            dataKey="actor"
+            name={actorLabel}
+            stroke="#2dcccd"
+            strokeWidth={2}
+            dot={false}
+            strokeDasharray="6 4"
+            connectNulls
+          />
+        )}
       </LineChart>
     </ResponsiveContainer>
   );

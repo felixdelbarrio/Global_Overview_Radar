@@ -50,24 +50,6 @@ router = APIRouter(dependencies=[Depends(_refresh_settings), Depends(require_goo
 
 _ALLOWED_SENTIMENTS = {"positive", "negative", "neutral"}
 _COMPARE_BODY = Body(...)
-_KNOWN_SOURCES = [
-    "news",
-    "newsapi",
-    "gdelt",
-    "guardian",
-    "forums",
-    "blogs",
-    "appstore",
-    "trustpilot",
-    "google_reviews",
-    "google_play",
-    "youtube",
-    "reddit",
-    "twitter",
-    "downdetector",
-]
-
-
 class OverrideRequest(BaseModel):
     ids: list[str]
     geo: str | None = None
@@ -305,9 +287,9 @@ def reputation_items(
     overrides = _load_overrides()
     items = _apply_overrides(doc.items, overrides)
 
-    enabled_sources = settings.enabled_sources()
-    if enabled_sources:
-        items = [item for item in items if item.source in enabled_sources]
+    visible_sources = settings.enabled_sources()
+    visible_sources_set = set(visible_sources)
+    items = [item for item in items if item.source in visible_sources_set]
 
     try:
         cfg = load_business_config()
@@ -340,11 +322,10 @@ def reputation_items(
         principal_terms,
     )
 
-    sources_enabled = doc.sources_enabled or settings.enabled_sources()
     return {
         "generated_at": doc.generated_at.isoformat(),
         "config_hash": doc.config_hash,
-        "sources_enabled": sources_enabled,
+        "sources_enabled": visible_sources,
         "items": [item.model_dump(mode="json") for item in filtered_items],
         "stats": {"count": len(filtered_items), "note": doc.stats.note},
     }
@@ -408,9 +389,9 @@ def reputation_items_compare(
     overrides = _load_overrides()
     items = _apply_overrides(doc.items, overrides)
 
-    enabled_sources = settings.enabled_sources()
-    if enabled_sources:
-        items = [item for item in items if item.source in enabled_sources]
+    visible_sources = settings.enabled_sources()
+    visible_sources_set = set(visible_sources)
+    items = [item for item in items if item.source in visible_sources_set]
 
     try:
         cfg = load_business_config()
@@ -471,12 +452,9 @@ def reputation_meta() -> dict[str, Any]:
     doc = _load_cache_optional()
     cache_available = doc is not None
 
-    sources_enabled = (doc.sources_enabled if doc else []) or settings.enabled_sources()
-    available_set = set(sources_enabled)
-    for source in _KNOWN_SOURCES:
-        if source in cfg:
-            available_set.add(source)
-    sources_available = sorted(available_set)
+    sources_enabled = settings.enabled_sources()
+    visible_sources_set = set(sources_enabled)
+    sources_available = sorted(visible_sources_set)
 
     source_counts: dict[str, int] = {}
     market_ratings: list[dict[str, Any]] = []
@@ -484,6 +462,8 @@ def reputation_meta() -> dict[str, Any]:
     if doc:
         for item in doc.items:
             if not item.source:
+                continue
+            if item.source not in visible_sources_set:
                 continue
             source_counts[item.source] = source_counts.get(item.source, 0) + 1
         market_ratings = [entry.model_dump(mode="json") for entry in doc.market_ratings]
@@ -502,6 +482,7 @@ def reputation_meta() -> dict[str, Any]:
         "cache_available": cache_available,
         "market_ratings": market_ratings,
         "market_ratings_history": market_ratings_history,
+        "ui_show_comparisons": settings.ui_show_comparisons,
         "profiles_active": active_profiles(),
         "profile_key": active_profile_key(),
         "profile_source": active_profile_source(),
