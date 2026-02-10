@@ -35,11 +35,6 @@ GROUPS: list[dict[str, str]] = [
         "description": "Selecciona el idioma general para noticias y traducciones de opiniones.",
     },
     {
-        "id": "visualization",
-        "label": "Visualización",
-        "description": "Controla qué bloques se muestran en el frontend.",
-    },
-    {
         "id": "sources_public",
         "label": "Fuentes sin credenciales",
         "description": "Activa o desactiva fuentes que no requieren API Key.",
@@ -98,8 +93,8 @@ FIELDS: list[UserSettingField] = [
     UserSettingField(
         key="visualization.show_comparisons",
         env="REPUTATION_UI_SHOW_COMPARISONS",
-        group="visualization",
-        label="Mostrar comparativas con otras entidades",
+        group="language",
+        label="Comparar con competencia",
         description=(
             "Si está desactivado, el frontend oculta la comparación con otros actores "
             "y muestra solo el actor principal."
