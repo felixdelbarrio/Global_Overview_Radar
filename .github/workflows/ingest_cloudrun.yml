@@ -84,13 +84,13 @@ jobs:
           LOGIN_REQUESTED="${{ steps.login_toggle.outputs.value }}"
           ADMIN_KEY=""
 
-          if [ "${LOGIN_REQUESTED}" = "true" ]; then
+          if [ "${LOGIN_REQUESTED}" != "true" ]; then
             ADMIN_KEY="$(gcloud secrets versions access latest \
               --secret AUTH_BYPASS_MUTATION_KEY \
               --project "$GCP_PROJECT" 2>/dev/null || true)"
             ADMIN_KEY="$(echo "$ADMIN_KEY" | tr -d '\r\n')"
             if [ -z "${ADMIN_KEY}" ]; then
-              echo "Missing AUTH_BYPASS_MUTATION_KEY secret while GOOGLE_CLOUD_LOGIN_REQUESTED=true."
+              echo "Missing AUTH_BYPASS_MUTATION_KEY secret while GOOGLE_CLOUD_LOGIN_REQUESTED=false."
               exit 1
             fi
             if [ "${#ADMIN_KEY}" -lt 32 ]; then
@@ -99,7 +99,7 @@ jobs:
             fi
           fi
 
-          if [ "${LOGIN_REQUESTED}" != "true" ] && [ -z "${AUTH_GOOGLE_CLIENT_ID:-}" ]; then
+          if [ "${LOGIN_REQUESTED}" = "true" ] && [ -z "${AUTH_GOOGLE_CLIENT_ID:-}" ]; then
             echo "Missing AUTH_GOOGLE_CLIENT_ID secret."
             exit 1
           fi
@@ -121,7 +121,7 @@ jobs:
             --audiences="$BACKEND_URL")"
 
           USER_TOKEN=""
-          if [ "${LOGIN_REQUESTED}" != "true" ]; then
+          if [ "${LOGIN_REQUESTED}" = "true" ]; then
             # Token “usuario” para tu capa de auth (audience = OAuth client id)
             USER_TOKEN="$(gcloud auth print-identity-token \
               --impersonate-service-account="$CALLER_SERVICE_ACCOUNT" \

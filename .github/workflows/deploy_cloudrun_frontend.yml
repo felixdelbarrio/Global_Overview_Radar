@@ -130,16 +130,16 @@ jobs:
           LOGIN_REQUESTED="${{ steps.login_toggle.outputs.value }}"
           FRONT_AUTH_ENABLED="true"
           BYPASS_READ_ONLY="false"
-          if [ "${LOGIN_REQUESTED}" = "true" ]; then
+          if [ "${LOGIN_REQUESTED}" != "true" ]; then
             FRONT_AUTH_ENABLED="false"
             BYPASS_READ_ONLY="true"
           fi
 
-          if [ "${LOGIN_REQUESTED}" != "true" ] && [ -z "${AUTH_GOOGLE_CLIENT_ID:-}" ]; then
+          if [ "${LOGIN_REQUESTED}" = "true" ] && [ -z "${AUTH_GOOGLE_CLIENT_ID:-}" ]; then
             echo "Missing AUTH_GOOGLE_CLIENT_ID secret."
             exit 1
           fi
-          if [ "${LOGIN_REQUESTED}" != "true" ] && ! echo "${AUTH_GOOGLE_CLIENT_ID}" | grep -q '\.apps\.googleusercontent\.com$'; then
+          if [ "${LOGIN_REQUESTED}" = "true" ] && ! echo "${AUTH_GOOGLE_CLIENT_ID}" | grep -q '\.apps\.googleusercontent\.com$'; then
             echo "ERROR: AUTH_GOOGLE_CLIENT_ID must end in .apps.googleusercontent.com (got: ${AUTH_GOOGLE_CLIENT_ID})"
             exit 1
           fi

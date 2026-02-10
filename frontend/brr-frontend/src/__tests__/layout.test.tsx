@@ -28,7 +28,7 @@ const loadLayout = async (authEnabled: boolean, bypass = false) => {
   process.env = {
     ...originalEnv,
     NEXT_PUBLIC_AUTH_ENABLED: authEnabled ? "true" : "false",
-    NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED: bypass ? "true" : "false",
+    NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED: bypass ? "false" : "true",
   };
   return (await import("@/app/layout")).default;
 };

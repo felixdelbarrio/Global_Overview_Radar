@@ -100,7 +100,8 @@ class ReputationSettings(BaseSettings):
 
     # Auth (Google ID tokens)
     auth_enabled: bool = Field(default=False, alias="AUTH_ENABLED")
-    # Compat: when true, Cloud Run can bypass interactive login and impersonate an allowed email.
+    # If true, the UI requires an end-user Google login (ID token).
+    # If false, Cloud Run bypasses interactive login and impersonates an allowed email.
     google_cloud_login_requested: bool = Field(
         default=False,
         alias="GOOGLE_CLOUD_LOGIN_REQUESTED",
