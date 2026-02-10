@@ -39,21 +39,6 @@ DEFAULT_HTTP_BLOCK_TTL_SEC = 90
 DEFAULT_HTTP_MAX_BYTES = 2_000_000
 
 
-def _safe_url_for_logs(url: str) -> str:
-    """Redact query/fragment to avoid leaking API keys in logs."""
-    try:
-        parsed = urlparse(url)
-        host = parsed.hostname or ""
-        if not host:
-            return "<invalid-url>"
-        port = f":{parsed.port}" if parsed.port else ""
-        path = parsed.path or ""
-        scheme = parsed.scheme or "http"
-        return f"{scheme}://{host}{port}{path}"
-    except Exception:
-        return "<invalid-url>"
-
-
 def _is_public_fetch_url(url: str) -> bool:
     """Best-effort SSRF guard for Cloud Run (block localhost/link-local/private IPs)."""
     try:
@@ -71,11 +56,7 @@ def _is_public_fetch_url(url: str) -> bool:
         except ValueError:
             return True  # domain name; cannot safely resolve without DNS lookup
         return not (
-            ip.is_private
-            or ip.is_loopback
-            or ip.is_link_local
-            or ip.is_reserved
-            or ip.is_multicast
+            ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast
         )
     except Exception:
         return False
@@ -202,7 +183,7 @@ def http_get_text(url: str, headers: dict[str, str] | None = None, timeout: int 
     if headers:
         req_headers.update(headers)
     if os.getenv("K_SERVICE") and not _is_public_fetch_url(url):
-        logger.warning("blocked outbound fetch on Cloud Run: %s", _safe_url_for_logs(url))
+        logger.warning("blocked outbound fetch on Cloud Run (non-public URL)")
         return ""
     if _is_blocked(url):
         return ""
@@ -240,7 +221,10 @@ def http_get_text(url: str, headers: dict[str, str] | None = None, timeout: int 
             if attempt >= retries:
                 if raise_on_error:
                     raise
-                logger.warning("http_get_text error for %s: %s", _safe_url_for_logs(url), exc)
+                logger.warning(
+                    "http_get_text error: %s",
+                    type(exc).__name__,
+                )
                 return ""
             sleep_for = backoff * (2**attempt)
             attempt += 1
@@ -256,7 +240,7 @@ def http_get_json(url: str, headers: dict[str, str] | None = None, timeout: int 
         return json.loads(raw)
     except json.JSONDecodeError:
         if rss_debug_enabled():
-            logger.debug("http_get_json decode failed for %s", _safe_url_for_logs(url))
+            logger.debug("http_get_json decode failed")
         return {}
 
 
@@ -344,7 +328,9 @@ def _ssl_context() -> ssl.SSLContext | None:
         # in production is a footgun (MITM/data-tampering risk). Keep the toggle for local
         # troubleshooting only.
         if os.getenv("K_SERVICE"):
-            logger.warning("REPUTATION_SSL_VERIFY=false ignored on Cloud Run (TLS verification enforced).")
+            logger.warning(
+                "REPUTATION_SSL_VERIFY=false ignored on Cloud Run (TLS verification enforced)."
+            )
             verify = True
         else:
             context = ssl.create_default_context()

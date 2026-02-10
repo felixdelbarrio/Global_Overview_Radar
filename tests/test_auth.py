@@ -77,7 +77,9 @@ def test_require_google_user_denies_when_email_not_allowed(
 ) -> None:
     monkeypatch.setattr(settings, "auth_enabled", True, raising=False)
     monkeypatch.setattr(settings, "google_cloud_login_requested", True, raising=False)
-    monkeypatch.setattr(settings, "auth_allowed_emails", "allowed@example.com", raising=False)
+    monkeypatch.setattr(
+        settings, "auth_allowed_emails", "allowed@example.com", raising=False
+    )
 
     def fake_verify(_: str) -> dict[str, Any]:
         return {"email": "user@gmail.com", "email_verified": True}
