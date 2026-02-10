@@ -6,6 +6,7 @@ type JwtPayload = {
 
 const TOKEN_KEY = "gor-google-id-token";
 const EMAIL_KEY = "gor-google-email";
+const ADMIN_KEY = "gor-admin-key";
 
 function isBrowser(): boolean {
   return typeof window !== "undefined";
@@ -93,6 +94,30 @@ export function clearStoredToken(): void {
   if (!storage) return;
   storage.removeItem(TOKEN_KEY);
   storage.removeItem(EMAIL_KEY);
+}
+
+export function getStoredAdminKey(): string | null {
+  const storage = getAuthStorage();
+  if (!storage) return null;
+  const value = storage.getItem(ADMIN_KEY);
+  return value ? value.trim() : null;
+}
+
+export function storeAdminKey(value: string): void {
+  const storage = getAuthStorage();
+  if (!storage) return;
+  const cleaned = value.trim();
+  if (!cleaned) {
+    storage.removeItem(ADMIN_KEY);
+    return;
+  }
+  storage.setItem(ADMIN_KEY, cleaned);
+}
+
+export function clearStoredAdminKey(): void {
+  const storage = getAuthStorage();
+  if (!storage) return;
+  storage.removeItem(ADMIN_KEY);
 }
 
 export function readAllowedEmails(): string[] {
