@@ -44,7 +44,6 @@ const authMocks = {
   clearStoredToken: vi.fn(),
   getEmailFromToken: vi.fn(),
   getStoredToken: vi.fn(),
-  isEmailAllowed: vi.fn(),
   isTokenExpired: vi.fn(),
   storeToken: vi.fn(),
 };
@@ -72,11 +71,9 @@ beforeEach(() => {
   authMocks.clearStoredToken.mockReset();
   authMocks.getEmailFromToken.mockReset();
   authMocks.getStoredToken.mockReset();
-  authMocks.isEmailAllowed.mockReset();
   authMocks.isTokenExpired.mockReset();
   authMocks.storeToken.mockReset();
   authMocks.isTokenExpired.mockReturnValue(false);
-  authMocks.isEmailAllowed.mockReturnValue(true);
   authMocks.getEmailFromToken.mockReturnValue("user@bbva.com");
   authMocks.getStoredToken.mockReturnValue(null);
   apiMocks.apiGet.mockReset();
@@ -197,29 +194,6 @@ describe("AuthGate", () => {
   it("clears stored token when session is expired", async () => {
     authMocks.getStoredToken.mockReturnValue("token");
     authMocks.isTokenExpired.mockReturnValue(true);
-
-    const AuthGate = await loadAuthGate({
-      NEXT_PUBLIC_AUTH_ENABLED: "true",
-      NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED: "true",
-      NEXT_PUBLIC_GOOGLE_CLIENT_ID: "test-client",
-    });
-
-    render(
-      <AuthGate>
-        <div>Contenido</div>
-      </AuthGate>
-    );
-
-    await waitFor(() => {
-      expect(authMocks.clearStoredToken).toHaveBeenCalled();
-    });
-  });
-
-  it("clears stored token when email is not allowed", async () => {
-    authMocks.getStoredToken.mockReturnValue("token");
-    authMocks.isTokenExpired.mockReturnValue(false);
-    authMocks.getEmailFromToken.mockReturnValue("user@evil.com");
-    authMocks.isEmailAllowed.mockReturnValue(false);
 
     const AuthGate = await loadAuthGate({
       NEXT_PUBLIC_AUTH_ENABLED: "true",

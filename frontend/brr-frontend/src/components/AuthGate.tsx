@@ -8,7 +8,6 @@ import {
   clearStoredToken,
   getEmailFromToken,
   getStoredToken,
-  isEmailAllowed,
   isTokenExpired,
 } from "@/lib/auth";
 
@@ -56,7 +55,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
       return { token: null, email: null, shouldClear: Boolean(stored) };
     }
     const storedEmail = getEmailFromToken(stored);
-    if (storedEmail && isEmailAllowed(storedEmail)) {
+    if (storedEmail) {
       return { token: stored, email: storedEmail, shouldClear: false };
     }
     return { token: null, email: null, shouldClear: true };

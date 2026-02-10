@@ -42,11 +42,7 @@ BACKEND_PYTHON_RUNTIME ?= 3.13
 
 AUTH_GOOGLE_CLIENT_ID ?=
 AUTH_ALLOWED_EMAILS ?=
-AUTH_ALLOWED_DOMAINS ?= gmail.com
-AUTH_ALLOWED_GROUPS ?=
 GOOGLE_CLOUD_LOGIN_REQUESTED ?= false
-NEXT_PUBLIC_ALLOWED_EMAILS ?= $(AUTH_ALLOWED_EMAILS)
-NEXT_PUBLIC_ALLOWED_DOMAINS ?= $(AUTH_ALLOWED_DOMAINS)
 CALLER_SERVICE_ACCOUNT ?= gor-github-deploy@$(GCP_PROJECT).iam.gserviceaccount.com
 INGEST_FORCE ?= true
 INGEST_ALL_SOURCES ?= false
@@ -72,7 +68,7 @@ VISUAL_QA_OUT ?= docs/visual-qa
 
 .DEFAULT_GOAL := help
 
-.PHONY: help venv install install-backend install-front env ensure-backend ensure-front ingest ingest-filtered reputation-ingest reputation-ingest-filtered serve serve-back dev-back dev-front build-front start-front lint lint-back lint-front typecheck typecheck-back typecheck-front format format-back format-front check test test-back test-front test-coverage test-coverage-back test-coverage-front bench bench-baseline visual-qa clean reset cloudrun-config cloudrun-env deploy-cloudrun-back deploy-cloudrun-front deploy-cloudrun ingest-cloudrun
+.PHONY: help venv install install-backend install-front env ensure-backend ensure-front ingest ingest-filtered reputation-ingest reputation-ingest-filtered serve serve-back dev-back dev-front build-front start-front lint lint-back lint-front typecheck typecheck-back typecheck-front format format-back format-front check codeql codeql-install codeql-python codeql-js codeql-clean test test-back test-front test-coverage test-coverage-back test-coverage-front bench bench-baseline visual-qa clean reset cloudrun-config cloudrun-env deploy-cloudrun-back deploy-cloudrun-front deploy-cloudrun ingest-cloudrun
 
 help:
 	@echo "Make targets disponibles:"
@@ -97,6 +93,7 @@ help:
 	@echo "  make typecheck       - Type checks backend + frontend"
 	@echo "  make format          - Formatear código (backend + frontend)"
 	@echo "  make check           - format-check + lint + typecheck"
+	@echo "  make codeql          - Analisis CodeQL local (requiere CodeQL CLI)"
 	@echo "  make test            - Ejecutar tests (si existen)"
 	@echo "  make test-back       - Ejecutar tests backend (pytest + cobertura)"
 	@echo "  make test-front      - Ejecutar tests frontend (vitest)"
@@ -177,29 +174,22 @@ cloudrun-config:
 		exit 1; \
 	fi; \
 	read -r -p "AUTH_ALLOWED_EMAILS (coma separada, opcional): " AUTH_ALLOWED_EMAILS_VAL; \
-	read -r -p "AUTH_ALLOWED_DOMAINS [$(AUTH_ALLOWED_DOMAINS)]: " AUTH_ALLOWED_DOMAINS_IN; \
-	AUTH_ALLOWED_DOMAINS_VAL=$${AUTH_ALLOWED_DOMAINS_IN:-$(AUTH_ALLOWED_DOMAINS)}; \
-	read -r -p "AUTH_ALLOWED_GROUPS (coma separada, opcional): " AUTH_ALLOWED_GROUPS_VAL; \
 	read -r -p "CORS_ALLOWED_ORIGIN_REGEX (required para Cloud Run backend): " CORS_ALLOWED_ORIGIN_REGEX_VAL; \
 	if [ -z "$$CORS_ALLOWED_ORIGIN_REGEX_VAL" ]; then \
 		echo "Falta CORS_ALLOWED_ORIGIN_REGEX."; \
 		exit 1; \
 	fi; \
-	{ printf '%s\n' \
-		"GCP_PROJECT=$${GCP_PROJECT_VAL}" \
-		"GCP_REGION=$${GCP_REGION_VAL}" \
-		"BACKEND_SERVICE=$${BACKEND_SERVICE_VAL}" \
-		"FRONTEND_SERVICE=$${FRONTEND_SERVICE_VAL}" \
-		"FRONTEND_SA=$${FRONTEND_SA_VAL}" \
-		"AUTH_GOOGLE_CLIENT_ID=$${AUTH_GOOGLE_CLIENT_ID_VAL}" \
-		"AUTH_ALLOWED_EMAILS=$${AUTH_ALLOWED_EMAILS_VAL}" \
-		"AUTH_ALLOWED_DOMAINS=$${AUTH_ALLOWED_DOMAINS_VAL}" \
-		"AUTH_ALLOWED_GROUPS=$${AUTH_ALLOWED_GROUPS_VAL}" \
-		"NEXT_PUBLIC_ALLOWED_EMAILS=$${AUTH_ALLOWED_EMAILS_VAL}" \
-		"NEXT_PUBLIC_ALLOWED_DOMAINS=$${AUTH_ALLOWED_DOMAINS_VAL}" \
-		"CORS_ALLOWED_ORIGIN_REGEX=$${CORS_ALLOWED_ORIGIN_REGEX_VAL}"; \
-	} > backend/reputation/.env.reputation
-	@echo "==> backend/reputation/.env.reputation generado. Ahora puedes ejecutar: make deploy-cloudrun"
+		{ printf '%s\n' \
+			"GCP_PROJECT=$${GCP_PROJECT_VAL}" \
+			"GCP_REGION=$${GCP_REGION_VAL}" \
+			"BACKEND_SERVICE=$${BACKEND_SERVICE_VAL}" \
+			"FRONTEND_SERVICE=$${FRONTEND_SERVICE_VAL}" \
+			"FRONTEND_SA=$${FRONTEND_SA_VAL}" \
+			"AUTH_GOOGLE_CLIENT_ID=$${AUTH_GOOGLE_CLIENT_ID_VAL}" \
+			"AUTH_ALLOWED_EMAILS=$${AUTH_ALLOWED_EMAILS_VAL}" \
+			"CORS_ALLOWED_ORIGIN_REGEX=$${CORS_ALLOWED_ORIGIN_REGEX_VAL}"; \
+		} > backend/reputation/.env.reputation
+		@echo "==> backend/reputation/.env.reputation generado. Ahora puedes ejecutar: make deploy-cloudrun"
 
 cloudrun-env:
 	@echo "==> Generando backend/reputation/cloudrun.env desde backend/reputation/.env.reputation..."
@@ -225,12 +215,6 @@ cloudrun-env:
 	fi
 	@if [ -n "$(AUTH_ALLOWED_EMAILS)" ] && ! grep -q '^AUTH_ALLOWED_EMAILS=' backend/reputation/cloudrun.env; then \
 		echo "AUTH_ALLOWED_EMAILS=$(AUTH_ALLOWED_EMAILS)" >> backend/reputation/cloudrun.env; \
-	fi
-	@if [ -n "$(AUTH_ALLOWED_DOMAINS)" ] && ! grep -q '^AUTH_ALLOWED_DOMAINS=' backend/reputation/cloudrun.env; then \
-		echo "AUTH_ALLOWED_DOMAINS=$(AUTH_ALLOWED_DOMAINS)" >> backend/reputation/cloudrun.env; \
-	fi
-	@if [ -n "$(AUTH_ALLOWED_GROUPS)" ] && ! grep -q '^AUTH_ALLOWED_GROUPS=' backend/reputation/cloudrun.env; then \
-		echo "AUTH_ALLOWED_GROUPS=$(AUTH_ALLOWED_GROUPS)" >> backend/reputation/cloudrun.env; \
 	fi
 	@if [ -n "$(GOOGLE_CLOUD_LOGIN_REQUESTED)" ] && ! grep -q '^GOOGLE_CLOUD_LOGIN_REQUESTED=' backend/reputation/cloudrun.env; then \
 		echo "GOOGLE_CLOUD_LOGIN_REQUESTED=$(GOOGLE_CLOUD_LOGIN_REQUESTED)" >> backend/reputation/cloudrun.env; \
@@ -291,8 +275,8 @@ deploy-cloudrun-front:
 		--cpu $(FRONTEND_CPU) \
 		--memory $(FRONTEND_MEMORY) \
 		--cpu-throttling \
-		--set-env-vars USE_SERVER_PROXY=true,API_PROXY_TARGET=$$BACKEND_URL,NEXT_PUBLIC_API_BASE_URL=/api,NEXT_PUBLIC_AUTH_ENABLED=$$FRONT_AUTH_ENABLED,NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED=$(GOOGLE_CLOUD_LOGIN_REQUESTED),NEXT_PUBLIC_GOOGLE_CLIENT_ID=$(AUTH_GOOGLE_CLIENT_ID),NEXT_PUBLIC_ALLOWED_EMAILS=$(NEXT_PUBLIC_ALLOWED_EMAILS),NEXT_PUBLIC_ALLOWED_DOMAINS=$(NEXT_PUBLIC_ALLOWED_DOMAINS) \
-		--set-build-env-vars USE_SERVER_PROXY=true,API_PROXY_TARGET=$$BACKEND_URL,NEXT_PUBLIC_API_BASE_URL=/api,NEXT_PUBLIC_AUTH_ENABLED=$$FRONT_AUTH_ENABLED,NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED=$(GOOGLE_CLOUD_LOGIN_REQUESTED),NEXT_PUBLIC_GOOGLE_CLIENT_ID=$(AUTH_GOOGLE_CLIENT_ID),NEXT_PUBLIC_ALLOWED_EMAILS=$(NEXT_PUBLIC_ALLOWED_EMAILS),NEXT_PUBLIC_ALLOWED_DOMAINS=$(NEXT_PUBLIC_ALLOWED_DOMAINS)
+		--set-env-vars USE_SERVER_PROXY=true,API_PROXY_TARGET=$$BACKEND_URL,NEXT_PUBLIC_API_BASE_URL=/api,NEXT_PUBLIC_AUTH_ENABLED=$$FRONT_AUTH_ENABLED,NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED=$(GOOGLE_CLOUD_LOGIN_REQUESTED),NEXT_PUBLIC_GOOGLE_CLIENT_ID=$(AUTH_GOOGLE_CLIENT_ID) \
+		--set-build-env-vars USE_SERVER_PROXY=true,API_PROXY_TARGET=$$BACKEND_URL,NEXT_PUBLIC_API_BASE_URL=/api,NEXT_PUBLIC_AUTH_ENABLED=$$FRONT_AUTH_ENABLED,NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED=$(GOOGLE_CLOUD_LOGIN_REQUESTED),NEXT_PUBLIC_GOOGLE_CLIENT_ID=$(AUTH_GOOGLE_CLIENT_ID)
 
 deploy-cloudrun: deploy-cloudrun-back deploy-cloudrun-front
 	@true
@@ -310,7 +294,22 @@ ingest-cloudrun:
 	else \
 		ADMIN_KEY="$(AUTH_BYPASS_MUTATION_KEY)"; \
 		if [ -z "$$ADMIN_KEY" ]; then \
-			echo "Falta AUTH_BYPASS_MUTATION_KEY para mutaciones mientras GOOGLE_CLOUD_LOGIN_REQUESTED=false."; \
+			# Prefer Secret Manager (no guardar el admin key en .env.reputation). \
+			if [ -n "$(CALLER_SERVICE_ACCOUNT)" ]; then \
+				ADMIN_KEY=$$(gcloud secrets versions access latest \
+					--secret AUTH_BYPASS_MUTATION_KEY \
+					--project "$(GCP_PROJECT)" \
+					--impersonate-service-account "$(CALLER_SERVICE_ACCOUNT)" 2>/dev/null || true); \
+			fi; \
+			if [ -z "$$ADMIN_KEY" ]; then \
+				ADMIN_KEY=$$(gcloud secrets versions access latest \
+					--secret AUTH_BYPASS_MUTATION_KEY \
+					--project "$(GCP_PROJECT)" 2>/dev/null || true); \
+			fi; \
+			ADMIN_KEY=$$(echo "$$ADMIN_KEY" | tr -d '\r\n'); \
+		fi; \
+		if [ -z "$$ADMIN_KEY" ]; then \
+			echo "Falta AUTH_BYPASS_MUTATION_KEY para mutaciones mientras GOOGLE_CLOUD_LOGIN_REQUESTED=false (no se pudo leer desde env ni desde Secret Manager)."; \
 			exit 1; \
 		fi; \
 		if [ "$${#ADMIN_KEY}" -lt 32 ]; then \
@@ -450,6 +449,84 @@ typecheck-front:
 	cd $(FRONTDIR) && npx tsc --noEmit
 
 check: format lint typecheck
+
+# -------------------------
+# CodeQL (SAST)
+# -------------------------
+CODEQL ?= codeql
+CODEQL_DIR ?= .codeql
+CODEQL_DB_DIR ?= $(CODEQL_DIR)/db
+CODEQL_RESULTS_DIR ?= $(CODEQL_DIR)/results
+CODEQL_THREADS ?= 0
+
+CODEQL_PY_QUERIES ?= codeql/python-queries
+CODEQL_JS_QUERIES ?= codeql/javascript-queries
+# Optional: for JS/TS extraction you can provide a build command:
+#   make codeql-js CODEQL_JS_COMMAND='cd frontend/brr-frontend && npm run build'
+CODEQL_JS_COMMAND ?=
+
+codeql: codeql-python codeql-js
+	@echo "==> CodeQL completado. Resultados en $(CODEQL_RESULTS_DIR)/"
+
+codeql-install:
+	@if command -v $(CODEQL) >/dev/null 2>&1; then \
+		echo "==> CodeQL CLI ya esta instalado: $$(command -v $(CODEQL))"; \
+		exit 0; \
+	fi
+	@if command -v brew >/dev/null 2>&1; then \
+		echo "==> Instalando CodeQL CLI via Homebrew..."; \
+		brew install codeql; \
+		exit 0; \
+	fi
+	@echo "ERROR: CodeQL CLI no encontrado. Instala 'codeql' (macOS: brew install codeql)." >&2
+	@exit 1
+
+codeql-python:
+	@echo "==> CodeQL (python)..."
+	@command -v $(CODEQL) >/dev/null 2>&1 || (echo "ERROR: falta CodeQL CLI. Ejecuta: make codeql-install (o brew install codeql)"; exit 1)
+	@mkdir -p $(CODEQL_DB_DIR) $(CODEQL_RESULTS_DIR)
+	@$(CODEQL) database create "$(CODEQL_DB_DIR)/python" \
+		--language=python \
+		--source-root=backend \
+		--overwrite
+	@$(CODEQL) database analyze "$(CODEQL_DB_DIR)/python" "$(CODEQL_PY_QUERIES)" \
+		--format=sarif-latest \
+		--output="$(CODEQL_RESULTS_DIR)/codeql-python.sarif" \
+		--sarif-category=python \
+		--threads="$(CODEQL_THREADS)" \
+		--download
+
+codeql-js:
+	@echo "==> CodeQL (javascript-typescript)..."
+	@command -v $(CODEQL) >/dev/null 2>&1 || (echo "ERROR: falta CodeQL CLI. Ejecuta: make codeql-install (o brew install codeql)"; exit 1)
+	@mkdir -p $(CODEQL_DB_DIR) $(CODEQL_RESULTS_DIR)
+	@if [ ! -d "$(FRONTDIR)/node_modules" ]; then \
+		echo "==> node_modules no encontrado. Instalando frontend..."; \
+		$(MAKE) install-front; \
+	fi
+	@if [ -n "$(CODEQL_JS_COMMAND)" ]; then \
+		echo "==> Creando DB JS/TS con build command: $(CODEQL_JS_COMMAND)"; \
+		$(CODEQL) database create "$(CODEQL_DB_DIR)/javascript-typescript" \
+			--language=javascript-typescript \
+			--source-root="$(FRONTDIR)" \
+			--command="$(CODEQL_JS_COMMAND)" \
+			--overwrite; \
+	else \
+		$(CODEQL) database create "$(CODEQL_DB_DIR)/javascript-typescript" \
+			--language=javascript-typescript \
+			--source-root="$(FRONTDIR)" \
+			--overwrite; \
+	fi
+	@$(CODEQL) database analyze "$(CODEQL_DB_DIR)/javascript-typescript" "$(CODEQL_JS_QUERIES)" \
+		--format=sarif-latest \
+		--output="$(CODEQL_RESULTS_DIR)/codeql-javascript-typescript.sarif" \
+		--sarif-category=javascript-typescript \
+		--threads="$(CODEQL_THREADS)" \
+		--download
+
+codeql-clean:
+	@echo "==> Eliminando artefactos CodeQL ($(CODEQL_DIR))..."
+	@rm -rf "$(CODEQL_DIR)"
 
 # -------------------------
 # Tests
