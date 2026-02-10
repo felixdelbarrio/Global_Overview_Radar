@@ -346,7 +346,6 @@ export function Shell({ children }: { children: React.ReactNode }) {
         all_sources: false,
       });
       setIngestJobs((prev) => ({ ...prev, [kind]: job }));
-      openPanel("ingest");
     } catch (err) {
       setIngestError(err instanceof Error ? err.message : "No se pudo iniciar la ingesta");
     } finally {
@@ -997,7 +996,10 @@ export function Shell({ children }: { children: React.ReactNode }) {
                               <div className="relative mt-3 flex items-center justify-end">
                                 <button
                                   type="button"
-                                  onClick={() => startIngest(kind)}
+                                  onClick={() => {
+                                    setIngestOpen(false);
+                                    void startIngest(kind);
+                                  }}
                                   disabled={actionDisabled}
                                   className="rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-[color:var(--text-55)] transition hover:bg-[color:var(--surface-60)] disabled:opacity-60"
                                 >
