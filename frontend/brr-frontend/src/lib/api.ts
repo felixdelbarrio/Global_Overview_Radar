@@ -5,10 +5,20 @@
  */
 
 import { logger } from "@/lib/logger";
-import { getStoredToken } from "@/lib/auth";
+import { clearStoredToken, getStoredToken } from "@/lib/auth";
 
 /** Base de la API; permite proxy local con /api. */
 export const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api";
+const AUTH_BYPASS = process.env.NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED === "true";
+const AUTH_ENABLED = process.env.NEXT_PUBLIC_AUTH_ENABLED === "true" && !AUTH_BYPASS;
+
+function resolveUserToken(): string | null {
+  if (!AUTH_ENABLED) {
+    clearStoredToken();
+    return null;
+  }
+  return getStoredToken();
+}
 
 logger.info("API_BASE", { apiBase: API_BASE });
 
@@ -26,7 +36,7 @@ const API_CACHE = new Map<string, CacheEntry>();
  */
 export async function apiGet<T>(path: string): Promise<T> {
   const url = `${API_BASE}${path.startsWith("/") ? path : `/${path}`}`;
-  const token = getStoredToken();
+  const token = resolveUserToken();
 
   logger.debug("apiGet -> request", () => ({ path, url }));
   const res = await fetch(url, {
@@ -49,7 +59,7 @@ export async function apiGetCached<T>(
   options?: { ttlMs?: number; force?: boolean }
 ): Promise<T> {
   const ttlMs = options?.ttlMs ?? 60000;
-  const token = getStoredToken();
+  const token = resolveUserToken();
   const url = `${API_BASE}${path.startsWith("/") ? path : `/${path}`}`;
   const cacheKey = `${token ?? "anon"}:${url}`;
   const now = Date.now();
@@ -89,7 +99,7 @@ export function clearApiCache(): void {
  */
 export async function apiPost<T>(path: string, body: unknown): Promise<T> {
   const url = `${API_BASE}${path.startsWith("/") ? path : `/${path}`}`;
-  const token = getStoredToken();
+  const token = resolveUserToken();
 
   logger.debug("apiPost -> request", () => ({ path, url, body }));
   const res = await fetch(url, {
