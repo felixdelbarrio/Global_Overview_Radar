@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ipaddress
 import json
 import logging
 import os
@@ -20,6 +21,13 @@ from xml.etree import ElementTree
 
 logger = logging.getLogger(__name__)
 
+SafeElementTree: Any
+try:
+    # Prefer a hardened XML parser for untrusted RSS/Atom feeds.
+    from defusedxml import ElementTree as SafeElementTree  # type: ignore
+except Exception:  # pragma: no cover - optional dependency for some dev/test envs
+    SafeElementTree = ElementTree
+
 _HTTP_CACHE: "OrderedDict[str, tuple[float, str]]" = OrderedDict()
 _HTTP_CACHE_LOCK = Lock()
 _HTTP_BLOCKED: dict[str, float] = {}
@@ -29,6 +37,48 @@ DEFAULT_HTTP_CACHE_MAX_ENTRIES = 500
 DEFAULT_HTTP_RETRIES = 1
 DEFAULT_HTTP_BLOCK_TTL_SEC = 90
 DEFAULT_HTTP_MAX_BYTES = 2_000_000
+
+
+def _safe_url_for_logs(url: str) -> str:
+    """Redact query/fragment to avoid leaking API keys in logs."""
+    try:
+        parsed = urlparse(url)
+        host = parsed.hostname or ""
+        if not host:
+            return "<invalid-url>"
+        port = f":{parsed.port}" if parsed.port else ""
+        path = parsed.path or ""
+        scheme = parsed.scheme or "http"
+        return f"{scheme}://{host}{port}{path}"
+    except Exception:
+        return "<invalid-url>"
+
+
+def _is_public_fetch_url(url: str) -> bool:
+    """Best-effort SSRF guard for Cloud Run (block localhost/link-local/private IPs)."""
+    try:
+        parsed = urlparse(url)
+        scheme = (parsed.scheme or "").lower()
+        if scheme not in {"http", "https"}:
+            return False
+        host = (parsed.hostname or "").strip().lower()
+        if not host:
+            return False
+        if host in {"localhost", "metadata.google.internal"}:
+            return False
+        try:
+            ip = ipaddress.ip_address(host)
+        except ValueError:
+            return True  # domain name; cannot safely resolve without DNS lookup
+        return not (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_reserved
+            or ip.is_multicast
+        )
+    except Exception:
+        return False
 
 
 def _env_int(name: str, default: int) -> int:
@@ -151,6 +201,9 @@ def http_get_text(url: str, headers: dict[str, str] | None = None, timeout: int 
     req_headers = {"User-Agent": "global-overview-radar/0.1"}
     if headers:
         req_headers.update(headers)
+    if os.getenv("K_SERVICE") and not _is_public_fetch_url(url):
+        logger.warning("blocked outbound fetch on Cloud Run: %s", _safe_url_for_logs(url))
+        return ""
     if _is_blocked(url):
         return ""
     cache_key = _http_cache_key(url, req_headers)
@@ -187,7 +240,7 @@ def http_get_text(url: str, headers: dict[str, str] | None = None, timeout: int 
             if attempt >= retries:
                 if raise_on_error:
                     raise
-                logger.warning("http_get_text error for %s: %s", url, exc)
+                logger.warning("http_get_text error for %s: %s", _safe_url_for_logs(url), exc)
                 return ""
             sleep_for = backoff * (2**attempt)
             attempt += 1
@@ -203,7 +256,7 @@ def http_get_json(url: str, headers: dict[str, str] | None = None, timeout: int 
         return json.loads(raw)
     except json.JSONDecodeError:
         if rss_debug_enabled():
-            logger.debug("http_get_json decode failed for %s", url)
+            logger.debug("http_get_json decode failed for %s", _safe_url_for_logs(url))
         return {}
 
 
@@ -213,8 +266,10 @@ def build_url(base: str, params: dict[str, Any]) -> str:
 
 def parse_rss(xml_text: str) -> list[dict[str, Any]]:
     try:
-        root = ElementTree.fromstring(xml_text)
-    except ElementTree.ParseError:
+        root = SafeElementTree.fromstring(xml_text)
+    except Exception as exc:
+        if rss_debug_enabled():
+            logger.debug("parse_rss failed: %s", exc)
         return []
 
     items: list[dict[str, Any]] = []
@@ -285,10 +340,17 @@ def _ssl_context() -> ssl.SSLContext | None:
         "on",
     }
     if not verify:
-        context = ssl.create_default_context()
-        context.check_hostname = False
-        context.verify_mode = ssl.CERT_NONE
-        return context
+        # Cloud Run always has a trusted certificate store; allowing TLS verification bypass
+        # in production is a footgun (MITM/data-tampering risk). Keep the toggle for local
+        # troubleshooting only.
+        if os.getenv("K_SERVICE"):
+            logger.warning("REPUTATION_SSL_VERIFY=false ignored on Cloud Run (TLS verification enforced).")
+            verify = True
+        else:
+            context = ssl.create_default_context()
+            context.check_hostname = False
+            context.verify_mode = ssl.CERT_NONE
+            return context
     try:
         import certifi
 
