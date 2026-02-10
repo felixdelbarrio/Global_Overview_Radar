@@ -1066,7 +1066,8 @@ class ReputationSentimentService:
         if self.llm_warning:
             return
         self.llm_warning = message
-        logger.warning(message)
+        # Avoid logging dynamic warning payloads to prevent accidental secret leakage.
+        logger.warning("LLM warning triggered")
 
 
 def _has_client_sentiment(item: ReputationItem) -> bool:
