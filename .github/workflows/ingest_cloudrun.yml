@@ -52,14 +52,13 @@ jobs:
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v2
 
-      - name: Resolve login bypass toggle (Secret Manager)
+      - name: Resolve login bypass toggle (GitHub Actions secret)
         id: login_toggle
+        env:
+          RAW_LOGIN_REQUESTED: ${{ secrets.GOOGLE_CLOUD_LOGIN_REQUESTED }}
         run: |
           set -euo pipefail
-          raw="$(gcloud secrets versions access latest \
-            --secret GOOGLE_CLOUD_LOGIN_REQUESTED \
-            --project "$GCP_PROJECT" 2>/dev/null || true)"
-          value="$(echo "${raw:-false}" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
+          value="$(echo "${RAW_LOGIN_REQUESTED:-false}" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
           if [ "$value" != "true" ]; then
             value="false"
           fi

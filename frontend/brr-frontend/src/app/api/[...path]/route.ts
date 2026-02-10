@@ -33,7 +33,9 @@ function sanitizeHeaders(headers: Headers): Headers {
   }
   sanitized.delete("host");
   sanitized.delete("content-length");
-  sanitized.delete("x-gor-admin-key");
+  if (!AUTH_BYPASS) {
+    sanitized.delete("x-gor-admin-key");
+  }
   // Internal marker added by the server proxy (never forward client-supplied values).
   sanitized.delete(PROXY_AUTH_HEADER);
   if (AUTH_BYPASS) {
@@ -75,7 +77,9 @@ function shouldUseIdToken(): boolean {
 
 async function proxyRequest(request: NextRequest, path: string[]): Promise<Response> {
   const method = request.method.toUpperCase();
-  if (AUTH_BYPASS && AUTH_BYPASS_READ_ONLY && MUTATING_METHODS.has(method)) {
+  const adminKey = request.headers.get("x-gor-admin-key");
+  const hasAdminKey = Boolean(adminKey && adminKey.trim());
+  if (AUTH_BYPASS && AUTH_BYPASS_READ_ONLY && MUTATING_METHODS.has(method) && !hasAdminKey) {
     return NextResponse.json(
       {
         detail:
