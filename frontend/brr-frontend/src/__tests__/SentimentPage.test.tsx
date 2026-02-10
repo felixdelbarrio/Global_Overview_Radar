@@ -213,7 +213,9 @@ describe("Sentimiento page", () => {
     fireEvent.click(screen.getByText("Descargar listado"));
     expect(createUrlSpy).toHaveBeenCalled();
 
-    fireEvent.click(screen.getByText("Iniciar ingesta"));
+    fireEvent.click(screen.getByLabelText("Centro de ingestas"));
+    expect(await screen.findByText("CENTRO DE INGESTA")).toBeInTheDocument();
+    fireEvent.click(screen.getAllByText("Iniciar ingesta")[0]);
     await waitFor(() => {
       expect(apiPostMock).toHaveBeenCalledWith("/ingest/reputation", {
         force: false,

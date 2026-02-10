@@ -165,7 +165,11 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
     [isDashboard, effectiveActor],
   );
   const showDownloads = mode === "sentiment";
-  const reputationCacheMissing = meta?.cache_available === false;
+  // Defensive: sometimes `meta.cache_available` may lag behind the actual items state
+  // (eg. when the cache is generated while the page is loading). Avoid showing the
+  // "Sin cache" banner if we already have items to display.
+  const reputationCacheMissing =
+    meta?.cache_available === false && !itemsLoading && items.length === 0;
   const showCacheNotice = reputationCacheMissing && !cacheNoticeDismissed;
 
   const touchItemsFilters = () => {
