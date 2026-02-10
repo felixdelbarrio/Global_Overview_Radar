@@ -36,6 +36,24 @@ def test_require_google_user_missing_token(monkeypatch: pytest.MonkeyPatch) -> N
     assert exc.value.status_code == 401
 
 
+def test_require_google_user_ignores_cloud_run_proxy_authorization(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "auth_enabled", True, raising=False)
+    monkeypatch.setattr(settings, "google_cloud_login_requested", False, raising=False)
+    with pytest.raises(HTTPException) as exc:
+        auth.require_google_user(
+            _make_request(
+                {
+                    "authorization": "Bearer cloud-run-id-token",
+                    "x-gor-proxy-auth": "cloudrun-idtoken",
+                }
+            )
+        )
+    assert exc.value.status_code == 401
+    assert exc.value.detail == "missing auth token"
+
+
 def test_require_google_user_domain_denied(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "auth_enabled", True, raising=False)
     monkeypatch.setattr(settings, "google_cloud_login_requested", False, raising=False)

@@ -35,6 +35,7 @@ const metaResponse = {
   geos: ["España", "USA"],
   otros_actores_por_geografia: { "España": ["Beta Bank"] },
   otros_actores_globales: ["Beta Bank"],
+  ui_show_comparisons: true,
   sources_enabled: ["news", "appstore", "google_play"],
   sources_available: ["news", "appstore", "google_play"],
   cache_available: false,

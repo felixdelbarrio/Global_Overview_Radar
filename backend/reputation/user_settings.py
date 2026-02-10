@@ -35,6 +35,11 @@ GROUPS: list[dict[str, str]] = [
         "description": "Selecciona el idioma general para noticias y traducciones de opiniones.",
     },
     {
+        "id": "visualization",
+        "label": "Visualización",
+        "description": "Controla qué bloques se muestran en el frontend.",
+    },
+    {
         "id": "sources_public",
         "label": "Fuentes sin credenciales",
         "description": "Activa o desactiva fuentes que no requieren API Key.",
@@ -91,13 +96,25 @@ FIELDS: list[UserSettingField] = [
         options=LANGUAGE_OPTIONS,
     ),
     UserSettingField(
+        key="visualization.show_comparisons",
+        env="REPUTATION_UI_SHOW_COMPARISONS",
+        group="visualization",
+        label="Mostrar comparativas con otras entidades",
+        description=(
+            "Si está desactivado, el frontend oculta la comparación con otros actores "
+            "y muestra solo el actor principal."
+        ),
+        kind="boolean",
+        default=False,
+    ),
+    UserSettingField(
         key="sources.news",
         env="REPUTATION_SOURCE_NEWS",
         group="sources_public",
         label="Noticias (RSS)",
         description="Agregadores y RSS.",
         kind="boolean",
-        default=True,
+        default=False,
     ),
     UserSettingField(
         key="sources.newsapi",
@@ -115,7 +132,7 @@ FIELDS: list[UserSettingField] = [
         label="GDELT",
         description="Global Database of Events.",
         kind="boolean",
-        default=True,
+        default=False,
     ),
     UserSettingField(
         key="sources.guardian",
@@ -133,7 +150,7 @@ FIELDS: list[UserSettingField] = [
         label="Foros",
         description="Foros y comunidades.",
         kind="boolean",
-        default=True,
+        default=False,
     ),
     UserSettingField(
         key="sources.blogs",
@@ -142,7 +159,7 @@ FIELDS: list[UserSettingField] = [
         label="Blogs",
         description="Blogs RSS.",
         kind="boolean",
-        default=True,
+        default=False,
     ),
     UserSettingField(
         key="sources.appstore",
@@ -160,7 +177,7 @@ FIELDS: list[UserSettingField] = [
         label="Trustpilot",
         description="Reseñas Trustpilot.",
         kind="boolean",
-        default=True,
+        default=False,
     ),
     UserSettingField(
         key="sources.google_reviews",
@@ -214,7 +231,7 @@ FIELDS: list[UserSettingField] = [
         label="Downdetector",
         description="Incidencias y caídas.",
         kind="boolean",
-        default=True,
+        default=False,
     ),
     UserSettingField(
         key="keys.news",
