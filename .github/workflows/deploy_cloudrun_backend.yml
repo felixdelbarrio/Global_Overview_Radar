@@ -87,6 +87,20 @@ jobs:
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v2
 
+      - name: Resolve login bypass toggle (Secret Manager)
+        id: login_toggle
+        run: |
+          set -euo pipefail
+          raw="$(gcloud secrets versions access latest \
+            --secret GOOGLE_CLOUD_LOGIN_REQUESTED \
+            --project "$GCP_PROJECT" 2>/dev/null || true)"
+          value="$(echo "${raw:-false}" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
+          if [ "$value" != "true" ]; then
+            value="false"
+          fi
+          echo "value=${value}" >> "$GITHUB_OUTPUT"
+          echo "GOOGLE_CLOUD_LOGIN_REQUESTED=${value}"
+
       - name: Prepare backend env file
         env:
           AUTH_GOOGLE_CLIENT_ID: ${{ secrets.AUTH_GOOGLE_CLIENT_ID }}
@@ -98,7 +112,26 @@ jobs:
 
           awk -F= '$0 !~ /^[[:space:]]*#/ && $0 ~ /=/ {print $0}' backend/reputation/.env.reputation.example > backend/reputation/cloudrun.env
 
-          if [ -z "${AUTH_GOOGLE_CLIENT_ID:-}" ]; then
+          LOGIN_REQUESTED="${{ steps.login_toggle.outputs.value }}"
+          BYPASS_ALLOW_MUTATIONS="false"
+          BYPASS_MUTATION_KEY=""
+          if [ "${LOGIN_REQUESTED}" = "true" ]; then
+            BYPASS_MUTATION_KEY="$(gcloud secrets versions access latest \
+              --secret AUTH_BYPASS_MUTATION_KEY \
+              --project "$GCP_PROJECT" 2>/dev/null || true)"
+            BYPASS_MUTATION_KEY="$(echo "$BYPASS_MUTATION_KEY" | tr -d '\r\n')"
+            if [ -z "${BYPASS_MUTATION_KEY}" ]; then
+              echo "Missing AUTH_BYPASS_MUTATION_KEY secret while GOOGLE_CLOUD_LOGIN_REQUESTED=true."
+              exit 1
+            fi
+            if [ "${#BYPASS_MUTATION_KEY}" -lt 32 ]; then
+              echo "AUTH_BYPASS_MUTATION_KEY must be at least 32 characters."
+              exit 1
+            fi
+            BYPASS_ALLOW_MUTATIONS="true"
+          fi
+
+          if [ "${LOGIN_REQUESTED}" != "true" ] && [ -z "${AUTH_GOOGLE_CLIENT_ID:-}" ]; then
             echo "Missing AUTH_GOOGLE_CLIENT_ID secret."
             exit 1
           fi
@@ -112,6 +145,9 @@ jobs:
           AUTH_ALLOWED_EMAILS=${AUTH_ALLOWED_EMAILS}
           AUTH_ALLOWED_DOMAINS=${AUTH_ALLOWED_DOMAINS}
           AUTH_ALLOWED_GROUPS=${AUTH_ALLOWED_GROUPS}
+          GOOGLE_CLOUD_LOGIN_REQUESTED=${LOGIN_REQUESTED}
+          AUTH_BYPASS_ALLOW_MUTATIONS=${BYPASS_ALLOW_MUTATIONS}
+          AUTH_BYPASS_MUTATION_KEY=${BYPASS_MUTATION_KEY}
           CORS_ALLOWED_ORIGIN_REGEX=${CORS_REGEX}
           EOF
 

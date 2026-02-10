@@ -8,6 +8,9 @@ const METADATA_IDENTITY_URL =
 
 const DEFAULT_LOCAL_API = "http://127.0.0.1:8000";
 const DEFAULT_RENDER_API = "https://global-overview-radar.onrender.com";
+const AUTH_BYPASS = process.env.NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED === "true";
+const AUTH_BYPASS_READ_ONLY = process.env.AUTH_BYPASS_READ_ONLY !== "false";
+const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
 const HOP_BY_HOP_HEADERS = new Set([
   "connection",
@@ -27,6 +30,7 @@ function sanitizeHeaders(headers: Headers): Headers {
   }
   sanitized.delete("host");
   sanitized.delete("content-length");
+  sanitized.delete("x-gor-admin-key");
   return sanitized;
 }
 
@@ -61,6 +65,17 @@ function shouldUseIdToken(): boolean {
 }
 
 async function proxyRequest(request: NextRequest, path: string[]): Promise<Response> {
+  const method = request.method.toUpperCase();
+  if (AUTH_BYPASS && AUTH_BYPASS_READ_ONLY && MUTATING_METHODS.has(method)) {
+    return NextResponse.json(
+      {
+        detail:
+          "Mutating API routes are disabled while GOOGLE_CLOUD_LOGIN_REQUESTED=true (read-only mode).",
+      },
+      { status: 403 },
+    );
+  }
+
   const target = resolveProxyTarget();
   const url = buildTargetUrl(target, path, new URL(request.url).search);
   const headers = sanitizeHeaders(new Headers(request.headers));
@@ -70,7 +85,6 @@ async function proxyRequest(request: NextRequest, path: string[]): Promise<Respo
     headers.set("authorization", `Bearer ${idToken}`);
   }
 
-  const method = request.method.toUpperCase();
   const body =
     method === "GET" || method === "HEAD" ? undefined : await request.arrayBuffer();
 

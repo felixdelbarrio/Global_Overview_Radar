@@ -17,6 +17,56 @@ afterEach(() => {
 });
 
 describe("proxy route", () => {
+  it("blocks mutating requests in auth-bypass read-only mode", async () => {
+    const fetchMock = vi.fn();
+    global.fetch = fetchMock as typeof fetch;
+
+    const { POST } = await loadRoute({
+      NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED: "true",
+      AUTH_BYPASS_READ_ONLY: "true",
+      USE_SERVER_PROXY: "true",
+      API_PROXY_TARGET: "https://api.example.com",
+    });
+
+    const req = new Request("http://localhost/api/ingest/reputation", {
+      method: "POST",
+      body: JSON.stringify({ force: false }),
+    });
+    const res = await POST(req as unknown as NextRequest, {
+      params: Promise.resolve({ path: ["ingest", "reputation"] }),
+    });
+
+    expect(res.status).toBe(403);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("allows mutating requests in auth-bypass mode when read-only override is disabled", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response("ok", {
+        status: 200,
+      })
+    );
+    global.fetch = fetchMock as typeof fetch;
+
+    const { POST } = await loadRoute({
+      NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED: "true",
+      AUTH_BYPASS_READ_ONLY: "false",
+      USE_SERVER_PROXY: "false",
+      API_PROXY_TARGET: "https://api.example.com",
+    });
+
+    const req = new Request("http://localhost/api/items", {
+      method: "POST",
+      body: "payload",
+    });
+    const res = await POST(req as unknown as NextRequest, {
+      params: Promise.resolve({ path: ["items"] }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("proxies requests without id token when disabled", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response("ok", {
@@ -34,6 +84,7 @@ describe("proxy route", () => {
     const req = new Request("http://localhost/api/kpis?x=1", {
       headers: {
         connection: "keep-alive",
+        "x-gor-admin-key": "attempted-forward",
       },
     });
     const res = await GET(req as unknown as NextRequest, {
@@ -47,6 +98,7 @@ describe("proxy route", () => {
     expect((options as RequestInit).redirect).toBe("manual");
     const headers = (options as RequestInit).headers as Headers;
     expect(headers.get("connection")).toBeNull();
+    expect(headers.get("x-gor-admin-key")).toBeNull();
   });
 
   it("adds id token when server proxy is enabled", async () => {

@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass
+from secrets import compare_digest
 from typing import TYPE_CHECKING, Any, Iterable, Mapping, cast
 
 from fastapi import HTTPException, Request
@@ -24,6 +25,7 @@ else:
 from reputation.config import settings
 
 logger = logging.getLogger(__name__)
+_MIN_MUTATION_KEY_LENGTH = 32
 
 _GROUP_SCOPE = "https://www.googleapis.com/auth/cloud-identity.groups.readonly"
 _GROUP_LOOKUP_URL = "https://cloudidentity.googleapis.com/v1/groups:lookup"
@@ -46,6 +48,34 @@ def _split_list(value: str | None) -> set[str]:
     if not value:
         return set()
     return {item.strip().lower() for item in value.split(",") if item.strip()}
+
+
+def _first_csv_item(value: str | None) -> str | None:
+    if not value:
+        return None
+    for item in value.split(","):
+        cleaned = item.strip().lower()
+        if cleaned:
+            return cleaned
+    return None
+
+
+def _cloud_bypass_user() -> AuthUser:
+    email = _first_csv_item(settings.auth_allowed_emails)
+    if not email:
+        raise HTTPException(
+            status_code=500,
+            detail="auth bypass misconfigured (missing AUTH_ALLOWED_EMAILS)",
+        )
+    return AuthUser(
+        email=email,
+        name="Cloud Run bypass",
+        subject="cloudrun-bypass",
+    )
+
+
+def _is_auth_bypass_active() -> bool:
+    return settings.auth_enabled and settings.google_cloud_login_requested
 
 
 def _cache_get(cache: dict[Any, tuple[Any, float]], key: Any) -> Any | None:
@@ -161,6 +191,13 @@ def require_google_user(request: Request) -> AuthUser:
     if not settings.auth_enabled:
         return AuthUser(email="anonymous")
 
+    # Backward-compatible toggle name:
+    # when GOOGLE_CLOUD_LOGIN_REQUESTED=true, interactive login is bypassed.
+    if _is_auth_bypass_active():
+        user = _cloud_bypass_user()
+        logger.warning("auth bypass active email=%s path=%s", user.email, request.url.path)
+        return user
+
     token = _extract_token(request)
     if not token:
         raise HTTPException(status_code=401, detail="missing auth token")
@@ -196,3 +233,28 @@ def require_google_user(request: Request) -> AuthUser:
         picture=str(payload.get("picture") or "") or None,
         subject=str(payload.get("sub") or "") or None,
     )
+
+
+def require_mutation_access(request: Request) -> None:
+    """Hardens state-changing endpoints when auth bypass is active."""
+    if not _is_auth_bypass_active():
+        return
+    if not settings.auth_bypass_allow_mutations:
+        raise HTTPException(
+            status_code=403,
+            detail="mutations disabled while auth bypass is active",
+        )
+    expected = settings.auth_bypass_mutation_key.strip()
+    if not expected:
+        raise HTTPException(
+            status_code=500,
+            detail="auth bypass misconfigured (missing AUTH_BYPASS_MUTATION_KEY)",
+        )
+    if len(expected) < _MIN_MUTATION_KEY_LENGTH:
+        raise HTTPException(
+            status_code=500,
+            detail="auth bypass misconfigured (AUTH_BYPASS_MUTATION_KEY too short)",
+        )
+    provided = (request.headers.get("x-gor-admin-key") or "").strip()
+    if not provided or not compare_digest(provided, expected):
+        raise HTTPException(status_code=403, detail="admin key required")

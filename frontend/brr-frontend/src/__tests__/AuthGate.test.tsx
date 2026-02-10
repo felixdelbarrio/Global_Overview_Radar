@@ -104,6 +104,22 @@ describe("AuthGate", () => {
     expect(screen.getByText("Contenido")).toBeInTheDocument();
   });
 
+  it("renders children when login bypass is enabled", async () => {
+    const AuthGate = await loadAuthGate({
+      NEXT_PUBLIC_AUTH_ENABLED: "true",
+      NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED: "true",
+      NEXT_PUBLIC_GOOGLE_CLIENT_ID: "",
+    });
+
+    render(
+      <AuthGate>
+        <div>Contenido</div>
+      </AuthGate>
+    );
+
+    expect(screen.getByText("Contenido")).toBeInTheDocument();
+  });
+
   it("shows missing client id message when enabled without client id", async () => {
     const AuthGate = await loadAuthGate({
       NEXT_PUBLIC_AUTH_ENABLED: "true",

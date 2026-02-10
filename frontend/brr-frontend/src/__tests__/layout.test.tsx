@@ -23,11 +23,12 @@ vi.mock("@/components/AuthGate", () => ({
 
 const originalEnv = { ...process.env };
 
-const loadLayout = async (authEnabled: boolean) => {
+const loadLayout = async (authEnabled: boolean, bypass = false) => {
   vi.resetModules();
   process.env = {
     ...originalEnv,
     NEXT_PUBLIC_AUTH_ENABLED: authEnabled ? "true" : "false",
+    NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED: bypass ? "true" : "false",
   };
   return (await import("@/app/layout")).default;
 };
@@ -55,4 +56,15 @@ it("wraps children with AuthGate when auth enabled", async () => {
     </RootLayout>
   );
   expect(html).toContain("data-auth-gate");
+});
+
+it("does not wrap children when login bypass is enabled", async () => {
+  const RootLayout = await loadLayout(true, true);
+  const html = renderToStaticMarkup(
+    <RootLayout>
+      <div>Hola</div>
+    </RootLayout>
+  );
+  expect(html).toContain("Hola");
+  expect(html).not.toContain("data-auth-gate");
 });

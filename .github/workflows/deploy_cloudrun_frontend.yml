@@ -87,6 +87,20 @@ jobs:
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v2
 
+      - name: Resolve login bypass toggle (Secret Manager)
+        id: login_toggle
+        run: |
+          set -euo pipefail
+          raw="$(gcloud secrets versions access latest \
+            --secret GOOGLE_CLOUD_LOGIN_REQUESTED \
+            --project "$GCP_PROJECT" 2>/dev/null || true)"
+          value="$(echo "${raw:-false}" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
+          if [ "$value" != "true" ]; then
+            value="false"
+          fi
+          echo "value=${value}" >> "$GITHUB_OUTPUT"
+          echo "GOOGLE_CLOUD_LOGIN_REQUESTED=${value}"
+
       - name: Resolve backend URL
         id: backend_url
         run: |
@@ -113,18 +127,26 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [ -z "${AUTH_GOOGLE_CLIENT_ID:-}" ]; then
+          LOGIN_REQUESTED="${{ steps.login_toggle.outputs.value }}"
+          FRONT_AUTH_ENABLED="true"
+          BYPASS_READ_ONLY="false"
+          if [ "${LOGIN_REQUESTED}" = "true" ]; then
+            FRONT_AUTH_ENABLED="false"
+            BYPASS_READ_ONLY="true"
+          fi
+
+          if [ "${LOGIN_REQUESTED}" != "true" ] && [ -z "${AUTH_GOOGLE_CLIENT_ID:-}" ]; then
             echo "Missing AUTH_GOOGLE_CLIENT_ID secret."
             exit 1
           fi
-          if ! echo "${AUTH_GOOGLE_CLIENT_ID}" | grep -q '\.apps\.googleusercontent\.com$'; then
+          if [ "${LOGIN_REQUESTED}" != "true" ] && ! echo "${AUTH_GOOGLE_CLIENT_ID}" | grep -q '\.apps\.googleusercontent\.com$'; then
             echo "ERROR: AUTH_GOOGLE_CLIENT_ID must end in .apps.googleusercontent.com (got: ${AUTH_GOOGLE_CLIENT_ID})"
             exit 1
           fi
 
           BACKEND_URL="${{ steps.backend_url.outputs.url }}"
 
-          ENV_VARS_COMMON="USE_SERVER_PROXY=true,API_PROXY_TARGET=${BACKEND_URL},NEXT_PUBLIC_API_BASE_URL=/api,NEXT_PUBLIC_AUTH_ENABLED=true,NEXT_PUBLIC_GOOGLE_CLIENT_ID=${AUTH_GOOGLE_CLIENT_ID},NEXT_PUBLIC_ALLOWED_EMAILS=${AUTH_ALLOWED_EMAILS},NEXT_PUBLIC_ALLOWED_DOMAINS=${AUTH_ALLOWED_DOMAINS}"
+          ENV_VARS_COMMON="USE_SERVER_PROXY=true,API_PROXY_TARGET=${BACKEND_URL},NEXT_PUBLIC_API_BASE_URL=/api,NEXT_PUBLIC_AUTH_ENABLED=${FRONT_AUTH_ENABLED},NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED=${LOGIN_REQUESTED},AUTH_BYPASS_READ_ONLY=${BYPASS_READ_ONLY},NEXT_PUBLIC_GOOGLE_CLIENT_ID=${AUTH_GOOGLE_CLIENT_ID},NEXT_PUBLIC_ALLOWED_EMAILS=${AUTH_ALLOWED_EMAILS},NEXT_PUBLIC_ALLOWED_DOMAINS=${AUTH_ALLOWED_DOMAINS}"
 
           gcloud run deploy "$FRONTEND_SERVICE" \
             --project "$GCP_PROJECT" \
