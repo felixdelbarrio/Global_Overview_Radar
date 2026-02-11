@@ -11,12 +11,12 @@ NOT_FOUND_EXCEPTION: type[Exception] | None = None
 
 try:
     import google.cloud.storage as _gcs_storage
-    from google.api_core.exceptions import NotFound as _not_found
+    from google.api_core.exceptions import NotFound as _NotFound
 except Exception:  # pragma: no cover - optional in local/offline environments
     pass
 else:
     gcs_storage = _gcs_storage
-    NOT_FOUND_EXCEPTION = _not_found
+    NOT_FOUND_EXCEPTION = _NotFound
 
 logger = logging.getLogger(__name__)
 

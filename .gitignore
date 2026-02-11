@@ -78,6 +78,8 @@ data/reputation/**/*.json
 data/reputation_llm/**/*.json
 data/cache/**/*.json
 data/cache/
+backend/data/reputation_samples/
+backend/data/reputation_llm_samples/
 !data/reputation/banking_bbva_retail.json
 
 ########################################
