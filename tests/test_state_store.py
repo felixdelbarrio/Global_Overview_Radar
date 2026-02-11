@@ -113,3 +113,19 @@ def test_state_store_handles_client_init_error(monkeypatch, tmp_path: Path) -> N
     local_file.write_text("{}", encoding="utf-8")
     assert state_store.sync_to_state(local_file, key="state.json") is False
     assert state_store._CLIENT_INIT_FAILED is True
+
+
+def test_state_store_rejects_unsafe_local_path_without_repo_root(monkeypatch) -> None:
+    objects: dict[str, bytes] = {}
+    fake_client = _FakeClient(objects)
+    monkeypatch.setenv("REPUTATION_STATE_BUCKET", "test-bucket")
+    monkeypatch.setenv("REPUTATION_STATE_PREFIX", "gor-state")
+    monkeypatch.setattr(
+        state_store, "gcs_storage", _FakeStorageModule(fake_client), raising=False
+    )
+    _reset_state_store()
+
+    unsafe = Path("/etc/passwd")
+    assert state_store.sync_to_state(unsafe, key="state.json") is False
+    assert state_store.sync_from_state(unsafe, key="state.json") is False
+    assert state_store.delete_from_state(unsafe, key="state.json") is False

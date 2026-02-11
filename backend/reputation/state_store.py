@@ -25,6 +25,29 @@ _CLIENT: Any | None = None
 _CLIENT_INIT_FAILED = False
 
 
+def _safe_local_path(path: Path, repo_root: Path | None = None) -> Path:
+    resolved = path.resolve()
+    if repo_root is not None:
+        root = repo_root.resolve()
+        resolved.relative_to(root)
+        return resolved
+
+    # Keep state sync constrained to the local workspace/temp areas.
+    allowed_roots = (
+        Path.cwd().resolve(),
+        Path("/tmp").resolve(),
+        Path("/private/var").resolve(),
+        Path("/var/folders").resolve(),
+    )
+    for root in allowed_roots:
+        try:
+            resolved.relative_to(root)
+            return resolved
+        except ValueError:
+            continue
+    raise ValueError(f"Path outside allowed roots: {resolved}")
+
+
 def state_bucket_name() -> str:
     return os.getenv("REPUTATION_STATE_BUCKET", "").strip()
 
@@ -78,7 +101,7 @@ def _resolve_relative_key(
         return key.strip().lstrip("/")
     if repo_root is not None:
         try:
-            return path.resolve().relative_to(repo_root.resolve()).as_posix()
+            return path.relative_to(repo_root.resolve()).as_posix()
         except Exception:
             pass
     return f"misc/{path.name}"
@@ -98,11 +121,17 @@ def sync_from_state(
     bucket_name = state_bucket_name()
     if not bucket_name:
         return False
-    object_key = _object_key(_resolve_relative_key(local_path, key=key, repo_root=repo_root))
+    try:
+        safe_local_path = _safe_local_path(local_path, repo_root=repo_root)
+    except ValueError:
+        logger.warning("Ignoring unsafe local path for sync_from_state: %s", local_path)
+        return False
+
+    object_key = _object_key(_resolve_relative_key(safe_local_path, key=key, repo_root=repo_root))
     blob = client.bucket(bucket_name).blob(object_key)
     try:
-        local_path.parent.mkdir(parents=True, exist_ok=True)
-        blob.download_to_filename(str(local_path))
+        safe_local_path.parent.mkdir(parents=True, exist_ok=True)
+        blob.download_to_filename(str(safe_local_path))
         return True
     except Exception as exc:
         if NOT_FOUND_EXCEPTION is not None and isinstance(exc, NOT_FOUND_EXCEPTION):
@@ -119,18 +148,23 @@ def sync_to_state(
 ) -> bool:
     if not state_store_enabled():
         return False
-    if not local_path.exists():
-        return False
     client = _get_client()
     if client is None:
         return False
     bucket_name = state_bucket_name()
     if not bucket_name:
         return False
-    object_key = _object_key(_resolve_relative_key(local_path, key=key, repo_root=repo_root))
+    try:
+        safe_local_path = _safe_local_path(local_path, repo_root=repo_root)
+    except ValueError:
+        logger.warning("Ignoring unsafe local path for sync_to_state: %s", local_path)
+        return False
+    if not safe_local_path.exists():
+        return False
+    object_key = _object_key(_resolve_relative_key(safe_local_path, key=key, repo_root=repo_root))
     blob = client.bucket(bucket_name).blob(object_key)
     try:
-        blob.upload_from_filename(str(local_path))
+        blob.upload_from_filename(str(safe_local_path))
         return True
     except Exception:
         logger.exception("Failed to upload state object gs://%s/%s", bucket_name, object_key)
@@ -151,7 +185,12 @@ def delete_from_state(
     bucket_name = state_bucket_name()
     if not bucket_name:
         return False
-    object_key = _object_key(_resolve_relative_key(local_path, key=key, repo_root=repo_root))
+    try:
+        safe_local_path = _safe_local_path(local_path, repo_root=repo_root)
+    except ValueError:
+        logger.warning("Ignoring unsafe local path for delete_from_state: %s", local_path)
+        return False
+    object_key = _object_key(_resolve_relative_key(safe_local_path, key=key, repo_root=repo_root))
     blob = client.bucket(bucket_name).blob(object_key)
     try:
         blob.delete()
