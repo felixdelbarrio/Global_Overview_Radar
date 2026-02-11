@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+from cryptography.fernet import Fernet
 
 from reputation import user_settings
 from reputation.api.main import create_app
@@ -41,6 +42,12 @@ def _set_env_paths(
         raising=False,
     )
     return env_path, example_path, advanced_env_path, advanced_example_path
+
+
+def _set_env_crypto_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(
+        "REPUTATION_ENV_CRYPTO_KEY", Fernet.generate_key().decode("utf-8")
+    )
 
 
 def test_settings_snapshot_redacts_secret_values(
@@ -92,12 +99,30 @@ def test_update_settings_ignores_secret_mask_marker(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
+    _set_env_crypto_key(monkeypatch)
     env_path, _, _, _ = _set_env_paths(monkeypatch, tmp_path)
     env_path.write_text("OPENAI_API_KEY=super-secret-openai\n", encoding="utf-8")
 
     user_settings.update_user_settings({"llm.openai_key": "********"})
     updated = user_settings._parse_env_file(env_path)
     assert updated["OPENAI_API_KEY"] == "super-secret-openai"
+
+
+def test_update_settings_encrypts_secret_values_at_rest(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _set_env_crypto_key(monkeypatch)
+    env_path, _, _, _ = _set_env_paths(monkeypatch, tmp_path)
+    env_path.write_text("LLM_ENABLED=true\nOPENAI_API_KEY=\n", encoding="utf-8")
+
+    user_settings.update_user_settings({"llm.openai_key": "super-secret-openai"})
+
+    raw_content = env_path.read_text(encoding="utf-8")
+    assert "OPENAI_API_KEY=super-secret-openai" not in raw_content
+    assert "OPENAI_API_KEY=enc:v1:" in raw_content
+    parsed = user_settings._parse_env_file(env_path)
+    assert parsed["OPENAI_API_KEY"] == "super-secret-openai"
 
 
 def test_update_settings_rejects_cloudrun_only_keys(

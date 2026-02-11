@@ -1,6 +1,6 @@
 /** Tests del helper apiGet/apiPost del frontend. */
 
-import { expect, it, vi } from "vitest";
+import { beforeEach, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/logger", () => ({
   logger: {
@@ -10,8 +10,11 @@ vi.mock("@/lib/logger", () => ({
   },
 }));
 
-import { apiGet } from "@/lib/api";
-import { apiPost } from "@/lib/api";
+import { apiGet, apiGetCached, apiPost, clearApiCache } from "@/lib/api";
+
+beforeEach(() => {
+  clearApiCache();
+});
 
 it("apiGet returns json on success", async () => {
   const fetchMock = vi.fn().mockResolvedValue({
@@ -83,4 +86,88 @@ it("apiPost builds URL without leading slash", async () => {
     "/api/ingest",
     expect.objectContaining({ method: "POST" })
   );
+});
+
+it("apiGetCached reuses cached value while TTL is valid", async () => {
+  const fetchMock = vi.fn().mockResolvedValue({
+    ok: true,
+    json: async () => ({ ok: true }),
+  });
+  global.fetch = fetchMock as typeof fetch;
+
+  const first = await apiGetCached<{ ok: boolean }>("/kpis", { ttlMs: 60000 });
+  const second = await apiGetCached<{ ok: boolean }>("/kpis", { ttlMs: 60000 });
+
+  expect(first.ok).toBe(true);
+  expect(second.ok).toBe(true);
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+});
+
+it("apiGetCached shares in-flight promise for same key", async () => {
+  let resolveFetch: ((value: { ok: boolean; json: () => Promise<{ ok: boolean }> }) => void) | null =
+    null;
+  const fetchMock = vi.fn().mockReturnValue(
+    new Promise((resolve) => {
+      resolveFetch = resolve;
+    })
+  );
+  global.fetch = fetchMock as typeof fetch;
+
+  const firstPromise = apiGetCached<{ ok: boolean }>("/kpis", { ttlMs: 60000 });
+  const secondPromise = apiGetCached<{ ok: boolean }>("/kpis", { ttlMs: 60000 });
+
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+  resolveFetch?.({
+    ok: true,
+    json: async () => ({ ok: true }),
+  });
+  const [first, second] = await Promise.all([firstPromise, secondPromise]);
+  expect(first.ok).toBe(true);
+  expect(second.ok).toBe(true);
+});
+
+it("apiGetCached force=true bypasses cache", async () => {
+  const fetchMock = vi
+    .fn()
+    .mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ n: 1 }),
+    })
+    .mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ n: 2 }),
+    });
+  global.fetch = fetchMock as typeof fetch;
+
+  const first = await apiGetCached<{ n: number }>("/kpis", { ttlMs: 60000 });
+  const second = await apiGetCached<{ n: number }>("/kpis", {
+    ttlMs: 60000,
+    force: true,
+  });
+
+  expect(first.n).toBe(1);
+  expect(second.n).toBe(2);
+  expect(fetchMock).toHaveBeenCalledTimes(2);
+});
+
+it("apiGetCached clears broken cache entry when request fails", async () => {
+  const fetchMock = vi
+    .fn()
+    .mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      text: async () => "boom",
+    })
+    .mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ ok: true }),
+    });
+  global.fetch = fetchMock as typeof fetch;
+
+  await expect(apiGetCached("/kpis", { ttlMs: 60000 })).rejects.toThrow(
+    "API /kpis failed: 500 — boom"
+  );
+  const recovered = await apiGetCached<{ ok: boolean }>("/kpis", { ttlMs: 60000 });
+  expect(recovered.ok).toBe(true);
+  expect(fetchMock).toHaveBeenCalledTimes(2);
 });

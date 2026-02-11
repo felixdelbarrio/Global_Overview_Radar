@@ -16,6 +16,7 @@ dependencies = [
   "google-auth>=2.29",
   "typing-extensions>=4.12",
   "defusedxml>=0.7.1",
+  "cryptography>=43.0",
 ]
 
 [project.scripts]

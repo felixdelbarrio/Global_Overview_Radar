@@ -1747,16 +1747,26 @@ export function Shell({ children }: { children: React.ReactNode }) {
                                                 ? "number"
                                                 : "text";
                                           return (
-                                            <input
-                                              key={key}
-                                              type={inputType}
-                                              value={String(settingsDraft[key] ?? "")}
-                                              onChange={(event) =>
-                                                updateSettingValue(key, event.target.value)
-                                              }
-                                              placeholder={field.placeholder ?? field.label}
-                                              className="w-full rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-60)] px-3 py-1 text-xs text-[color:var(--ink)]"
-                                            />
+                                            <div key={key} className="flex items-center gap-2">
+                                              <input
+                                                type={inputType}
+                                                value={String(settingsDraft[key] ?? "")}
+                                                onChange={(event) =>
+                                                  updateSettingValue(key, event.target.value)
+                                                }
+                                                placeholder={field.placeholder ?? field.label}
+                                                className="w-full rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-60)] px-3 py-1 text-xs text-[color:var(--ink)]"
+                                              />
+                                              {field.type === "secret" && (
+                                                <button
+                                                  type="button"
+                                                  onClick={() => updateSettingValue(key, "")}
+                                                  className="rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-solid)] px-2 py-1 text-[10px] uppercase tracking-[0.2em] text-[color:var(--text-60)] hover:text-rose-500"
+                                                >
+                                                  RESET
+                                                </button>
+                                              )}
+                                            </div>
                                           );
                                         })}
                                       </div>
@@ -1937,7 +1947,17 @@ export function Shell({ children }: { children: React.ReactNode }) {
                                           disabled={fieldDisabled}
                                           className="w-40 rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-60)] px-3 py-1 text-xs text-[color:var(--ink)] disabled:opacity-50"
                                         />
-                                        {isAdvanced && (
+                                        {field.type === "secret" ? (
+                                          <button
+                                            type="button"
+                                            onClick={() => updateSettingValue(field.key, "")}
+                                            disabled={fieldDisabled}
+                                            className="rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-solid)] px-2 py-1 text-[10px] uppercase tracking-[0.2em] text-[color:var(--text-60)] hover:text-rose-500 disabled:opacity-50"
+                                          >
+                                            RESET
+                                          </button>
+                                        ) : (
+                                          isAdvanced && (
                                           <button
                                             type="button"
                                             onClick={() => updateSettingValue(field.key, "")}
@@ -1946,6 +1966,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
                                           >
                                             Quitar
                                           </button>
+                                          )
                                         )}
                                       </div>
                                     )}
