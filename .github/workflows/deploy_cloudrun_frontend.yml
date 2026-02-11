@@ -129,10 +129,6 @@ jobs:
           set -euo pipefail
 
           LOGIN_REQUESTED="${{ steps.login_toggle.outputs.value }}"
-          BYPASS_READ_ONLY="false"
-          if [ "${LOGIN_REQUESTED}" != "true" ]; then
-            BYPASS_READ_ONLY="true"
-          fi
 
           if [ "${LOGIN_REQUESTED}" = "true" ] && [ -z "${AUTH_GOOGLE_CLIENT_ID:-}" ]; then
             echo "Missing AUTH_GOOGLE_CLIENT_ID secret."
@@ -145,7 +141,7 @@ jobs:
 
           BACKEND_URL="${{ steps.backend_url.outputs.url }}"
 
-          ENV_VARS_COMMON="USE_SERVER_PROXY=true,API_PROXY_TARGET=${BACKEND_URL},NEXT_PUBLIC_API_BASE_URL=/api,NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED=${LOGIN_REQUESTED},AUTH_BYPASS_READ_ONLY=${BYPASS_READ_ONLY},AUTH_GOOGLE_CLIENT_ID=${AUTH_GOOGLE_CLIENT_ID},NEXT_PUBLIC_DISABLE_ADVANCED_SETTINGS=true"
+          ENV_VARS_COMMON="USE_SERVER_PROXY=true,API_PROXY_TARGET=${BACKEND_URL},NEXT_PUBLIC_API_BASE_URL=/api,NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED=${LOGIN_REQUESTED},AUTH_GOOGLE_CLIENT_ID=${AUTH_GOOGLE_CLIENT_ID},NEXT_PUBLIC_DISABLE_ADVANCED_SETTINGS=true"
 
           gcloud run deploy "$FRONTEND_SERVICE" \
             --project "$GCP_PROJECT" \

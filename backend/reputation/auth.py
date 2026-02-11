@@ -147,11 +147,6 @@ def require_mutation_access(request: Request) -> None:
     """Hardens state-changing endpoints when auth bypass is active."""
     if not _is_auth_bypass_active():
         return
-    if not settings.auth_bypass_allow_mutations:
-        raise HTTPException(
-            status_code=403,
-            detail="mutations disabled while auth bypass is active",
-        )
     expected = settings.auth_bypass_mutation_key.strip()
     if not expected:
         raise HTTPException(

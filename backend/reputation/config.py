@@ -12,6 +12,8 @@ from dotenv import dotenv_values
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from reputation.env_crypto import decrypt_env_secret, is_encrypted_value
+
 # Paths
 REPO_ROOT = Path(__file__).resolve().parents[2]
 REPUTATION_ENV_PATH = REPO_ROOT / "backend" / "reputation" / ".env.reputation"
@@ -34,7 +36,6 @@ logger = logging.getLogger(__name__)
 
 CLOUDRUN_ONLY_ENV_KEYS = {
     "AUTH_ALLOWED_EMAILS",
-    "AUTH_BYPASS_ALLOW_MUTATIONS",
     "AUTH_BYPASS_MUTATION_KEY",
     "AUTH_GOOGLE_CLIENT_ID",
     "CORS_ALLOWED_ORIGIN_REGEX",
@@ -117,12 +118,8 @@ class ReputationSettings(BaseSettings):
         default=False,
         alias="GOOGLE_CLOUD_LOGIN_REQUESTED",
     )
-    # If auth bypass is enabled, mutation endpoints stay blocked unless explicitly enabled.
-    auth_bypass_allow_mutations: bool = Field(
-        default=False,
-        alias="AUTH_BYPASS_ALLOW_MUTATIONS",
-    )
-    # Shared secret required for mutation endpoints while auth bypass is enabled.
+    # Shared secret required for mutation endpoints while auth bypass is enabled
+    # (GOOGLE_CLOUD_LOGIN_REQUESTED=false).
     auth_bypass_mutation_key: str = Field(
         default="",
         alias="AUTH_BYPASS_MUTATION_KEY",
@@ -186,7 +183,7 @@ def _load_reputation_env_to_os() -> None:
     global _DOTENV_MANAGED_KEYS
 
     env_files = [REPUTATION_ENV_PATH, REPUTATION_ADVANCED_ENV_PATH]
-    parsed_sources = [dotenv_values(str(path)) for path in env_files if path.exists()]
+    parsed_sources = [(path, dotenv_values(str(path))) for path in env_files if path.exists()]
     if not parsed_sources:
         for key in list(_DOTENV_MANAGED_KEYS):
             os.environ.pop(key, None)
@@ -195,14 +192,18 @@ def _load_reputation_env_to_os() -> None:
 
     allowed_values: dict[str, str] = {}
     # Merge order: base env first, advanced env second (advanced overrides base on conflicts).
-    for parsed in parsed_sources:
+    for source_path, parsed in parsed_sources:
         for raw_key, raw_value in parsed.items():
             if not raw_key:
                 continue
             key = str(raw_key).strip()
             if not key or key in CLOUDRUN_ONLY_ENV_KEYS:
                 continue
-            allowed_values[key] = "" if raw_value is None else str(raw_value)
+            value = "" if raw_value is None else str(raw_value)
+            decrypted = decrypt_env_secret(value)
+            if is_encrypted_value(value) and decrypted == value:
+                logger.warning("Unable to decrypt %s from %s; keeping raw value.", key, source_path)
+            allowed_values[key] = decrypted
 
     # Clear keys previously managed by dotenv but removed from file.
     for key in list(_DOTENV_MANAGED_KEYS):

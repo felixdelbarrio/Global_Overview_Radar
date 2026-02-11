@@ -44,6 +44,27 @@ const settingsResponse = {
         },
       ],
     },
+    {
+      id: "sources_credentials",
+      label: "Credenciales",
+      fields: [
+        {
+          key: "sources.newsapi",
+          label: "NewsAPI",
+          description: "Provider",
+          type: "boolean",
+          value: false,
+        },
+        {
+          key: "keys.newsapi",
+          label: "NewsAPI Key",
+          description: "API key",
+          type: "secret",
+          value: "********",
+          configured: true,
+        },
+      ],
+    },
   ],
   updated_at: "2025-01-01T00:00:00Z",
   advanced_options: [],
@@ -106,12 +127,17 @@ describe("Shell settings and ingest", () => {
       newsLabel.parentElement?.parentElement?.querySelector("button");
     expect(newsToggle).toBeTruthy();
     fireEvent.click(newsToggle as HTMLButtonElement);
+    fireEvent.click(screen.getByText("RESET"));
     fireEvent.click(screen.getByText("Guardar"));
 
     await waitFor(() => {
       expect(apiPostMock).toHaveBeenCalledWith(
         "/reputation/settings",
-        expect.anything()
+        expect.objectContaining({
+          values: expect.objectContaining({
+            "keys.newsapi": "",
+          }),
+        })
       );
     });
 
