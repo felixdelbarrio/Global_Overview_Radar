@@ -9,6 +9,8 @@ from fastapi.testclient import TestClient
 
 from reputation.api.main import create_app
 
+_ADMIN_KEY = "32chars-minimum-admin-key-12345678"
+
 
 def _write_cache(tmp_path: Path, items: list[dict]) -> Path:
     doc = {
@@ -46,6 +48,9 @@ def _client(
     monkeypatch.setattr(rep_config.settings, "overrides_path", overrides_path)
     # Asegura determinismo: estos tests usan items con source="news"
     monkeypatch.setattr(rep_config.settings, "source_news", True)
+    monkeypatch.setattr(rep_config.settings, "google_cloud_login_requested", False)
+    monkeypatch.setattr(rep_config.settings, "auth_bypass_allow_mutations", True)
+    monkeypatch.setattr(rep_config.settings, "auth_bypass_mutation_key", _ADMIN_KEY)
     app = create_app()
     app.dependency_overrides[reputation_router._refresh_settings] = lambda: None
     return TestClient(app)
@@ -65,6 +70,7 @@ def test_override_endpoint_updates_items(
     res = client.post(
         "/reputation/items/override",
         json={"ids": ["a1"], "geo": "USA", "sentiment": "negative"},
+        headers={"x-gor-admin-key": _ADMIN_KEY},
     )
     assert res.status_code == 200
     body = res.json()
@@ -109,7 +115,11 @@ def test_override_endpoint_validation(
     overrides_path = tmp_path / "rep_overrides.json"
     client = _client(monkeypatch, cache_path, overrides_path)
 
-    res = client.post("/reputation/items/override", json=payload)
+    res = client.post(
+        "/reputation/items/override",
+        json=payload,
+        headers={"x-gor-admin-key": _ADMIN_KEY},
+    )
     assert res.status_code == 400
     assert res.json()["detail"] == detail
 

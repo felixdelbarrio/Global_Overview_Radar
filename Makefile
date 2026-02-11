@@ -2,8 +2,8 @@
 # Uso: make <target>
 SHELL := /bin/bash
 
-# Cloud Run targets read backend/reputation/.env.reputation directly (dotenv format).
-# Do NOT -include it in Make: values may contain `$` and would be expanded by Make.
+# Cloud Run targets read backend/reputation/cloudrun.env (dotenv format).
+# Do NOT -include dotenv files in Make: values may contain `$` and would be expanded by Make.
 
 # --- Configuración general ---
 VENV := .venv
@@ -40,7 +40,7 @@ INGEST_POLL_SECONDS ?= 10
 INGEST_POLL_ATTEMPTS ?= 60
 
 # CORS (Cloud Run backend)
-# Recomendación: setear en backend/reputation/.env.reputation (dotenv; usa '$' normal)
+# Recomendación: setear en backend/reputation/cloudrun.env (dotenv; usa '$' normal)
 # Ejemplos:
 #   CORS_ALLOWED_ORIGIN_REGEX=^https://.*\\.run\\.app$
 #   CORS_ALLOWED_ORIGIN_REGEX=^https://(gor-frontend-[a-z0-9-]+\\.a\\.run\\.app|tu-dominio\\.com)$
@@ -57,7 +57,7 @@ VISUAL_QA_OUT ?= docs/visual-qa
 
 .DEFAULT_GOAL := help
 
-.PHONY: help venv install install-backend install-front env ensure-backend ensure-front ingest ingest-filtered reputation-ingest reputation-ingest-filtered serve serve-back dev-back dev-front build-front start-front lint lint-back lint-front typecheck typecheck-back typecheck-front format format-back format-front check codeql codeql-install codeql-python codeql-js codeql-clean test test-back test-front test-coverage test-coverage-back test-coverage-front bench bench-baseline visual-qa clean reset cloudrun-config cloudrun-env deploy-cloudrun-back deploy-cloudrun-front deploy-cloudrun ingest-cloudrun
+.PHONY: help venv install install-backend install-front env ensure-backend ensure-front ensure-cloudrun-env ingest ingest-filtered reputation-ingest reputation-ingest-filtered serve serve-back dev-back dev-front build-front start-front lint lint-back lint-front typecheck typecheck-back typecheck-front format format-back format-front check codeql codeql-install codeql-python codeql-js codeql-clean test test-back test-front test-coverage test-coverage-back test-coverage-front bench bench-baseline visual-qa clean reset cloudrun-config cloudrun-env deploy-cloudrun-back deploy-cloudrun-front deploy-cloudrun ingest-cloudrun
 
 help:
 	@echo "Make targets disponibles:"
@@ -91,8 +91,8 @@ help:
 	@echo "  make bench-baseline  - Generar baseline backend"
 	@echo "  make visual-qa       - Capturas headless mobile (frontend)"
 	@echo "  make clean           - Eliminar venv, caches, node_modules (frontend)"
-	@echo "  make cloudrun-config - Crear backend/reputation/.env.reputation (preguntas interactivas)"
-	@echo "  make cloudrun-env    - Generar backend/reputation/cloudrun.env desde .env.reputation"
+	@echo "  make cloudrun-config - Configurar backend/reputation/cloudrun.env (preguntas interactivas)"
+	@echo "  make cloudrun-env    - Validar/normalizar backend/reputation/cloudrun.env"
 	@echo "  make deploy-cloudrun-back  - Deploy backend en Cloud Run (usa env vars)"
 	@echo "  make deploy-cloudrun-front - Deploy frontend en Cloud Run (usa env vars + proxy /api)"
 	@echo "  make deploy-cloudrun       - Deploy backend + frontend (Cloud Run)"
@@ -143,65 +143,81 @@ ensure-front: install-front
 # Cloud Run helpers
 # -------------------------
 
-cloudrun-config:
-	@echo "==> Configurando backend/reputation/.env.reputation (se guarda local; idealmente gitignored)..."
+ensure-cloudrun-env:
 	@mkdir -p backend/reputation
-	@test -f backend/reputation/.env.reputation || cp backend/reputation/.env.reputation.example backend/reputation/.env.reputation
+	@test -f backend/reputation/cloudrun.env || cp backend/reputation/cloudrun.env.example backend/reputation/cloudrun.env
+	@echo "==> backend/reputation/cloudrun.env preparado."
+
+cloudrun-config: ensure-cloudrun-env
+	@echo "==> Configurando backend/reputation/cloudrun.env..."
 	@set -euo pipefail; \
-	ENV_FILE="backend/reputation/.env.reputation"; \
+	ENV_FILE="backend/reputation/cloudrun.env"; \
 	env_get() { awk -F= -v k="$$1" '$$0 ~ ("^"k"=") {print substr($$0,index($$0,"=")+1)}' "$$ENV_FILE" | tail -n1; }; \
 	DEFAULT_GCP_PROJECT="global-overview-radar"; \
 	DEFAULT_GCP_REGION="europe-southwest1"; \
 	DEFAULT_BACKEND_SERVICE="gor-backend"; \
 	DEFAULT_FRONTEND_SERVICE="gor-frontend"; \
-	GCP_PROJECT_DEFAULT="$${GCP_PROJECT:-$$(env_get GCP_PROJECT)}"; \
+	GCP_PROJECT_DEFAULT="$$(env_get GCP_PROJECT)"; \
 	GCP_PROJECT_DEFAULT="$${GCP_PROJECT_DEFAULT:-$$DEFAULT_GCP_PROJECT}"; \
 	read -r -p "GCP_PROJECT [$$GCP_PROJECT_DEFAULT]: " GCP_PROJECT_IN; \
 	GCP_PROJECT_VAL="$${GCP_PROJECT_IN:-$$GCP_PROJECT_DEFAULT}"; \
-	GCP_REGION_DEFAULT="$${GCP_REGION:-$$(env_get GCP_REGION)}"; \
+	GCP_REGION_DEFAULT="$$(env_get GCP_REGION)"; \
 	GCP_REGION_DEFAULT="$${GCP_REGION_DEFAULT:-$$DEFAULT_GCP_REGION}"; \
 	read -r -p "GCP_REGION [$$GCP_REGION_DEFAULT]: " GCP_REGION_IN; \
 	GCP_REGION_VAL="$${GCP_REGION_IN:-$$GCP_REGION_DEFAULT}"; \
-	BACKEND_SERVICE_DEFAULT="$${BACKEND_SERVICE:-$$(env_get BACKEND_SERVICE)}"; \
+	BACKEND_SERVICE_DEFAULT="$$(env_get BACKEND_SERVICE)"; \
 	BACKEND_SERVICE_DEFAULT="$${BACKEND_SERVICE_DEFAULT:-$$DEFAULT_BACKEND_SERVICE}"; \
 	read -r -p "BACKEND_SERVICE [$$BACKEND_SERVICE_DEFAULT]: " BACKEND_SERVICE_IN; \
 	BACKEND_SERVICE_VAL="$${BACKEND_SERVICE_IN:-$$BACKEND_SERVICE_DEFAULT}"; \
-	FRONTEND_SERVICE_DEFAULT="$${FRONTEND_SERVICE:-$$(env_get FRONTEND_SERVICE)}"; \
+	FRONTEND_SERVICE_DEFAULT="$$(env_get FRONTEND_SERVICE)"; \
 	FRONTEND_SERVICE_DEFAULT="$${FRONTEND_SERVICE_DEFAULT:-$$DEFAULT_FRONTEND_SERVICE}"; \
 	read -r -p "FRONTEND_SERVICE [$$FRONTEND_SERVICE_DEFAULT]: " FRONTEND_SERVICE_IN; \
 	FRONTEND_SERVICE_VAL="$${FRONTEND_SERVICE_IN:-$$FRONTEND_SERVICE_DEFAULT}"; \
-	FRONTEND_SA_DEFAULT="$${FRONTEND_SA:-$$(env_get FRONTEND_SA)}"; \
+	FRONTEND_SA_DEFAULT="$$(env_get FRONTEND_SA)"; \
 	if [ -z "$$FRONTEND_SA_DEFAULT" ]; then FRONTEND_SA_DEFAULT="gor-frontend-sa@$${GCP_PROJECT_VAL}.iam.gserviceaccount.com"; fi; \
 	read -r -p "FRONTEND_SA [$$FRONTEND_SA_DEFAULT]: " FRONTEND_SA_IN; \
 	FRONTEND_SA_VAL="$${FRONTEND_SA_IN:-$$FRONTEND_SA_DEFAULT}"; \
-	LOGIN_REQ_DEFAULT="$${GOOGLE_CLOUD_LOGIN_REQUESTED:-$$(env_get GOOGLE_CLOUD_LOGIN_REQUESTED)}"; \
+	LOGIN_REQ_DEFAULT="$$(env_get GOOGLE_CLOUD_LOGIN_REQUESTED)"; \
 	LOGIN_REQ_DEFAULT="$${LOGIN_REQ_DEFAULT:-false}"; \
 	read -r -p "GOOGLE_CLOUD_LOGIN_REQUESTED (true/false) [$$LOGIN_REQ_DEFAULT]: " GOOGLE_CLOUD_LOGIN_REQUESTED_IN; \
 	GOOGLE_CLOUD_LOGIN_REQUESTED_VAL="$$(echo "$${GOOGLE_CLOUD_LOGIN_REQUESTED_IN:-$$LOGIN_REQ_DEFAULT}" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"; \
 	if [ "$$GOOGLE_CLOUD_LOGIN_REQUESTED_VAL" != "true" ]; then GOOGLE_CLOUD_LOGIN_REQUESTED_VAL="false"; fi; \
-	CLIENT_ID_DEFAULT="$${AUTH_GOOGLE_CLIENT_ID:-$$(env_get AUTH_GOOGLE_CLIENT_ID)}"; \
+	CLIENT_ID_DEFAULT="$$(env_get AUTH_GOOGLE_CLIENT_ID)"; \
 	read -r -p "AUTH_GOOGLE_CLIENT_ID [$$CLIENT_ID_DEFAULT]: " AUTH_GOOGLE_CLIENT_ID_IN; \
 	AUTH_GOOGLE_CLIENT_ID_VAL="$${AUTH_GOOGLE_CLIENT_ID_IN:-$$CLIENT_ID_DEFAULT}"; \
-	ALLOWED_EMAILS_DEFAULT="$${AUTH_ALLOWED_EMAILS:-$$(env_get AUTH_ALLOWED_EMAILS)}"; \
+	ALLOWED_EMAILS_DEFAULT="$$(env_get AUTH_ALLOWED_EMAILS)"; \
 	read -r -p "AUTH_ALLOWED_EMAILS (coma separada) [$$ALLOWED_EMAILS_DEFAULT]: " AUTH_ALLOWED_EMAILS_IN; \
 	AUTH_ALLOWED_EMAILS_VAL="$${AUTH_ALLOWED_EMAILS_IN:-$$ALLOWED_EMAILS_DEFAULT}"; \
-	CORS_REGEX_DEFAULT="$${CORS_ALLOWED_ORIGIN_REGEX:-$$(env_get CORS_ALLOWED_ORIGIN_REGEX)}"; \
+	CORS_REGEX_DEFAULT="$$(env_get CORS_ALLOWED_ORIGIN_REGEX)"; \
 	read -r -p "CORS_ALLOWED_ORIGIN_REGEX (required para Cloud Run backend) [$$CORS_REGEX_DEFAULT]: " CORS_ALLOWED_ORIGIN_REGEX_IN; \
 	CORS_ALLOWED_ORIGIN_REGEX_VAL="$${CORS_ALLOWED_ORIGIN_REGEX_IN:-$$CORS_REGEX_DEFAULT}"; \
+	ALLOW_MUTATIONS_DEFAULT="$$(env_get AUTH_BYPASS_ALLOW_MUTATIONS)"; \
+	ALLOW_MUTATIONS_DEFAULT="$${ALLOW_MUTATIONS_DEFAULT:-false}"; \
+	read -r -p "AUTH_BYPASS_ALLOW_MUTATIONS (true/false) [$$ALLOW_MUTATIONS_DEFAULT]: " AUTH_BYPASS_ALLOW_MUTATIONS_IN; \
+	AUTH_BYPASS_ALLOW_MUTATIONS_VAL="$$(echo "$${AUTH_BYPASS_ALLOW_MUTATIONS_IN:-$$ALLOW_MUTATIONS_DEFAULT}" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"; \
+	if [ "$$AUTH_BYPASS_ALLOW_MUTATIONS_VAL" != "true" ]; then AUTH_BYPASS_ALLOW_MUTATIONS_VAL="false"; fi; \
+	BYPASS_KEY_DEFAULT="$$(env_get AUTH_BYPASS_MUTATION_KEY)"; \
+	read -r -s -p "AUTH_BYPASS_MUTATION_KEY [oculta; Enter para mantener]: " AUTH_BYPASS_MUTATION_KEY_IN; \
+	printf '\n'; \
+	AUTH_BYPASS_MUTATION_KEY_VAL="$${AUTH_BYPASS_MUTATION_KEY_IN:-$$BYPASS_KEY_DEFAULT}"; \
 	if [ "$$GOOGLE_CLOUD_LOGIN_REQUESTED_VAL" = "true" ] && [ -z "$$AUTH_GOOGLE_CLIENT_ID_VAL" ]; then \
 		echo "Falta AUTH_GOOGLE_CLIENT_ID (required cuando GOOGLE_CLOUD_LOGIN_REQUESTED=true)."; \
 		exit 1; \
 	fi; \
-	if [ "$$GOOGLE_CLOUD_LOGIN_REQUESTED_VAL" != "true" ] && [ -z "$$AUTH_ALLOWED_EMAILS_VAL" ]; then \
-		echo "Falta AUTH_ALLOWED_EMAILS (required cuando GOOGLE_CLOUD_LOGIN_REQUESTED=false)."; \
+	if [ "$$GOOGLE_CLOUD_LOGIN_REQUESTED_VAL" = "true" ] && [ -z "$$AUTH_ALLOWED_EMAILS_VAL" ]; then \
+		echo "Falta AUTH_ALLOWED_EMAILS (required cuando GOOGLE_CLOUD_LOGIN_REQUESTED=true)."; \
 		exit 1; \
 	fi; \
 	if [ -z "$$CORS_ALLOWED_ORIGIN_REGEX_VAL" ]; then \
 		echo "Falta CORS_ALLOWED_ORIGIN_REGEX."; \
 		exit 1; \
 	fi; \
+	if [ "$$AUTH_BYPASS_ALLOW_MUTATIONS_VAL" = "true" ] && [ -n "$$AUTH_BYPASS_MUTATION_KEY_VAL" ] && [ "$${#AUTH_BYPASS_MUTATION_KEY_VAL}" -lt 32 ]; then \
+		echo "AUTH_BYPASS_MUTATION_KEY debe tener al menos 32 caracteres."; \
+		exit 1; \
+	fi; \
 	TMP_FILE="$$ENV_FILE.tmp"; \
-	grep -vE '^(GCP_PROJECT|GCP_REGION|BACKEND_SERVICE|FRONTEND_SERVICE|FRONTEND_SA|GOOGLE_CLOUD_LOGIN_REQUESTED|AUTH_GOOGLE_CLIENT_ID|AUTH_ALLOWED_EMAILS|CORS_ALLOWED_ORIGIN_REGEX)=' "$$ENV_FILE" > "$$TMP_FILE" || true; \
+	grep -vE '^(GCP_PROJECT|GCP_REGION|BACKEND_SERVICE|FRONTEND_SERVICE|FRONTEND_SA|GOOGLE_CLOUD_LOGIN_REQUESTED|AUTH_GOOGLE_CLIENT_ID|AUTH_ALLOWED_EMAILS|CORS_ALLOWED_ORIGIN_REGEX|AUTH_BYPASS_ALLOW_MUTATIONS|AUTH_BYPASS_MUTATION_KEY)=' "$$ENV_FILE" > "$$TMP_FILE" || true; \
 	mv "$$TMP_FILE" "$$ENV_FILE"; \
 	{ printf '\n# --- Cloud Run (generated by make cloudrun-config) ---\n'; \
 		printf '%s\n' \
@@ -213,59 +229,67 @@ cloudrun-config:
 			"GOOGLE_CLOUD_LOGIN_REQUESTED=$${GOOGLE_CLOUD_LOGIN_REQUESTED_VAL}" \
 			"AUTH_GOOGLE_CLIENT_ID=$${AUTH_GOOGLE_CLIENT_ID_VAL}" \
 			"AUTH_ALLOWED_EMAILS=$${AUTH_ALLOWED_EMAILS_VAL}" \
-			"CORS_ALLOWED_ORIGIN_REGEX=$${CORS_ALLOWED_ORIGIN_REGEX_VAL}"; \
+			"CORS_ALLOWED_ORIGIN_REGEX=$${CORS_ALLOWED_ORIGIN_REGEX_VAL}" \
+			"AUTH_BYPASS_ALLOW_MUTATIONS=$${AUTH_BYPASS_ALLOW_MUTATIONS_VAL}" \
+			"AUTH_BYPASS_MUTATION_KEY=$${AUTH_BYPASS_MUTATION_KEY_VAL}"; \
 	} >> "$$ENV_FILE"; \
-	echo "==> backend/reputation/.env.reputation actualizado. Ahora puedes ejecutar: make deploy-cloudrun"
+	echo "==> backend/reputation/cloudrun.env actualizado. Ahora puedes ejecutar: make deploy-cloudrun"
 
-cloudrun-env:
-	@echo "==> Generando backend/reputation/cloudrun.env desde backend/reputation/.env.reputation..."
-	@test -f backend/reputation/.env.reputation || (echo "Falta backend/reputation/.env.reputation (ejecuta: make env o make cloudrun-config)"; exit 1)
-	@mkdir -p backend/reputation
-	@awk -F= '$$0 !~ /^[[:space:]]*#/ && $$0 ~ /=/ {print $$0}' backend/reputation/.env.reputation > backend/reputation/cloudrun.env
+cloudrun-env: ensure-cloudrun-env
+	@echo "==> Validando backend/reputation/cloudrun.env..."
 	@set -euo pipefail; \
 	ENV_FILE="backend/reputation/cloudrun.env"; \
 	env_get() { awk -F= -v k="$$1" '$$0 ~ ("^"k"=") {print substr($$0,index($$0,"=")+1)}' "$$ENV_FILE" | tail -n1; }; \
-	LOGIN_REQUESTED_VAL="$${GOOGLE_CLOUD_LOGIN_REQUESTED:-$$(env_get GOOGLE_CLOUD_LOGIN_REQUESTED)}"; \
+	LOGIN_REQUESTED_VAL="$$(env_get GOOGLE_CLOUD_LOGIN_REQUESTED)"; \
 	LOGIN_REQUESTED_VAL="$$(echo "$$LOGIN_REQUESTED_VAL" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"; \
 	if [ "$$LOGIN_REQUESTED_VAL" != "true" ]; then LOGIN_REQUESTED_VAL="false"; fi; \
-	CLIENT_ID_VAL="$${AUTH_GOOGLE_CLIENT_ID:-$$(env_get AUTH_GOOGLE_CLIENT_ID)}"; \
-	ALLOWED_EMAILS_VAL="$${AUTH_ALLOWED_EMAILS:-$$(env_get AUTH_ALLOWED_EMAILS)}"; \
-	CORS_REGEX_VAL="$${CORS_ALLOWED_ORIGIN_REGEX:-$$(env_get CORS_ALLOWED_ORIGIN_REGEX)}"; \
+	CLIENT_ID_VAL="$$(env_get AUTH_GOOGLE_CLIENT_ID)"; \
+	ALLOWED_EMAILS_VAL="$$(env_get AUTH_ALLOWED_EMAILS)"; \
+	CORS_REGEX_VAL="$$(env_get CORS_ALLOWED_ORIGIN_REGEX)"; \
+	ALLOW_MUTATIONS_VAL="$$(env_get AUTH_BYPASS_ALLOW_MUTATIONS)"; \
+	ALLOW_MUTATIONS_VAL="$$(echo "$$ALLOW_MUTATIONS_VAL" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"; \
+	if [ "$$ALLOW_MUTATIONS_VAL" != "true" ]; then ALLOW_MUTATIONS_VAL="false"; fi; \
+	BYPASS_KEY_VAL="$$(env_get AUTH_BYPASS_MUTATION_KEY)"; \
 	CLIENT_ID_VAL="$$(printf '%s' "$$CLIENT_ID_VAL" | tr -d '\r')"; \
 	ALLOWED_EMAILS_VAL="$$(printf '%s' "$$ALLOWED_EMAILS_VAL" | tr -d '\r')"; \
 	CORS_REGEX_VAL="$$(printf '%s' "$$CORS_REGEX_VAL" | tr -d '\r')"; \
+	BYPASS_KEY_VAL="$$(printf '%s' "$$BYPASS_KEY_VAL" | tr -d '\r')"; \
 	if [ -z "$$CORS_REGEX_VAL" ]; then \
-		echo "Falta CORS_ALLOWED_ORIGIN_REGEX en backend/reputation/.env.reputation (required para Cloud Run backend)."; \
+		echo "Falta CORS_ALLOWED_ORIGIN_REGEX en backend/reputation/cloudrun.env (required para Cloud Run backend)."; \
 		exit 1; \
 	fi; \
 	if [ "$$LOGIN_REQUESTED_VAL" = "true" ]; then \
 		if [ -z "$$CLIENT_ID_VAL" ]; then \
-			echo "Falta AUTH_GOOGLE_CLIENT_ID (ponlo en backend/reputation/.env.reputation o exporta la variable)."; \
+			echo "Falta AUTH_GOOGLE_CLIENT_ID (ponlo en backend/reputation/cloudrun.env)."; \
+			exit 1; \
+		fi; \
+		if [ -z "$$ALLOWED_EMAILS_VAL" ]; then \
+			echo "Falta AUTH_ALLOWED_EMAILS (required cuando GOOGLE_CLOUD_LOGIN_REQUESTED=true)."; \
 			exit 1; \
 		fi; \
 		if ! echo "$$CLIENT_ID_VAL" | grep -q '\\.apps\\.googleusercontent\\.com$$'; then \
 			echo "ERROR: AUTH_GOOGLE_CLIENT_ID debe ser un OAuth Client ID (termina en .apps.googleusercontent.com). Valor actual: $$CLIENT_ID_VAL"; \
 			exit 1; \
 		fi; \
-	else \
-		if [ -z "$$ALLOWED_EMAILS_VAL" ]; then \
-			echo "Falta AUTH_ALLOWED_EMAILS (required cuando GOOGLE_CLOUD_LOGIN_REQUESTED=false)."; \
-			exit 1; \
-		fi; \
+	fi; \
+	if [ "$$ALLOW_MUTATIONS_VAL" = "true" ] && [ -n "$$BYPASS_KEY_VAL" ] && [ "$${#BYPASS_KEY_VAL}" -lt 32 ]; then \
+		echo "AUTH_BYPASS_MUTATION_KEY debe tener al menos 32 caracteres."; \
+		exit 1; \
 	fi; \
 	TMP_FILE="$$ENV_FILE.tmp"; \
-	awk '$$0 !~ /^(AUTH_ENABLED|AUTH_GOOGLE_CLIENT_ID|AUTH_ALLOWED_EMAILS|GOOGLE_CLOUD_LOGIN_REQUESTED|CORS_ALLOWED_ORIGIN_REGEX|AUTH_BYPASS_MUTATION_KEY)=/' "$$ENV_FILE" > "$$TMP_FILE"; \
+	awk '$$0 !~ /^(AUTH_GOOGLE_CLIENT_ID|AUTH_ALLOWED_EMAILS|GOOGLE_CLOUD_LOGIN_REQUESTED|CORS_ALLOWED_ORIGIN_REGEX|AUTH_BYPASS_ALLOW_MUTATIONS|AUTH_BYPASS_MUTATION_KEY)=/' "$$ENV_FILE" > "$$TMP_FILE"; \
 	mv "$$TMP_FILE" "$$ENV_FILE"; \
 	{ printf '\n# --- Auth/Cloud Run (normalized by make cloudrun-env) ---\n'; \
 		printf '%s\n' \
-			"AUTH_ENABLED=true" \
 			"GOOGLE_CLOUD_LOGIN_REQUESTED=$$LOGIN_REQUESTED_VAL" \
 			"CORS_ALLOWED_ORIGIN_REGEX=$$CORS_REGEX_VAL"; \
 		if [ -n "$$CLIENT_ID_VAL" ]; then printf '%s\n' "AUTH_GOOGLE_CLIENT_ID=$$CLIENT_ID_VAL"; fi; \
 		if [ -n "$$ALLOWED_EMAILS_VAL" ]; then printf '%s\n' "AUTH_ALLOWED_EMAILS=$$ALLOWED_EMAILS_VAL"; fi; \
+		printf '%s\n' "AUTH_BYPASS_ALLOW_MUTATIONS=$$ALLOW_MUTATIONS_VAL"; \
+		printf '%s\n' "AUTH_BYPASS_MUTATION_KEY=$$BYPASS_KEY_VAL"; \
 	} >> "$$ENV_FILE"
 
-	@echo "==> cloudrun.env generado."
+	@echo "==> cloudrun.env validado."
 
 deploy-cloudrun-back: cloudrun-env
 	@echo "==> Deploy backend en Cloud Run..."
@@ -278,15 +302,20 @@ deploy-cloudrun-back: cloudrun-env
 	GCP_REGION="$${GCP_REGION:-europe-southwest1}"; \
 	BACKEND_SERVICE="$${BACKEND_SERVICE:-$$(env_get BACKEND_SERVICE)}"; \
 	BACKEND_SERVICE="$${BACKEND_SERVICE:-gor-backend}"; \
-	LOGIN_REQUESTED_VAL="$${GOOGLE_CLOUD_LOGIN_REQUESTED:-$$(env_get GOOGLE_CLOUD_LOGIN_REQUESTED)}"; \
+	LOGIN_REQUESTED_VAL="$$(env_get GOOGLE_CLOUD_LOGIN_REQUESTED)"; \
 	LOGIN_REQUESTED_VAL=$$(echo "$$LOGIN_REQUESTED_VAL" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]'); \
 	if [ "$$LOGIN_REQUESTED_VAL" != "true" ]; then LOGIN_REQUESTED_VAL="false"; fi; \
+	ALLOW_MUTATIONS_VAL="$$(env_get AUTH_BYPASS_ALLOW_MUTATIONS)"; \
+	ALLOW_MUTATIONS_VAL=$$(echo "$$ALLOW_MUTATIONS_VAL" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]'); \
+	if [ "$$ALLOW_MUTATIONS_VAL" != "true" ]; then ALLOW_MUTATIONS_VAL="false"; fi; \
 	SECRET_ARGS=(); \
 	if [ "$$LOGIN_REQUESTED_VAL" = "true" ]; then \
 		SECRET_ARGS+=(--remove-secrets AUTH_BYPASS_MUTATION_KEY); \
-	else \
-		# Secret lives in GCP Secret Manager; do not store it in backend/reputation/.env.reputation. \
+	elif [ "$$ALLOW_MUTATIONS_VAL" = "true" ]; then \
+		# Secret lives in GCP Secret Manager; do not store it in backend/reputation/cloudrun.env. \
 		SECRET_ARGS+=(--update-secrets AUTH_BYPASS_MUTATION_KEY=AUTH_BYPASS_MUTATION_KEY:latest); \
+	else \
+		SECRET_ARGS+=(--remove-secrets AUTH_BYPASS_MUTATION_KEY); \
 	fi; \
 	BUILD_VARS="GOOGLE_RUNTIME_VERSION=$(BACKEND_PYTHON_RUNTIME),GOOGLE_ENTRYPOINT=python -m uvicorn reputation.api.main:app --host 0.0.0.0 --port 8080"; \
 	gcloud run deploy "$$BACKEND_SERVICE" \
@@ -300,15 +329,20 @@ deploy-cloudrun-back: cloudrun-env
 		--cpu $(BACKEND_CPU) \
 		--memory $(BACKEND_MEMORY) \
 		--cpu-throttling \
-		--set-build-env-vars "$$BUILD_VARS" \
-		"$${SECRET_ARGS[@]}" \
-		--env-vars-file "$$ENV_FILE"
+			--set-build-env-vars "$$BUILD_VARS" \
+			"$${SECRET_ARGS[@]}" \
+			--env-vars-file "$$ENV_FILE"; \
+	# In some services, traffic may remain pinned to an older revision. Force latest. \
+	gcloud run services update-traffic "$$BACKEND_SERVICE" \
+		--project "$$GCP_PROJECT" \
+		--region "$$GCP_REGION" \
+		--to-latest
 
-deploy-cloudrun-front:
+deploy-cloudrun-front: cloudrun-env
 	@echo "==> Deploy frontend en Cloud Run (proxy /api -> backend)..."
 	@set -euo pipefail; \
-	ENV_FILE="backend/reputation/.env.reputation"; \
-	test -f "$$ENV_FILE" || (echo "Falta $$ENV_FILE (ejecuta: make env o make cloudrun-config)"; exit 1); \
+	ENV_FILE="backend/reputation/cloudrun.env"; \
+	test -f "$$ENV_FILE" || (echo "Falta $$ENV_FILE (ejecuta: make cloudrun-env)"; exit 1); \
 	env_get() { awk -F= -v k="$$1" '$$0 ~ ("^"k"=") {print substr($$0,index($$0,"=")+1)}' "$$ENV_FILE" | tail -n1; }; \
 	GCP_PROJECT="$${GCP_PROJECT:-$$(env_get GCP_PROJECT)}"; \
 	GCP_PROJECT="$${GCP_PROJECT:-global-overview-radar}"; \
@@ -320,14 +354,14 @@ deploy-cloudrun-front:
 	FRONTEND_SERVICE="$${FRONTEND_SERVICE:-gor-frontend}"; \
 	FRONTEND_SA="$${FRONTEND_SA:-$$(env_get FRONTEND_SA)}"; \
 	if [ -z "$$FRONTEND_SA" ]; then FRONTEND_SA="gor-frontend-sa@$${GCP_PROJECT}.iam.gserviceaccount.com"; fi; \
-	LOGIN_REQUESTED_VAL="$${GOOGLE_CLOUD_LOGIN_REQUESTED:-$$(env_get GOOGLE_CLOUD_LOGIN_REQUESTED)}"; \
+	LOGIN_REQUESTED_VAL="$$(env_get GOOGLE_CLOUD_LOGIN_REQUESTED)"; \
 	LOGIN_REQUESTED_VAL=$$(echo "$$LOGIN_REQUESTED_VAL" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]'); \
 	if [ "$$LOGIN_REQUESTED_VAL" != "true" ]; then LOGIN_REQUESTED_VAL="false"; fi; \
-	CLIENT_ID_VAL="$${AUTH_GOOGLE_CLIENT_ID:-$$(env_get AUTH_GOOGLE_CLIENT_ID)}"; \
+	CLIENT_ID_VAL="$$(env_get AUTH_GOOGLE_CLIENT_ID)"; \
 	CLIENT_ID_VAL=$$(printf '%s' "$$CLIENT_ID_VAL" | tr -d '\r'); \
 	if [ "$$LOGIN_REQUESTED_VAL" = "true" ]; then \
 		if [ -z "$$CLIENT_ID_VAL" ]; then \
-			echo "Falta AUTH_GOOGLE_CLIENT_ID (ponlo en backend/reputation/.env.reputation o exporta la variable)."; \
+			echo "Falta AUTH_GOOGLE_CLIENT_ID (ponlo en backend/reputation/cloudrun.env)."; \
 			exit 1; \
 		fi; \
 		if ! echo "$$CLIENT_ID_VAL" | grep -q '\\.apps\\.googleusercontent\\.com$$'; then \
@@ -340,8 +374,6 @@ deploy-cloudrun-front:
 		echo "No se pudo obtener BACKEND_URL. Deploy del backend primero."; \
 		exit 1; \
 	fi; \
-	FRONT_AUTH_ENABLED=true; \
-	if [ "$$LOGIN_REQUESTED_VAL" != "true" ]; then FRONT_AUTH_ENABLED=false; fi; \
 	gcloud run deploy "$$FRONTEND_SERVICE" \
 		--project "$$GCP_PROJECT" \
 		--region "$$GCP_REGION" \
@@ -354,16 +386,16 @@ deploy-cloudrun-front:
 		--cpu $(FRONTEND_CPU) \
 		--memory $(FRONTEND_MEMORY) \
 		--cpu-throttling \
-		--set-env-vars USE_SERVER_PROXY=true,API_PROXY_TARGET=$$BACKEND_URL,NEXT_PUBLIC_API_BASE_URL=/api,NEXT_PUBLIC_AUTH_ENABLED=$$FRONT_AUTH_ENABLED,NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED=$$LOGIN_REQUESTED_VAL,NEXT_PUBLIC_GOOGLE_CLIENT_ID=$$CLIENT_ID_VAL \
-		--set-build-env-vars USE_SERVER_PROXY=true,API_PROXY_TARGET=$$BACKEND_URL,NEXT_PUBLIC_API_BASE_URL=/api,NEXT_PUBLIC_AUTH_ENABLED=$$FRONT_AUTH_ENABLED,NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED=$$LOGIN_REQUESTED_VAL,NEXT_PUBLIC_GOOGLE_CLIENT_ID=$$CLIENT_ID_VAL
+		--set-env-vars USE_SERVER_PROXY=true,API_PROXY_TARGET=$$BACKEND_URL,NEXT_PUBLIC_API_BASE_URL=/api,NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED=$$LOGIN_REQUESTED_VAL,AUTH_GOOGLE_CLIENT_ID=$$CLIENT_ID_VAL,NEXT_PUBLIC_DISABLE_ADVANCED_SETTINGS=true \
+		--set-build-env-vars USE_SERVER_PROXY=true,API_PROXY_TARGET=$$BACKEND_URL,NEXT_PUBLIC_API_BASE_URL=/api,NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED=$$LOGIN_REQUESTED_VAL,AUTH_GOOGLE_CLIENT_ID=$$CLIENT_ID_VAL,NEXT_PUBLIC_DISABLE_ADVANCED_SETTINGS=true
 
 deploy-cloudrun: deploy-cloudrun-back deploy-cloudrun-front
 	@true
 
-ingest-cloudrun:
+ingest-cloudrun: cloudrun-env
 	@set -euo pipefail; \
-	ENV_FILE="backend/reputation/.env.reputation"; \
-	test -f "$$ENV_FILE" || (echo "Falta $$ENV_FILE (ejecuta: make env o make cloudrun-config)"; exit 1); \
+	ENV_FILE="backend/reputation/cloudrun.env"; \
+	test -f "$$ENV_FILE" || (echo "Falta $$ENV_FILE (ejecuta: make cloudrun-env)"; exit 1); \
 	env_get() { awk -F= -v k="$$1" '$$0 ~ ("^"k"=") {print substr($$0,index($$0,"=")+1)}' "$$ENV_FILE" | tail -n1; }; \
 	GCP_PROJECT="$${GCP_PROJECT:-$$(env_get GCP_PROJECT)}"; \
 	GCP_PROJECT="$${GCP_PROJECT:-global-overview-radar}"; \
@@ -371,24 +403,26 @@ ingest-cloudrun:
 	GCP_REGION="$${GCP_REGION:-europe-southwest1}"; \
 	BACKEND_SERVICE="$${BACKEND_SERVICE:-$$(env_get BACKEND_SERVICE)}"; \
 	BACKEND_SERVICE="$${BACKEND_SERVICE:-gor-backend}"; \
-	LOGIN_REQUESTED_VAL="$${GOOGLE_CLOUD_LOGIN_REQUESTED:-$$(env_get GOOGLE_CLOUD_LOGIN_REQUESTED)}"; \
+	LOGIN_REQUESTED_VAL="$$(env_get GOOGLE_CLOUD_LOGIN_REQUESTED)"; \
 	LOGIN_REQUESTED_VAL=$$(echo "$$LOGIN_REQUESTED_VAL" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]'); \
 	if [ "$$LOGIN_REQUESTED_VAL" != "true" ]; then LOGIN_REQUESTED_VAL="false"; fi; \
-	CLIENT_ID_VAL="$${AUTH_GOOGLE_CLIENT_ID:-$$(env_get AUTH_GOOGLE_CLIENT_ID)}"; \
+	CLIENT_ID_VAL="$$(env_get AUTH_GOOGLE_CLIENT_ID)"; \
 	CLIENT_ID_VAL=$$(printf '%s' "$$CLIENT_ID_VAL" | tr -d '\r'); \
 	echo "==> Lanzando ingesta remota en Cloud Run ($$BACKEND_SERVICE)..."; \
 	ADMIN_KEY=""; \
 	CALLER_SERVICE_ACCOUNT_VAL="$${CALLER_SERVICE_ACCOUNT:-gor-github-deploy@$${GCP_PROJECT}.iam.gserviceaccount.com}"; \
+	ALLOW_MUTATIONS_VAL="$$(env_get AUTH_BYPASS_ALLOW_MUTATIONS)"; \
+	ALLOW_MUTATIONS_VAL=$$(echo "$$ALLOW_MUTATIONS_VAL" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]'); \
+	if [ "$$ALLOW_MUTATIONS_VAL" != "true" ]; then ALLOW_MUTATIONS_VAL="false"; fi; \
 	if [ "$$LOGIN_REQUESTED_VAL" != "true" ]; then \
-		ALLOW_MUTATIONS_VAL=$$(awk -F= '/^AUTH_BYPASS_ALLOW_MUTATIONS=/{print substr($$0,index($$0,"=")+1)}' backend/reputation/.env.reputation 2>/dev/null | tail -n1 | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]' || true); \
 		if [ "$$ALLOW_MUTATIONS_VAL" != "true" ]; then \
 			echo "AVISO: AUTH_BYPASS_ALLOW_MUTATIONS no esta en true. En bypass, /ingest/reputation devolvera 403 (mutations disabled)."; \
-			echo "       Ajusta backend/reputation/.env.reputation y redeploy del backend si quieres permitir ingestas via make ingest-cloudrun."; \
+			echo "       Ajusta backend/reputation/cloudrun.env y redeploy del backend si quieres permitir ingestas via make ingest-cloudrun."; \
 		fi; \
 	fi; \
 	if [ "$$LOGIN_REQUESTED_VAL" = "true" ]; then \
 		if [ -z "$$CLIENT_ID_VAL" ]; then \
-			echo "Falta AUTH_GOOGLE_CLIENT_ID (ponlo en backend/reputation/.env.reputation o exporta la variable)."; \
+			echo "Falta AUTH_GOOGLE_CLIENT_ID (ponlo en backend/reputation/cloudrun.env)."; \
 			exit 1; \
 		fi; \
 		if ! echo "$$CLIENT_ID_VAL" | grep -q '\\.apps\\.googleusercontent\\.com$$'; then \
@@ -396,7 +430,7 @@ ingest-cloudrun:
 			exit 1; \
 		fi; \
 	else \
-		# Prefer Secret Manager (no guardar el admin key en backend/reputation/.env.reputation). \
+		# Prefer Secret Manager (no guardar el admin key en backend/reputation/cloudrun.env). \
 		if [ -n "$$CALLER_SERVICE_ACCOUNT_VAL" ]; then \
 			ADMIN_KEY=$$(gcloud secrets versions access latest \
 				--secret AUTH_BYPASS_MUTATION_KEY \
@@ -562,6 +596,7 @@ CODEQL_THREADS ?= 0
 
 CODEQL_PY_QUERIES ?= codeql/python-queries
 CODEQL_JS_QUERIES ?= codeql/javascript-queries
+CODEQL_JS_SOURCE_ROOT ?= $(FRONTDIR)/src
 # Optional: for JS/TS extraction you can provide a build command:
 #   make codeql-js CODEQL_JS_COMMAND='cd frontend/brr-frontend && npm run build'
 CODEQL_JS_COMMAND ?=
@@ -610,13 +645,13 @@ codeql-js:
 		echo "==> Creando DB JS/TS con build command: $(CODEQL_JS_COMMAND)"; \
 		$(CODEQL) database create "$(CODEQL_DB_DIR)/javascript-typescript" \
 			--language=javascript-typescript \
-			--source-root="$(FRONTDIR)" \
+			--source-root="$(CODEQL_JS_SOURCE_ROOT)" \
 			--command="$(CODEQL_JS_COMMAND)" \
 			--overwrite; \
 	else \
 		$(CODEQL) database create "$(CODEQL_DB_DIR)/javascript-typescript" \
 			--language=javascript-typescript \
-			--source-root="$(FRONTDIR)" \
+			--source-root="$(CODEQL_JS_SOURCE_ROOT)" \
 			--overwrite; \
 	fi
 	@$(CODEQL) database analyze "$(CODEQL_DB_DIR)/javascript-typescript" "$(CODEQL_JS_QUERIES)" \

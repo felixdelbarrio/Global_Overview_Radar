@@ -154,7 +154,7 @@ class ReputationIngestService:
             safe_pct = max(0, min(100, int(pct)))
             progress(stage, safe_pct, meta or {})
 
-        # Relee .env.reputation para aplicar credenciales y configuración dinámica.
+        # Relee .env.reputation + .env.reputation.advanced para configuración dinámica.
         reload_reputation_settings()
         # Refresca el repo por si cambió la ruta del cache/perfil.
         self._repo = ReputationCacheRepo(self._settings.cache_path)

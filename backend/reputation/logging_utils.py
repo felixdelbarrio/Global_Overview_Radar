@@ -13,7 +13,12 @@ from threading import Lock
 from types import TracebackType
 from typing import TYPE_CHECKING, Mapping, Optional
 
-from reputation.config import REPO_ROOT, REPUTATION_ENV_PATH, ReputationSettings
+from reputation.config import (
+    REPO_ROOT,
+    REPUTATION_ADVANCED_ENV_PATH,
+    REPUTATION_ENV_PATH,
+    ReputationSettings,
+)
 
 _DISABLED_LEVEL = logging.CRITICAL + 10
 _BASE_FORMAT = "%(asctime)s | %(levelname)s | %(name)s | %(message)s"
@@ -39,10 +44,15 @@ def _resolve_path(file_name: str | Path) -> Path:
 
 
 def _env_mtime() -> Optional[float]:
-    try:
-        return REPUTATION_ENV_PATH.stat().st_mtime
-    except FileNotFoundError:
+    mtimes: list[float] = []
+    for path in (REPUTATION_ENV_PATH, REPUTATION_ADVANCED_ENV_PATH):
+        try:
+            mtimes.append(path.stat().st_mtime)
+        except FileNotFoundError:
+            continue
+    if not mtimes:
         return None
+    return max(mtimes)
 
 
 def _stop_listener() -> None:
@@ -67,7 +77,7 @@ def _should_check() -> bool:
 
 
 def configure_logging(force: bool = False) -> None:
-    """Configura logging leyendo la config actual desde .env.reputation."""
+    """Configura logging leyendo la config actual desde .env.reputation y .advanced."""
     global _last_signature, _last_mtime, _listener, _listener_handlers, _atexit_registered
 
     if not force and _last_signature is not None and not _should_check():

@@ -7,6 +7,9 @@ from pathlib import Path
 from typing import Any, Literal
 
 from reputation.config import (
+    CLOUDRUN_ONLY_ENV_KEYS,
+    REPUTATION_ADVANCED_ENV_EXAMPLE,
+    REPUTATION_ADVANCED_ENV_PATH,
     REPUTATION_ENV_EXAMPLE,
     REPUTATION_ENV_PATH,
     reload_reputation_settings,
@@ -389,6 +392,9 @@ FIELDS: list[UserSettingField] = [
 
 FIELDS_BY_KEY = {field.key: field for field in FIELDS}
 FIELDS_BY_ENV = {field.env: field for field in FIELDS}
+ADVANCED_GROUP_ID = "advanced"
+ADVANCED_FIELDS = [field for field in FIELDS if field.group == ADVANCED_GROUP_ID]
+ADVANCED_FIELD_ENVS = {field.env for field in ADVANCED_FIELDS}
 
 SOURCE_CREDENTIAL_REQUIREMENTS: dict[str, list[str]] = {
     "REPUTATION_SOURCE_NEWSAPI": ["NEWSAPI_API_KEY"],
@@ -528,6 +534,10 @@ _SENSITIVE_ENV_EXACT_ALLOWLIST = {
 _SECRET_MASK = "********"
 
 
+def _is_cloud_run_runtime() -> bool:
+    return bool(os.getenv("K_SERVICE") or os.getenv("K_REVISION") or os.getenv("CLOUD_RUN_JOB"))
+
+
 def _is_sensitive_env_name(name: str) -> bool:
     normalized = name.strip().upper()
     if not normalized:
@@ -647,7 +657,7 @@ def _resolve_language_preference(env_values: dict[str, str], default: str) -> st
     return default
 
 
-def _render_env_file(values: dict[str, str], extras: dict[str, str]) -> str:
+def _render_main_env_file(values: dict[str, str]) -> str:
     lines: list[str] = []
     lines.append("# === Configuracion reputacional (cliente final) ===")
     lines.append("# Si falta .env.reputation, se copiará este archivo.")
@@ -655,30 +665,12 @@ def _render_env_file(values: dict[str, str], extras: dict[str, str]) -> str:
 
     for group in GROUPS:
         group_id = group["id"]
+        if group_id == ADVANCED_GROUP_ID:
+            continue
         lines.append(f"# === {group['label'].upper()} ===")
         description = group.get("description")
         if description:
             lines.append(f"# {description}")
-
-        if group_id == "advanced":
-            for field in [f for f in FIELDS if f.group == group_id]:
-                if field.label and field.description:
-                    lines.append(f"# {field.label}. {field.description}")
-                elif field.label:
-                    lines.append(f"# {field.label}")
-                elif field.description:
-                    lines.append(f"# {field.description}")
-                value = values.get(field.env)
-                if value is None:
-                    value = _format_env_value(field.default, field)
-                lines.append(f"{field.env}={value}")
-            if extras:
-                lines.append("# Variables adicionales (solo si sabes lo que haces)")
-                for key in sorted(extras.keys()):
-                    lines.append(f"{key}={extras[key]}")
-            lines.append("")
-            continue
-
         for field in [f for f in FIELDS if f.group == group_id]:
             if field.label and field.description:
                 lines.append(f"# {field.label}. {field.description}")
@@ -697,76 +689,120 @@ def _render_env_file(values: dict[str, str], extras: dict[str, str]) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
+def _render_advanced_env_file(values: dict[str, str], extras: dict[str, str]) -> str:
+    lines: list[str] = []
+    lines.append("# === AVANZADO ===")
+    lines.append("# Variables técnicas (solo si sabes lo que haces).")
+    for field in ADVANCED_FIELDS:
+        if field.label and field.description:
+            lines.append(f"# {field.label}. {field.description}")
+        elif field.label:
+            lines.append(f"# {field.label}")
+        elif field.description:
+            lines.append(f"# {field.description}")
+        value = values.get(field.env)
+        if value is None:
+            value = _format_env_value(field.default, field)
+        lines.append(f"{field.env}={value}")
+    if extras:
+        lines.append("# Variables adicionales (solo si sabes lo que haces)")
+        for key in sorted(extras.keys()):
+            if key in CLOUDRUN_ONLY_ENV_KEYS:
+                continue
+            if key in FIELDS_BY_ENV and key not in ADVANCED_FIELD_ENVS:
+                continue
+            lines.append(f"{key}={extras[key]}")
+    return "\n".join(lines).rstrip() + "\n"
+
+
 def _render_env_example() -> str:
     values: dict[str, str] = {}
     for field in FIELDS:
+        if field.group == ADVANCED_GROUP_ID:
+            continue
         if field.kind == "secret":
             values[field.env] = ""
         else:
             values[field.env] = _format_env_value(field.default, field)
-    return _render_env_file(values, {})
+    return _render_main_env_file(values)
+
+
+def _render_advanced_env_example() -> str:
+    values: dict[str, str] = {}
+    for field in ADVANCED_FIELDS:
+        if field.kind == "secret":
+            values[field.env] = ""
+        else:
+            values[field.env] = _format_env_value(field.default, field)
+    return _render_advanced_env_file(values, {})
 
 
 def _ensure_example_file() -> None:
     if not REPUTATION_ENV_EXAMPLE.exists():
         REPUTATION_ENV_EXAMPLE.write_text(_render_env_example(), encoding="utf-8")
-        return
-
-    existing = _parse_env_file(REPUTATION_ENV_EXAMPLE)
-    extras = {k: v for k, v in existing.items() if k not in FIELDS_BY_ENV}
-    values: dict[str, str] = {}
-    for field in FIELDS:
-        if field.env in existing:
-            values[field.env] = existing[field.env]
-        elif field.kind == "secret":
-            values[field.env] = ""
-        else:
-            values[field.env] = _format_env_value(field.default, field)
-    content = _render_env_file(values, extras)
-    if REPUTATION_ENV_EXAMPLE.read_text(encoding="utf-8") != content:
-        REPUTATION_ENV_EXAMPLE.write_text(content, encoding="utf-8")
-
-
-def _apply_env_to_os(values: dict[str, str]) -> None:
-    for field in FIELDS:
-        value = values.get(field.env)
-        if value is None or value == "":
-            os.environ.pop(field.env, None)
-        else:
-            os.environ[field.env] = value
-        if field.key == "language.preference":
-            if value is None or value == "":
-                os.environ.pop("NEWSAPI_LANGUAGE", None)
+    else:
+        existing = _parse_env_file(REPUTATION_ENV_EXAMPLE)
+        values: dict[str, str] = {}
+        for field in FIELDS:
+            if field.group == ADVANCED_GROUP_ID:
+                continue
+            if field.env in existing:
+                values[field.env] = existing[field.env]
+            elif field.kind == "secret":
+                values[field.env] = ""
             else:
-                os.environ["NEWSAPI_LANGUAGE"] = value
+                values[field.env] = _format_env_value(field.default, field)
+        content = _render_main_env_file(values)
+        if REPUTATION_ENV_EXAMPLE.read_text(encoding="utf-8") != content:
+            REPUTATION_ENV_EXAMPLE.write_text(content, encoding="utf-8")
+
+    if not REPUTATION_ADVANCED_ENV_EXAMPLE.exists():
+        REPUTATION_ADVANCED_ENV_EXAMPLE.write_text(_render_advanced_env_example(), encoding="utf-8")
+
+
+def _advanced_option_defaults(options: list[str]) -> dict[str, str]:
+    example_values = _parse_env_file(REPUTATION_ADVANCED_ENV_EXAMPLE)
+    return {option: example_values.get(option, "") for option in options}
 
 
 def get_user_settings_snapshot() -> dict[str, Any]:
     _ensure_example_file()
-    env_values = _parse_env_file(REPUTATION_ENV_PATH)
-    extras = {
-        k: v for k, v in env_values.items() if k not in FIELDS_BY_ENV and k != "NEWSAPI_LANGUAGE"
+    cloud_run_runtime = _is_cloud_run_runtime()
+    main_env_values = _parse_env_file(REPUTATION_ENV_PATH)
+    advanced_env_exists = REPUTATION_ADVANCED_ENV_PATH.exists()
+    advanced_env_values = _parse_env_file(REPUTATION_ADVANCED_ENV_PATH)
+    advanced_example_values = _parse_env_file(REPUTATION_ADVANCED_ENV_EXAMPLE)
+    advanced_extras = {
+        k: v
+        for k, v in advanced_env_values.items()
+        if (k not in FIELDS_BY_ENV and k != "NEWSAPI_LANGUAGE" and k not in CLOUDRUN_ONLY_ENV_KEYS)
     }
     values_by_key: dict[str, Any] = {}
     for field in FIELDS:
-        raw = env_values.get(field.env)
+        raw = (
+            advanced_env_values.get(field.env)
+            if field.group == ADVANCED_GROUP_ID
+            else main_env_values.get(field.env)
+        )
         values_by_key[field.key] = _parse_value(raw, field)
     language_field = FIELDS_BY_KEY.get("language.preference")
     if language_field:
         values_by_key[language_field.key] = _resolve_language_preference(
-            env_values, language_field.default
+            main_env_values, language_field.default
         )
 
     groups_payload: list[dict[str, Any]] = []
     for group in GROUPS:
+        if cloud_run_runtime and group["id"] == "advanced":
+            continue
         group_fields = []
         if group["id"] == "advanced":
             for field in [f for f in FIELDS if f.group == group["id"]]:
                 group_fields.append(
                     _field_payload(field, values_by_key.get(field.key, field.default))
                 )
-            for env_key in sorted(extras.keys()):
-                raw_value = extras.get(env_key, "")
+            for env_key in sorted(advanced_extras.keys()):
+                raw_value = advanced_extras.get(env_key, "")
                 is_secret_extra = _is_sensitive_env_name(env_key)
                 payload: dict[str, Any] = {
                     "key": f"advanced.{env_key}",
@@ -797,86 +833,177 @@ def get_user_settings_snapshot() -> dict[str, Any]:
         )
 
     updated_at = None
-    if REPUTATION_ENV_PATH.exists():
-        updated_at = datetime.fromtimestamp(
-            REPUTATION_ENV_PATH.stat().st_mtime, tz=timezone.utc
-        ).isoformat()
+    updated_candidates: list[datetime] = []
+    for path in (REPUTATION_ENV_PATH, REPUTATION_ADVANCED_ENV_PATH):
+        if path.exists():
+            updated_candidates.append(datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc))
+    if updated_candidates:
+        updated_at = max(updated_candidates).isoformat()
 
-    advanced_options = sorted(
-        {key for key in ADVANCED_ENV_CANDIDATES if key not in FIELDS_BY_ENV} | set(extras.keys())
+    advanced_options = (
+        []
+        if cloud_run_runtime
+        else sorted(
+            {
+                key
+                for key in ADVANCED_ENV_CANDIDATES
+                if key not in FIELDS_BY_ENV and key not in CLOUDRUN_ONLY_ENV_KEYS
+            }
+            | {key for key in advanced_extras if key not in CLOUDRUN_ONLY_ENV_KEYS}
+            | {
+                key
+                for key in advanced_example_values
+                if key not in FIELDS_BY_ENV and key not in CLOUDRUN_ONLY_ENV_KEYS
+            }
+        )
+    )
+
+    advanced_option_defaults = (
+        {} if cloud_run_runtime else _advanced_option_defaults(advanced_options)
     )
 
     return {
         "groups": groups_payload,
         "updated_at": updated_at,
         "advanced_options": advanced_options,
+        "advanced_option_defaults": advanced_option_defaults,
+        "advanced_env_exists": advanced_env_exists and not cloud_run_runtime,
     }
 
 
 def update_user_settings(values: dict[str, Any]) -> dict[str, Any]:
     _ensure_example_file()
-    env_values = _parse_env_file(REPUTATION_ENV_PATH)
-    base_env_values = env_values.copy()
+    cloud_run_runtime = _is_cloud_run_runtime()
+    main_env_values = _parse_env_file(REPUTATION_ENV_PATH)
+    advanced_env_values = _parse_env_file(REPUTATION_ADVANCED_ENV_PATH)
+    advanced_example_values = _parse_env_file(REPUTATION_ADVANCED_ENV_EXAMPLE)
+    allowed_advanced_dynamic_keys = (
+        set(ADVANCED_ENV_CANDIDATES)
+        | {
+            key
+            for key in advanced_env_values
+            if key not in FIELDS_BY_ENV and key not in CLOUDRUN_ONLY_ENV_KEYS
+        }
+        | {
+            key
+            for key in advanced_example_values
+            if key not in FIELDS_BY_ENV and key not in CLOUDRUN_ONLY_ENV_KEYS
+        }
+    )
+    base_advanced_env_values = advanced_env_values.copy()
+    advanced_touched = False
+
+    if not cloud_run_runtime and not REPUTATION_ADVANCED_ENV_PATH.exists():
+        wants_advanced_change = False
+        for key in values:
+            field = FIELDS_BY_KEY.get(key)
+            if (field and field.group == ADVANCED_GROUP_ID) or key.startswith("advanced."):
+                wants_advanced_change = True
+                break
+        if wants_advanced_change:
+            REPUTATION_ADVANCED_ENV_PATH.write_text(
+                REPUTATION_ADVANCED_ENV_EXAMPLE.read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+            advanced_env_values = _parse_env_file(REPUTATION_ADVANCED_ENV_PATH)
+            base_advanced_env_values = advanced_env_values.copy()
+            advanced_touched = True
 
     for key, value in values.items():
         field = FIELDS_BY_KEY.get(key)
         if not field:
             if key.startswith("advanced."):
+                if cloud_run_runtime:
+                    raise ValueError("La configuración avanzada está deshabilitada en Cloud Run.")
                 env_key = key.split(".", 1)[1].strip()
                 if not env_key:
                     continue
+                if env_key in CLOUDRUN_ONLY_ENV_KEYS:
+                    raise ValueError(
+                        f"{env_key} se gestiona solo desde backend/reputation/cloudrun.env."
+                    )
+                if env_key in FIELDS_BY_ENV and env_key not in ADVANCED_FIELD_ENVS:
+                    raise ValueError(
+                        f"{env_key} no es una variable avanzada y se gestiona desde .env.reputation."
+                    )
+                if (
+                    env_key not in ADVANCED_FIELD_ENVS
+                    and env_key not in allowed_advanced_dynamic_keys
+                ):
+                    raise ValueError(f"{env_key} no está permitido en configuración avanzada.")
                 if _is_sensitive_env_name(env_key) and str(value).strip() == _SECRET_MASK:
                     # Keep current secret value when client sends masked marker.
                     continue
                 if value is None or (isinstance(value, str) and not value.strip()):
-                    env_values.pop(env_key, None)
+                    advanced_env_values.pop(env_key, None)
                 else:
-                    env_values[env_key] = str(value).strip()
+                    advanced_env_values[env_key] = str(value).strip()
+                advanced_touched = True
             continue
+        if cloud_run_runtime and field.group == "advanced":
+            raise ValueError("La configuración avanzada está deshabilitada en Cloud Run.")
+        if field.env in CLOUDRUN_ONLY_ENV_KEYS:
+            raise ValueError(f"{field.env} se gestiona solo desde backend/reputation/cloudrun.env.")
         if field.kind == "secret" and isinstance(value, str) and value.strip() == _SECRET_MASK:
             # Keep current secret value when client sends masked marker.
             continue
         coerced = _coerce_update(value, field)
-        env_values[field.env] = _format_env_value(coerced, field)
+        if field.group == ADVANCED_GROUP_ID:
+            advanced_env_values[field.env] = _format_env_value(coerced, field)
+            advanced_touched = True
+        else:
+            main_env_values[field.env] = _format_env_value(coerced, field)
         if field.key == "language.preference":
-            env_values["NEWSAPI_LANGUAGE"] = env_values[field.env]
+            main_env_values["NEWSAPI_LANGUAGE"] = main_env_values[field.env]
 
-    log_enabled = _env_truthy(env_values.get("REPUTATION_LOG_ENABLED"))
+    log_enabled = _env_truthy(advanced_env_values.get("REPUTATION_LOG_ENABLED"))
     if not log_enabled:
-        for field in FIELDS:
-            if field.group != "advanced" or field.key == "advanced.log_enabled":
+        for field in ADVANCED_FIELDS:
+            if field.key == "advanced.log_enabled":
                 continue
-            if field.env in base_env_values:
-                env_values[field.env] = base_env_values[field.env]
+            if field.env in base_advanced_env_values:
+                advanced_env_values[field.env] = base_advanced_env_values[field.env]
             else:
-                env_values.pop(field.env, None)
-        for key in list(env_values.keys()):
-            if key in FIELDS_BY_ENV or key == "NEWSAPI_LANGUAGE":
+                advanced_env_values.pop(field.env, None)
+        for env_key in list(advanced_env_values.keys()):
+            if env_key in FIELDS_BY_ENV or env_key == "NEWSAPI_LANGUAGE":
                 continue
-            if key in base_env_values:
-                env_values[key] = base_env_values[key]
+            if env_key in base_advanced_env_values:
+                advanced_env_values[env_key] = base_advanced_env_values[env_key]
             else:
-                env_values.pop(key, None)
+                advanced_env_values.pop(env_key, None)
 
-    extras = {
-        k: v for k, v in env_values.items() if k not in FIELDS_BY_ENV and k != "NEWSAPI_LANGUAGE"
+    advanced_extras = {
+        k: v
+        for k, v in advanced_env_values.items()
+        if (k not in FIELDS_BY_ENV and k != "NEWSAPI_LANGUAGE" and k not in CLOUDRUN_ONLY_ENV_KEYS)
     }
+
+    merged_field_values: dict[str, str] = {}
+    for field in FIELDS:
+        source_values = advanced_env_values if field.group == ADVANCED_GROUP_ID else main_env_values
+        if field.env in source_values:
+            merged_field_values[field.env] = source_values[field.env]
 
     missing_sources: list[str] = []
     for source_env, required_envs in SOURCE_CREDENTIAL_REQUIREMENTS.items():
-        if not _env_truthy(env_values.get(source_env)):
+        if not _env_truthy(merged_field_values.get(source_env)):
             continue
-        missing = [env for env in required_envs if not env_values.get(env)]
+        missing = [env for env in required_envs if not merged_field_values.get(env)]
         if missing:
             source_label = FIELDS_BY_ENV.get(source_env)
             missing_sources.append(source_label.label if source_label else source_env)
 
     if missing_sources:
         raise ValueError("Faltan credenciales para: " + ", ".join(sorted(set(missing_sources))))
-    rendered = _render_env_file(env_values, extras)
-    REPUTATION_ENV_PATH.write_text(rendered, encoding="utf-8")
 
-    _apply_env_to_os(env_values)
+    REPUTATION_ENV_PATH.write_text(_render_main_env_file(main_env_values), encoding="utf-8")
+    if REPUTATION_ADVANCED_ENV_PATH.exists() or advanced_touched:
+        REPUTATION_ADVANCED_ENV_PATH.write_text(
+            _render_advanced_env_file(advanced_env_values, advanced_extras),
+            encoding="utf-8",
+        )
+
     reload_reputation_settings()
     _ensure_example_file()
 
@@ -889,7 +1016,21 @@ def reset_user_settings_to_example() -> dict[str, Any]:
         raise FileNotFoundError("Reputation example env file not found")
     content = REPUTATION_ENV_EXAMPLE.read_text(encoding="utf-8")
     REPUTATION_ENV_PATH.write_text(content, encoding="utf-8")
-    env_values = _parse_env_file(REPUTATION_ENV_PATH)
-    _apply_env_to_os(env_values)
+    if REPUTATION_ADVANCED_ENV_PATH.exists():
+        advanced_content = REPUTATION_ADVANCED_ENV_EXAMPLE.read_text(encoding="utf-8")
+        REPUTATION_ADVANCED_ENV_PATH.write_text(advanced_content, encoding="utf-8")
+    reload_reputation_settings()
+    return get_user_settings_snapshot()
+
+
+def enable_advanced_settings() -> dict[str, Any]:
+    _ensure_example_file()
+    if _is_cloud_run_runtime():
+        raise ValueError("La configuración avanzada está deshabilitada en Cloud Run.")
+    if not REPUTATION_ADVANCED_ENV_PATH.exists():
+        REPUTATION_ADVANCED_ENV_PATH.write_text(
+            REPUTATION_ADVANCED_ENV_EXAMPLE.read_text(encoding="utf-8"),
+            encoding="utf-8",
+        )
     reload_reputation_settings()
     return get_user_settings_snapshot()
