@@ -143,71 +143,16 @@ def test_require_mutation_access_allows_when_bypass_disabled(
     auth.require_mutation_access(_make_request({}))
 
 
-def test_require_mutation_access_requires_key_in_bypass_mode(
+def test_require_mutation_access_allows_when_bypass_enabled(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(settings, "google_cloud_login_requested", False, raising=False)
-    monkeypatch.setattr(
-        settings,
-        "auth_bypass_mutation_key",
-        "32chars-minimum-admin-key-12345678",
-        raising=False,
-    )
-
-    with pytest.raises(HTTPException) as exc:
-        auth.require_mutation_access(_make_request({}))
-    assert exc.value.status_code == 403
+    auth.require_mutation_access(_make_request({}))
 
 
-def test_require_mutation_access_500_when_key_missing_in_config(
+def test_require_mutation_access_ignores_admin_key_config_in_bypass(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(settings, "google_cloud_login_requested", False, raising=False)
     monkeypatch.setattr(settings, "auth_bypass_mutation_key", "", raising=False)
-
-    with pytest.raises(HTTPException) as exc:
-        auth.require_mutation_access(_make_request({"x-gor-admin-key": "anything"}))
-    assert exc.value.status_code == 500
-
-
-def test_require_mutation_access_500_when_key_too_short(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(settings, "google_cloud_login_requested", False, raising=False)
-    monkeypatch.setattr(settings, "auth_bypass_mutation_key", "short", raising=False)
-
-    with pytest.raises(HTTPException) as exc:
-        auth.require_mutation_access(_make_request({"x-gor-admin-key": "short"}))
-    assert exc.value.status_code == 500
-
-
-def test_require_mutation_access_rejects_invalid_key(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(settings, "google_cloud_login_requested", False, raising=False)
-    monkeypatch.setattr(
-        settings,
-        "auth_bypass_mutation_key",
-        "32chars-minimum-admin-key-12345678",
-        raising=False,
-    )
-
-    with pytest.raises(HTTPException) as exc:
-        auth.require_mutation_access(_make_request({"x-gor-admin-key": "wrong"}))
-    assert exc.value.status_code == 403
-
-
-def test_require_mutation_access_accepts_valid_key(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(settings, "google_cloud_login_requested", False, raising=False)
-    monkeypatch.setattr(
-        settings,
-        "auth_bypass_mutation_key",
-        "32chars-minimum-admin-key-12345678",
-        raising=False,
-    )
-
-    auth.require_mutation_access(
-        _make_request({"x-gor-admin-key": "32chars-minimum-admin-key-12345678"})
-    )
+    auth.require_mutation_access(_make_request({"x-gor-admin-key": "anything"}))

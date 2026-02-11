@@ -10,7 +10,6 @@ const DEFAULT_LOCAL_API = "http://127.0.0.1:8000";
 const DEFAULT_RENDER_API = "https://global-overview-radar.onrender.com";
 const LOGIN_REQUIRED = process.env.NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED === "true";
 const AUTH_BYPASS = !LOGIN_REQUIRED;
-const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 const PROXY_AUTH_HEADER = "x-gor-proxy-auth";
 const PROXY_AUTH_CLOUD_RUN = "cloudrun-idtoken";
 
@@ -38,9 +37,7 @@ function sanitizeHeaders(headers: Headers): Headers {
   sanitized.delete("content-length");
   // Never forward browser cookies to the backend.
   sanitized.delete("cookie");
-  if (!AUTH_BYPASS) {
-    sanitized.delete("x-gor-admin-key");
-  }
+  sanitized.delete("x-gor-admin-key");
   // Internal marker added by the server proxy (never forward client-supplied values).
   sanitized.delete(PROXY_AUTH_HEADER);
   if (AUTH_BYPASS) {
@@ -107,17 +104,6 @@ function shouldUseIdToken(): boolean {
 
 async function proxyRequest(request: NextRequest, path: string[]): Promise<Response> {
   const method = request.method.toUpperCase();
-  const adminKey = request.headers.get("x-gor-admin-key");
-  const hasAdminKey = Boolean(adminKey && adminKey.trim());
-  if (AUTH_BYPASS && MUTATING_METHODS.has(method) && !hasAdminKey) {
-    return NextResponse.json(
-      {
-        detail:
-          "Mutating API routes require x-gor-admin-key while GOOGLE_CLOUD_LOGIN_REQUESTED=false.",
-      },
-      { status: 403 },
-    );
-  }
 
   const target = resolveProxyTarget();
   const url = buildTargetUrl(target, path, new URL(request.url).search);

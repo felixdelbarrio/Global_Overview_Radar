@@ -31,7 +31,6 @@ import {
   INGEST_STARTED_EVENT,
 } from "@/lib/events";
 import type { IngestJob, IngestJobKind } from "@/lib/types";
-import { clearStoredAdminKey, getStoredAdminKey, storeAdminKey } from "@/lib/auth";
 
 type ProfileOptionsResponse = {
   active: {
@@ -93,8 +92,6 @@ const ADVANCED_LOG_KEYS = new Set([
   "advanced.log_file_name",
   "advanced.log_debug",
 ]);
-const LOGIN_REQUIRED = process.env.NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED === "true";
-const AUTH_BYPASS = !LOGIN_REQUIRED;
 const DISABLE_ADVANCED_SETTINGS = process.env.NEXT_PUBLIC_DISABLE_ADVANCED_SETTINGS === "true";
 
 function sanitizeSettingsForUi(data: ReputationSettingsResponse): ReputationSettingsResponse {
@@ -179,8 +176,6 @@ export function Shell({ children }: { children: React.ReactNode }) {
   );
   const [advancedEnvExists, setAdvancedEnvExists] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
-  const [adminKeyDraft, setAdminKeyDraft] = useState("");
-  const [adminKeySavedAt, setAdminKeySavedAt] = useState(0);
 
   type FloatingPanel = "ingest" | "profiles" | "settings";
 
@@ -336,12 +331,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
     return () => {
       alive = false;
     };
-  }, [settingsOpen, adminKeySavedAt]);
-
-  useEffect(() => {
-    if (!AUTH_BYPASS) return;
-    setAdminKeyDraft(getStoredAdminKey() ?? "");
-  }, []);
+  }, [settingsOpen]);
 
   const ingestJobsRef = useRef(ingestJobs);
 
@@ -1453,46 +1443,6 @@ export function Shell({ children }: { children: React.ReactNode }) {
                         </span>
                       </div>
 
-                      {AUTH_BYPASS && (
-                        <div className="mt-3 rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-3 py-2">
-                          <div className="text-[10px] uppercase tracking-[0.22em] text-[color:var(--text-55)]">
-                            Modo sin login
-                          </div>
-                          <div className="mt-1 text-[11px] text-[color:var(--text-60)]">
-                            Para operar (guardar configuración, ingestas), introduce la clave admin.
-                          </div>
-                          <div className="mt-2 flex flex-wrap items-center gap-2">
-                            <input
-                              type="password"
-                              value={adminKeyDraft}
-                              onChange={(event) => setAdminKeyDraft(event.target.value)}
-                              placeholder="AUTH_BYPASS_MUTATION_KEY"
-                              className="flex-1 min-w-[220px] rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-60)] px-3 py-1 text-xs text-[color:var(--ink)]"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => {
-                                storeAdminKey(adminKeyDraft);
-                                setAdminKeySavedAt(Date.now());
-                              }}
-                              className="rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-solid)] px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-[color:var(--ink)]"
-                            >
-                              Guardar clave
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                clearStoredAdminKey();
-                                setAdminKeyDraft("");
-                                setAdminKeySavedAt(Date.now());
-                              }}
-                              className="rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-[color:var(--text-55)] hover:text-rose-500"
-                            >
-                              Quitar
-                            </button>
-                          </div>
-                        </div>
-                      )}
                     </div>
 
                   <div className="max-h-none overflow-visible px-4 pb-24 space-y-3 sm:max-h-[60vh] sm:overflow-auto sm:pb-4">

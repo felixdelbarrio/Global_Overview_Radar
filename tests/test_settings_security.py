@@ -251,7 +251,7 @@ def test_settings_endpoint_allows_read_without_admin_key_in_auth_bypass(
     assert read_snapshot.status_code == 200
 
 
-def test_settings_update_endpoint_requires_admin_key_in_auth_bypass(
+def test_settings_update_endpoint_allows_without_admin_key_in_auth_bypass(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     import reputation.config as rep_config
@@ -273,12 +273,7 @@ def test_settings_update_endpoint_requires_admin_key_in_auth_bypass(
     app.dependency_overrides[reputation_router._refresh_settings] = lambda: None
     client = TestClient(app)
 
-    denied = client.post("/reputation/settings", json={"values": {"llm.enabled": True}})
-    assert denied.status_code == 403
-
     allowed = client.post(
-        "/reputation/settings",
-        json={"values": {"llm.enabled": True}},
-        headers={"x-gor-admin-key": key},
+        "/reputation/settings", json={"values": {"llm.enabled": True}}
     )
     assert allowed.status_code == 200

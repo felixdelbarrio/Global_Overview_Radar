@@ -7,7 +7,6 @@
 import { logger } from "@/lib/logger";
 import {
   clearStoredToken,
-  getStoredAdminKey,
   getStoredToken,
   isTokenExpired,
 } from "@/lib/auth";
@@ -15,7 +14,6 @@ import {
 /** Base de la API; permite proxy local con /api. */
 export const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api";
 const LOGIN_REQUIRED = process.env.NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED === "true";
-const AUTH_BYPASS = !LOGIN_REQUIRED;
 
 function resolveUserToken(): string | null {
   if (!LOGIN_REQUIRED) {
@@ -29,11 +27,6 @@ function resolveUserToken(): string | null {
     return null;
   }
   return token;
-}
-
-function resolveAdminKey(): string | null {
-  if (!AUTH_BYPASS) return null;
-  return getStoredAdminKey();
 }
 
 logger.info("API_BASE", { apiBase: API_BASE });
@@ -53,16 +46,14 @@ const API_CACHE = new Map<string, CacheEntry>();
 export async function apiGet<T>(path: string): Promise<T> {
   const url = `${API_BASE}${path.startsWith("/") ? path : `/${path}`}`;
   const token = resolveUserToken();
-  const adminKey = resolveAdminKey();
 
   logger.debug("apiGet -> request", () => ({ path, url }));
   const res = await fetch(url, {
     cache: "no-store",
     headers:
-      token || adminKey
+      token
         ? {
             ...(token ? { "x-user-id-token": token } : {}),
-            ...(adminKey ? { "x-gor-admin-key": adminKey } : {}),
           }
         : undefined,
   });
@@ -127,7 +118,6 @@ export function clearApiCache(): void {
 export async function apiPost<T>(path: string, body: unknown): Promise<T> {
   const url = `${API_BASE}${path.startsWith("/") ? path : `/${path}`}`;
   const token = resolveUserToken();
-  const adminKey = resolveAdminKey();
 
   logger.debug("apiPost -> request", () => ({ path, url, body }));
   const res = await fetch(url, {
@@ -135,7 +125,6 @@ export async function apiPost<T>(path: string, body: unknown): Promise<T> {
     headers: {
       "Content-Type": "application/json",
       ...(token ? { "x-user-id-token": token } : {}),
-      ...(adminKey ? { "x-gor-admin-key": adminKey } : {}),
     },
     body: JSON.stringify(body),
     cache: "no-store",

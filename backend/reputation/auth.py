@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass
-from secrets import compare_digest
 from typing import TYPE_CHECKING, Any, Mapping, cast
 
 from fastapi import HTTPException, Request
@@ -22,7 +21,6 @@ else:
 from reputation.config import settings
 
 logger = logging.getLogger(__name__)
-_MIN_MUTATION_KEY_LENGTH = 32
 _PROXY_AUTH_HEADER = "x-gor-proxy-auth"
 _PROXY_AUTH_CLOUD_RUN = "cloudrun-idtoken"
 
@@ -144,20 +142,9 @@ def require_google_user(request: Request) -> AuthUser:
 
 
 def require_mutation_access(request: Request) -> None:
-    """Hardens state-changing endpoints when auth bypass is active."""
-    if not _is_auth_bypass_active():
-        return
-    expected = settings.auth_bypass_mutation_key.strip()
-    if not expected:
-        raise HTTPException(
-            status_code=500,
-            detail="auth bypass misconfigured (missing AUTH_BYPASS_MUTATION_KEY)",
-        )
-    if len(expected) < _MIN_MUTATION_KEY_LENGTH:
-        raise HTTPException(
-            status_code=500,
-            detail="auth bypass misconfigured (AUTH_BYPASS_MUTATION_KEY too short)",
-        )
-    provided = (request.headers.get("x-gor-admin-key") or "").strip()
-    if not provided or not compare_digest(provided, expected):
-        raise HTTPException(status_code=403, detail="admin key required")
+    """Mutation access guard.
+
+    With GOOGLE_CLOUD_LOGIN_REQUESTED=false, Cloud Run infrastructure auth is
+    considered sufficient and no extra admin key is required.
+    """
+    return
