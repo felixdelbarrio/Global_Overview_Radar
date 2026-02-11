@@ -108,7 +108,6 @@ jobs:
         env:
           AUTH_GOOGLE_CLIENT_ID: ${{ secrets.AUTH_GOOGLE_CLIENT_ID }}
           AUTH_ALLOWED_EMAILS: ${{ secrets.AUTH_ALLOWED_EMAILS }}
-          AUTH_BYPASS_MUTATION_KEY_GH: ${{ secrets.AUTH_BYPASS_MUTATION_KEY }}
         run: |
           set -euo pipefail
 
@@ -118,25 +117,6 @@ jobs:
           mv backend/reputation/cloudrun.env.tmp backend/reputation/cloudrun.env
 
           LOGIN_REQUESTED="${{ steps.login_toggle.outputs.value }}"
-          BYPASS_MUTATION_KEY="$(echo "${AUTH_BYPASS_MUTATION_KEY_GH:-}" | tr -d '\r\n')"
-          if [ "${LOGIN_REQUESTED}" = "true" ]; then
-            BYPASS_MUTATION_KEY=""
-          else
-            if [ -z "${BYPASS_MUTATION_KEY}" ]; then
-              BYPASS_MUTATION_KEY="$(gcloud secrets versions access latest \
-                --secret AUTH_BYPASS_MUTATION_KEY \
-                --project "$GCP_PROJECT" 2>/dev/null || true)"
-              BYPASS_MUTATION_KEY="$(echo "$BYPASS_MUTATION_KEY" | tr -d '\r\n')"
-            fi
-            if [ -z "${BYPASS_MUTATION_KEY}" ]; then
-              echo "Missing AUTH_BYPASS_MUTATION_KEY secret while GOOGLE_CLOUD_LOGIN_REQUESTED=false."
-              exit 1
-            fi
-            if [ "${#BYPASS_MUTATION_KEY}" -lt 32 ]; then
-              echo "AUTH_BYPASS_MUTATION_KEY must be at least 32 characters."
-              exit 1
-            fi
-          fi
 
           if [ "${LOGIN_REQUESTED}" = "true" ] && [ -z "${AUTH_GOOGLE_CLIENT_ID:-}" ]; then
             echo "Missing AUTH_GOOGLE_CLIENT_ID secret."
@@ -185,6 +165,7 @@ jobs:
             --timeout 300 \
             --set-build-env-vars "${BUILD_VARS}" \
             "${SECRET_ARGS[@]}" \
+            --remove-env-vars AUTH_BYPASS_ALLOW_MUTATIONS \
             --env-vars-file backend/reputation/cloudrun.env
 
       - name: Route backend traffic to latest revision
