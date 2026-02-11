@@ -1,0 +1,642 @@
+{
+  "geografias": [
+    "España",
+    "México",
+    "Perú",
+    "Colombia",
+    "Argentina",
+    "Turquía"
+  ],
+  "geografias_aliases": {
+    "España": [
+      "Espana",
+      "España",
+      "Spain",
+      "ES"
+    ],
+    "México": [
+      "Mexico",
+      "México",
+      "MX",
+      "CDMX",
+      "Ciudad de Mexico",
+      "Ciudad de México"
+    ],
+    "Perú": [
+      "Peru",
+      "Perú",
+      "PE",
+      "Lima"
+    ],
+    "Colombia": [
+      "Colombia",
+      "CO",
+      "Bogota",
+      "Bogotá",
+      "Medellin",
+      "Medellín"
+    ],
+    "Argentina": [
+      "Argentina",
+      "AR",
+      "Buenos Aires"
+    ],
+    "Turquía": [
+      "Turquia",
+      "Turquía",
+      "Turkey",
+      "TR",
+      "Istanbul",
+      "İstanbul"
+    ]
+  },
+  "actor_principal": {
+    "Hyundai": [
+      "Hyundai"
+    ]
+  },
+  "actor_principal_aliases": {
+    "Hyundai": [
+      "HYUNDAI",
+      "Hyundai Argentina",
+      "Hyundai Colombia",
+      "Hyundai EV",
+      "Hyundai España",
+      "Hyundai Motor",
+      "Hyundai México",
+      "Hyundai Perú",
+      "Hyundai Turkey",
+      "Hyundai Türkiye",
+      "Hyundai app",
+      "IONIQ",
+      "IONIQ 5",
+      "IONIQ 6"
+    ]
+  },
+  "otros_actores_aliases": {
+    "Kia": [
+      "KIA",
+      "Kia EV",
+      "Kia Motors"
+    ],
+    "Toyota": [
+      "TOYOTA",
+      "Toyota Motor"
+    ],
+    "Volkswagen": [
+      "VW",
+      "Volkswagen",
+      "Volkswagen Group"
+    ],
+    "Renault": [
+      "Renault",
+      "Renault Group"
+    ],
+    "Ford": [
+      "Ford",
+      "Ford Motor"
+    ],
+    "Tesla": [
+      "TESLA",
+      "Tesla EV",
+      "Tesla Motors"
+    ],
+    "BYD": [
+      "BYD",
+      "BYD Auto",
+      "Build Your Dreams"
+    ],
+    "Togg": [
+      "TOGG",
+      "Turkiye'nin Otomobili",
+      "Türkiye'nin Otomobili"
+    ]
+  },
+  "otros_actores_globales": [
+    "IONIQ",
+    "Hyundai Mobis",
+    "Hyundai BlueLink"
+  ],
+  "otros_actores_por_geografia": {
+    "España": [
+      "Toyota",
+      "Volkswagen",
+      "Renault",
+      "Ford",
+      "Kia",
+      "Tesla",
+      "BYD"
+    ],
+    "México": [
+      "Toyota",
+      "Volkswagen",
+      "Renault",
+      "Ford",
+      "Kia",
+      "Tesla",
+      "BYD"
+    ],
+    "Perú": [
+      "Toyota",
+      "Volkswagen",
+      "Renault",
+      "Ford",
+      "Kia",
+      "Tesla",
+      "BYD"
+    ],
+    "Colombia": [
+      "Toyota",
+      "Volkswagen",
+      "Renault",
+      "Ford",
+      "Kia",
+      "Tesla",
+      "BYD"
+    ],
+    "Argentina": [
+      "Toyota",
+      "Volkswagen",
+      "Renault",
+      "Ford",
+      "Kia",
+      "Tesla",
+      "BYD"
+    ],
+    "Turquía": [
+      "Toyota",
+      "Volkswagen",
+      "Renault",
+      "Ford",
+      "Kia",
+      "Tesla",
+      "BYD",
+      "Togg"
+    ]
+  },
+  "keywords": [
+    "Hyundai",
+    "Hyundai BlueLink",
+    "Hyundai autonomía",
+    "Hyundai carga",
+    "Hyundai electrico",
+    "Hyundai eléctrico",
+    "Hyundai financiación",
+    "Hyundai garantía",
+    "Hyundai infotainment",
+    "Hyundai llamada a revisión",
+    "Hyundai recall",
+    "Hyundai software",
+    "IONIQ",
+    "IONIQ 5",
+    "IONIQ 6"
+  ],
+  "segment_terms": [
+    "airbag",
+    "autonomia",
+    "autonomía",
+    "bateria",
+    "batería",
+    "carga",
+    "cargador",
+    "consumo",
+    "electrico",
+    "eléctrico",
+    "ev",
+    "financiacion",
+    "financiación",
+    "frenada",
+    "garantia",
+    "garantía",
+    "infotainment",
+    "llamada a revision",
+    "llamada a revisión",
+    "motor",
+    "ota",
+    "recall",
+    "software"
+  ],
+  "hard_exclude_terms": [],
+  "segment_guard": {
+    "enabled": true,
+    "default_terms": [
+      "Hyundai",
+      "IONIQ",
+      "BlueLink",
+      "Kia",
+      "Toyota",
+      "Volkswagen",
+      "Renault",
+      "Ford",
+      "Tesla",
+      "BYD",
+      "Togg"
+    ]
+  },
+  "reddit": {
+    "subreddits": [
+      "spain",
+      "mexico",
+      "fintech",
+      "technology",
+      "news",
+      "personalfinance",
+      "europe",
+      "worldnews"
+    ],
+    "query_templates": [
+      "\"{actor}\" (app OR web OR servicio OR soporte OR login OR error)",
+      "\"{actor}\" (precio OR comision OR comisión OR subida OR caída OR caida OR outage)",
+      "\"{actor}\" (otros actores OR alternativa OR vs)"
+    ]
+  },
+  "news": {
+    "rss_query_templates": [
+      "https://news.google.com/rss/search?q={query}&hl={hl}&gl={gl}&ceid={ceid}"
+    ],
+    "rss_geo_map": {
+      "España": {
+        "hl": "es",
+        "gl": "ES",
+        "ceid": "ES:es"
+      },
+      "México": {
+        "hl": "es-419",
+        "gl": "MX",
+        "ceid": "MX:es-419"
+      },
+      "Colombia": {
+        "hl": "es-419",
+        "gl": "CO",
+        "ceid": "CO:es-419"
+      },
+      "Perú": {
+        "hl": "es-419",
+        "gl": "PE",
+        "ceid": "PE:es-419"
+      },
+      "Argentina": {
+        "hl": "es-419",
+        "gl": "AR",
+        "ceid": "AR:es-419"
+      },
+      "Turquía": {
+        "hl": "tr",
+        "gl": "TR",
+        "ceid": "TR:tr"
+      }
+    },
+    "site_query_terms_by_category": {
+      "press": [
+        "ultimas",
+        "actualidad",
+        "negocios",
+        "empresas",
+        "mercados",
+        "economia",
+        "economía"
+      ],
+      "industry": [
+        "tendencias",
+        "sector",
+        "innovacion",
+        "innovación",
+        "producto",
+        "estrategia"
+      ],
+      "regulators": [
+        "regulador",
+        "regulacion",
+        "regulación",
+        "sancion",
+        "sanción",
+        "normativa"
+      ]
+    },
+    "site_sources_by_geo": {
+      "España": {
+        "press": [
+          "efe.com",
+          "reuters.com",
+          "bloomberg.com",
+          "bloomberglinea.com",
+          "forbes.com"
+        ],
+        "industry": [
+          "motor1.com",
+          "carscoops.com",
+          "autocar.co.uk",
+          "caranddriver.com",
+          "insideevs.com",
+          "km77.com",
+          "motor.es",
+          "coches.net"
+        ],
+        "regulators": []
+      },
+      "México": {
+        "press": [
+          "efe.com",
+          "reuters.com",
+          "bloomberg.com",
+          "bloomberglinea.com",
+          "forbes.com"
+        ],
+        "industry": [
+          "motor1.com",
+          "carscoops.com",
+          "autocar.co.uk",
+          "caranddriver.com",
+          "insideevs.com",
+          "motorpasion.com.mx",
+          "autologia.com.mx"
+        ],
+        "regulators": []
+      },
+      "Perú": {
+        "press": [
+          "efe.com",
+          "reuters.com",
+          "bloomberg.com",
+          "bloomberglinea.com",
+          "forbes.com"
+        ],
+        "industry": [
+          "motor1.com",
+          "carscoops.com",
+          "autocar.co.uk",
+          "caranddriver.com",
+          "insideevs.com"
+        ],
+        "regulators": []
+      },
+      "Colombia": {
+        "press": [
+          "efe.com",
+          "reuters.com",
+          "bloomberg.com",
+          "bloomberglinea.com",
+          "forbes.com"
+        ],
+        "industry": [
+          "motor1.com",
+          "carscoops.com",
+          "autocar.co.uk",
+          "caranddriver.com",
+          "insideevs.com"
+        ],
+        "regulators": []
+      },
+      "Argentina": {
+        "press": [
+          "efe.com",
+          "reuters.com",
+          "bloomberg.com",
+          "bloomberglinea.com",
+          "forbes.com"
+        ],
+        "industry": [
+          "motor1.com",
+          "carscoops.com",
+          "autocar.co.uk",
+          "caranddriver.com",
+          "insideevs.com",
+          "motor1.com.ar",
+          "autoblog.com.ar"
+        ],
+        "regulators": []
+      },
+      "Turquía": {
+        "press": [
+          "efe.com",
+          "reuters.com",
+          "bloomberg.com",
+          "bloomberglinea.com",
+          "forbes.com"
+        ],
+        "industry": [
+          "motor1.com",
+          "carscoops.com",
+          "autocar.co.uk",
+          "caranddriver.com",
+          "insideevs.com",
+          "otopark.com",
+          "arabam.com"
+        ],
+        "regulators": []
+      }
+    },
+    "rss_urls": []
+  },
+  "forums": {
+    "rss_query_templates": [
+      "https://news.google.com/rss/search?q={query}&hl={hl}&gl={gl}&ceid={ceid}"
+    ],
+    "query_terms": [
+      "foro",
+      "foros",
+      "forum",
+      "forums",
+      "comunidad",
+      "opiniones",
+      "queja",
+      "quejas",
+      "problema",
+      "problemas"
+    ],
+    "rss_urls": [
+      "https://news.google.com/rss/search?q=site%3Areddit.com+Hyundai",
+      "https://news.google.com/rss/search?q=site%3Arankia.com+Hyundai",
+      "https://news.google.com/rss/search?q=site%3Aforocoches.com+Hyundai",
+      "https://news.google.com/rss/search?q=site%3Aforodecoches.com+Hyundai",
+      "https://news.google.com/rss/search?q=site%3Aplay.google.com+Hyundai BlueLink",
+      "https://news.google.com/rss/search?q=site%3Aapps.apple.com+Hyundai BlueLink",
+      "https://news.google.com/rss/search?q=site%3Aplay.google.com+IONIQ 5",
+      "https://news.google.com/rss/search?q=site%3Aapps.apple.com+IONIQ 5"
+    ]
+  },
+  "blogs": {
+    "rss_query_templates": [
+      "https://news.google.com/rss/search?q={query}&hl={hl}&gl={gl}&ceid={ceid}"
+    ],
+    "query_terms": [
+      "blog",
+      "blogs",
+      "opinion",
+      "opinión",
+      "analisis",
+      "análisis",
+      "review",
+      "reseña",
+      "reseñas"
+    ],
+    "rss_urls": [
+      "https://news.google.com/rss/search?q=site%3Amedium.com+Hyundai",
+      "https://news.google.com/rss/search?q=site%3Asubstack.com+Hyundai",
+      "https://news.google.com/rss/search?q=site%3Ainsideevs.com+Hyundai",
+      "https://news.google.com/rss/search?q=site%3Amotor1.com+Hyundai",
+      "https://news.google.com/rss/search?q=site%3Aplay.google.com+Hyundai BlueLink",
+      "https://news.google.com/rss/search?q=site%3Aapps.apple.com+Hyundai BlueLink",
+      "https://news.google.com/rss/search?q=site%3Aplay.google.com+IONIQ 5",
+      "https://news.google.com/rss/search?q=site%3Aapps.apple.com+IONIQ 5"
+    ]
+  },
+  "appstore": {
+    "app_ids": [
+      "6741947307",
+      "1565286187",
+      "1577334573",
+      "1617623127",
+      "1519034860",
+      "1517566572",
+      "1487652920",
+      "582007913"
+    ],
+    "app_id_to_actor": {}
+  },
+  "trustpilot": {
+    "rss_query_templates": [
+      "https://news.google.com/rss/search?q={query}&hl={hl}&gl={gl}&ceid={ceid}"
+    ],
+    "query_terms": [
+      "trustpilot",
+      "reseña",
+      "reseñas",
+      "review",
+      "reviews",
+      "opiniones"
+    ],
+    "rss_urls": [
+      "https://news.google.com/rss/search?q=Trustpilot+Hyundai",
+      "https://news.google.com/rss/search?q=Trustpilot+Toyota",
+      "https://news.google.com/rss/search?q=Trustpilot+Tesla",
+      "https://news.google.com/rss/search?q=Trustpilot+Volkswagen",
+      "https://news.google.com/rss/search?q=Trustpilot+Kia"
+    ]
+  },
+  "google_reviews": {
+    "place_ids": []
+  },
+  "downdetector": {
+    "rss_query_templates": [
+      "https://news.google.com/rss/search?q={query}&hl={hl}&gl={gl}&ceid={ceid}"
+    ],
+    "rss_query_segment_mode": "strict",
+    "query_terms": [
+      "downdetector",
+      "incidencia",
+      "incidencias",
+      "caida",
+      "caída",
+      "outage",
+      "interrupcion",
+      "interrupción"
+    ],
+    "rss_urls": []
+  },
+  "require_actor_sources": [
+    "news",
+    "forums",
+    "blogs",
+    "gdelt",
+    "newsapi",
+    "guardian",
+    "downdetector"
+  ],
+  "noise_terms": [
+    "deportes",
+    "futbol",
+    "fútbol",
+    "liga",
+    "goles",
+    "gol",
+    "partido",
+    "marcador",
+    "club",
+    "torneo",
+    "campeonato",
+    "copa",
+    "mundial",
+    "seleccion",
+    "selección",
+    "jugador",
+    "entrenador",
+    "fichaje",
+    "traspaso",
+    "derbi",
+    "derby",
+    "clasico",
+    "clásico",
+    "nba",
+    "nfl",
+    "mlb",
+    "nhl",
+    "tenis",
+    "atp",
+    "wta",
+    "grand slam",
+    "formula 1",
+    "f1",
+    "motogp",
+    "ufc",
+    "celebridad",
+    "celebridades",
+    "famoso",
+    "famosos",
+    "artista",
+    "cantante",
+    "actor",
+    "actriz",
+    "influencer",
+    "boda",
+    "divorcio",
+    "romance",
+    "escandalo",
+    "escándalo",
+    "reality",
+    "alfombra roja",
+    "estreno",
+    "pelicula",
+    "película",
+    "serie",
+    "telenovela",
+    "show",
+    "concierto",
+    "gira",
+    "festival",
+    "premios",
+    "grammy",
+    "oscar",
+    "apuesta",
+    "apuestas",
+    "loteria",
+    "lotería",
+    "jackpot",
+    "sorteo",
+    "tinka"
+  ],
+  "context_terms": [
+    "hyundai",
+    "auto",
+    "coche",
+    "vehiculo",
+    "vehículo",
+    "modelo",
+    "concesionario",
+    "mantenimiento",
+    "garantia",
+    "garantía",
+    "recall",
+    "motor",
+    "electrico",
+    "eléctrico",
+    "hibrido",
+    "híbrido",
+    "taller",
+    "itv",
+    "revision",
+    "revisión",
+    "bateria",
+    "batería"
+  ]
+}
