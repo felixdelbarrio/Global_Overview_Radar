@@ -11,6 +11,9 @@ def test_resolve_config_files_recovers_missing_profile_from_state(
     import reputation.config as rep_config
 
     cfg_dir = tmp_path / "data" / "reputation"
+    sample_cfg_dir = tmp_path / "data" / "reputation_samples"
+    sample_cfg_dir.mkdir(parents=True, exist_ok=True)
+    (sample_cfg_dir / "banking_bbva_empresas.json").write_text("{}", encoding="utf-8")
     cfg_dir.mkdir(parents=True, exist_ok=True)
     (cfg_dir / "banking_bbva_retail.json").write_text("{}", encoding="utf-8")
 
@@ -26,6 +29,7 @@ def test_resolve_config_files_recovers_missing_profile_from_state(
 
     monkeypatch.setattr(rep_config, "state_store_enabled", lambda: True)
     monkeypatch.setattr(rep_config, "sync_from_state", _fake_sync_from_state)
+    monkeypatch.setattr(rep_config, "DEFAULT_SAMPLE_CONFIG_PATH", sample_cfg_dir)
 
     files = rep_config._resolve_config_files(cfg_dir, ["banking_bbva_empresas"])
 
@@ -67,3 +71,10 @@ def test_set_profile_state_rejects_path_like_profile_name() -> None:
 
     with pytest.raises(ValueError, match="Invalid profile name"):
         rep_config.set_profile_state("samples", ["../etc/passwd"])
+
+
+def test_set_profile_state_rejects_unknown_profile() -> None:
+    import reputation.config as rep_config
+
+    with pytest.raises(FileNotFoundError, match="not found"):
+        rep_config.set_profile_state("samples", ["perfil_inexistente"])
