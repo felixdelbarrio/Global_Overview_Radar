@@ -6,12 +6,17 @@ from pathlib import Path
 from threading import Lock
 from typing import Any
 
+gcs_storage: Any | None = None
+NOT_FOUND_EXCEPTION: type[Exception] | None = None
+
 try:
-    import google.cloud.storage as gcs_storage
-    from google.api_core.exceptions import NotFound
+    import google.cloud.storage as _gcs_storage
+    from google.api_core.exceptions import NotFound as _not_found
 except Exception:  # pragma: no cover - optional in local/offline environments
-    NotFound = Exception
-    gcs_storage = None
+    pass
+else:
+    gcs_storage = _gcs_storage
+    NOT_FOUND_EXCEPTION = _not_found
 
 logger = logging.getLogger(__name__)
 
@@ -100,7 +105,7 @@ def sync_from_state(
         blob.download_to_filename(str(local_path))
         return True
     except Exception as exc:
-        if gcs_storage is not None and isinstance(exc, NotFound):
+        if NOT_FOUND_EXCEPTION is not None and isinstance(exc, NOT_FOUND_EXCEPTION):
             return False
         logger.exception("Failed to download state object gs://%s/%s", bucket_name, object_key)
         return False
@@ -152,7 +157,7 @@ def delete_from_state(
         blob.delete()
         return True
     except Exception as exc:
-        if gcs_storage is not None and isinstance(exc, NotFound):
+        if NOT_FOUND_EXCEPTION is not None and isinstance(exc, NOT_FOUND_EXCEPTION):
             return False
         logger.exception("Failed to delete state object gs://%s/%s", bucket_name, object_key)
         return False
