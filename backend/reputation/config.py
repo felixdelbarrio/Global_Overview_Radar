@@ -61,6 +61,8 @@ DEFAULT_CONFIG_PATH = REPO_ROOT / "data" / "reputation"
 DEFAULT_LLM_CONFIG_PATH = REPO_ROOT / "data" / "reputation_llm"
 DEFAULT_SAMPLE_CONFIG_PATH = REPO_ROOT / "data" / "reputation_samples"
 DEFAULT_SAMPLE_LLM_CONFIG_PATH = REPO_ROOT / "data" / "reputation_llm_samples"
+PACKAGE_SAMPLE_CONFIG_PATH = PACKAGE_DIR / "sample_seed" / "reputation_samples"
+PACKAGE_SAMPLE_LLM_CONFIG_PATH = PACKAGE_DIR / "sample_seed" / "reputation_llm_samples"
 DEFAULT_CACHE_PATH = REPO_ROOT / "data" / "cache" / "reputation_cache.json"
 DEFAULT_OVERRIDES_PATH = REPO_ROOT / "data" / "cache" / "reputation_overrides.json"
 PROFILE_STATE_PATH = REPO_ROOT / "data" / "cache" / "reputation_profile.json"
@@ -506,11 +508,11 @@ def _resolve_profile_files_with_recovery(
     if not missing:
         return selected
 
-    if _sync_missing_profiles_from_state(cfg_dir, missing):
-        files = _sorted_config_files(cfg_dir)
-        selected, missing = _select_profile_files(files, profiles)
-        if not missing:
-            return selected
+    _sync_missing_profiles_from_state(cfg_dir, missing)
+    files = _sorted_config_files(cfg_dir)
+    selected, missing = _select_profile_files(files, profiles)
+    if not missing:
+        return selected
 
     is_default_runtime_dir = cfg_dir.resolve() == BASE_CONFIG_PATH.resolve()
     if is_default_runtime_dir and _seed_missing_profiles_from_samples(cfg_dir, missing):
@@ -661,7 +663,24 @@ def _sorted_config_files(directory: Path) -> list[Path]:
     return sorted(files, key=sort_key)
 
 
+def _ensure_seed_templates(target_dir: Path, seed_dir: Path) -> None:
+    if not seed_dir.exists() or not seed_dir.is_dir():
+        return
+    target_dir.mkdir(parents=True, exist_ok=True)
+    for seed_file in _sorted_config_files(seed_dir):
+        target_file = target_dir / seed_file.name
+        if target_file.exists() and target_file.is_file():
+            continue
+        shutil.copy2(seed_file, target_file)
+
+
+def _ensure_sample_template_files() -> None:
+    _ensure_seed_templates(DEFAULT_SAMPLE_CONFIG_PATH, PACKAGE_SAMPLE_CONFIG_PATH)
+    _ensure_seed_templates(DEFAULT_SAMPLE_LLM_CONFIG_PATH, PACKAGE_SAMPLE_LLM_CONFIG_PATH)
+
+
 def _sample_profile_file_maps() -> tuple[dict[str, Path], dict[str, Path]]:
+    _ensure_sample_template_files()
     sample_cfg_by_profile: dict[str, Path] = {}
     if DEFAULT_SAMPLE_CONFIG_PATH.exists() and DEFAULT_SAMPLE_CONFIG_PATH.is_dir():
         for sample_cfg in _sorted_config_files(DEFAULT_SAMPLE_CONFIG_PATH):
@@ -707,6 +726,8 @@ def active_profile_source() -> str:
 
 def list_available_profiles(source: str) -> list[str]:
     source_key = _normalize_profile_source(source)
+    if source_key == "samples":
+        _ensure_sample_template_files()
     cfg_path, _ = _resolve_paths_for_source(source_key)
     if not cfg_path.exists():
         return []

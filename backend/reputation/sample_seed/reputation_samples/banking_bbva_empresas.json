@@ -1,0 +1,1076 @@
+{
+  "geografias": [
+    "España",
+    "México",
+    "Perú",
+    "Colombia",
+    "Argentina",
+    "Turquía"
+  ],
+  "geografias_aliases": {
+    "España": ["Espana", "España", "Spain", "ES"],
+    "México": ["Mexico", "México", "MX", "CDMX", "Ciudad de Mexico", "Ciudad de México"],
+    "Perú": ["Peru", "Perú", "PE", "Lima"],
+    "Colombia": ["Colombia", "CO", "Bogota", "Bogotá", "Medellin", "Medellín"],
+    "Argentina": ["Argentina", "AR", "Buenos Aires"],
+    "Turquía": ["Turquia", "Turquía", "Turkey", "TR", "Istanbul", "İstanbul"]
+  },
+  "actor_principal": {
+    "BBVA": ["BBVA Empresas"]
+  },
+  "actor_principal_aliases": {
+    "BBVA": [
+      "BBVA Bank",
+      "BBVA Business",
+      "BBVA Cash Management",
+      "BBVA Empresas",
+      "BBVA Net Cash",
+      "BBVA NetCash",
+      "BBVA Spark",
+      "Garanti BBVA",
+      "Garanti BBVA Türkiye",
+      "Garanti Bank"
+    ]
+  },
+  "otros_actores_aliases": {
+    "Santander": [
+      "Banco Santander",
+      "Santander Argentina",
+      "Santander Business",
+      "Santander Corporate",
+      "Santander Empresas",
+      "Santander Empresas app",
+      "Santander Mexico",
+      "Santander México",
+      "Santander Río"
+    ],
+    "Caixabank": [
+      "Caixa Bank",
+      "CaixaBank",
+      "CaixaBank Sign",
+      "La Caixa"
+    ],
+    "Sabadell": [
+      "Banco Sabadell",
+      "Sabadell Empresas",
+      "Sabadell Token Digital",
+      "Sabadell S.A."
+    ],
+    "Bankinter": [
+      "Bankinter Empresas",
+      "Bankinter Corporate",
+      "Bankinter S.A."
+    ],
+    "Banorte": [
+      "Banorte Empresas",
+      "BEM Móvil",
+      "Débito Empresarial Banorte",
+      "Grupo Financiero Banorte"
+    ],
+    "Citibanamex": [
+      "Banamex",
+      "Citi Banamex",
+      "Citibamex",
+      "BancaNet Empresarial",
+      "BancaNet Empresarial Móvil"
+    ],
+    "Scotiabank": [
+      "ScotiaConnect",
+      "Scotiabank Empresas",
+      "Scotiabank Perú",
+      "Scotiabank Colombia"
+    ],
+    "BCP": [
+      "BCP Perú",
+      "Banco de Credito del Peru",
+      "Banco de Crédito del Perú"
+    ],
+    "Interbank": [
+      "Inter Bank",
+      "Interbank Perú"
+    ],
+    "Bancolombia": [
+      "Banco Bancolombia",
+      "Bancolombia Empresas",
+      "Bancolombia S.A."
+    ],
+    "Banco de Bogota": [
+      "Banco de Bogotá",
+      "Banco de Bogota",
+      "Banco de Bogotá App Negocios",
+      "Portal Negocios Banco de Bogotá"
+    ],
+    "Davivienda": [
+      "Banco Davivienda",
+      "Davivienda Movil Empresas",
+      "Davivienda Móvil Empresas",
+      "Davivienda S.A."
+    ],
+    "Banco de Galicia": [
+      "Banco Galicia",
+      "Galicia Office",
+      "Galicia Office - Empresas"
+    ],
+    "AKBANK": ["Ak Bank", "Akbank", "Akbank Mobil", "Akbank Mobile"],
+    "ING": ["ING Bank", "ING España", "ING Mobil", "ING Turkiye", "ING Türkiye"],
+    "N26": ["N26 Bank", "N26 Business"],
+    "Nubank": ["Nu", "Nu Bank", "Nubank Brasil", "Nubank México"],
+    "Mercado Pago": ["Mercado Pago Empresas", "Mercado Pago Negocios", "MercadoPago"],
+    "Stripe": ["Stripe Payments", "Stripe Treasury"],
+    "Adyen": ["Adyen Payments"],
+    "PayPal": ["PayPal Business", "PayPal Empresas"],
+    "Bunq": ["bunq", "bunq Business"],
+    "Openbank": ["Open Bank", "Openbank Business", "Openbank Empresas"],
+    "Garanti BBVA": ["Garanti", "Garanti BBVA", "Garanti BBVA Türkiye", "Garanti Bank"],
+    "İşbank": ["Is Bankasi", "Isbank", "Türkiye Is Bankasi", "Türkiye İş Bankası", "İş Bankası"],
+    "Yapı Kredi": ["Yapi Kredi", "Yapi Kredi Bankasi", "Yapı Kredi Bankası"],
+    "Ziraat": ["TC Ziraat Bankası", "Türkiye Cumhuriyeti Ziraat Bankası", "Ziraat Bankasi", "Ziraat Bankası"],
+    "VakıfBank": ["Turkiye Vakiflar Bankasi", "Türkiye Vakıflar Bankası", "VakifBank", "VakıfBank"],
+    "Halkbank": ["Halkbank", "Turkiye Halk Bankasi", "Türkiye Halk Bankası"]
+  },
+  "otros_actores_globales": [
+    "Revolut",
+    "Wise",
+    "Qonto",
+    "N26",
+    "Stripe",
+    "Adyen",
+    "PayPal",
+    "Bunq",
+    "Openbank"
+  ],
+  "otros_actores_por_geografia": {
+    "España": ["Santander", "Caixabank", "Sabadell", "Bankinter", "Openbank", "N26"],
+    "México": ["Santander", "Banorte", "Citibanamex", "Scotiabank", "Nubank", "Mercado Pago"],
+    "Perú": ["BCP", "Interbank", "Scotiabank"],
+    "Colombia": ["Bancolombia", "Banco de Bogota", "Davivienda"],
+    "Argentina": ["Santander", "Banco de Galicia", "Mercado Pago"],
+    "Turquía": ["AKBANK", "ING", "Garanti BBVA", "İşbank", "Yapı Kredi", "Ziraat", "VakıfBank", "Halkbank"]
+  },
+  "keywords": [
+    "BBVA Business",
+    "BBVA Cash Management",
+    "BBVA Empresas",
+    "BBVA Empresas app",
+    "BBVA Empresas caída",
+    "BBVA Empresas incidencia",
+    "BBVA Empresas login",
+    "BBVA Empresas móvil",
+    "BBVA Empresas web",
+    "BBVA Net Cash",
+    "BBVA Net Cash login",
+    "BBVA NetCash",
+    "BBVA Spark",
+    "BBVA banca empresas",
+    "Bancolombia Empresas",
+    "CaixaBank Sign",
+    "Citibanamex BancaNet Empresarial",
+    "Davivienda Móvil Empresas",
+    "Galicia Office - Empresas",
+    "Santander Empresas app",
+    "BBVA Net Cash error",
+    "BBVA Net Cash caída",
+    "BBVA Net Cash no funciona",
+    "BBVA Empresas token",
+    "BBVA Empresas firma",
+    "BBVA Empresas SWIFT",
+    "BBVA Empresas SEPA",
+    "BBVA Empresas confirming",
+    "BBVA Empresas cash pooling",
+    "Santander Empresas confirming",
+    "Bankinter Empresas token",
+    "Sabadell Token Digital"
+  ],
+  "segment_terms": [
+    "2fa",
+    "autonomos",
+    "autónomos",
+    "banca corporativa",
+    "banca empresas",
+    "business",
+    "cash management",
+    "ciberseguridad",
+    "cobros",
+    "comisiones",
+    "confirming",
+    "corporate",
+    "empresa",
+    "empresas",
+    "factoring",
+    "financiacion",
+    "financiación",
+    "fraude",
+    "leasing",
+    "open finance",
+    "pagos",
+    "pos",
+    "pyme",
+    "pymes",
+    "tesoreria",
+    "token",
+    "tpv",
+    "transferencias",
+    "no puedo entrar",
+    "inicio de sesión",
+    "firma",
+    "firma digital",
+    "aprobación",
+    "autorización",
+    "cheques",
+    "pagarés",
+    "remesas",
+    "nóminas",
+    "SEPA",
+    "SWIFT",
+    "transferencia internacional",
+    "IBAN",
+    "beneficiario",
+    "cuenta bloqueada",
+    "limite",
+    "latencia",
+    "timeout",
+    "cargo no reconocido",
+    "contracargo",
+    "phishing",
+    "estafa",
+    "suplantación",
+    "incidencia",
+    "outage"
+  ],
+  "hard_exclude_terms": ["Personal", "Particular", "Retail"],
+  "segment_guard": {
+    "enabled": true,
+    "default_terms": [
+      "Empresas",
+      "Empresarial",
+      "Business",
+      "Negocios",
+      "Corporate",
+      "Net Cash",
+      "NetCash",
+      "GEMA",
+      "Gema",
+      "SENDA",
+      "Senda"
+    ]
+  },
+  "reddit": {
+    "subreddits": [
+      "spain",
+      "mexico",
+      "fintech",
+      "banking",
+      "personalfinance",
+      "europe",
+      "cybersecurity",
+      "scams",
+      "privacy",
+      "latam",
+      "colombia",
+      "peru",
+      "argentina",
+      "turkey",
+      "europersonalfinance"
+    ],
+    "query_templates": [
+      "\"{actor}\" (empresa OR empresas OR business OR corporate) (app OR web)",
+      "\"{actor}\" (empresas OR business) (login OR error OR bug OR comisión OR soporte)",
+      "\"{actor}\" banca empresas app",
+      "\"{actor}\" (phishing OR fraude OR estafa OR suplantación OR ciberseguridad)",
+      "\"{actor}\" (caída OR caida OR outage OR mantenimiento OR \"no funciona\") (net cash OR empresas OR business)",
+      "\"{actor}\" (comisiones OR tarifas OR \"cargo no reconocido\" OR devolución OR reembolso)",
+      "\"{actor}\" (confirming OR factoring OR leasing OR TPV OR POS OR \"cash pooling\")",
+      "\"{actor}\" vs (Santander OR CaixaBank OR Sabadell OR Bankinter OR Banorte OR Bancolombia OR Akbank)"
+    ]
+  },
+  "news": {
+    "rss_query_templates": [
+      "https://news.google.com/rss/search?q={query}&hl={hl}&gl={gl}&ceid={ceid}"
+    ],
+    "rss_geo_map": {
+      "España": { "hl": "es", "gl": "ES", "ceid": "ES:es" },
+      "México": { "hl": "es-419", "gl": "MX", "ceid": "MX:es-419" },
+      "Colombia": { "hl": "es-419", "gl": "CO", "ceid": "CO:es-419" },
+      "Perú": { "hl": "es-419", "gl": "PE", "ceid": "PE:es-419" },
+      "Argentina": { "hl": "es-419", "gl": "AR", "ceid": "AR:es-419" },
+      "Turquía": { "hl": "tr", "gl": "TR", "ceid": "TR:tr" }
+    },
+    "site_query_terms_by_category": {
+      "press": ["economia", "finanzas", "banca", "empresas", "mercados", "negocios"],
+      "fintech": ["fintech", "banca digital", "neobanco", "pagos", "open banking"],
+      "regulators": ["regulador", "regulacion", "supervision", "banco central", "superintendencia"]
+    },
+    "site_sources_by_geo": {
+      "España": {
+        "press": [
+          "cincodias.elpais.com",
+          "expansion.com",
+          "eleconomista.es",
+          "bolsamania.com",
+          "elconfidencial.com",
+          "invertia.com",
+          "europapress.es",
+          "lavanguardia.com",
+          "abc.es",
+          "eldiario.es",
+          "economiadigital.es",
+          "efe.com",
+          "bloomberglinea.com",
+          "rtve.es",
+          "elmundo.es",
+          "elperiodico.com",
+          "lainformacion.com",
+          "forbes.es",
+          "reuters.com",
+          "ft.com"
+        ],
+        "fintech": [
+          "fintechspain.com",
+          "aefi.es",
+          "adigital.org",
+          "finnovista.com",
+          "latamfintech.co",
+          "contxto.com",
+          "finextra.com",
+          "thepaypers.com",
+          "pymnts.com",
+          "asociacionfintech.es",
+          "paymentsdive.com",
+          "americanbanker.com",
+          "crowdfundinsider.com"
+        ],
+        "regulators": [
+          "bde.es",
+          "cnmv.es",
+          "mineco.gob.es",
+          "aebanca.es",
+          "ceca.es",
+          "cnmc.es",
+          "ecb.europa.eu",
+          "eba.europa.eu",
+          "aepd.es",
+          "incibe.es",
+          "enisa.es"
+        ]
+      },
+      "México": {
+        "press": [
+          "eleconomista.com.mx",
+          "expansion.mx",
+          "elfinanciero.com.mx",
+          "forbes.com.mx",
+          "eluniversal.com.mx",
+          "milenio.com",
+          "excelsior.com.mx",
+          "heraldodemexico.com.mx",
+          "reforma.com",
+          "efe.com",
+          "bloomberglinea.com",
+          "elceo.com",
+          "reuters.com",
+          "ft.com"
+        ],
+        "fintech": [
+          "fintechmexico.org",
+          "finnovista.com",
+          "latamfintech.co",
+          "contxto.com",
+          "finextra.com",
+          "thepaypers.com",
+          "pymnts.com",
+          "paymentsdive.com",
+          "americanbanker.com",
+          "crowdfundinsider.com"
+        ],
+        "regulators": [
+          "banxico.org.mx",
+          "cnbv.gob.mx",
+          "condusef.gob.mx",
+          "consar.gob.mx",
+          "shcp.gob.mx",
+          "abm.org.mx",
+          "profeco.gob.mx"
+        ]
+      },
+      "Perú": {
+        "press": [
+          "gestion.pe",
+          "elcomercio.pe",
+          "larepublica.pe",
+          "semanaeconomica.com",
+          "rpp.pe",
+          "andina.pe",
+          "peru21.pe",
+          "efe.com",
+          "bloomberglinea.com",
+          "peru-retail.com",
+          "reuters.com",
+          "ft.com"
+        ],
+        "fintech": [
+          "fintechperu.pe",
+          "finnovista.com",
+          "latamfintech.co",
+          "contxto.com",
+          "finextra.com",
+          "thepaypers.com",
+          "pymnts.com",
+          "paymentsdive.com",
+          "americanbanker.com",
+          "crowdfundinsider.com"
+        ],
+        "regulators": [
+          "bcrp.gob.pe",
+          "sbs.gob.pe",
+          "smv.gob.pe",
+          "mef.gob.pe",
+          "asbanc.com.pe",
+          "indecopi.gob.pe"
+        ]
+      },
+      "Colombia": {
+        "press": [
+          "portafolio.co",
+          "larepublica.co",
+          "dinero.com",
+          "eltiempo.com",
+          "valoraanalitik.com",
+          "semana.com",
+          "elespectador.com",
+          "noticiascaracol.com",
+          "efe.com",
+          "bloomberglinea.com",
+          "reuters.com",
+          "ft.com"
+        ],
+        "fintech": [
+          "colombiafintech.co",
+          "asobancaria.com",
+          "finnovista.com",
+          "latamfintech.co",
+          "contxto.com",
+          "finextra.com",
+          "thepaypers.com",
+          "pymnts.com",
+          "paymentsdive.com",
+          "americanbanker.com",
+          "crowdfundinsider.com"
+        ],
+        "regulators": [
+          "banrep.gov.co",
+          "superfinanciera.gov.co",
+          "minhacienda.gov.co",
+          "fogafin.gov.co",
+          "supersociedades.gov.co",
+          "sic.gov.co"
+        ]
+      },
+      "Argentina": {
+        "press": [
+          "ambito.com",
+          "cronista.com",
+          "infobae.com",
+          "clarin.com",
+          "lanacion.com.ar",
+          "perfil.com",
+          "iprofesional.com",
+          "baenegocios.com",
+          "efe.com",
+          "bloomberglinea.com",
+          "iproup.com",
+          "reuters.com",
+          "ft.com"
+        ],
+        "fintech": [
+          "camaraargentinadefintech.org",
+          "fintech.com.ar",
+          "finnovista.com",
+          "latamfintech.co",
+          "contxto.com",
+          "finextra.com",
+          "thepaypers.com",
+          "pymnts.com",
+          "paymentsdive.com",
+          "americanbanker.com",
+          "crowdfundinsider.com"
+        ],
+        "regulators": [
+          "bcra.gob.ar",
+          "cnv.gov.ar",
+          "argentina.gob.ar",
+          "aba-argentina.com",
+          "adeba.com.ar"
+        ]
+      },
+      "Turquía": {
+        "press": [
+          "dunya.com",
+          "hurriyetdailynews.com",
+          "aa.com.tr",
+          "bloomberght.com",
+          "ekonomim.com",
+          "hurriyet.com.tr",
+          "sabah.com.tr",
+          "efe.com",
+          "bloomberglinea.com",
+          "trthaber.com",
+          "ntv.com.tr",
+          "reuters.com",
+          "ft.com"
+        ],
+        "fintech": [
+          "fintechistanbul.org",
+          "todeb.org.tr",
+          "finnovista.com",
+          "latamfintech.co",
+          "contxto.com",
+          "finextra.com",
+          "thepaypers.com",
+          "pymnts.com",
+          "paymentsdive.com",
+          "americanbanker.com",
+          "crowdfundinsider.com"
+        ],
+        "regulators": [
+          "tcmb.gov.tr",
+          "bddk.org.tr",
+          "spk.gov.tr",
+          "tbb.org.tr",
+          "tmsf.org.tr",
+          "kvkk.gov.tr"
+        ]
+      }
+    },
+    "rss_urls": [
+      {
+        "url": "https://feeds.elpais.com/mrss-s/pages/ep/site/cincodias.elpais.com/section/ultimas-noticias/portada",
+        "geo": "España",
+        "category": "press"
+      },
+      {
+        "url": "https://feeds.elpais.com/mrss-s/list/ep/site/cincodias.elpais.com/section/economia",
+        "geo": "España",
+        "category": "press"
+      },
+      {
+        "url": "https://feeds.elpais.com/mrss-s/list/ep/site/cincodias.elpais.com/section/companias",
+        "geo": "España",
+        "category": "press"
+      },
+      {
+        "url": "https://www.eleconomista.com.mx/rss/ultimas-noticias",
+        "geo": "México",
+        "category": "press"
+      },
+      {
+        "url": "https://gestion.pe/arc/outboundfeeds/rss/category/economia/?outputType=xml",
+        "geo": "Perú",
+        "category": "press"
+      },
+      {
+        "url": "http://portafolio.co/rss/economia.xml",
+        "geo": "Colombia",
+        "category": "press"
+      },
+      {
+        "url": "http://portafolio.co/rss/negocios.xml",
+        "geo": "Colombia",
+        "category": "press"
+      },
+      {
+        "url": "http://portafolio.co/rss/negocios/empresas.xml",
+        "geo": "Colombia",
+        "category": "press"
+      },
+      {
+        "url": "http://portafolio.co/rss/economia/finanzas.xml",
+        "geo": "Colombia",
+        "category": "press"
+      },
+      {
+        "url": "http://portafolio.co/rss/economia/empleo.xml",
+        "geo": "Colombia",
+        "category": "press"
+      },
+      {
+        "url": "http://portafolio.co/rss/economia/impuestos.xml",
+        "geo": "Colombia",
+        "category": "press"
+      },
+      {
+        "url": "https://eleconomista.com.ar/economia/feed/",
+        "geo": "Argentina",
+        "category": "press"
+      },
+      {
+        "url": "https://eleconomista.com.ar/negocios/feed/",
+        "geo": "Argentina",
+        "category": "press"
+      },
+      {
+        "url": "https://www.anews.com.tr/rss/economy.xml",
+        "geo": "Turquía",
+        "category": "press"
+      }
+    ]
+  },
+  "forums": {
+    "rss_query_templates": [
+      "https://news.google.com/rss/search?q={query}&hl={hl}&gl={gl}&ceid={ceid}"
+    ],
+    "query_terms": ["foro", "foros", "forum", "forums", "comunidad", "opiniones"],
+    "rss_urls": [
+      "https://news.google.com/rss/search?q=BBVA+Empresas+foro",
+      "https://news.google.com/rss/search?q=BBVA+Business+forum",
+      "https://news.google.com/rss/search?q=banca+empresas+foro",
+      "https://news.google.com/rss/search?q=site%3Arankia.com+BBVA+Empresas",
+      "https://news.google.com/rss/search?q=site%3Arankia.com+Santander+Empresas",
+      "https://news.google.com/rss/search?q=site%3Aforocoches.com+BBVA",
+      "https://news.google.com/rss/search?q=site%3Areddit.com+BBVA+Empresas",
+      "https://news.google.com/rss/search?q=site%3Areddit.com+Santander+Empresas",
+      "https://news.google.com/rss/search?q=site%3Astackoverflow.com+BBVA+API",
+      "https://news.google.com/rss/search?q=site%3Aplay.google.com+BBVA+Empresas",
+      "https://news.google.com/rss/search?q=site%3Aapps.apple.com+BBVA+Empresas",
+      "https://news.google.com/rss/search?q=site%3Aplay.google.com+Santander+Empresas",
+      "https://news.google.com/rss/search?q=site%3Aapps.apple.com+Santander+Empresas",
+      "https://news.google.com/rss/search?q=BBVA+Net+Cash+error",
+      "https://news.google.com/rss/search?q=BBVA+Empresas+no+funciona",
+      "https://news.google.com/rss/search?q=BBVA+Empresas+phishing",
+      "https://news.google.com/rss/search?q=BBVA+Empresas+comisiones",
+      "https://news.google.com/rss/search?q=site%3Abbva.es+net+cash+incidencia",
+      "https://news.google.com/rss/search?q=site%3Abbva.com+net+cash+incident",
+      "https://news.google.com/rss/search?q=site%3Astatuspage.io+BBVA",
+      "https://news.google.com/rss/search?q=site%3Agithub.com+bbva+api",
+      "https://news.google.com/rss/search?q=site%3Astackoverflow.com+\"bbva\"+\"oauth\""
+    ]
+  },
+  "blogs": {
+    "rss_query_templates": [
+      "https://news.google.com/rss/search?q={query}&hl={hl}&gl={gl}&ceid={ceid}"
+    ],
+    "query_terms": ["blog", "blogs", "post", "articulo", "artículo", "opinion", "opinión"],
+    "rss_urls": [
+      "https://news.google.com/rss/search?q=BBVA+Empresas+blog",
+      "https://news.google.com/rss/search?q=BBVA+Business+blog",
+      "https://news.google.com/rss/search?q=banca+empresas+blog",
+      "https://news.google.com/rss/search?q=BBVA+Spark+blog",
+      "https://news.google.com/rss/search?q=site%3Afinnovista.com+BBVA",
+      "https://news.google.com/rss/search?q=site%3Alatamfintech.co+BBVA",
+      "https://news.google.com/rss/search?q=site%3Acontxto.com+BBVA",
+      "https://news.google.com/rss/search?q=site%3Afinextra.com+BBVA",
+      "https://news.google.com/rss/search?q=site%3Athepaypers.com+BBVA",
+      "https://news.google.com/rss/search?q=site%3Aplay.google.com+BBVA+Empresas",
+      "https://news.google.com/rss/search?q=site%3Aapps.apple.com+BBVA+Empresas",
+      "https://news.google.com/rss/search?q=site%3Aplay.google.com+Santander+Empresas",
+      "https://news.google.com/rss/search?q=site%3Aapps.apple.com+Santander+Empresas",
+      "https://news.google.com/rss/search?q=BBVA+Empresas+cash+management+estrategia",
+      "https://news.google.com/rss/search?q=BBVA+Empresas+confirming+factoring",
+      "https://news.google.com/rss/search?q=BBVA+Empresas+open+banking+API",
+      "https://news.google.com/rss/search?q=site%3Abbva.com+cash+management",
+      "https://news.google.com/rss/search?q=site%3Afinextra.com+BBVA+cash+management",
+      "https://news.google.com/rss/search?q=site%3Athepaypers.com+BBVA+business"
+    ]
+  },
+  "appstore": {
+    "core_only": true,
+    "app_ids": [
+      "1590189082",
+      "1459550683",
+      "1198146011",
+      "1175384795",
+      "976662821",
+      "1209986220",
+      "1328811481",
+      "1589126967",
+      "1201902594",
+      "1558937311",
+      "1088404293",
+      "1255229181",
+      "1433984299",
+      "1110912115",
+      "6447528295",
+      "1609083736",
+      "1101862517",
+      "560516360",
+      "395535459",
+      "521117624",
+      "308261752",
+      "458627086",
+      "885993234",
+      "853569450",
+      "1340991559",
+      "1053148887",
+      "978516833",
+      "1522442740",
+      "1214811644",
+      "1436969262",
+      "6456981837"
+    ],
+    "app_ids_by_geo": {
+      "España": [
+        "1590189082",
+        "976662821",
+        "1209986220",
+        "1328811481",
+        "1589126967",
+        "1214811644",
+        "1436969262",
+        "6456981837",
+        "1053148887",
+        "978516833",
+        "1522442740"
+      ],
+      "México": [
+        "1459550683",
+        "1201902594",
+        "1558937311",
+        "1088404293",
+        "1255229181",
+        "1053148887",
+        "978516833",
+        "1522442740"
+      ],
+      "Perú": ["1198146011", "1433984299"],
+      "Colombia": ["1590189082", "1110912115", "6447528295", "1609083736"],
+      "Argentina": ["1175384795", "1101862517"],
+      "Turquía": [
+        "560516360",
+        "395535459",
+        "521117624",
+        "308261752",
+        "458627086",
+        "885993234",
+        "853569450",
+        "1340991559"
+      ],
+      "Global": [
+        "1053148887",
+        "978516833",
+        "1522442740",
+        "1214811644",
+        "1436969262",
+        "6456981837"
+      ]
+    },
+    "country_by_geo": {
+      "España": "es",
+      "México": "mx",
+      "Perú": "pe",
+      "Colombia": "co",
+      "Argentina": "ar",
+      "Turquía": "tr"
+    },
+    "app_id_to_actor": {
+      "1590189082": "BBVA",
+      "1459550683": "BBVA",
+      "1198146011": "BBVA",
+      "1175384795": "BBVA",
+      "976662821": "Santander",
+      "1209986220": "Bankinter",
+      "1328811481": "Caixabank",
+      "1589126967": "Sabadell",
+      "1201902594": "Banorte",
+      "1558937311": "Banorte",
+      "1088404293": "Citibanamex",
+      "1255229181": "Scotiabank",
+      "1433984299": "Scotiabank",
+      "1110912115": "Bancolombia",
+      "6447528295": "Banco de Bogota",
+      "1609083736": "Davivienda",
+      "1101862517": "Banco de Galicia",
+      "560516360": "AKBANK",
+      "395535459": "ING",
+      "521117624": "Garanti BBVA",
+      "308261752": "İşbank",
+      "458627086": "Yapı Kredi",
+      "885993234": "Ziraat",
+      "853569450": "VakıfBank",
+      "1340991559": "Halkbank",
+      "1053148887": "PayPal",
+      "978516833": "Stripe",
+      "1522442740": "Adyen",
+      "1214811644": "Qonto",
+      "1436969262": "Revolut",
+      "6456981837": "Wise"
+    }
+  },
+  "trustpilot": {
+    "rss_query_templates": [
+      "https://news.google.com/rss/search?q={query}&hl={hl}&gl={gl}&ceid={ceid}"
+    ],
+    "query_terms": ["trustpilot", "reseña", "reseñas", "review", "reviews", "opiniones"],
+    "rss_urls": [
+      "https://news.google.com/rss/search?q=Trustpilot+BBVA+Empresas",
+      "https://news.google.com/rss/search?q=Trustpilot+BBVA+Business"
+    ]
+  },
+  "google_reviews": {
+    "place_ids": []
+  },
+  "downdetector": {
+    "rss_query_templates": [
+      "https://news.google.com/rss/search?q={query}&hl={hl}&gl={gl}&ceid={ceid}"
+    ],
+    "rss_query_segment_mode": "strict",
+    "query_terms": [
+      "downdetector",
+      "incidencia",
+      "incidencias",
+      "caida",
+      "caída",
+      "outage",
+      "interrupcion",
+      "interrupción"
+    ],
+    "rss_urls": [
+      "https://news.google.com/rss/search?q=Downdetector+BBVA+Empresas",
+      "https://news.google.com/rss/search?q=Downdetector+BBVA+Business"
+    ]
+  },
+  "google_play": {
+    "core_only": true,
+    "package_ids": [],
+    "package_ids_by_geo": {
+      "España": [
+        "com.bbva.GEMA.global",
+        "es.bancosantander.empresas",
+        "com.bankinter.empresas",
+        "es.caixabank.caixabanksign",
+        "eu.qonto.qonto",
+        "com.paypal.merchant.client",
+        "com.stripe.android.dashboard",
+        "com.adyen.ipp.mobile.companion.live",
+        "com.revolut.business",
+        "com.transferwise.android"
+      ],
+      "México": [
+        "com.bbva.GEMA",
+        "com.banorte.bem.movil",
+        "com.citibanamex.bnemobile",
+        "com.paypal.merchant.client",
+        "com.stripe.android.dashboard",
+        "com.adyen.ipp.mobile.companion.live",
+        "com.mercadopago.wallet"
+      ],
+      "Perú": [
+        "pe.bbvacontinental.netcash",
+        "pe.com.scotiabank.blpm.android.client"
+      ],
+      "Colombia": [
+        "com.todo1.mobile.bancolombiaempresas",
+        "co.com.ath.bbog.icbs",
+        "com.davivienda.nuevaappemp",
+        "com.paypal.merchant.client",
+        "com.stripe.android.dashboard",
+        "com.adyen.ipp.mobile.companion.live"
+      ],
+      "Argentina": ["com.galicia.otp"],
+      "Turquía": [
+        "com.paypal.merchant.client",
+        "com.stripe.android.dashboard",
+        "com.adyen.ipp.mobile.companion.live"
+      ]
+    },
+    "geo_to_gl": {
+      "España": "ES",
+      "México": "MX",
+      "Perú": "PE",
+      "Colombia": "CO",
+      "Argentina": "AR",
+      "Turquía": "TR"
+    },
+    "geo_to_hl": {
+      "España": "es",
+      "México": "es-419",
+      "Perú": "es-419",
+      "Colombia": "es-419",
+      "Argentina": "es-419",
+      "Turquía": "tr"
+    },
+    "package_id_to_actor": {
+      "com.bbva.GEMA.global": "BBVA",
+      "com.bbva.GEMA": "BBVA",
+      "pe.bbvacontinental.netcash": "BBVA",
+      "es.bancosantander.empresas": "Santander",
+      "com.bankinter.empresas": "Bankinter",
+      "es.caixabank.caixabanksign": "Caixabank",
+      "com.banorte.bem.movil": "Banorte",
+      "com.citibanamex.bnemobile": "Citibanamex",
+      "pe.com.scotiabank.blpm.android.client": "Scotiabank",
+      "com.todo1.mobile.bancolombiaempresas": "Bancolombia",
+      "co.com.ath.bbog.icbs": "Banco de Bogota",
+      "com.davivienda.nuevaappemp": "Davivienda",
+      "com.galicia.otp": "Banco de Galicia",
+      "eu.qonto.qonto": "Qonto",
+      "com.revolut.business": "Revolut",
+      "com.transferwise.android": "Wise",
+      "com.paypal.merchant.client": "PayPal",
+      "com.stripe.android.dashboard": "Stripe",
+      "com.adyen.ipp.mobile.companion.live": "Adyen",
+      "com.mercadopago.wallet": "Mercado Pago"
+    }
+  },
+  "require_actor_sources": [
+    "news",
+    "forums",
+    "blogs",
+    "gdelt",
+    "newsapi",
+    "guardian",
+    "downdetector"
+  ],
+  "require_context_sources": ["downdetector"],
+  "noise_terms": [
+    "deportes",
+    "futbol",
+    "fútbol",
+    "liga",
+    "goles",
+    "gol",
+    "partido",
+    "marcador",
+    "club",
+    "torneo",
+    "campeonato",
+    "copa",
+    "mundial",
+    "seleccion",
+    "selección",
+    "jugador",
+    "entrenador",
+    "fichaje",
+    "traspaso",
+    "derbi",
+    "derby",
+    "clasico",
+    "clásico",
+    "nba",
+    "nfl",
+    "mlb",
+    "nhl",
+    "tenis",
+    "atp",
+    "wta",
+    "grand slam",
+    "formula 1",
+    "f1",
+    "motogp",
+    "ufc",
+    "celebridad",
+    "celebridades",
+    "famoso",
+    "famosos",
+    "artista",
+    "cantante",
+    "actor",
+    "actriz",
+    "influencer",
+    "boda",
+    "divorcio",
+    "romance",
+    "escandalo",
+    "escándalo",
+    "reality",
+    "alfombra roja",
+    "estreno",
+    "pelicula",
+    "película",
+    "serie",
+    "telenovela",
+    "show",
+    "concierto",
+    "gira",
+    "festival",
+    "premios",
+    "grammy",
+    "oscar",
+    "apuesta",
+    "apuestas",
+    "loteria",
+    "lotería",
+    "jackpot",
+    "sorteo",
+    "tinka"
+  ],
+  "actor_context_guard": ["BBVA", "Santander"],
+  "context_terms": [
+    "banca",
+    "banco",
+    "bank",
+    "finanzas",
+    "financiero",
+    "financiera",
+    "empresa",
+    "empresas",
+    "corporativo",
+    "corporate",
+    "pyme",
+    "pymes",
+    "cuenta",
+    "tarjeta",
+    "transferencia",
+    "pago",
+    "pagos",
+    "comisiones",
+    "cash management",
+    "tesoreria",
+    "tesorería",
+    "confirming",
+    "factoring",
+    "leasing",
+    "tpv",
+    "pos",
+    "net cash",
+    "netcash",
+    "swift",
+    "sepa",
+    "token",
+    "firma",
+    "firma digital",
+    "banca online",
+    "app",
+    "web",
+    "iban",
+    "nif",
+    "bizum",
+    "domiciliacion",
+    "domiciliación",
+    "nomina",
+    "nómina",
+    "clabe",
+    "spei",
+    "banxico",
+    "codi",
+    "rfc",
+    "buró de crédito",
+    "buro de credito",
+    "cci",
+    "bcrp",
+    "sbs",
+    "sunat",
+    "ruc",
+    "pse",
+    "nit",
+    "banrep",
+    "superfinanciera",
+    "cbu",
+    "cuit",
+    "cuil",
+    "bcra",
+    "alias cbu",
+    "eft",
+    "fast",
+    "tcmb",
+    "cash pooling",
+    "pagare",
+    "pagaré",
+    "remesa",
+    "remesas",
+    "cheque",
+    "cheques",
+    "linea de credito",
+    "línea de crédito",
+    "garantia",
+    "garantía"
+  ]
+}

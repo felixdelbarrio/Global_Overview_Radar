@@ -19,6 +19,7 @@ from reputation.config import (
     active_profile_key,
     active_profile_source,
     active_profiles,
+    apply_sample_profiles_to_default,
     compute_config_hash,
     list_available_profiles,
     load_business_config,
@@ -515,7 +516,17 @@ def reputation_profiles_update(
     source = normalize_profile_source(payload.source)
     profiles = payload.profiles or []
     try:
-        active = set_profile_state(source, profiles)
+        if source == "samples":
+            applied = apply_sample_profiles_to_default(profiles)
+            active = applied.get("active", {})
+            if not isinstance(active, dict):
+                active = {
+                    "source": active_profile_source(),
+                    "profiles": active_profiles(),
+                    "profile_key": active_profile_key(),
+                }
+        else:
+            active = set_profile_state(source, profiles)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:

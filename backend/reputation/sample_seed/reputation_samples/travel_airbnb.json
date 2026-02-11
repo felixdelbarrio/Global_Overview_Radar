@@ -1,0 +1,606 @@
+{
+  "geografias": [
+    "España",
+    "México",
+    "Perú",
+    "Colombia",
+    "Argentina",
+    "Turquía"
+  ],
+  "geografias_aliases": {
+    "España": [
+      "Espana",
+      "España",
+      "Spain",
+      "ES"
+    ],
+    "México": [
+      "Mexico",
+      "México",
+      "MX",
+      "CDMX",
+      "Ciudad de Mexico",
+      "Ciudad de México"
+    ],
+    "Perú": [
+      "Peru",
+      "Perú",
+      "PE",
+      "Lima"
+    ],
+    "Colombia": [
+      "Colombia",
+      "CO",
+      "Bogota",
+      "Bogotá",
+      "Medellin",
+      "Medellín"
+    ],
+    "Argentina": [
+      "Argentina",
+      "AR",
+      "Buenos Aires"
+    ],
+    "Turquía": [
+      "Turquia",
+      "Turquía",
+      "Turkey",
+      "TR",
+      "Istanbul",
+      "İstanbul"
+    ]
+  },
+  "actor_principal": {
+    "Airbnb": [
+      "Airbnb"
+    ]
+  },
+  "actor_principal_aliases": {
+    "Airbnb": [
+      "AIRBNB",
+      "Airbnb",
+      "Airbnb Argentina",
+      "Airbnb Colombia",
+      "Airbnb España",
+      "Airbnb México",
+      "Airbnb Perú",
+      "Airbnb Turkey",
+      "Airbnb Türkiye",
+      "Airbnb anfitrión",
+      "Airbnb app",
+      "Airbnb host"
+    ]
+  },
+  "otros_actores_aliases": {
+    "Booking.com": [
+      "Booking",
+      "Booking app",
+      "Booking.com"
+    ],
+    "Vrbo": [
+      "HomeAway",
+      "VRBO",
+      "Vrbo app"
+    ],
+    "Expedia": [
+      "Expedia",
+      "Expedia app"
+    ],
+    "Tripadvisor": [
+      "TripAdvisor",
+      "Tripadvisor",
+      "Tripadvisor rentals"
+    ],
+    "Agoda": [
+      "Agoda",
+      "Agoda app"
+    ]
+  },
+  "otros_actores_globales": [
+    "Airbnb Experiences",
+    "AirCover",
+    "Airbnb Host"
+  ],
+  "otros_actores_por_geografia": {
+    "España": [
+      "Booking.com",
+      "Vrbo",
+      "Expedia",
+      "Tripadvisor",
+      "Agoda"
+    ],
+    "México": [
+      "Booking.com",
+      "Vrbo",
+      "Expedia",
+      "Tripadvisor",
+      "Agoda"
+    ],
+    "Perú": [
+      "Booking.com",
+      "Vrbo",
+      "Expedia",
+      "Tripadvisor",
+      "Agoda"
+    ],
+    "Colombia": [
+      "Booking.com",
+      "Vrbo",
+      "Expedia",
+      "Tripadvisor",
+      "Agoda"
+    ],
+    "Argentina": [
+      "Booking.com",
+      "Vrbo",
+      "Expedia",
+      "Tripadvisor",
+      "Agoda"
+    ],
+    "Turquía": [
+      "Booking.com",
+      "Vrbo",
+      "Expedia",
+      "Tripadvisor",
+      "Agoda"
+    ]
+  },
+  "keywords": [
+    "Airbnb",
+    "Airbnb anfitrión",
+    "Airbnb cancelación",
+    "Airbnb comisión",
+    "Airbnb estafa",
+    "Airbnb host",
+    "Airbnb licencia",
+    "Airbnb limpieza",
+    "Airbnb ocupación",
+    "Airbnb reembolso",
+    "Airbnb regulación",
+    "Airbnb scam",
+    "Airbnb soporte",
+    "Airbnb tasa turística"
+  ],
+  "segment_terms": [
+    "cancelacion",
+    "cancelación",
+    "cleaning",
+    "comision",
+    "comisión",
+    "estafa",
+    "licencia",
+    "licencias",
+    "limpieza",
+    "ocupacion",
+    "ocupación",
+    "reembolso",
+    "refund",
+    "regulacion",
+    "regulación",
+    "safety",
+    "scam",
+    "seguridad",
+    "soporte",
+    "support",
+    "tasa turistica",
+    "tasa turística"
+  ],
+  "hard_exclude_terms": [],
+  "segment_guard": {
+    "enabled": true,
+    "default_terms": [
+      "Airbnb",
+      "Booking",
+      "Booking.com",
+      "Vrbo",
+      "HomeAway",
+      "Expedia",
+      "Tripadvisor",
+      "Agoda"
+    ]
+  },
+  "reddit": {
+    "subreddits": [
+      "spain",
+      "mexico",
+      "fintech",
+      "technology",
+      "news",
+      "personalfinance",
+      "europe",
+      "worldnews"
+    ],
+    "query_templates": [
+      "\"{actor}\" (app OR web OR servicio OR soporte OR login OR error)",
+      "\"{actor}\" (precio OR comision OR comisión OR subida OR caída OR caida OR outage)",
+      "\"{actor}\" (otros actores OR alternativa OR vs)"
+    ]
+  },
+  "news": {
+    "rss_query_templates": [
+      "https://news.google.com/rss/search?q={query}&hl={hl}&gl={gl}&ceid={ceid}"
+    ],
+    "rss_geo_map": {
+      "España": {
+        "hl": "es",
+        "gl": "ES",
+        "ceid": "ES:es"
+      },
+      "México": {
+        "hl": "es-419",
+        "gl": "MX",
+        "ceid": "MX:es-419"
+      },
+      "Colombia": {
+        "hl": "es-419",
+        "gl": "CO",
+        "ceid": "CO:es-419"
+      },
+      "Perú": {
+        "hl": "es-419",
+        "gl": "PE",
+        "ceid": "PE:es-419"
+      },
+      "Argentina": {
+        "hl": "es-419",
+        "gl": "AR",
+        "ceid": "AR:es-419"
+      },
+      "Turquía": {
+        "hl": "tr",
+        "gl": "TR",
+        "ceid": "TR:tr"
+      }
+    },
+    "site_query_terms_by_category": {
+      "press": [
+        "ultimas",
+        "actualidad",
+        "negocios",
+        "empresas",
+        "mercados",
+        "economia",
+        "economía"
+      ],
+      "industry": [
+        "tendencias",
+        "sector",
+        "innovacion",
+        "innovación",
+        "producto",
+        "estrategia"
+      ],
+      "regulators": [
+        "regulador",
+        "regulacion",
+        "regulación",
+        "sancion",
+        "sanción",
+        "normativa"
+      ]
+    },
+    "site_sources_by_geo": {
+      "España": {
+        "press": [
+          "efe.com",
+          "reuters.com",
+          "bloomberg.com",
+          "bloomberglinea.com",
+          "forbes.com",
+          "elpais.com",
+          "elconfidencial.com",
+          "expansion.com",
+          "cincodias.elpais.com"
+        ],
+        "industry": [
+          "skift.com",
+          "phocuswire.com",
+          "traveldailynews.com"
+        ],
+        "regulators": [
+          "madrid.es",
+          "barcelona.cat",
+          "mitma.gob.es"
+        ]
+      },
+      "México": {
+        "press": [
+          "efe.com",
+          "reuters.com",
+          "bloomberg.com",
+          "bloomberglinea.com",
+          "forbes.com",
+          "expansion.mx",
+          "eleconomista.com.mx"
+        ],
+        "industry": [
+          "skift.com",
+          "phocuswire.com",
+          "traveldailynews.com"
+        ],
+        "regulators": []
+      },
+      "Perú": {
+        "press": [
+          "efe.com",
+          "reuters.com",
+          "bloomberg.com",
+          "bloomberglinea.com",
+          "forbes.com"
+        ],
+        "industry": [
+          "skift.com",
+          "phocuswire.com",
+          "traveldailynews.com"
+        ],
+        "regulators": []
+      },
+      "Colombia": {
+        "press": [
+          "efe.com",
+          "reuters.com",
+          "bloomberg.com",
+          "bloomberglinea.com",
+          "forbes.com"
+        ],
+        "industry": [
+          "skift.com",
+          "phocuswire.com",
+          "traveldailynews.com"
+        ],
+        "regulators": []
+      },
+      "Argentina": {
+        "press": [
+          "efe.com",
+          "reuters.com",
+          "bloomberg.com",
+          "bloomberglinea.com",
+          "forbes.com",
+          "infobae.com",
+          "lanacion.com.ar"
+        ],
+        "industry": [
+          "skift.com",
+          "phocuswire.com",
+          "traveldailynews.com"
+        ],
+        "regulators": []
+      },
+      "Turquía": {
+        "press": [
+          "efe.com",
+          "reuters.com",
+          "bloomberg.com",
+          "bloomberglinea.com",
+          "forbes.com",
+          "hurriyetdailynews.com",
+          "aa.com.tr"
+        ],
+        "industry": [
+          "skift.com",
+          "phocuswire.com",
+          "traveldailynews.com"
+        ],
+        "regulators": []
+      }
+    },
+    "rss_urls": []
+  },
+  "forums": {
+    "rss_query_templates": [
+      "https://news.google.com/rss/search?q={query}&hl={hl}&gl={gl}&ceid={ceid}"
+    ],
+    "query_terms": [
+      "foro",
+      "foros",
+      "forum",
+      "forums",
+      "comunidad",
+      "opiniones",
+      "queja",
+      "quejas",
+      "problema",
+      "problemas"
+    ],
+    "rss_urls": [
+      "https://news.google.com/rss/search?q=site%3Areddit.com+Airbnb",
+      "https://news.google.com/rss/search?q=site%3Arankia.com+Airbnb",
+      "https://news.google.com/rss/search?q=site%3Aforocoches.com+Airbnb",
+      "https://news.google.com/rss/search?q=site%3Atripadvisor.com+Airbnb",
+      "https://news.google.com/rss/search?q=site%3Abooking.com+Airbnb",
+      "https://news.google.com/rss/search?q=site%3Aplay.google.com+Airbnb",
+      "https://news.google.com/rss/search?q=site%3Aapps.apple.com+Airbnb",
+      "https://news.google.com/rss/search?q=site%3Aplay.google.com+Airbnb host",
+      "https://news.google.com/rss/search?q=site%3Aapps.apple.com+Airbnb host"
+    ]
+  },
+  "blogs": {
+    "rss_query_templates": [
+      "https://news.google.com/rss/search?q={query}&hl={hl}&gl={gl}&ceid={ceid}"
+    ],
+    "query_terms": [
+      "blog",
+      "blogs",
+      "opinion",
+      "opinión",
+      "analisis",
+      "análisis",
+      "review",
+      "reseña",
+      "reseñas"
+    ],
+    "rss_urls": [
+      "https://news.google.com/rss/search?q=site%3Amedium.com+Airbnb",
+      "https://news.google.com/rss/search?q=site%3Asubstack.com+Airbnb",
+      "https://news.google.com/rss/search?q=site%3Askift.com+Airbnb",
+      "https://news.google.com/rss/search?q=site%3Aphocuswire.com+Airbnb",
+      "https://news.google.com/rss/search?q=site%3Aplay.google.com+Airbnb",
+      "https://news.google.com/rss/search?q=site%3Aapps.apple.com+Airbnb",
+      "https://news.google.com/rss/search?q=site%3Aplay.google.com+Airbnb host",
+      "https://news.google.com/rss/search?q=site%3Aapps.apple.com+Airbnb host"
+    ]
+  },
+  "appstore": {
+    "app_ids": [
+      "401626263",
+      "367003839",
+      "1245772818",
+      "284876795"
+    ],
+    "app_id_to_actor": {}
+  },
+  "trustpilot": {
+    "rss_query_templates": [
+      "https://news.google.com/rss/search?q={query}&hl={hl}&gl={gl}&ceid={ceid}"
+    ],
+    "query_terms": [
+      "trustpilot",
+      "reseña",
+      "reseñas",
+      "review",
+      "reviews",
+      "opiniones"
+    ],
+    "rss_urls": [
+      "https://news.google.com/rss/search?q=Trustpilot+Airbnb",
+      "https://news.google.com/rss/search?q=Trustpilot+Booking.com",
+      "https://news.google.com/rss/search?q=Trustpilot+Vrbo",
+      "https://news.google.com/rss/search?q=Trustpilot+Expedia",
+      "https://news.google.com/rss/search?q=Trustpilot+Tripadvisor"
+    ]
+  },
+  "google_reviews": {
+    "place_ids": []
+  },
+  "downdetector": {
+    "rss_query_templates": [
+      "https://news.google.com/rss/search?q={query}&hl={hl}&gl={gl}&ceid={ceid}"
+    ],
+    "rss_query_segment_mode": "strict",
+    "query_terms": [
+      "downdetector",
+      "incidencia",
+      "incidencias",
+      "caida",
+      "caída",
+      "outage",
+      "interrupcion",
+      "interrupción"
+    ],
+    "rss_urls": []
+  },
+  "require_actor_sources": [
+    "news",
+    "forums",
+    "blogs",
+    "gdelt",
+    "newsapi",
+    "guardian",
+    "downdetector"
+  ],
+  "noise_terms": [
+    "deportes",
+    "futbol",
+    "fútbol",
+    "liga",
+    "goles",
+    "gol",
+    "partido",
+    "marcador",
+    "club",
+    "torneo",
+    "campeonato",
+    "copa",
+    "mundial",
+    "seleccion",
+    "selección",
+    "jugador",
+    "entrenador",
+    "fichaje",
+    "traspaso",
+    "derbi",
+    "derby",
+    "clasico",
+    "clásico",
+    "nba",
+    "nfl",
+    "mlb",
+    "nhl",
+    "tenis",
+    "atp",
+    "wta",
+    "grand slam",
+    "formula 1",
+    "f1",
+    "motogp",
+    "ufc",
+    "celebridad",
+    "celebridades",
+    "famoso",
+    "famosos",
+    "artista",
+    "cantante",
+    "actor",
+    "actriz",
+    "influencer",
+    "boda",
+    "divorcio",
+    "romance",
+    "escandalo",
+    "escándalo",
+    "reality",
+    "alfombra roja",
+    "estreno",
+    "pelicula",
+    "película",
+    "serie",
+    "telenovela",
+    "show",
+    "concierto",
+    "gira",
+    "festival",
+    "premios",
+    "grammy",
+    "oscar",
+    "apuesta",
+    "apuestas",
+    "loteria",
+    "lotería",
+    "jackpot",
+    "sorteo",
+    "tinka"
+  ],
+  "context_terms": [
+    "airbnb",
+    "alojamiento",
+    "reserva",
+    "anfitrion",
+    "anfitrión",
+    "huesped",
+    "huésped",
+    "viaje",
+    "estadia",
+    "estancia",
+    "cancelacion",
+    "cancelación",
+    "reembolso",
+    "check in",
+    "check out",
+    "precio",
+    "tarifa",
+    "alquiler vacacional",
+    "apartamento",
+    "departamento",
+    "piso",
+    "casa",
+    "cabaña",
+    "hostal",
+    "limpieza",
+    "tasa de limpieza",
+    "check-in",
+    "check-out",
+    "impuesto turistico",
+    "impuesto turístico"
+  ]
+}
