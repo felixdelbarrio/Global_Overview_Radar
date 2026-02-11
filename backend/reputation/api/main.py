@@ -3,7 +3,6 @@ from __future__ import annotations
 import os
 
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 
 from reputation.api.routers.auth import router as auth_router
 from reputation.api.routers.ingest import router as ingest_router
@@ -28,19 +27,6 @@ def create_app() -> FastAPI:
         docs_url="/docs" if docs_enabled else None,
         redoc_url="/redoc" if docs_enabled else None,
         openapi_url="/openapi.json" if docs_enabled else None,
-    )
-
-    # Set up CORS using a regex for allowed origins
-    # This allows for flexibility with localhost and dynamic Cloud Run URLs.
-    # Default regex allows any localhost port for local development.
-    allowed_origin_regex = os.environ.get("CORS_ALLOWED_ORIGIN_REGEX", r"https?://localhost(:\d+)?")
-
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origin_regex=allowed_origin_regex,
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
     )
 
     app.include_router(auth_router, prefix="/auth", tags=["auth"])

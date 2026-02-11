@@ -28,6 +28,7 @@ jobs:
       GCP_PROJECT: global-overview-radar
       GCP_REGION: europe-southwest1
       BACKEND_SERVICE: gor-backend
+      BACKEND_SA: ""
       BACKEND_PYTHON_RUNTIME: "3.13"
 
       BACKEND_MAX_INSTANCES: "1"
@@ -112,7 +113,7 @@ jobs:
           set -euo pipefail
 
           cp backend/reputation/cloudrun.env.example backend/reputation/cloudrun.env
-          awk '$0 !~ /^(AUTH_GOOGLE_CLIENT_ID|AUTH_ALLOWED_EMAILS|GOOGLE_CLOUD_LOGIN_REQUESTED|AUTH_BYPASS_MUTATION_KEY|CORS_ALLOWED_ORIGIN_REGEX)=/' \
+          awk '$0 !~ /^(AUTH_GOOGLE_CLIENT_ID|AUTH_ALLOWED_EMAILS|GOOGLE_CLOUD_LOGIN_REQUESTED|AUTH_BYPASS_MUTATION_KEY)=/' \
             backend/reputation/cloudrun.env > backend/reputation/cloudrun.env.tmp
           mv backend/reputation/cloudrun.env.tmp backend/reputation/cloudrun.env
 
@@ -127,14 +128,10 @@ jobs:
             exit 1
           fi
 
-          # Allow the frontend Cloud Run URL pattern:
-          CORS_REGEX="^https://${FRONTEND_SERVICE}-.+\\.a\\.run\\.app$"
-
           cat >> backend/reputation/cloudrun.env <<EOF
           AUTH_GOOGLE_CLIENT_ID=${AUTH_GOOGLE_CLIENT_ID}
           AUTH_ALLOWED_EMAILS=${AUTH_ALLOWED_EMAILS}
           GOOGLE_CLOUD_LOGIN_REQUESTED=${LOGIN_REQUESTED}
-          CORS_ALLOWED_ORIGIN_REGEX=${CORS_REGEX}
           EOF
 
       - name: Deploy backend (Cloud Run)
@@ -142,6 +139,12 @@ jobs:
           set -euo pipefail
           unset CLOUDSDK_RUN_DEPLOY_ENV_VARS_FILE CLOUDSDK_RUN_DEPLOY_SET_ENV_VARS CLOUDSDK_RUN_DEPLOY_UPDATE_ENV_VARS CLOUDSDK_RUN_DEPLOY_REMOVE_ENV_VARS CLOUDSDK_RUN_DEPLOY_CLEAR_ENV_VARS
           LOGIN_REQUESTED="${{ steps.login_toggle.outputs.value }}"
+          BACKEND_RUNTIME_SA="${BACKEND_SA:-}"
+          if [ -z "${BACKEND_RUNTIME_SA}" ]; then
+            PROJECT_NUMBER="$(gcloud projects describe "$GCP_PROJECT" --format='value(projectNumber)')"
+            BACKEND_RUNTIME_SA="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
+          fi
+          echo "Using backend runtime service account: ${BACKEND_RUNTIME_SA}"
           BUILD_VARS="GOOGLE_RUNTIME_VERSION=${BACKEND_PYTHON_RUNTIME},GOOGLE_ENTRYPOINT=python -m uvicorn reputation.api.main:app --host 0.0.0.0 --port 8080"
           SECRET_ARGS=()
           if [ "${LOGIN_REQUESTED}" = "true" ]; then
@@ -156,6 +159,7 @@ jobs:
             --project "$GCP_PROJECT" \
             --region "$GCP_REGION" \
             --source backend \
+            --service-account "$BACKEND_RUNTIME_SA" \
             --no-allow-unauthenticated \
             --min-instances 0 \
             --max-instances "$BACKEND_MAX_INSTANCES" \
