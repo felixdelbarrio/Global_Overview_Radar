@@ -228,8 +228,6 @@ cloudrun-env: ensure-cloudrun-env
 	@set -euo pipefail; \
 	ENV_FILE="backend/reputation/cloudrun.env"; \
 	env_get() { awk -F= -v k="$$1" '$$0 ~ ("^"k"=") {print substr($$0,index($$0,"=")+1)}' "$$ENV_FILE" | tail -n1; }; \
-	GCP_PROJECT_VAL="$${GCP_PROJECT:-$$(env_get GCP_PROJECT)}"; \
-	GCP_PROJECT_VAL="$${GCP_PROJECT_VAL:-global-overview-radar}"; \
 	LOGIN_REQUESTED_VAL="$$(env_get GOOGLE_CLOUD_LOGIN_REQUESTED)"; \
 	LOGIN_REQUESTED_VAL="$$(echo "$$LOGIN_REQUESTED_VAL" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"; \
 	if [ "$$LOGIN_REQUESTED_VAL" != "true" ]; then LOGIN_REQUESTED_VAL="false"; fi; \
@@ -257,22 +255,7 @@ cloudrun-env: ensure-cloudrun-env
 			exit 1; \
 		fi; \
 	else \
-		if ! command -v gcloud >/dev/null 2>&1; then \
-			echo "Falta gcloud para validar AUTH_BYPASS_MUTATION_KEY en Secret Manager."; \
-			exit 1; \
-		fi; \
-		BYPASS_KEY_VAL=$$(gcloud secrets versions access latest \
-			--secret AUTH_BYPASS_MUTATION_KEY \
-			--project "$$GCP_PROJECT_VAL" 2>/dev/null || true); \
-		BYPASS_KEY_VAL=$$(printf '%s' "$$BYPASS_KEY_VAL" | tr -d '\r\n'); \
-		if [ -z "$$BYPASS_KEY_VAL" ]; then \
-			echo "Falta AUTH_BYPASS_MUTATION_KEY en Secret Manager (project=$$GCP_PROJECT_VAL) cuando GOOGLE_CLOUD_LOGIN_REQUESTED=false."; \
-			exit 1; \
-		fi; \
-		if [ "$${#BYPASS_KEY_VAL}" -lt 32 ]; then \
-			echo "AUTH_BYPASS_MUTATION_KEY en Secret Manager debe tener al menos 32 caracteres."; \
-			exit 1; \
-		fi; \
+		echo "INFO: GOOGLE_CLOUD_LOGIN_REQUESTED=false; AUTH_BYPASS_MUTATION_KEY se inyectara desde Secret Manager en deploy."; \
 	fi; \
 	TMP_FILE="$$ENV_FILE.tmp"; \
 	awk '$$0 !~ /^(AUTH_GOOGLE_CLIENT_ID|AUTH_ALLOWED_EMAILS|GOOGLE_CLOUD_LOGIN_REQUESTED|CORS_ALLOWED_ORIGIN_REGEX)=/' "$$ENV_FILE" > "$$TMP_FILE"; \
@@ -301,12 +284,13 @@ deploy-cloudrun-back: cloudrun-env
 	LOGIN_REQUESTED_VAL="$$(env_get GOOGLE_CLOUD_LOGIN_REQUESTED)"; \
 	LOGIN_REQUESTED_VAL=$$(echo "$$LOGIN_REQUESTED_VAL" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]'); \
 	if [ "$$LOGIN_REQUESTED_VAL" != "true" ]; then LOGIN_REQUESTED_VAL="false"; fi; \
-	SECRET_ARGS=(); \
+	# Prevent inherited CLOUDSDK_* vars from injecting conflicting env-var flags. \
+	unset CLOUDSDK_RUN_DEPLOY_ENV_VARS_FILE CLOUDSDK_RUN_DEPLOY_SET_ENV_VARS CLOUDSDK_RUN_DEPLOY_UPDATE_ENV_VARS CLOUDSDK_RUN_DEPLOY_REMOVE_ENV_VARS CLOUDSDK_RUN_DEPLOY_CLEAR_ENV_VARS; \
+	SECRET_FLAG=""; \
 	if [ "$$LOGIN_REQUESTED_VAL" = "true" ]; then \
-		SECRET_ARGS+=(--remove-secrets AUTH_BYPASS_MUTATION_KEY); \
+		SECRET_FLAG="--remove-secrets AUTH_BYPASS_MUTATION_KEY"; \
 	else \
-		# Secret lives in GCP Secret Manager; do not store it in backend/reputation/cloudrun.env. \
-		SECRET_ARGS+=(--update-secrets AUTH_BYPASS_MUTATION_KEY=AUTH_BYPASS_MUTATION_KEY:latest); \
+		SECRET_FLAG="--update-secrets AUTH_BYPASS_MUTATION_KEY=AUTH_BYPASS_MUTATION_KEY:latest"; \
 	fi; \
 	BUILD_VARS="GOOGLE_RUNTIME_VERSION=$(BACKEND_PYTHON_RUNTIME),GOOGLE_ENTRYPOINT=python -m uvicorn reputation.api.main:app --host 0.0.0.0 --port 8080"; \
 	gcloud run deploy "$$BACKEND_SERVICE" \
@@ -320,9 +304,13 @@ deploy-cloudrun-back: cloudrun-env
 		--cpu $(BACKEND_CPU) \
 		--memory $(BACKEND_MEMORY) \
 		--cpu-throttling \
-			--set-build-env-vars "$$BUILD_VARS" \
-			"$${SECRET_ARGS[@]}" \
-			--env-vars-file "$$ENV_FILE"; \
+		--set-build-env-vars "$$BUILD_VARS" \
+		$$SECRET_FLAG \
+		--env-vars-file "$$ENV_FILE"; \
+	gcloud run services update "$$BACKEND_SERVICE" \
+		--project "$$GCP_PROJECT" \
+		--region "$$GCP_REGION" \
+		--remove-env-vars AUTH_BYPASS_ALLOW_MUTATIONS >/dev/null 2>&1 || true; \
 	# In some services, traffic may remain pinned to an older revision. Force latest. \
 	gcloud run services update-traffic "$$BACKEND_SERVICE" \
 		--project "$$GCP_PROJECT" \
