@@ -2127,7 +2127,12 @@ function isAppleStoreUrl(url?: string) {
   if (!url) return false;
   try {
     const host = new URL(url).hostname.toLowerCase();
-    return host.includes("itunes.apple.com") || host.includes("apps.apple.com");
+    return (
+      host === "itunes.apple.com" ||
+      host.endsWith(".itunes.apple.com") ||
+      host === "apps.apple.com" ||
+      host.endsWith(".apps.apple.com")
+    );
   } catch {
     return false;
   }

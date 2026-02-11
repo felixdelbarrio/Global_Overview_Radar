@@ -6,7 +6,7 @@ import Script from "next/script";
 import { AuthGate } from "@/components/AuthGate";
 
 const LOGIN_REQUIRED = process.env.NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED === "true";
-const AUTH_ENABLED = process.env.NEXT_PUBLIC_AUTH_ENABLED === "true" && LOGIN_REQUIRED;
+const AUTH_GOOGLE_CLIENT_ID = process.env.AUTH_GOOGLE_CLIENT_ID ?? "";
 
 /** Metadata base para SEO y titulo de la app. */
 export const metadata = {
@@ -32,7 +32,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <Script id="theme-init" strategy="beforeInteractive">
           {`(function(){try{var t=localStorage.getItem('gor-theme');if(t==='ambient-dark'||t==='ambient-light'){document.documentElement.dataset.theme=t;}else{document.documentElement.dataset.theme='ambient-dark';}}catch(e){}})();`}
         </Script>
-        {AUTH_ENABLED ? <AuthGate>{children}</AuthGate> : children}
+        {LOGIN_REQUIRED ? <AuthGate clientId={AUTH_GOOGLE_CLIENT_ID}>{children}</AuthGate> : children}
       </body>
     </html>
   );

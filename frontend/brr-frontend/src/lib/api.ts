@@ -9,20 +9,26 @@ import {
   clearStoredToken,
   getStoredAdminKey,
   getStoredToken,
+  isTokenExpired,
 } from "@/lib/auth";
 
 /** Base de la API; permite proxy local con /api. */
 export const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api";
 const LOGIN_REQUIRED = process.env.NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED === "true";
 const AUTH_BYPASS = !LOGIN_REQUIRED;
-const AUTH_ENABLED = process.env.NEXT_PUBLIC_AUTH_ENABLED === "true" && LOGIN_REQUIRED;
 
 function resolveUserToken(): string | null {
-  if (!AUTH_ENABLED) {
+  if (!LOGIN_REQUIRED) {
     clearStoredToken();
     return null;
   }
-  return getStoredToken();
+  const token = getStoredToken();
+  if (!token) return null;
+  if (isTokenExpired(token)) {
+    clearStoredToken();
+    return null;
+  }
+  return token;
 }
 
 function resolveAdminKey(): string | null {
@@ -64,6 +70,10 @@ export async function apiGet<T>(path: string): Promise<T> {
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     logger.warn("apiGet -> error", () => ({ path, status: res.status, text }));
+    if (LOGIN_REQUIRED && res.status === 401) {
+      // When ID tokens expire or the backend rejects them, clear local auth so AuthGate can re-login.
+      clearStoredToken();
+    }
     throw new Error(`API ${path} failed: ${res.status}${text ? ` — ${text}` : ""}`);
   }
 
@@ -134,6 +144,9 @@ export async function apiPost<T>(path: string, body: unknown): Promise<T> {
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     logger.warn("apiPost -> error", () => ({ path, status: res.status, text }));
+    if (LOGIN_REQUIRED && res.status === 401) {
+      clearStoredToken();
+    }
     throw new Error(`API ${path} failed: ${res.status}${text ? ` — ${text}` : ""}`);
   }
 

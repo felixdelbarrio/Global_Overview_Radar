@@ -4,17 +4,21 @@ on:
   workflow_run:
     workflows: ["CI - Backend"]
     types: [completed]
+  workflow_dispatch:
 
 concurrency:
-  group: deploy-cloudrun-backend-${{ github.event.workflow_run.head_sha }}
+  group: deploy-cloudrun-backend-${{ github.event.workflow_run.head_sha || github.sha }}
   cancel-in-progress: true
 
 jobs:
   deploy:
     if: >-
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.event == 'push' &&
-      github.event.workflow_run.head_branch == 'master'
+      (github.event_name == 'workflow_dispatch' && github.ref_name == 'master') ||
+      (
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.event == 'push' &&
+        github.event.workflow_run.head_branch == 'master'
+      )
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -37,7 +41,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Create GitHub Deployment (Production - Backend)
         id: create_deploy
@@ -46,7 +50,7 @@ jobs:
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
-            const sha = context.payload.workflow_run.head_sha;
+            const sha = (context.payload.workflow_run && context.payload.workflow_run.head_sha) || context.sha;
 
             const res = await github.rest.repos.createDeployment({
               owner,
@@ -107,7 +111,10 @@ jobs:
         run: |
           set -euo pipefail
 
-          awk -F= '$0 !~ /^[[:space:]]*#/ && $0 ~ /=/ {print $0}' backend/reputation/.env.reputation.example > backend/reputation/cloudrun.env
+          cp backend/reputation/cloudrun.env.example backend/reputation/cloudrun.env
+          awk '$0 !~ /^(AUTH_GOOGLE_CLIENT_ID|AUTH_ALLOWED_EMAILS|GOOGLE_CLOUD_LOGIN_REQUESTED|AUTH_BYPASS_ALLOW_MUTATIONS|AUTH_BYPASS_MUTATION_KEY|CORS_ALLOWED_ORIGIN_REGEX)=/' \
+            backend/reputation/cloudrun.env > backend/reputation/cloudrun.env.tmp
+          mv backend/reputation/cloudrun.env.tmp backend/reputation/cloudrun.env
 
           LOGIN_REQUESTED="${{ steps.login_toggle.outputs.value }}"
           BYPASS_ALLOW_MUTATIONS="false"
@@ -132,12 +139,15 @@ jobs:
             echo "Missing AUTH_GOOGLE_CLIENT_ID secret."
             exit 1
           fi
+          if [ "${LOGIN_REQUESTED}" = "true" ] && [ -z "${AUTH_ALLOWED_EMAILS:-}" ]; then
+            echo "Missing AUTH_ALLOWED_EMAILS secret."
+            exit 1
+          fi
 
           # Allow the frontend Cloud Run URL pattern:
           CORS_REGEX="^https://${FRONTEND_SERVICE}-.+\\.a\\.run\\.app$"
 
           cat >> backend/reputation/cloudrun.env <<EOF
-          AUTH_ENABLED=true
           AUTH_GOOGLE_CLIENT_ID=${AUTH_GOOGLE_CLIENT_ID}
           AUTH_ALLOWED_EMAILS=${AUTH_ALLOWED_EMAILS}
           GOOGLE_CLOUD_LOGIN_REQUESTED=${LOGIN_REQUESTED}
@@ -167,6 +177,14 @@ jobs:
             --timeout 300 \
             --set-build-env-vars "${BUILD_VARS}" \
             --env-vars-file backend/reputation/cloudrun.env
+
+      - name: Route backend traffic to latest revision
+        run: |
+          set -euo pipefail
+          gcloud run services update-traffic "$BACKEND_SERVICE" \
+            --project "$GCP_PROJECT" \
+            --region "$GCP_REGION" \
+            --to-latest
 
       - name: Show latest failed Cloud Build details
         if: failure()

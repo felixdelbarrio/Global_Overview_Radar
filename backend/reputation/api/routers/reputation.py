@@ -36,6 +36,7 @@ from reputation.models import (
 from reputation.repositories.cache_repo import ReputationCacheRepo
 from reputation.repositories.overrides_repo import ReputationOverridesRepo
 from reputation.user_settings import (
+    enable_advanced_settings,
     get_user_settings_snapshot,
     reset_user_settings_to_example,
     update_user_settings,
@@ -545,3 +546,13 @@ def reputation_settings_reset(
     _: None = Depends(require_mutation_access),
 ) -> dict[str, Any]:
     return reset_user_settings_to_example()
+
+
+@router.post("/settings/advanced/enable")
+def reputation_settings_enable_advanced(
+    _: None = Depends(require_mutation_access),
+) -> dict[str, Any]:
+    try:
+        return enable_advanced_settings()
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc

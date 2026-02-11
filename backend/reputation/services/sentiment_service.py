@@ -1194,8 +1194,18 @@ def _normalize_lang_code(value: str | None) -> str:
 def _sanitize_text(value: str) -> str:
     if not value:
         return ""
-    cleaned = re.sub(r"<script[^>]*>.*?</script>", " ", value, flags=re.IGNORECASE | re.DOTALL)
-    cleaned = re.sub(r"<style[^>]*>.*?</style>", " ", cleaned, flags=re.IGNORECASE | re.DOTALL)
+    cleaned = re.sub(
+        r"<script\b[^>]*>[\s\S]*?<\s*/\s*script\b[^>]*>",
+        " ",
+        value,
+        flags=re.IGNORECASE,
+    )
+    cleaned = re.sub(
+        r"<style\b[^>]*>[\s\S]*?<\s*/\s*style\b[^>]*>",
+        " ",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
     cleaned = re.sub(r"<[^>]+>", " ", cleaned)
     cleaned = html.unescape(cleaned)
     cleaned = re.sub(r"\s+", " ", cleaned).strip()

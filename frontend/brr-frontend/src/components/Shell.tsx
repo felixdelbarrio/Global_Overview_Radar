@@ -66,6 +66,8 @@ type ReputationSettingsResponse = {
   groups: ReputationSettingsGroup[];
   updated_at?: string | null;
   advanced_options?: string[];
+  advanced_option_defaults?: Record<string, string>;
+  advanced_env_exists?: boolean;
 };
 
 const EMPTY_PROFILES: string[] = [];
@@ -93,6 +95,18 @@ const ADVANCED_LOG_KEYS = new Set([
 ]);
 const LOGIN_REQUIRED = process.env.NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED === "true";
 const AUTH_BYPASS = !LOGIN_REQUIRED;
+const DISABLE_ADVANCED_SETTINGS = process.env.NEXT_PUBLIC_DISABLE_ADVANCED_SETTINGS === "true";
+
+function sanitizeSettingsForUi(data: ReputationSettingsResponse): ReputationSettingsResponse {
+  if (!DISABLE_ADVANCED_SETTINGS) return data;
+  return {
+    ...data,
+    groups: data.groups.filter((group) => group.id !== "advanced"),
+    advanced_options: [],
+    advanced_option_defaults: {},
+    advanced_env_exists: false,
+  };
+}
 
 export function Shell({ children }: { children: React.ReactNode }) {
   const profileAppliedKey = "gor-profile-applied";
@@ -160,6 +174,10 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const [advancedValue, setAdvancedValue] = useState("");
   const [advancedError, setAdvancedError] = useState<string | null>(null);
   const [advancedOptions, setAdvancedOptions] = useState<string[]>([]);
+  const [advancedOptionDefaults, setAdvancedOptionDefaults] = useState<Record<string, string>>(
+    {},
+  );
+  const [advancedEnvExists, setAdvancedEnvExists] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [adminKeyDraft, setAdminKeyDraft] = useState("");
   const [adminKeySavedAt, setAdminKeySavedAt] = useState(0);
@@ -288,16 +306,19 @@ export function Shell({ children }: { children: React.ReactNode }) {
     apiGet<ReputationSettingsResponse>("/reputation/settings")
       .then((data) => {
         if (!alive) return;
-        setSettingsGroups(data.groups);
+        const sanitized = sanitizeSettingsForUi(data);
+        setSettingsGroups(sanitized.groups);
         const nextBase: Record<string, string | number | boolean> = {};
-        data.groups.forEach((group) => {
+        sanitized.groups.forEach((group) => {
           group.fields.forEach((field) => {
             nextBase[field.key] = field.value;
           });
         });
         setSettingsBase(nextBase);
         setSettingsDraft(nextBase);
-        setAdvancedOptions(data.advanced_options ?? []);
+        setAdvancedOptions(sanitized.advanced_options ?? []);
+        setAdvancedOptionDefaults(sanitized.advanced_option_defaults ?? {});
+        setAdvancedEnvExists(Boolean(sanitized.advanced_env_exists));
         setAdvancedOpen(false);
         setAdvancedKey("");
         setAdvancedValue("");
@@ -309,6 +330,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
         setSettingsError(err instanceof Error ? err.message : "No se pudo cargar la configuración");
         setAdvancedError(null);
         setAdvancedOptions([]);
+        setAdvancedOptionDefaults({});
+        setAdvancedEnvExists(false);
       });
     return () => {
       alive = false;
@@ -639,17 +662,20 @@ export function Shell({ children }: { children: React.ReactNode }) {
         "/reputation/settings/reset",
         {}
       );
-      setSettingsGroups(response.groups);
+      const sanitized = sanitizeSettingsForUi(response);
+      setSettingsGroups(sanitized.groups);
       const nextBase: Record<string, string | number | boolean> = {};
-      response.groups.forEach((group) => {
+      sanitized.groups.forEach((group) => {
         group.fields.forEach((field) => {
           nextBase[field.key] = field.value;
         });
       });
       setSettingsBase(nextBase);
       setSettingsDraft(nextBase);
-      setAdvancedOptions(response.advanced_options ?? []);
-      dispatchSettingsChanged({ updated_at: response.updated_at ?? null });
+      setAdvancedOptions(sanitized.advanced_options ?? []);
+      setAdvancedOptionDefaults(sanitized.advanced_option_defaults ?? {});
+      setAdvancedEnvExists(Boolean(sanitized.advanced_env_exists));
+      dispatchSettingsChanged({ updated_at: sanitized.updated_at ?? null });
       setSettingsSaved(true);
       if (typeof window !== "undefined") {
         window.setTimeout(() => setSettingsSaved(false), 2600);
@@ -662,6 +688,58 @@ export function Shell({ children }: { children: React.ReactNode }) {
     } finally {
       setSettingsBusy(false);
     }
+  };
+
+  const toggleAdvancedOptions = async () => {
+    if (advancedOpen) {
+      setAdvancedOpen(false);
+      return;
+    }
+    setAdvancedError(null);
+    if (advancedEnvExists) {
+      setAdvancedOpen(true);
+      return;
+    }
+    setSettingsBusy(true);
+    try {
+      const response = await apiPost<ReputationSettingsResponse>(
+        "/reputation/settings/advanced/enable",
+        {}
+      );
+      const sanitized = sanitizeSettingsForUi(response);
+      setSettingsGroups(sanitized.groups);
+      const nextBase: Record<string, string | number | boolean> = {};
+      sanitized.groups.forEach((group) => {
+        group.fields.forEach((field) => {
+          nextBase[field.key] = field.value;
+        });
+      });
+      setSettingsBase(nextBase);
+      setSettingsDraft(nextBase);
+      setAdvancedOptions(sanitized.advanced_options ?? []);
+      setAdvancedOptionDefaults(sanitized.advanced_option_defaults ?? {});
+      setAdvancedEnvExists(Boolean(sanitized.advanced_env_exists));
+      setAdvancedOpen(true);
+      setAdvancedKey("");
+      setAdvancedValue("");
+    } catch (err) {
+      setAdvancedError(
+        err instanceof Error
+          ? err.message
+          : "No se pudo habilitar la configuración avanzada"
+      );
+    } finally {
+      setSettingsBusy(false);
+    }
+  };
+
+  const handleAdvancedKeyChange = (rawKey: string) => {
+    setAdvancedKey(rawKey);
+    if (!rawKey) {
+      setAdvancedValue("");
+      return;
+    }
+    setAdvancedValue(advancedOptionDefaults[rawKey] ?? "");
   };
 
   const addAdvancedSetting = () => {
@@ -715,17 +793,20 @@ export function Shell({ children }: { children: React.ReactNode }) {
       const response = await apiPost<ReputationSettingsResponse>("/reputation/settings", {
         values: updates,
       });
-      setSettingsGroups(response.groups);
+      const sanitized = sanitizeSettingsForUi(response);
+      setSettingsGroups(sanitized.groups);
       const nextBase: Record<string, string | number | boolean> = {};
-      response.groups.forEach((group) => {
+      sanitized.groups.forEach((group) => {
         group.fields.forEach((field) => {
           nextBase[field.key] = field.value;
         });
       });
       setSettingsBase(nextBase);
       setSettingsDraft(nextBase);
-      setAdvancedOptions(response.advanced_options ?? []);
-      dispatchSettingsChanged({ updated_at: response.updated_at ?? null });
+      setAdvancedOptions(sanitized.advanced_options ?? []);
+      setAdvancedOptionDefaults(sanitized.advanced_option_defaults ?? {});
+      setAdvancedEnvExists(Boolean(sanitized.advanced_env_exists));
+      dispatchSettingsChanged({ updated_at: sanitized.updated_at ?? null });
       setSettingsSaved(true);
       if (typeof window !== "undefined") {
         window.setTimeout(() => setSettingsSaved(false), 2600);
@@ -1571,7 +1652,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
                                 </div>
                                 <button
                                   type="button"
-                                  onClick={() => setAdvancedOpen((prev) => !prev)}
+                                  onClick={toggleAdvancedOptions}
                                   className={`settings-toggle ${
                                     advancedOpen ? "is-on" : "is-off"
                                   } relative inline-flex shrink-0 h-6 w-11 items-center rounded-full border transition ${
@@ -1702,7 +1783,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
                                 <div className="mt-2 flex flex-wrap items-center gap-2">
                                   <select
                                     value={advancedKey}
-                                    onChange={(event) => setAdvancedKey(event.target.value)}
+                                    onChange={(event) => handleAdvancedKeyChange(event.target.value)}
                                     disabled={advancedLocked}
                                     className="flex-1 min-w-[180px] rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-60)] px-3 py-1 text-xs text-[color:var(--ink)] disabled:opacity-50"
                                   >

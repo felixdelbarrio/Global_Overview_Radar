@@ -29,7 +29,6 @@ def test_verify_google_token_missing_client_id(monkeypatch: pytest.MonkeyPatch) 
 
 
 def test_require_google_user_missing_token(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(settings, "auth_enabled", True, raising=False)
     monkeypatch.setattr(settings, "google_cloud_login_requested", True, raising=False)
     with pytest.raises(HTTPException) as exc:
         auth.require_google_user(_make_request({}))
@@ -39,7 +38,6 @@ def test_require_google_user_missing_token(monkeypatch: pytest.MonkeyPatch) -> N
 def test_require_google_user_ignores_cloud_run_proxy_authorization(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(settings, "auth_enabled", True, raising=False)
     monkeypatch.setattr(settings, "google_cloud_login_requested", True, raising=False)
     with pytest.raises(HTTPException) as exc:
         auth.require_google_user(
@@ -58,7 +56,6 @@ def test_require_google_user_ignores_authorization_on_cloud_run(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("K_SERVICE", "gor-backend")
-    monkeypatch.setattr(settings, "auth_enabled", True, raising=False)
     monkeypatch.setattr(settings, "google_cloud_login_requested", True, raising=False)
     with pytest.raises(HTTPException) as exc:
         auth.require_google_user(
@@ -75,7 +72,6 @@ def test_require_google_user_ignores_authorization_on_cloud_run(
 def test_require_google_user_denies_when_email_not_allowed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(settings, "auth_enabled", True, raising=False)
     monkeypatch.setattr(settings, "google_cloud_login_requested", True, raising=False)
     monkeypatch.setattr(
         settings, "auth_allowed_emails", "allowed@example.com", raising=False
@@ -93,7 +89,6 @@ def test_require_google_user_denies_when_email_not_allowed(
 
 
 def test_require_google_user_allows(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(settings, "auth_enabled", True, raising=False)
     monkeypatch.setattr(settings, "google_cloud_login_requested", True, raising=False)
     monkeypatch.setattr(settings, "auth_allowed_emails", "", raising=False)
 
@@ -115,7 +110,6 @@ def test_require_google_user_allows(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_require_google_user_bypass_uses_first_allowed_email(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(settings, "auth_enabled", True, raising=False)
     monkeypatch.setattr(settings, "google_cloud_login_requested", False, raising=False)
     monkeypatch.setattr(
         settings,
@@ -129,22 +123,20 @@ def test_require_google_user_bypass_uses_first_allowed_email(
     assert user.subject == "cloudrun-bypass"
 
 
-def test_require_google_user_bypass_needs_allowed_emails(
+def test_require_google_user_bypass_uses_default_email_when_missing_allowlist(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(settings, "auth_enabled", True, raising=False)
     monkeypatch.setattr(settings, "google_cloud_login_requested", False, raising=False)
     monkeypatch.setattr(settings, "auth_allowed_emails", "", raising=False)
 
-    with pytest.raises(HTTPException) as exc:
-        auth.require_google_user(_make_request({}))
-    assert exc.value.status_code == 500
+    user = auth.require_google_user(_make_request({}))
+    assert user.email == "cloudrun-bypass@local.invalid"
+    assert user.subject == "cloudrun-bypass"
 
 
 def test_require_mutation_access_allows_when_bypass_disabled(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(settings, "auth_enabled", True, raising=False)
     monkeypatch.setattr(settings, "google_cloud_login_requested", True, raising=False)
 
     # Should pass-through without requiring admin key when bypass is disabled.
@@ -154,7 +146,6 @@ def test_require_mutation_access_allows_when_bypass_disabled(
 def test_require_mutation_access_blocks_when_bypass_mutations_disabled(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(settings, "auth_enabled", True, raising=False)
     monkeypatch.setattr(settings, "google_cloud_login_requested", False, raising=False)
     monkeypatch.setattr(settings, "auth_bypass_allow_mutations", False, raising=False)
     monkeypatch.setattr(
@@ -172,7 +163,6 @@ def test_require_mutation_access_blocks_when_bypass_mutations_disabled(
 def test_require_mutation_access_requires_key_when_enabled(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(settings, "auth_enabled", True, raising=False)
     monkeypatch.setattr(settings, "google_cloud_login_requested", False, raising=False)
     monkeypatch.setattr(settings, "auth_bypass_allow_mutations", True, raising=False)
     monkeypatch.setattr(
@@ -190,7 +180,6 @@ def test_require_mutation_access_requires_key_when_enabled(
 def test_require_mutation_access_500_when_key_missing_in_config(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(settings, "auth_enabled", True, raising=False)
     monkeypatch.setattr(settings, "google_cloud_login_requested", False, raising=False)
     monkeypatch.setattr(settings, "auth_bypass_allow_mutations", True, raising=False)
     monkeypatch.setattr(settings, "auth_bypass_mutation_key", "", raising=False)
@@ -203,7 +192,6 @@ def test_require_mutation_access_500_when_key_missing_in_config(
 def test_require_mutation_access_500_when_key_too_short(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(settings, "auth_enabled", True, raising=False)
     monkeypatch.setattr(settings, "google_cloud_login_requested", False, raising=False)
     monkeypatch.setattr(settings, "auth_bypass_allow_mutations", True, raising=False)
     monkeypatch.setattr(settings, "auth_bypass_mutation_key", "short", raising=False)
@@ -216,7 +204,6 @@ def test_require_mutation_access_500_when_key_too_short(
 def test_require_mutation_access_rejects_invalid_key(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(settings, "auth_enabled", True, raising=False)
     monkeypatch.setattr(settings, "google_cloud_login_requested", False, raising=False)
     monkeypatch.setattr(settings, "auth_bypass_allow_mutations", True, raising=False)
     monkeypatch.setattr(
@@ -234,7 +221,6 @@ def test_require_mutation_access_rejects_invalid_key(
 def test_require_mutation_access_accepts_valid_key(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(settings, "auth_enabled", True, raising=False)
     monkeypatch.setattr(settings, "google_cloud_login_requested", False, raising=False)
     monkeypatch.setattr(settings, "auth_bypass_allow_mutations", True, raising=False)
     monkeypatch.setattr(

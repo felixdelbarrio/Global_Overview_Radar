@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 const LOGIN_REQUIRED = process.env.NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED === "true";
-const AUTH_LOG_ENABLED = process.env.NEXT_PUBLIC_AUTH_ENABLED === "true" && LOGIN_REQUIRED;
 
 function normalizeIapEmail(value: string | null): string | null {
   if (!value) return null;
@@ -15,7 +14,7 @@ function normalizeIapId(value: string | null): string | null {
 }
 
 export function proxy(request: NextRequest) {
-  if (!AUTH_LOG_ENABLED) {
+  if (!LOGIN_REQUIRED) {
     return NextResponse.next();
   }
   const email = normalizeIapEmail(request.headers.get("x-goog-authenticated-user-email"));

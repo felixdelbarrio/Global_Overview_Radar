@@ -54,10 +54,9 @@ def _first_csv_item(value: str | None) -> str | None:
 def _cloud_bypass_user() -> AuthUser:
     email = _first_csv_item(settings.auth_allowed_emails)
     if not email:
-        raise HTTPException(
-            status_code=500,
-            detail="auth bypass misconfigured (missing AUTH_ALLOWED_EMAILS)",
-        )
+        # In bypass mode, AUTH_ALLOWED_EMAILS is optional and only used to select
+        # the synthetic audit identity.
+        email = "cloudrun-bypass@local.invalid"
     return AuthUser(
         email=email,
         name="Cloud Run bypass",
@@ -69,7 +68,7 @@ def _is_auth_bypass_active() -> bool:
     # When GOOGLE_CLOUD_LOGIN_REQUESTED=false, the system runs in "bypass" mode:
     # requests are authenticated at the infrastructure layer (Cloud Run invoker),
     # and the app does not require an end-user Google ID token.
-    return settings.auth_enabled and not settings.google_cloud_login_requested
+    return not settings.google_cloud_login_requested
 
 
 def _extract_token(request: Request) -> str | None:
@@ -96,9 +95,9 @@ def _verify_google_token(token: str) -> Mapping[str, Any]:
     client_id = settings.auth_google_client_id.strip()
     if not client_id:
         raise HTTPException(status_code=500, detail="auth misconfigured (missing client id)")
+    if google_id_token is None or google_requests is None:
+        raise HTTPException(status_code=500, detail="auth dependency missing")
     try:
-        if google_id_token is None or google_requests is None:
-            raise HTTPException(status_code=500, detail="auth dependency missing")
         requests_mod = cast(Any, google_requests)
         id_token_mod = cast(Any, google_id_token)
         payload = id_token_mod.verify_oauth2_token(
@@ -112,9 +111,6 @@ def _verify_google_token(token: str) -> Mapping[str, Any]:
 
 
 def require_google_user(request: Request) -> AuthUser:
-    if not settings.auth_enabled:
-        return AuthUser(email="anonymous")
-
     # When GOOGLE_CLOUD_LOGIN_REQUESTED=false, interactive login is bypassed.
     if _is_auth_bypass_active():
         user = _cloud_bypass_user()
