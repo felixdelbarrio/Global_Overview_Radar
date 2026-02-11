@@ -60,3 +60,10 @@ def test_resolve_config_files_seeds_default_from_samples(
     assert [file.stem for file in files] == ["banking_bbva_empresas"]
     assert (base_cfg_dir / "banking_bbva_empresas.json").exists()
     assert (base_llm_dir / "banking_bbva_empresas_llm.json").exists()
+
+
+def test_set_profile_state_rejects_path_like_profile_name() -> None:
+    import reputation.config as rep_config
+
+    with pytest.raises(ValueError, match="Invalid profile name"):
+        rep_config.set_profile_state("samples", ["../etc/passwd"])

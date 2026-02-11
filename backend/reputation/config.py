@@ -4,6 +4,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import shutil
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Sequence, cast
@@ -384,7 +385,15 @@ def _normalize_profile_name(value: str) -> str:
     name = value.strip()
     if name.lower().endswith(".json"):
         name = name[:-5]
-    return name.strip()
+    name = name.strip()
+    if not name:
+        return ""
+    # Reject path-like or potentially dangerous profile selectors.
+    if name in {".", ".."} or "/" in name or "\\" in name:
+        raise ValueError(f"Invalid profile name: {value!r}")
+    if re.fullmatch(r"[A-Za-z0-9_-]+", name) is None:
+        raise ValueError(f"Invalid profile name: {value!r}")
+    return name
 
 
 def _normalize_profile_source(value: str | None) -> str:
@@ -407,8 +416,12 @@ def _parse_profile_selector(value: str | None) -> list[str]:
     raw = value.strip()
     if not raw or raw.lower() in {"all", "*", "todos"}:
         return []
-    parts = [_normalize_profile_name(part) for part in raw.split(",")]
-    return [part for part in parts if part]
+    parts: list[str] = []
+    for raw_part in raw.split(","):
+        normalized = _normalize_profile_name(raw_part)
+        if normalized:
+            parts.append(normalized)
+    return parts
 
 
 def _filter_profile_files(
