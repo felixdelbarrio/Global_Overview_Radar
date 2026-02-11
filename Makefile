@@ -233,9 +233,9 @@ cloudrun-env: ensure-cloudrun-env
 	LOGIN_REQUESTED_VAL="$$(env_get GOOGLE_CLOUD_LOGIN_REQUESTED)"; \
 	LOGIN_REQUESTED_VAL="$$(echo "$$LOGIN_REQUESTED_VAL" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"; \
 	if [ "$$LOGIN_REQUESTED_VAL" != "true" ]; then LOGIN_REQUESTED_VAL="false"; fi; \
-	CLIENT_ID_VAL="$${AUTH_GOOGLE_CLIENT_ID:-$$(env_get AUTH_GOOGLE_CLIENT_ID)}"; \
-	ALLOWED_EMAILS_VAL="$${AUTH_ALLOWED_EMAILS:-$$(env_get AUTH_ALLOWED_EMAILS)}"; \
-	STATE_BUCKET_VAL="$${REPUTATION_STATE_BUCKET:-$$(env_get REPUTATION_STATE_BUCKET)}"; \
+	CLIENT_ID_VAL="$$(env_get AUTH_GOOGLE_CLIENT_ID)"; \
+	ALLOWED_EMAILS_VAL="$$(env_get AUTH_ALLOWED_EMAILS)"; \
+	STATE_BUCKET_VAL="$$(env_get REPUTATION_STATE_BUCKET)"; \
 	CLIENT_ID_VAL="$$(printf '%s' "$$CLIENT_ID_VAL" | tr -d '\r')"; \
 	ALLOWED_EMAILS_VAL="$$(printf '%s' "$$ALLOWED_EMAILS_VAL" | tr -d '\r')"; \
 	STATE_BUCKET_VAL="$$(printf '%s' "$$STATE_BUCKET_VAL" | tr -d '\r')"; \
@@ -290,31 +290,33 @@ deploy-cloudrun-back: cloudrun-env
 		PROJECT_NUMBER=$$(gcloud projects describe "$$GCP_PROJECT" --format='value(projectNumber)'); \
 		BACKEND_SA="$$PROJECT_NUMBER-compute@developer.gserviceaccount.com"; \
 	fi; \
-	unset CLOUDSDK_RUN_DEPLOY_ENV_VARS_FILE CLOUDSDK_RUN_DEPLOY_SET_ENV_VARS CLOUDSDK_RUN_DEPLOY_UPDATE_ENV_VARS CLOUDSDK_RUN_DEPLOY_REMOVE_ENV_VARS CLOUDSDK_RUN_DEPLOY_CLEAR_ENV_VARS; \
-	mkdir -p backend/data; \
-	rsync -a --delete data/reputation/ backend/data/reputation/; \
-	rsync -a --delete data/reputation_llm/ backend/data/reputation_llm/; \
-	rsync -a --delete data/reputation_samples/ backend/data/reputation_samples/; \
-	rsync -a --delete data/reputation_llm_samples/ backend/data/reputation_llm_samples/; \
-	BUILD_VARS="GOOGLE_RUNTIME_VERSION=$(BACKEND_PYTHON_RUNTIME),GOOGLE_ENTRYPOINT=python -m uvicorn reputation.api.main:app --host 0.0.0.0 --port 8080"; \
-	gcloud run deploy "$$BACKEND_SERVICE" \
-	--project "$$GCP_PROJECT" \
-	--region "$$GCP_REGION" \
-	--source backend \
-	--service-account "$$BACKEND_SA" \
-	--no-allow-unauthenticated \
-	--min-instances 0 \
-	--max-instances $(BACKEND_MAX_INSTANCES) \
-		--concurrency $(BACKEND_CONCURRENCY) \
-		--cpu $(BACKEND_CPU) \
-		--memory $(BACKEND_MEMORY) \
-		--cpu-throttling \
-		--set-build-env-vars "$$BUILD_VARS" \
-		--env-vars-file "$$ENV_FILE"; \
-	gcloud run services update-traffic "$$BACKEND_SERVICE" \
+		# Prevent inherited CLOUDSDK_* vars from injecting conflicting env-var flags. \
+		unset CLOUDSDK_RUN_DEPLOY_ENV_VARS_FILE CLOUDSDK_RUN_DEPLOY_SET_ENV_VARS CLOUDSDK_RUN_DEPLOY_UPDATE_ENV_VARS CLOUDSDK_RUN_DEPLOY_REMOVE_ENV_VARS CLOUDSDK_RUN_DEPLOY_CLEAR_ENV_VARS; \
+		mkdir -p backend/data; \
+		rsync -a --delete data/reputation/ backend/data/reputation/; \
+		rsync -a --delete data/reputation_llm/ backend/data/reputation_llm/; \
+		rsync -a --delete data/reputation_samples/ backend/data/reputation_samples/; \
+		rsync -a --delete data/reputation_llm_samples/ backend/data/reputation_llm_samples/; \
+		BUILD_VARS="GOOGLE_RUNTIME_VERSION=$(BACKEND_PYTHON_RUNTIME),GOOGLE_ENTRYPOINT=python -m uvicorn reputation.api.main:app --host 0.0.0.0 --port 8080"; \
+		gcloud run deploy "$$BACKEND_SERVICE" \
 		--project "$$GCP_PROJECT" \
-	--region "$$GCP_REGION" \
-	--to-latest
+		--region "$$GCP_REGION" \
+		--source backend \
+		--service-account "$$BACKEND_SA" \
+		--no-allow-unauthenticated \
+		--min-instances 0 \
+		--max-instances $(BACKEND_MAX_INSTANCES) \
+			--concurrency $(BACKEND_CONCURRENCY) \
+			--cpu $(BACKEND_CPU) \
+			--memory $(BACKEND_MEMORY) \
+			--cpu-throttling \
+			--set-build-env-vars "$$BUILD_VARS" \
+			--env-vars-file "$$ENV_FILE"; \
+		# In some services, traffic may remain pinned to an older revision. Force latest. \
+		gcloud run services update-traffic "$$BACKEND_SERVICE" \
+			--project "$$GCP_PROJECT" \
+		--region "$$GCP_REGION" \
+		--to-latest
 
 deploy-cloudrun-front: cloudrun-env
 	@echo "==> Deploy frontend en Cloud Run (proxy /api -> backend)..."
