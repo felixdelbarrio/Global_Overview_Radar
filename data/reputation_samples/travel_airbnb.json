@@ -213,7 +213,7 @@
     "query_templates": [
       "\"{actor}\" (app OR web OR servicio OR soporte OR login OR error)",
       "\"{actor}\" (precio OR comision OR comisión OR subida OR caída OR caida OR outage)",
-      "\"{actor}\" (competencia OR alternativa OR vs)"
+      "\"{actor}\" (otros actores OR alternativa OR vs)"
     ]
   },
   "news": {

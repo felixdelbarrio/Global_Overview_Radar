@@ -100,7 +100,7 @@ FIELDS: list[UserSettingField] = [
         key="visualization.show_comparisons",
         env="REPUTATION_UI_SHOW_COMPARISONS",
         group="language",
-        label="Comparar con competencia",
+        label="Comparar con otros actores",
         description=(
             "Si está desactivado, el frontend oculta la comparación con otros actores "
             "y muestra solo el actor principal."

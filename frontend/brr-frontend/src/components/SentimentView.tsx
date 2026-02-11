@@ -1029,7 +1029,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
             )}
             {showStoreRatingsForGeo && !isDashboard && comparisonsEnabled && (
               <StoreRatingCard
-                label="Rating oficial competencia"
+                label="Rating oficial otros actores"
                 ratings={actorStoreRatings}
                 loading={itemsLoading}
                 visibility={storeRatingVisibility}
