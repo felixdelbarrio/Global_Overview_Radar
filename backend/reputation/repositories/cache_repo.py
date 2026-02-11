@@ -6,7 +6,9 @@ from pathlib import Path
 from typing import Optional
 
 from reputation.actors import build_actor_alias_map, canonicalize_actor
+from reputation.config import REPO_ROOT
 from reputation.models import ReputationCacheDocument
+from reputation.state_store import state_store_enabled, sync_from_state, sync_to_state
 
 
 class ReputationCacheRepo:
@@ -14,10 +16,11 @@ class ReputationCacheRepo:
         self._path = path
 
     def load(self) -> Optional[ReputationCacheDocument]:
+        if state_store_enabled():
+            sync_from_state(self._path, repo_root=REPO_ROOT)
         if not self._path.exists():
             return None
         import json
-        from pathlib import Path
 
         with self._path.open("r", encoding="utf-8") as f:
             data = json.load(f)
@@ -27,7 +30,9 @@ class ReputationCacheRepo:
         # `data/reputation/config.json` si está disponible. Este fichero
         # contiene la sección `otros_actores_aliases` con la forma:
         # { "CanonicalName": ["alias1", "alias2"] }
-        config_file = Path(__file__).resolve().parents[3] / "data" / "reputation" / "config.json"
+        config_file = REPO_ROOT / "data" / "reputation" / "config.json"
+        if state_store_enabled():
+            sync_from_state(config_file, repo_root=REPO_ROOT)
         alias_map: dict[str, str] = {}
         if config_file.exists():
             try:
@@ -55,6 +60,8 @@ class ReputationCacheRepo:
             f.flush()
             os.fsync(f.fileno())
         tmp_path.replace(self._path)
+        if state_store_enabled():
+            sync_to_state(self._path, repo_root=REPO_ROOT)
 
     def is_fresh(self, ttl_hours: int) -> bool:
         doc = self.load()

@@ -12,7 +12,9 @@ from reputation.config import (
     REPUTATION_ADVANCED_ENV_PATH,
     REPUTATION_ENV_EXAMPLE,
     REPUTATION_ENV_PATH,
+    persist_reputation_env_files_to_state,
     reload_reputation_settings,
+    sync_reputation_env_files_from_state,
 )
 from reputation.env_crypto import decrypt_env_secret, encrypt_env_secret
 
@@ -774,6 +776,7 @@ def _advanced_option_defaults(options: list[str]) -> dict[str, str]:
 
 
 def get_user_settings_snapshot() -> dict[str, Any]:
+    sync_reputation_env_files_from_state()
     _ensure_example_file()
     cloud_run_runtime = _is_cloud_run_runtime()
     main_env_values = _parse_env_file(REPUTATION_ENV_PATH)
@@ -880,6 +883,7 @@ def get_user_settings_snapshot() -> dict[str, Any]:
 
 
 def update_user_settings(values: dict[str, Any]) -> dict[str, Any]:
+    sync_reputation_env_files_from_state()
     _ensure_example_file()
     cloud_run_runtime = _is_cloud_run_runtime()
     main_env_values = _parse_env_file(REPUTATION_ENV_PATH)
@@ -1011,6 +1015,7 @@ def update_user_settings(values: dict[str, Any]) -> dict[str, Any]:
             _render_advanced_env_file(advanced_env_values, advanced_extras),
             encoding="utf-8",
         )
+    persist_reputation_env_files_to_state()
 
     reload_reputation_settings()
     _ensure_example_file()
@@ -1019,6 +1024,7 @@ def update_user_settings(values: dict[str, Any]) -> dict[str, Any]:
 
 
 def reset_user_settings_to_example() -> dict[str, Any]:
+    sync_reputation_env_files_from_state()
     _ensure_example_file()
     if not REPUTATION_ENV_EXAMPLE.exists():
         raise FileNotFoundError("Reputation example env file not found")
@@ -1027,11 +1033,13 @@ def reset_user_settings_to_example() -> dict[str, Any]:
     if REPUTATION_ADVANCED_ENV_PATH.exists():
         advanced_content = REPUTATION_ADVANCED_ENV_EXAMPLE.read_text(encoding="utf-8")
         REPUTATION_ADVANCED_ENV_PATH.write_text(advanced_content, encoding="utf-8")
+    persist_reputation_env_files_to_state()
     reload_reputation_settings()
     return get_user_settings_snapshot()
 
 
 def enable_advanced_settings() -> dict[str, Any]:
+    sync_reputation_env_files_from_state()
     _ensure_example_file()
     if _is_cloud_run_runtime():
         raise ValueError("La configuración avanzada está deshabilitada en Cloud Run.")
@@ -1040,5 +1048,6 @@ def enable_advanced_settings() -> dict[str, Any]:
             REPUTATION_ADVANCED_ENV_EXAMPLE.read_text(encoding="utf-8"),
             encoding="utf-8",
         )
+        persist_reputation_env_files_to_state()
     reload_reputation_settings()
     return get_user_settings_snapshot()
