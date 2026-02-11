@@ -415,22 +415,103 @@ def _filter_profile_files(
     files: Sequence[Path],
     profiles: Sequence[str] | None,
 ) -> list[Path]:
-    if not profiles:
-        return list(files)
-    profile_set = {p.lower() for p in profiles}
-    selected = [file for file in files if file.stem.lower() in profile_set]
-    missing = profile_set - {file.stem.lower() for file in files}
+    selected, missing = _select_profile_files(files, profiles)
     if missing:
         raise FileNotFoundError(f"Reputation profile(s) not found: {', '.join(sorted(missing))}")
     return selected
 
 
+def _select_profile_files(
+    files: Sequence[Path],
+    profiles: Sequence[str] | None,
+) -> tuple[list[Path], set[str]]:
+    if not profiles:
+        return list(files), set()
+    profile_set = {
+        _normalize_profile_name(p).lower() for p in profiles if _normalize_profile_name(p)
+    }
+    selected = [file for file in files if file.stem.lower() in profile_set]
+    missing = profile_set - {file.stem.lower() for file in files}
+    return selected, missing
+
+
+def _sync_missing_profiles_from_state(cfg_dir: Path, missing_profiles: set[str]) -> bool:
+    if not missing_profiles or not state_store_enabled():
+        return False
+    synced_any = False
+    for profile in sorted(missing_profiles):
+        target = cfg_dir / f"{profile}.json"
+        synced = sync_from_state(target, repo_root=REPO_ROOT)
+        synced_any = synced_any or synced
+    return synced_any
+
+
+def _seed_missing_profiles_from_samples(
+    cfg_dir: Path,
+    missing_profiles: set[str],
+) -> bool:
+    if not missing_profiles:
+        return False
+    if not DEFAULT_SAMPLE_CONFIG_PATH.exists() or not DEFAULT_SAMPLE_CONFIG_PATH.is_dir():
+        return False
+
+    seeded_any = False
+    for profile in sorted(missing_profiles):
+        sample_cfg = DEFAULT_SAMPLE_CONFIG_PATH / f"{profile}.json"
+        if not sample_cfg.exists() or not sample_cfg.is_file():
+            continue
+
+        cfg_dir.mkdir(parents=True, exist_ok=True)
+        dst_cfg = cfg_dir / sample_cfg.name
+        shutil.copy2(sample_cfg, dst_cfg)
+        if state_store_enabled():
+            sync_to_state(dst_cfg, repo_root=REPO_ROOT)
+        seeded_any = True
+
+        sample_llm = DEFAULT_SAMPLE_LLM_CONFIG_PATH / f"{profile}_llm.json"
+        if sample_llm.exists() and sample_llm.is_file():
+            BASE_LLM_CONFIG_PATH.mkdir(parents=True, exist_ok=True)
+            dst_llm = BASE_LLM_CONFIG_PATH / sample_llm.name
+            shutil.copy2(sample_llm, dst_llm)
+            if state_store_enabled():
+                sync_to_state(dst_llm, repo_root=REPO_ROOT)
+
+    return seeded_any
+
+
+def _resolve_profile_files_with_recovery(
+    cfg_dir: Path,
+    profiles: Sequence[str] | None,
+) -> list[Path]:
+    files = _sorted_config_files(cfg_dir)
+    selected, missing = _select_profile_files(files, profiles)
+    if not missing:
+        return selected
+
+    if _sync_missing_profiles_from_state(cfg_dir, missing):
+        files = _sorted_config_files(cfg_dir)
+        selected, missing = _select_profile_files(files, profiles)
+        if not missing:
+            return selected
+
+    is_default_runtime_dir = cfg_dir.resolve() == BASE_CONFIG_PATH.resolve()
+    if is_default_runtime_dir and _seed_missing_profiles_from_samples(cfg_dir, missing):
+        files = _sorted_config_files(cfg_dir)
+        selected, missing = _select_profile_files(files, profiles)
+        if not missing:
+            return selected
+
+    raise FileNotFoundError(f"Reputation profile(s) not found: {', '.join(sorted(missing))}")
+
+
 def _resolve_config_files(cfg_path: Path, profiles: Sequence[str] | None = None) -> list[Path]:
     if cfg_path.exists():
         if cfg_path.is_dir():
-            return _filter_profile_files(_sorted_config_files(cfg_path), profiles)
+            return _resolve_profile_files_with_recovery(cfg_path, profiles)
         if profiles:
-            profile_set = {p.lower() for p in profiles}
+            profile_set = {
+                _normalize_profile_name(p).lower() for p in profiles if _normalize_profile_name(p)
+            }
             if cfg_path.stem.lower() not in profile_set:
                 raise FileNotFoundError(
                     f"Reputation profile(s) not found: {', '.join(sorted(profile_set))}"
@@ -438,8 +519,15 @@ def _resolve_config_files(cfg_path: Path, profiles: Sequence[str] | None = None)
         return [cfg_path]
 
     search_dir = cfg_path if cfg_path.suffix == "" else cfg_path.parent
+    if profiles and not search_dir.exists():
+        expected = {
+            _normalize_profile_name(p).lower() for p in profiles if _normalize_profile_name(p)
+        }
+        _sync_missing_profiles_from_state(search_dir, expected)
+        if search_dir.resolve() == BASE_CONFIG_PATH.resolve():
+            _seed_missing_profiles_from_samples(search_dir, expected)
     if search_dir.exists() and search_dir.is_dir():
-        return _filter_profile_files(_sorted_config_files(search_dir), profiles)
+        return _resolve_profile_files_with_recovery(search_dir, profiles)
 
     return []
 

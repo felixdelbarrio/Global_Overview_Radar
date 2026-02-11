@@ -186,14 +186,11 @@ cloudrun-config: ensure-cloudrun-env
 	ALLOWED_EMAILS_DEFAULT="$$(env_get AUTH_ALLOWED_EMAILS)"; \
 	read -r -p "AUTH_ALLOWED_EMAILS (coma separada) [$$ALLOWED_EMAILS_DEFAULT]: " AUTH_ALLOWED_EMAILS_IN; \
 	AUTH_ALLOWED_EMAILS_VAL="$${AUTH_ALLOWED_EMAILS_IN:-$$ALLOWED_EMAILS_DEFAULT}"; \
-	STATE_BUCKET_DEFAULT="$$(env_get REPUTATION_STATE_BUCKET)"; \
-	if [ -z "$$STATE_BUCKET_DEFAULT" ]; then STATE_BUCKET_DEFAULT="$${GCP_PROJECT_VAL}-reputation-state"; fi; \
-	read -r -p "REPUTATION_STATE_BUCKET [$$STATE_BUCKET_DEFAULT]: " REPUTATION_STATE_BUCKET_IN; \
-	REPUTATION_STATE_BUCKET_VAL="$${REPUTATION_STATE_BUCKET_IN:-$$STATE_BUCKET_DEFAULT}"; \
-	STATE_PREFIX_DEFAULT="$$(env_get REPUTATION_STATE_PREFIX)"; \
-	STATE_PREFIX_DEFAULT="$${STATE_PREFIX_DEFAULT:-reputation-state}"; \
-	read -r -p "REPUTATION_STATE_PREFIX [$$STATE_PREFIX_DEFAULT]: " REPUTATION_STATE_PREFIX_IN; \
-	REPUTATION_STATE_PREFIX_VAL="$${REPUTATION_STATE_PREFIX_IN:-$$STATE_PREFIX_DEFAULT}"; \
+		STATE_BUCKET_DEFAULT="$$(env_get REPUTATION_STATE_BUCKET)"; \
+		if [ -z "$$STATE_BUCKET_DEFAULT" ]; then STATE_BUCKET_DEFAULT="$${GCP_PROJECT_VAL}-reputation-state"; fi; \
+		read -r -p "REPUTATION_STATE_BUCKET [$$STATE_BUCKET_DEFAULT]: " REPUTATION_STATE_BUCKET_IN; \
+		REPUTATION_STATE_BUCKET_VAL="$${REPUTATION_STATE_BUCKET_IN:-$$STATE_BUCKET_DEFAULT}"; \
+		REPUTATION_STATE_PREFIX_VAL="reputation-state"; \
 	if [ "$$GOOGLE_CLOUD_LOGIN_REQUESTED_VAL" = "true" ] && [ -z "$$AUTH_GOOGLE_CLIENT_ID_VAL" ]; then \
 		echo "Falta AUTH_GOOGLE_CLIENT_ID (required cuando GOOGLE_CLOUD_LOGIN_REQUESTED=true)."; \
 		exit 1; \
@@ -239,17 +236,13 @@ cloudrun-env: ensure-cloudrun-env
 	CLIENT_ID_VAL="$$(env_get AUTH_GOOGLE_CLIENT_ID)"; \
 	ALLOWED_EMAILS_VAL="$$(env_get AUTH_ALLOWED_EMAILS)"; \
 	STATE_BUCKET_VAL="$$(env_get REPUTATION_STATE_BUCKET)"; \
-	STATE_PREFIX_VAL="$$(env_get REPUTATION_STATE_PREFIX)"; \
 	CLIENT_ID_VAL="$$(printf '%s' "$$CLIENT_ID_VAL" | tr -d '\r')"; \
 	ALLOWED_EMAILS_VAL="$$(printf '%s' "$$ALLOWED_EMAILS_VAL" | tr -d '\r')"; \
 	STATE_BUCKET_VAL="$$(printf '%s' "$$STATE_BUCKET_VAL" | tr -d '\r')"; \
-	STATE_PREFIX_VAL="$$(printf '%s' "$$STATE_PREFIX_VAL" | tr -d '\r')"; \
+	STATE_PREFIX_VAL="reputation-state"; \
 	if [ -z "$$STATE_BUCKET_VAL" ]; then \
 		echo "Falta REPUTATION_STATE_BUCKET (ponlo en backend/reputation/cloudrun.env)."; \
 		exit 1; \
-	fi; \
-	if [ -z "$$STATE_PREFIX_VAL" ]; then \
-		STATE_PREFIX_VAL="reputation-state"; \
 	fi; \
 		if [ "$$LOGIN_REQUESTED_VAL" = "true" ]; then \
 		if [ -z "$$CLIENT_ID_VAL" ]; then \
@@ -300,6 +293,8 @@ deploy-cloudrun-back: cloudrun-env
 		# Prevent inherited CLOUDSDK_* vars from injecting conflicting env-var flags. \
 		unset CLOUDSDK_RUN_DEPLOY_ENV_VARS_FILE CLOUDSDK_RUN_DEPLOY_SET_ENV_VARS CLOUDSDK_RUN_DEPLOY_UPDATE_ENV_VARS CLOUDSDK_RUN_DEPLOY_REMOVE_ENV_VARS CLOUDSDK_RUN_DEPLOY_CLEAR_ENV_VARS; \
 		mkdir -p backend/data; \
+		rsync -a --delete data/reputation/ backend/data/reputation/; \
+		rsync -a --delete data/reputation_llm/ backend/data/reputation_llm/; \
 		rsync -a --delete data/reputation_samples/ backend/data/reputation_samples/; \
 		rsync -a --delete data/reputation_llm_samples/ backend/data/reputation_llm_samples/; \
 		BUILD_VARS="GOOGLE_RUNTIME_VERSION=$(BACKEND_PYTHON_RUNTIME),GOOGLE_ENTRYPOINT=python -m uvicorn reputation.api.main:app --host 0.0.0.0 --port 8080"; \
