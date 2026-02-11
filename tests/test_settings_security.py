@@ -225,7 +225,7 @@ def test_update_settings_persists_advanced_values_in_advanced_file_only(
     assert advanced_values["REPUTATION_HTTP_CACHE_TTL_SEC"] == "90"
 
 
-def test_settings_endpoint_requires_admin_key_in_auth_bypass(
+def test_settings_endpoint_allows_read_without_admin_key_in_auth_bypass(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     import reputation.config as rep_config
@@ -240,7 +240,30 @@ def test_settings_endpoint_requires_admin_key_in_auth_bypass(
         rep_config.settings, "auth_allowed_emails", "owner@example.com", raising=False
     )
     monkeypatch.setattr(
-        rep_config.settings, "auth_bypass_allow_mutations", True, raising=False
+        rep_config.settings, "auth_bypass_mutation_key", key, raising=False
+    )
+
+    app = create_app()
+    app.dependency_overrides[reputation_router._refresh_settings] = lambda: None
+    client = TestClient(app)
+
+    read_snapshot = client.get("/reputation/settings")
+    assert read_snapshot.status_code == 200
+
+
+def test_settings_update_endpoint_requires_admin_key_in_auth_bypass(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import reputation.config as rep_config
+    from reputation.api.routers import reputation as reputation_router
+
+    key = "32chars-minimum-admin-key-12345678"
+
+    monkeypatch.setattr(
+        rep_config.settings, "google_cloud_login_requested", False, raising=False
+    )
+    monkeypatch.setattr(
+        rep_config.settings, "auth_allowed_emails", "owner@example.com", raising=False
     )
     monkeypatch.setattr(
         rep_config.settings, "auth_bypass_mutation_key", key, raising=False
@@ -250,8 +273,12 @@ def test_settings_endpoint_requires_admin_key_in_auth_bypass(
     app.dependency_overrides[reputation_router._refresh_settings] = lambda: None
     client = TestClient(app)
 
-    denied = client.get("/reputation/settings")
+    denied = client.post("/reputation/settings", json={"values": {"llm.enabled": True}})
     assert denied.status_code == 403
 
-    allowed = client.get("/reputation/settings", headers={"x-gor-admin-key": key})
+    allowed = client.post(
+        "/reputation/settings",
+        json={"values": {"llm.enabled": True}},
+        headers={"x-gor-admin-key": key},
+    )
     assert allowed.status_code == 200

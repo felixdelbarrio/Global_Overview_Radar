@@ -36,7 +36,6 @@ logger = logging.getLogger(__name__)
 
 CLOUDRUN_ONLY_ENV_KEYS = {
     "AUTH_ALLOWED_EMAILS",
-    "AUTH_BYPASS_ALLOW_MUTATIONS",
     "AUTH_BYPASS_MUTATION_KEY",
     "AUTH_GOOGLE_CLIENT_ID",
     "CORS_ALLOWED_ORIGIN_REGEX",
@@ -119,12 +118,8 @@ class ReputationSettings(BaseSettings):
         default=False,
         alias="GOOGLE_CLOUD_LOGIN_REQUESTED",
     )
-    # If auth bypass is enabled, mutation endpoints stay blocked unless explicitly enabled.
-    auth_bypass_allow_mutations: bool = Field(
-        default=False,
-        alias="AUTH_BYPASS_ALLOW_MUTATIONS",
-    )
-    # Shared secret required for mutation endpoints while auth bypass is enabled.
+    # Shared secret required for mutation endpoints while auth bypass is enabled
+    # (GOOGLE_CLOUD_LOGIN_REQUESTED=false).
     auth_bypass_mutation_key: str = Field(
         default="",
         alias="AUTH_BYPASS_MUTATION_KEY",

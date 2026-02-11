@@ -17,13 +17,12 @@ afterEach(() => {
 });
 
 describe("proxy route", () => {
-  it("blocks mutating requests in auth-bypass read-only mode", async () => {
+  it("blocks mutating requests in auth-bypass mode when admin key is missing", async () => {
     const fetchMock = vi.fn();
     global.fetch = fetchMock as typeof fetch;
 
     const { POST } = await loadRoute({
       NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED: "false",
-      AUTH_BYPASS_READ_ONLY: "true",
       USE_SERVER_PROXY: "true",
       API_PROXY_TARGET: "https://api.example.com",
     });
@@ -40,7 +39,7 @@ describe("proxy route", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("allows mutating requests in auth-bypass mode when read-only override is disabled", async () => {
+  it("allows read requests in auth-bypass mode without admin key", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response("ok", {
         status: 200,
@@ -48,18 +47,14 @@ describe("proxy route", () => {
     );
     global.fetch = fetchMock as typeof fetch;
 
-    const { POST } = await loadRoute({
+    const { GET } = await loadRoute({
       NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED: "false",
-      AUTH_BYPASS_READ_ONLY: "false",
       USE_SERVER_PROXY: "false",
       API_PROXY_TARGET: "https://api.example.com",
     });
 
-    const req = new Request("http://localhost/api/items", {
-      method: "POST",
-      body: "payload",
-    });
-    const res = await POST(req as unknown as NextRequest, {
+    const req = new Request("http://localhost/api/items", { method: "GET" });
+    const res = await GET(req as unknown as NextRequest, {
       params: Promise.resolve({ path: ["items"] }),
     });
 
@@ -102,7 +97,7 @@ describe("proxy route", () => {
     expect(headers.get("x-gor-admin-key")).toBeNull();
   });
 
-  it("allows mutating requests in auth-bypass read-only mode when admin key is provided", async () => {
+  it("allows mutating requests in auth-bypass mode when admin key is provided", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response("ok", {
         status: 200,
@@ -112,7 +107,6 @@ describe("proxy route", () => {
 
     const { POST } = await loadRoute({
       NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED: "false",
-      AUTH_BYPASS_READ_ONLY: "true",
       USE_SERVER_PROXY: "false",
       API_PROXY_TARGET: "https://api.example.com",
     });

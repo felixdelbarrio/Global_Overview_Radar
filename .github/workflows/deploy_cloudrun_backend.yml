@@ -108,30 +108,33 @@ jobs:
         env:
           AUTH_GOOGLE_CLIENT_ID: ${{ secrets.AUTH_GOOGLE_CLIENT_ID }}
           AUTH_ALLOWED_EMAILS: ${{ secrets.AUTH_ALLOWED_EMAILS }}
+          AUTH_BYPASS_MUTATION_KEY_GH: ${{ secrets.AUTH_BYPASS_MUTATION_KEY }}
         run: |
           set -euo pipefail
 
           cp backend/reputation/cloudrun.env.example backend/reputation/cloudrun.env
-          awk '$0 !~ /^(AUTH_GOOGLE_CLIENT_ID|AUTH_ALLOWED_EMAILS|GOOGLE_CLOUD_LOGIN_REQUESTED|AUTH_BYPASS_ALLOW_MUTATIONS|AUTH_BYPASS_MUTATION_KEY|CORS_ALLOWED_ORIGIN_REGEX)=/' \
+          awk '$0 !~ /^(AUTH_GOOGLE_CLIENT_ID|AUTH_ALLOWED_EMAILS|GOOGLE_CLOUD_LOGIN_REQUESTED|AUTH_BYPASS_MUTATION_KEY|CORS_ALLOWED_ORIGIN_REGEX)=/' \
             backend/reputation/cloudrun.env > backend/reputation/cloudrun.env.tmp
           mv backend/reputation/cloudrun.env.tmp backend/reputation/cloudrun.env
 
           LOGIN_REQUESTED="${{ steps.login_toggle.outputs.value }}"
-          BYPASS_ALLOW_MUTATIONS="false"
-          BYPASS_MUTATION_KEY=""
-          if [ "${LOGIN_REQUESTED}" != "true" ]; then
-            BYPASS_MUTATION_KEY="$(gcloud secrets versions access latest \
-              --secret AUTH_BYPASS_MUTATION_KEY \
-              --project "$GCP_PROJECT" 2>/dev/null || true)"
-            BYPASS_MUTATION_KEY="$(echo "$BYPASS_MUTATION_KEY" | tr -d '\r\n')"
-            if [ -n "${BYPASS_MUTATION_KEY}" ] && [ "${#BYPASS_MUTATION_KEY}" -lt 32 ]; then
-              echo "AUTH_BYPASS_MUTATION_KEY must be at least 32 characters."
+          BYPASS_MUTATION_KEY="$(echo "${AUTH_BYPASS_MUTATION_KEY_GH:-}" | tr -d '\r\n')"
+          if [ "${LOGIN_REQUESTED}" = "true" ]; then
+            BYPASS_MUTATION_KEY=""
+          else
+            if [ -z "${BYPASS_MUTATION_KEY}" ]; then
+              BYPASS_MUTATION_KEY="$(gcloud secrets versions access latest \
+                --secret AUTH_BYPASS_MUTATION_KEY \
+                --project "$GCP_PROJECT" 2>/dev/null || true)"
+              BYPASS_MUTATION_KEY="$(echo "$BYPASS_MUTATION_KEY" | tr -d '\r\n')"
+            fi
+            if [ -z "${BYPASS_MUTATION_KEY}" ]; then
+              echo "Missing AUTH_BYPASS_MUTATION_KEY secret while GOOGLE_CLOUD_LOGIN_REQUESTED=false."
               exit 1
             fi
-            if [ -n "${BYPASS_MUTATION_KEY}" ]; then
-              BYPASS_ALLOW_MUTATIONS="true"
-            else
-              echo "::warning::AUTH_BYPASS_MUTATION_KEY missing while GOOGLE_CLOUD_LOGIN_REQUESTED=false. Deploying backend in bypass read-only mode (mutations disabled)."
+            if [ "${#BYPASS_MUTATION_KEY}" -lt 32 ]; then
+              echo "AUTH_BYPASS_MUTATION_KEY must be at least 32 characters."
+              exit 1
             fi
           fi
 
@@ -151,15 +154,20 @@ jobs:
           AUTH_GOOGLE_CLIENT_ID=${AUTH_GOOGLE_CLIENT_ID}
           AUTH_ALLOWED_EMAILS=${AUTH_ALLOWED_EMAILS}
           GOOGLE_CLOUD_LOGIN_REQUESTED=${LOGIN_REQUESTED}
-          AUTH_BYPASS_ALLOW_MUTATIONS=${BYPASS_ALLOW_MUTATIONS}
-          AUTH_BYPASS_MUTATION_KEY=${BYPASS_MUTATION_KEY}
           CORS_ALLOWED_ORIGIN_REGEX=${CORS_REGEX}
           EOF
 
       - name: Deploy backend (Cloud Run)
         run: |
           set -euo pipefail
+          LOGIN_REQUESTED="${{ steps.login_toggle.outputs.value }}"
           BUILD_VARS="GOOGLE_RUNTIME_VERSION=${BACKEND_PYTHON_RUNTIME},GOOGLE_ENTRYPOINT=python -m uvicorn reputation.api.main:app --host 0.0.0.0 --port 8080"
+          SECRET_ARGS=()
+          if [ "${LOGIN_REQUESTED}" = "true" ]; then
+            SECRET_ARGS+=(--remove-secrets AUTH_BYPASS_MUTATION_KEY)
+          else
+            SECRET_ARGS+=(--update-secrets AUTH_BYPASS_MUTATION_KEY=AUTH_BYPASS_MUTATION_KEY:latest)
+          fi
 
           # Buildpacks: source must include backend pyproject for dependency install.
           # Entry point binds explicitly to 8080 (Cloud Run default container port).
@@ -176,6 +184,7 @@ jobs:
             --cpu-throttling \
             --timeout 300 \
             --set-build-env-vars "${BUILD_VARS}" \
+            "${SECRET_ARGS[@]}" \
             --env-vars-file backend/reputation/cloudrun.env
 
       - name: Route backend traffic to latest revision

@@ -35,6 +35,7 @@ jobs:
 
       # OAuth client id (si tu política lo trata como secret, déjalo en secrets)
       AUTH_GOOGLE_CLIENT_ID: ${{ secrets.AUTH_GOOGLE_CLIENT_ID }}
+      AUTH_BYPASS_MUTATION_KEY: ${{ secrets.AUTH_BYPASS_MUTATION_KEY }}
 
     steps:
       - name: Authenticate to Google Cloud (WIF)
@@ -84,9 +85,12 @@ jobs:
           ADMIN_KEY=""
 
           if [ "${LOGIN_REQUESTED}" != "true" ]; then
-            ADMIN_KEY="$(gcloud secrets versions access latest \
-              --secret AUTH_BYPASS_MUTATION_KEY \
-              --project "$GCP_PROJECT" 2>/dev/null || true)"
+            ADMIN_KEY="$(echo "${AUTH_BYPASS_MUTATION_KEY:-}" | tr -d '\r\n')"
+            if [ -z "${ADMIN_KEY}" ]; then
+              ADMIN_KEY="$(gcloud secrets versions access latest \
+                --secret AUTH_BYPASS_MUTATION_KEY \
+                --project "$GCP_PROJECT" 2>/dev/null || true)"
+            fi
             ADMIN_KEY="$(echo "$ADMIN_KEY" | tr -d '\r\n')"
             if [ -z "${ADMIN_KEY}" ]; then
               echo "Missing AUTH_BYPASS_MUTATION_KEY secret while GOOGLE_CLOUD_LOGIN_REQUESTED=false."

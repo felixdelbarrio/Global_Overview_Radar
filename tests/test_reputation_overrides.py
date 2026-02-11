@@ -49,7 +49,6 @@ def _client(
     # Asegura determinismo: estos tests usan items con source="news"
     monkeypatch.setattr(rep_config.settings, "source_news", True)
     monkeypatch.setattr(rep_config.settings, "google_cloud_login_requested", False)
-    monkeypatch.setattr(rep_config.settings, "auth_bypass_allow_mutations", True)
     monkeypatch.setattr(rep_config.settings, "auth_bypass_mutation_key", _ADMIN_KEY)
     app = create_app()
     app.dependency_overrides[reputation_router._refresh_settings] = lambda: None

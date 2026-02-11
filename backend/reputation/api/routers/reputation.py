@@ -524,9 +524,8 @@ def reputation_profiles_update(
 
 
 @router.get("/settings")
-def reputation_settings(
-    _: None = Depends(require_mutation_access),
-) -> dict[str, Any]:
+def reputation_settings() -> dict[str, Any]:
+    # Read-only snapshot: safe to expose in bypass mode without admin key.
     return get_user_settings_snapshot()
 
 

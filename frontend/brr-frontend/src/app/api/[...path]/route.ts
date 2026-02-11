@@ -10,7 +10,6 @@ const DEFAULT_LOCAL_API = "http://127.0.0.1:8000";
 const DEFAULT_RENDER_API = "https://global-overview-radar.onrender.com";
 const LOGIN_REQUIRED = process.env.NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED === "true";
 const AUTH_BYPASS = !LOGIN_REQUIRED;
-const AUTH_BYPASS_READ_ONLY = process.env.AUTH_BYPASS_READ_ONLY !== "false";
 const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 const PROXY_AUTH_HEADER = "x-gor-proxy-auth";
 const PROXY_AUTH_CLOUD_RUN = "cloudrun-idtoken";
@@ -110,11 +109,11 @@ async function proxyRequest(request: NextRequest, path: string[]): Promise<Respo
   const method = request.method.toUpperCase();
   const adminKey = request.headers.get("x-gor-admin-key");
   const hasAdminKey = Boolean(adminKey && adminKey.trim());
-  if (AUTH_BYPASS && AUTH_BYPASS_READ_ONLY && MUTATING_METHODS.has(method) && !hasAdminKey) {
+  if (AUTH_BYPASS && MUTATING_METHODS.has(method) && !hasAdminKey) {
     return NextResponse.json(
       {
         detail:
-          "Mutating API routes are disabled while GOOGLE_CLOUD_LOGIN_REQUESTED=false (read-only mode).",
+          "Mutating API routes require x-gor-admin-key while GOOGLE_CLOUD_LOGIN_REQUESTED=false.",
       },
       { status: 403 },
     );
