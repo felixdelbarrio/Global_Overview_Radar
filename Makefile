@@ -322,6 +322,7 @@ deploy-cloudrun-back: cloudrun-env
 		--cpu-throttling \
 			--set-build-env-vars "$$BUILD_VARS" \
 			"$${SECRET_ARGS[@]}" \
+			--remove-env-vars AUTH_BYPASS_ALLOW_MUTATIONS \
 			--env-vars-file "$$ENV_FILE"; \
 	# In some services, traffic may remain pinned to an older revision. Force latest. \
 	gcloud run services update-traffic "$$BACKEND_SERVICE" \
