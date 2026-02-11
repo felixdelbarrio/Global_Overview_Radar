@@ -14,6 +14,7 @@ from reputation.config import (
     REPUTATION_ENV_PATH,
     reload_reputation_settings,
 )
+from reputation.env_crypto import decrypt_env_secret, encrypt_env_secret
 
 SettingKind = Literal["boolean", "string", "secret", "number", "select"]
 
@@ -581,7 +582,7 @@ def _parse_env_file(path: Path) -> dict[str, str]:
         if not stripped or stripped.startswith("#") or "=" not in stripped:
             continue
         key, raw_value = stripped.split("=", 1)
-        values[key.strip()] = _strip_quotes(raw_value.strip())
+        values[key.strip()] = decrypt_env_secret(_strip_quotes(raw_value.strip()))
     return values
 
 
@@ -681,6 +682,8 @@ def _render_main_env_file(values: dict[str, str]) -> str:
             value = values.get(field.env)
             if value is None:
                 value = _format_env_value(field.default, field)
+            elif field.kind == "secret":
+                value = encrypt_env_secret(value)
             lines.append(f"{field.env}={value}")
             if field.key == "language.preference":
                 lines.append(f"NEWSAPI_LANGUAGE={value}")
@@ -703,6 +706,8 @@ def _render_advanced_env_file(values: dict[str, str], extras: dict[str, str]) ->
         value = values.get(field.env)
         if value is None:
             value = _format_env_value(field.default, field)
+        elif field.kind == "secret":
+            value = encrypt_env_secret(value)
         lines.append(f"{field.env}={value}")
     if extras:
         lines.append("# Variables adicionales (solo si sabes lo que haces)")
@@ -711,7 +716,10 @@ def _render_advanced_env_file(values: dict[str, str], extras: dict[str, str]) ->
                 continue
             if key in FIELDS_BY_ENV and key not in ADVANCED_FIELD_ENVS:
                 continue
-            lines.append(f"{key}={extras[key]}")
+            raw_value = extras[key]
+            if _is_sensitive_env_name(key):
+                raw_value = encrypt_env_secret(raw_value)
+            lines.append(f"{key}={raw_value}")
     return "\n".join(lines).rstrip() + "\n"
 
 
