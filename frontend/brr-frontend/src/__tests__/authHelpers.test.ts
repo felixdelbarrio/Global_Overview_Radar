@@ -7,10 +7,8 @@ import {
   getEmailFromToken,
   getStoredEmail,
   getStoredToken,
-  isEmailAllowed,
   isTokenExpired,
   parseJwtPayload,
-  readAllowedDomains,
   storeToken,
 } from "@/lib/auth";
 
@@ -141,23 +139,4 @@ describe("auth helpers", () => {
     });
   });
 
-  it("validates allowed domains", () => {
-    process.env.NEXT_PUBLIC_ALLOWED_DOMAINS = "bbva.com,example.com";
-    expect(readAllowedDomains()).toEqual(["bbva.com", "example.com"]);
-    expect(isEmailAllowed("user@bbva.com")).toBe(true);
-    expect(isEmailAllowed("user@gmail.com")).toBe(false);
-  });
-
-  it("allows any email when no allowlists are configured", () => {
-    process.env.NEXT_PUBLIC_ALLOWED_DOMAINS = "";
-    process.env.NEXT_PUBLIC_ALLOWED_EMAILS = "";
-    expect(isEmailAllowed("user@bbva.com")).toBe(true);
-  });
-
-  it("allows explicitly whitelisted emails", () => {
-    process.env.NEXT_PUBLIC_ALLOWED_DOMAINS = "";
-    process.env.NEXT_PUBLIC_ALLOWED_EMAILS = "user@bbva.com";
-    expect(isEmailAllowed("user@bbva.com")).toBe(true);
-    expect(isEmailAllowed("other@bbva.com")).toBe(false);
-  });
 });

@@ -15,6 +15,10 @@ const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 const PROXY_AUTH_HEADER = "x-gor-proxy-auth";
 const PROXY_AUTH_CLOUD_RUN = "cloudrun-idtoken";
 
+const METADATA_TIMEOUT_MS = 3000;
+const UPSTREAM_TIMEOUT_MS = 30000;
+const ID_TOKEN_TTL_MS = 50 * 60 * 1000; // conservative cache under typical 1h lifetime
+
 const HOP_BY_HOP_HEADERS = new Set([
   "connection",
   "keep-alive",
@@ -33,6 +37,8 @@ function sanitizeHeaders(headers: Headers): Headers {
   }
   sanitized.delete("host");
   sanitized.delete("content-length");
+  // Never forward browser cookies to the backend.
+  sanitized.delete("cookie");
   if (!AUTH_BYPASS) {
     sanitized.delete("x-gor-admin-key");
   }
@@ -57,18 +63,43 @@ function buildTargetUrl(target: string, path: string[], search: string): string 
   return `${target}${suffix}${search || ""}`;
 }
 
+function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  return fetch(url, { ...init, signal: controller.signal }).finally(() => clearTimeout(timeout));
+}
+
+let _cachedIdToken: { audience: string; token: string; expiresAt: number } | null = null;
+let _cachedIdTokenPromise: Promise<string> | null = null;
+
 async function fetchIdToken(audience: string): Promise<string> {
+  const now = Date.now();
+  if (_cachedIdToken && _cachedIdToken.audience === audience && _cachedIdToken.expiresAt > now) {
+    return _cachedIdToken.token;
+  }
+  if (_cachedIdTokenPromise) {
+    return _cachedIdTokenPromise;
+  }
   const url = `${METADATA_IDENTITY_URL}?audience=${encodeURIComponent(
     audience,
   )}&format=full`;
-  const res = await fetch(url, {
-    headers: { "Metadata-Flavor": "Google" },
+  _cachedIdTokenPromise = (async () => {
+    const res = await fetchWithTimeout(
+      url,
+      { headers: { "Metadata-Flavor": "Google" } },
+      METADATA_TIMEOUT_MS,
+    );
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`metadata identity token failed (${res.status}): ${text}`);
+    }
+    const token = (await res.text()).trim();
+    _cachedIdToken = { audience, token, expiresAt: Date.now() + ID_TOKEN_TTL_MS };
+    return token;
+  })().finally(() => {
+    _cachedIdTokenPromise = null;
   });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`metadata identity token failed (${res.status}): ${text}`);
-  }
-  return res.text();
+  return _cachedIdTokenPromise;
 }
 
 function shouldUseIdToken(): boolean {
@@ -102,12 +133,16 @@ async function proxyRequest(request: NextRequest, path: string[]): Promise<Respo
   const body =
     method === "GET" || method === "HEAD" ? undefined : await request.arrayBuffer();
 
-  const upstream = await fetch(url, {
-    method,
-    headers,
-    body,
-    redirect: "manual",
-  });
+  const upstream = await fetchWithTimeout(
+    url,
+    {
+      method,
+      headers,
+      body,
+      redirect: "manual",
+    },
+    UPSTREAM_TIMEOUT_MS,
+  );
 
   const responseHeaders = sanitizeHeaders(new Headers(upstream.headers));
   return new NextResponse(upstream.body, {

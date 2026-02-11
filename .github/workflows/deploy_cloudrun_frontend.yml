@@ -4,17 +4,21 @@ on:
   workflow_run:
     workflows: ["CI - Frontend"]
     types: [completed]
+  workflow_dispatch:
 
 concurrency:
-  group: deploy-cloudrun-frontend-${{ github.event.workflow_run.head_sha }}
+  group: deploy-cloudrun-frontend-${{ github.event.workflow_run.head_sha || github.sha }}
   cancel-in-progress: true
 
 jobs:
   deploy:
     if: >-
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.event == 'push' &&
-      github.event.workflow_run.head_branch == 'master'
+      (github.event_name == 'workflow_dispatch' && github.ref_name == 'master') ||
+      (
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.event == 'push' &&
+        github.event.workflow_run.head_branch == 'master'
+      )
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -37,7 +41,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Create GitHub Deployment (Production - Frontend)
         id: create_deploy
@@ -46,7 +50,7 @@ jobs:
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
-            const sha = context.payload.workflow_run.head_sha;
+            const sha = (context.payload.workflow_run && context.payload.workflow_run.head_sha) || context.sha;
 
             const res = await github.rest.repos.createDeployment({
               owner,
@@ -121,16 +125,12 @@ jobs:
         id: deploy_frontend
         env:
           AUTH_GOOGLE_CLIENT_ID: ${{ secrets.AUTH_GOOGLE_CLIENT_ID }}
-          AUTH_ALLOWED_EMAILS: ${{ secrets.AUTH_ALLOWED_EMAILS }}
-          AUTH_ALLOWED_DOMAINS: ${{ secrets.AUTH_ALLOWED_DOMAINS }}
         run: |
           set -euo pipefail
 
           LOGIN_REQUESTED="${{ steps.login_toggle.outputs.value }}"
-          FRONT_AUTH_ENABLED="true"
           BYPASS_READ_ONLY="false"
           if [ "${LOGIN_REQUESTED}" != "true" ]; then
-            FRONT_AUTH_ENABLED="false"
             BYPASS_READ_ONLY="true"
           fi
 
@@ -145,7 +145,7 @@ jobs:
 
           BACKEND_URL="${{ steps.backend_url.outputs.url }}"
 
-          ENV_VARS_COMMON="USE_SERVER_PROXY=true,API_PROXY_TARGET=${BACKEND_URL},NEXT_PUBLIC_API_BASE_URL=/api,NEXT_PUBLIC_AUTH_ENABLED=${FRONT_AUTH_ENABLED},NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED=${LOGIN_REQUESTED},AUTH_BYPASS_READ_ONLY=${BYPASS_READ_ONLY},NEXT_PUBLIC_GOOGLE_CLIENT_ID=${AUTH_GOOGLE_CLIENT_ID},NEXT_PUBLIC_ALLOWED_EMAILS=${AUTH_ALLOWED_EMAILS},NEXT_PUBLIC_ALLOWED_DOMAINS=${AUTH_ALLOWED_DOMAINS}"
+          ENV_VARS_COMMON="USE_SERVER_PROXY=true,API_PROXY_TARGET=${BACKEND_URL},NEXT_PUBLIC_API_BASE_URL=/api,NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED=${LOGIN_REQUESTED},AUTH_BYPASS_READ_ONLY=${BYPASS_READ_ONLY},AUTH_GOOGLE_CLIENT_ID=${AUTH_GOOGLE_CLIENT_ID},NEXT_PUBLIC_DISABLE_ADVANCED_SETTINGS=true"
 
           gcloud run deploy "$FRONTEND_SERVICE" \
             --project "$GCP_PROJECT" \
@@ -161,6 +161,11 @@ jobs:
             --cpu-throttling \
             --set-env-vars "${ENV_VARS_COMMON}" \
             --set-build-env-vars "${ENV_VARS_COMMON}"
+
+          gcloud run services update-traffic "$FRONTEND_SERVICE" \
+            --project "$GCP_PROJECT" \
+            --region "$GCP_REGION" \
+            --to-latest
 
           FRONTEND_URL="$(gcloud run services describe "$FRONTEND_SERVICE" \
             --project "$GCP_PROJECT" \

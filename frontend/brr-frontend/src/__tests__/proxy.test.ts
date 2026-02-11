@@ -13,12 +13,11 @@ vi.mock("next/server", () => ({
 
 const originalEnv = { ...process.env };
 
-const loadProxy = async (enabled: boolean, bypass = false) => {
+const loadProxy = async (loginRequired: boolean) => {
   vi.resetModules();
   process.env = {
     ...originalEnv,
-    NEXT_PUBLIC_AUTH_ENABLED: enabled ? "true" : "false",
-    NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED: bypass ? "false" : "true",
+    NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED: loginRequired ? "true" : "false",
   };
   return import("@/proxy");
 };
@@ -73,7 +72,7 @@ describe("proxy", () => {
 
   it("skips logging when bypass is enabled", async () => {
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
-    const { proxy } = await loadProxy(true, true);
+    const { proxy } = await loadProxy(false);
     const req = {
       headers: new Headers(),
       nextUrl: { pathname: "/bypass" },

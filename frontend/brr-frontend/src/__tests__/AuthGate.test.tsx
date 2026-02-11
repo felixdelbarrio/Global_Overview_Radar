@@ -44,7 +44,6 @@ const authMocks = {
   clearStoredToken: vi.fn(),
   getEmailFromToken: vi.fn(),
   getStoredToken: vi.fn(),
-  isEmailAllowed: vi.fn(),
   isTokenExpired: vi.fn(),
   storeToken: vi.fn(),
 };
@@ -63,7 +62,12 @@ const loadAuthGate = async (env: Record<string, string | undefined>) => {
   vi.resetModules();
   process.env = { ...originalEnv, ...env };
   const mod = await import("@/components/AuthGate");
-  return mod.AuthGate;
+  const resolvedClientId = process.env.AUTH_GOOGLE_CLIENT_ID ?? "";
+  const WrappedAuthGate = ({ children }: { children: React.ReactNode }) => (
+    <mod.AuthGate clientId={resolvedClientId}>{children}</mod.AuthGate>
+  );
+  WrappedAuthGate.displayName = "WrappedAuthGate";
+  return WrappedAuthGate;
 };
 
 beforeEach(() => {
@@ -72,11 +76,9 @@ beforeEach(() => {
   authMocks.clearStoredToken.mockReset();
   authMocks.getEmailFromToken.mockReset();
   authMocks.getStoredToken.mockReset();
-  authMocks.isEmailAllowed.mockReset();
   authMocks.isTokenExpired.mockReset();
   authMocks.storeToken.mockReset();
   authMocks.isTokenExpired.mockReturnValue(false);
-  authMocks.isEmailAllowed.mockReturnValue(true);
   authMocks.getEmailFromToken.mockReturnValue("user@bbva.com");
   authMocks.getStoredToken.mockReturnValue(null);
   apiMocks.apiGet.mockReset();
@@ -92,7 +94,6 @@ afterEach(() => {
 describe("AuthGate", () => {
   it("renders children when auth is disabled", async () => {
     const AuthGate = await loadAuthGate({
-      NEXT_PUBLIC_AUTH_ENABLED: "false",
     });
 
     render(
@@ -106,9 +107,8 @@ describe("AuthGate", () => {
 
   it("renders children when login bypass is enabled", async () => {
     const AuthGate = await loadAuthGate({
-      NEXT_PUBLIC_AUTH_ENABLED: "true",
       NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED: "false",
-      NEXT_PUBLIC_GOOGLE_CLIENT_ID: "",
+      AUTH_GOOGLE_CLIENT_ID: "",
     });
 
     render(
@@ -122,9 +122,8 @@ describe("AuthGate", () => {
 
   it("shows missing client id message when enabled without client id", async () => {
     const AuthGate = await loadAuthGate({
-      NEXT_PUBLIC_AUTH_ENABLED: "true",
       NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED: "true",
-      NEXT_PUBLIC_GOOGLE_CLIENT_ID: "",
+      AUTH_GOOGLE_CLIENT_ID: "",
     });
 
     render(
@@ -134,16 +133,15 @@ describe("AuthGate", () => {
     );
 
     expect(
-      screen.getByText("Falta configurar `NEXT_PUBLIC_GOOGLE_CLIENT_ID`.")
+      screen.getByText("Falta configurar `AUTH_GOOGLE_CLIENT_ID`.")
     ).toBeInTheDocument();
   });
 
   it("shows login screen when unauthenticated on /login", async () => {
     usePathnameMock.mockReturnValue("/login");
     const AuthGate = await loadAuthGate({
-      NEXT_PUBLIC_AUTH_ENABLED: "true",
       NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED: "true",
-      NEXT_PUBLIC_GOOGLE_CLIENT_ID: "test-client",
+      AUTH_GOOGLE_CLIENT_ID: "test-client",
     });
 
     render(
@@ -158,9 +156,8 @@ describe("AuthGate", () => {
   it("redirects to login when unauthenticated on other routes", async () => {
     usePathnameMock.mockReturnValue("/dashboard");
     const AuthGate = await loadAuthGate({
-      NEXT_PUBLIC_AUTH_ENABLED: "true",
       NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED: "true",
-      NEXT_PUBLIC_GOOGLE_CLIENT_ID: "test-client",
+      AUTH_GOOGLE_CLIENT_ID: "test-client",
     });
 
     render(
@@ -178,9 +175,8 @@ describe("AuthGate", () => {
     usePathnameMock.mockReturnValue("/dashboard");
     window.history.pushState({}, "", "/dashboard?foo=1");
     const AuthGate = await loadAuthGate({
-      NEXT_PUBLIC_AUTH_ENABLED: "true",
       NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED: "true",
-      NEXT_PUBLIC_GOOGLE_CLIENT_ID: "test-client",
+      AUTH_GOOGLE_CLIENT_ID: "test-client",
     });
 
     render(
@@ -199,32 +195,8 @@ describe("AuthGate", () => {
     authMocks.isTokenExpired.mockReturnValue(true);
 
     const AuthGate = await loadAuthGate({
-      NEXT_PUBLIC_AUTH_ENABLED: "true",
       NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED: "true",
-      NEXT_PUBLIC_GOOGLE_CLIENT_ID: "test-client",
-    });
-
-    render(
-      <AuthGate>
-        <div>Contenido</div>
-      </AuthGate>
-    );
-
-    await waitFor(() => {
-      expect(authMocks.clearStoredToken).toHaveBeenCalled();
-    });
-  });
-
-  it("clears stored token when email is not allowed", async () => {
-    authMocks.getStoredToken.mockReturnValue("token");
-    authMocks.isTokenExpired.mockReturnValue(false);
-    authMocks.getEmailFromToken.mockReturnValue("user@evil.com");
-    authMocks.isEmailAllowed.mockReturnValue(false);
-
-    const AuthGate = await loadAuthGate({
-      NEXT_PUBLIC_AUTH_ENABLED: "true",
-      NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED: "true",
-      NEXT_PUBLIC_GOOGLE_CLIENT_ID: "test-client",
+      AUTH_GOOGLE_CLIENT_ID: "test-client",
     });
 
     render(
@@ -247,9 +219,8 @@ describe("AuthGate", () => {
     });
 
     const AuthGate = await loadAuthGate({
-      NEXT_PUBLIC_AUTH_ENABLED: "true",
       NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED: "true",
-      NEXT_PUBLIC_GOOGLE_CLIENT_ID: "test-client",
+      AUTH_GOOGLE_CLIENT_ID: "test-client",
     });
 
     render(
@@ -272,9 +243,8 @@ describe("AuthGate", () => {
     window.history.pushState({}, "", "/login?next=//evil.com");
 
     const AuthGate = await loadAuthGate({
-      NEXT_PUBLIC_AUTH_ENABLED: "true",
       NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED: "true",
-      NEXT_PUBLIC_GOOGLE_CLIENT_ID: "test-client",
+      AUTH_GOOGLE_CLIENT_ID: "test-client",
     });
 
     render(
@@ -294,9 +264,8 @@ describe("AuthGate", () => {
     window.history.pushState({}, "", "/login?next=http://evil.com");
 
     const AuthGate = await loadAuthGate({
-      NEXT_PUBLIC_AUTH_ENABLED: "true",
       NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED: "true",
-      NEXT_PUBLIC_GOOGLE_CLIENT_ID: "test-client",
+      AUTH_GOOGLE_CLIENT_ID: "test-client",
     });
 
     render(
@@ -316,9 +285,8 @@ describe("AuthGate", () => {
     window.history.pushState({}, "", "/login?next=foo");
 
     const AuthGate = await loadAuthGate({
-      NEXT_PUBLIC_AUTH_ENABLED: "true",
       NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED: "true",
-      NEXT_PUBLIC_GOOGLE_CLIENT_ID: "test-client",
+      AUTH_GOOGLE_CLIENT_ID: "test-client",
     });
 
     render(
@@ -338,9 +306,8 @@ describe("AuthGate", () => {
     window.history.pushState({}, "", "/login?next=/sentimiento");
 
     const AuthGate = await loadAuthGate({
-      NEXT_PUBLIC_AUTH_ENABLED: "true",
       NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED: "true",
-      NEXT_PUBLIC_GOOGLE_CLIENT_ID: "test-client",
+      AUTH_GOOGLE_CLIENT_ID: "test-client",
     });
 
     render(
@@ -360,9 +327,8 @@ describe("AuthGate", () => {
     window.history.pushState({}, "", "/login?next=/\\\\evil");
 
     const AuthGate = await loadAuthGate({
-      NEXT_PUBLIC_AUTH_ENABLED: "true",
       NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED: "true",
-      NEXT_PUBLIC_GOOGLE_CLIENT_ID: "test-client",
+      AUTH_GOOGLE_CLIENT_ID: "test-client",
     });
 
     render(
@@ -387,9 +353,8 @@ describe("AuthGate", () => {
     });
 
     const AuthGate = await loadAuthGate({
-      NEXT_PUBLIC_AUTH_ENABLED: "true",
       NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED: "true",
-      NEXT_PUBLIC_GOOGLE_CLIENT_ID: "test-client",
+      AUTH_GOOGLE_CLIENT_ID: "test-client",
     });
 
     render(

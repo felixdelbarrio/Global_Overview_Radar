@@ -8,13 +8,10 @@ import {
   clearStoredToken,
   getEmailFromToken,
   getStoredToken,
-  isEmailAllowed,
   isTokenExpired,
 } from "@/lib/auth";
 
 const LOGIN_REQUIRED = process.env.NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED === "true";
-const AUTH_ENABLED = process.env.NEXT_PUBLIC_AUTH_ENABLED === "true" && LOGIN_REQUIRED;
-const CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "";
 const FALLBACK_ROUTE = "/";
 const LOGIN_NEXT_COOKIE = "gor-login-next";
 
@@ -23,6 +20,11 @@ type AuthMeResponse = {
   name?: string | null;
   picture?: string | null;
   subject?: string | null;
+};
+
+type AuthGateProps = {
+  children: React.ReactNode;
+  clientId?: string;
 };
 
 function sanitizeNextPath(value: string | null): string {
@@ -35,7 +37,8 @@ function sanitizeNextPath(value: string | null): string {
   return value;
 }
 
-export function AuthGate({ children }: { children: React.ReactNode }) {
+export function AuthGate({ children, clientId = "" }: AuthGateProps) {
+  const normalizedClientId = clientId.trim();
   const buttonRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const pathname = usePathname();
@@ -48,7 +51,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     email: string | null;
     shouldClear: boolean;
   }>(() => {
-    if (!AUTH_ENABLED || typeof window === "undefined") {
+    if (!LOGIN_REQUIRED || typeof window === "undefined") {
       return { token: null, email: null, shouldClear: false };
     }
     const stored = getStoredToken();
@@ -56,7 +59,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
       return { token: null, email: null, shouldClear: Boolean(stored) };
     }
     const storedEmail = getEmailFromToken(stored);
-    if (storedEmail && isEmailAllowed(storedEmail)) {
+    if (storedEmail) {
       return { token: stored, email: storedEmail, shouldClear: false };
     }
     return { token: null, email: null, shouldClear: true };
@@ -80,7 +83,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   }, [auth.shouldClear]);
 
   useEffect(() => {
-    if (!AUTH_ENABLED) return;
+    if (!LOGIN_REQUIRED) return;
     if (token) return;
     if (isLoginPage) return;
     const search = typeof window !== "undefined" ? window.location.search : "";
@@ -89,7 +92,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   }, [token, isLoginPage, pathname, router]);
 
   useEffect(() => {
-    if (!AUTH_ENABLED) return;
+    if (!LOGIN_REQUIRED) return;
     if (!token) return;
     if (!isLoginPage) return;
     const params =
@@ -99,12 +102,12 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   }, [token, isLoginPage, router]);
 
   useEffect(() => {
-    if (!AUTH_ENABLED || !CLIENT_ID || !ready) return;
+    if (!LOGIN_REQUIRED || !normalizedClientId || !ready) return;
     if (!window.google?.accounts?.id) return;
     const loginUri = `${window.location.origin}/login/callback`;
 
     window.google.accounts.id.initialize({
-      client_id: CLIENT_ID,
+      client_id: normalizedClientId,
       auto_select: false,
       ux_mode: "redirect",
       login_uri: loginUri,
@@ -118,10 +121,10 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
         text: "signin_with",
       });
     }
-  }, [ready]);
+  }, [normalizedClientId, ready]);
 
   useEffect(() => {
-    if (!AUTH_ENABLED) return;
+    if (!LOGIN_REQUIRED) return;
     if (!isLoginPage) return;
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
@@ -134,7 +137,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   }, [isLoginPage]);
 
   useEffect(() => {
-    if (!AUTH_ENABLED) return;
+    if (!LOGIN_REQUIRED) return;
     if (!token) {
       lastVerifiedToken.current = null;
       return;
@@ -170,15 +173,15 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     }
   };
 
-  if (!AUTH_ENABLED) {
+  if (!LOGIN_REQUIRED) {
     return <>{children}</>;
   }
 
-  if (!CLIENT_ID) {
+  if (!normalizedClientId) {
     return (
       <div className="min-h-screen grid place-items-center bg-[color:var(--surface-90)]">
         <div className="max-w-md rounded-3xl border border-[color:var(--border-70)] bg-[color:var(--surface-85)] p-6 text-sm text-[color:var(--text-65)]">
-          Falta configurar `NEXT_PUBLIC_GOOGLE_CLIENT_ID`.
+          Falta configurar `AUTH_GOOGLE_CLIENT_ID`.
         </div>
       </div>
     );

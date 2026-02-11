@@ -3,11 +3,12 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 import shutil
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Sequence, cast
 
-from dotenv import load_dotenv
+from dotenv import dotenv_values
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -15,6 +16,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 REPO_ROOT = Path(__file__).resolve().parents[2]
 REPUTATION_ENV_PATH = REPO_ROOT / "backend" / "reputation" / ".env.reputation"
 REPUTATION_ENV_EXAMPLE = REPO_ROOT / "backend" / "reputation" / ".env.reputation.example"
+REPUTATION_ADVANCED_ENV_PATH = REPO_ROOT / "backend" / "reputation" / ".env.reputation.advanced"
+REPUTATION_ADVANCED_ENV_EXAMPLE = (
+    REPO_ROOT / "backend" / "reputation" / ".env.reputation.advanced.example"
+)
 
 DEFAULT_CONFIG_PATH = REPO_ROOT / "data" / "reputation"
 DEFAULT_LLM_CONFIG_PATH = REPO_ROOT / "data" / "reputation_llm"
@@ -26,6 +31,17 @@ PROFILE_STATE_PATH = REPO_ROOT / "data" / "cache" / "reputation_profile.json"
 DEFAULT_CACHE_TTL_HOURS = 24
 
 logger = logging.getLogger(__name__)
+
+CLOUDRUN_ONLY_ENV_KEYS = {
+    "AUTH_ALLOWED_EMAILS",
+    "AUTH_BYPASS_ALLOW_MUTATIONS",
+    "AUTH_BYPASS_MUTATION_KEY",
+    "AUTH_GOOGLE_CLIENT_ID",
+    "CORS_ALLOWED_ORIGIN_REGEX",
+    "GOOGLE_CLOUD_LOGIN_REQUESTED",
+}
+
+_DOTENV_MANAGED_KEYS: set[str] = set()
 
 ALL_SOURCES = [
     "reddit",
@@ -46,13 +62,9 @@ ALL_SOURCES = [
 
 
 class ReputationSettings(BaseSettings):
-    """Configuración de reputación (se carga desde .env.reputation)."""
+    """Configuración de reputación (se carga desde .env.reputation + .advanced)."""
 
-    model_config = SettingsConfigDict(
-        env_file=str(REPUTATION_ENV_PATH),
-        env_file_encoding="utf-8",
-        extra="ignore",
-    )
+    model_config = SettingsConfigDict(extra="ignore")
 
     # Rutas
     config_path: Path = Field(default=DEFAULT_CONFIG_PATH, alias="REPUTATION_CONFIG_PATH")
@@ -99,7 +111,6 @@ class ReputationSettings(BaseSettings):
     )
 
     # Auth (Google ID tokens)
-    auth_enabled: bool = Field(default=False, alias="AUTH_ENABLED")
     # If true, the UI requires an end-user Google login (ID token).
     # If false, Cloud Run bypasses interactive login and impersonates an allowed email.
     google_cloud_login_requested: bool = Field(
@@ -118,9 +129,6 @@ class ReputationSettings(BaseSettings):
     )
     auth_google_client_id: str = Field(default="", alias="AUTH_GOOGLE_CLIENT_ID")
     auth_allowed_emails: str = Field(default="", alias="AUTH_ALLOWED_EMAILS")
-    auth_allowed_domains: str = Field(default="", alias="AUTH_ALLOWED_DOMAINS")
-    auth_allowed_groups: str = Field(default="", alias="AUTH_ALLOWED_GROUPS")
-    auth_groups_cache_ttl: int = Field(default=300, alias="AUTH_GROUPS_CACHE_TTL")
 
     def enabled_sources(self) -> List[str]:
         """Devuelve la lista de fuentes activas según los toggles."""
@@ -173,9 +181,47 @@ def _ensure_env_file() -> None:
     env_path.write_text(example_path.read_text(encoding="utf-8"), encoding="utf-8")
 
 
-# Carga .env.reputation en variables de entorno para collectors que leen os.getenv
+def _load_reputation_env_to_os() -> None:
+    """Carga .env.reputation + .env.reputation.advanced en `os.environ`."""
+    global _DOTENV_MANAGED_KEYS
+
+    env_files = [REPUTATION_ENV_PATH, REPUTATION_ADVANCED_ENV_PATH]
+    parsed_sources = [dotenv_values(str(path)) for path in env_files if path.exists()]
+    if not parsed_sources:
+        for key in list(_DOTENV_MANAGED_KEYS):
+            os.environ.pop(key, None)
+        _DOTENV_MANAGED_KEYS.clear()
+        return
+
+    allowed_values: dict[str, str] = {}
+    # Merge order: base env first, advanced env second (advanced overrides base on conflicts).
+    for parsed in parsed_sources:
+        for raw_key, raw_value in parsed.items():
+            if not raw_key:
+                continue
+            key = str(raw_key).strip()
+            if not key or key in CLOUDRUN_ONLY_ENV_KEYS:
+                continue
+            allowed_values[key] = "" if raw_value is None else str(raw_value)
+
+    # Clear keys previously managed by dotenv but removed from file.
+    for key in list(_DOTENV_MANAGED_KEYS):
+        if key not in allowed_values:
+            os.environ.pop(key, None)
+            _DOTENV_MANAGED_KEYS.discard(key)
+
+    for key, value in allowed_values.items():
+        # Respect externally injected env vars unless this key is already managed from dotenv.
+        if key in os.environ and key not in _DOTENV_MANAGED_KEYS:
+            continue
+        os.environ[key] = value
+        _DOTENV_MANAGED_KEYS.add(key)
+
+
+# Carga .env.reputation + .env.reputation.advanced en variables de entorno para
+# collectors que leen os.getenv, excluyendo claves cloud-only.
 _ensure_env_file()
-load_dotenv(str(REPUTATION_ENV_PATH), override=False)
+_load_reputation_env_to_os()
 
 # Singleton de settings
 settings = ReputationSettings()
@@ -589,11 +635,12 @@ _apply_profile_cache_paths(settings)
 
 
 def reload_reputation_settings() -> None:
-    """Recarga settings desde .env.reputation y aplica normalizaciones."""
+    """Recarga settings desde .env.reputation y .env.reputation.advanced."""
     global BASE_CONFIG_PATH, BASE_LLM_CONFIG_PATH
+    _load_reputation_env_to_os()
     new_settings = ReputationSettings()
 
-    for field_name in settings.model_fields:
+    for field_name in type(settings).model_fields:
         setattr(settings, field_name, getattr(new_settings, field_name))
 
     if not settings.config_path.is_absolute():
