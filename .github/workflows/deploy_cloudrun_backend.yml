@@ -140,6 +140,7 @@ jobs:
       - name: Deploy backend (Cloud Run)
         run: |
           set -euo pipefail
+          unset CLOUDSDK_RUN_DEPLOY_ENV_VARS_FILE CLOUDSDK_RUN_DEPLOY_SET_ENV_VARS CLOUDSDK_RUN_DEPLOY_UPDATE_ENV_VARS CLOUDSDK_RUN_DEPLOY_REMOVE_ENV_VARS CLOUDSDK_RUN_DEPLOY_CLEAR_ENV_VARS
           LOGIN_REQUESTED="${{ steps.login_toggle.outputs.value }}"
           BUILD_VARS="GOOGLE_RUNTIME_VERSION=${BACKEND_PYTHON_RUNTIME},GOOGLE_ENTRYPOINT=python -m uvicorn reputation.api.main:app --host 0.0.0.0 --port 8080"
           SECRET_ARGS=()
@@ -165,8 +166,11 @@ jobs:
             --timeout 300 \
             --set-build-env-vars "${BUILD_VARS}" \
             "${SECRET_ARGS[@]}" \
-            --remove-env-vars AUTH_BYPASS_ALLOW_MUTATIONS \
             --env-vars-file backend/reputation/cloudrun.env
+          gcloud run services update "$BACKEND_SERVICE" \
+            --project "$GCP_PROJECT" \
+            --region "$GCP_REGION" \
+            --remove-env-vars AUTH_BYPASS_ALLOW_MUTATIONS >/dev/null 2>&1 || true
 
       - name: Route backend traffic to latest revision
         run: |
