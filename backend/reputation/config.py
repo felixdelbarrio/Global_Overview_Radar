@@ -13,15 +13,48 @@ from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from reputation.env_crypto import decrypt_env_secret, is_encrypted_value
+from reputation.state_store import (
+    delete_from_state,
+    state_store_enabled,
+    sync_from_state,
+    sync_to_state,
+)
+
+
+def _is_cloud_run_runtime() -> bool:
+    return bool(os.getenv("K_SERVICE") or os.getenv("K_REVISION") or os.getenv("CLOUD_RUN_JOB"))
+
 
 # Paths
-REPO_ROOT = Path(__file__).resolve().parents[2]
-REPUTATION_ENV_PATH = REPO_ROOT / "backend" / "reputation" / ".env.reputation"
-REPUTATION_ENV_EXAMPLE = REPO_ROOT / "backend" / "reputation" / ".env.reputation.example"
-REPUTATION_ADVANCED_ENV_PATH = REPO_ROOT / "backend" / "reputation" / ".env.reputation.advanced"
-REPUTATION_ADVANCED_ENV_EXAMPLE = (
-    REPO_ROOT / "backend" / "reputation" / ".env.reputation.advanced.example"
-)
+PACKAGE_DIR = Path(__file__).resolve().parent
+if PACKAGE_DIR.parent.name == "backend":
+    REPO_ROOT = PACKAGE_DIR.parent.parent
+else:
+    REPO_ROOT = PACKAGE_DIR.parent
+
+_SOURCE_ENV_DIR = REPO_ROOT / "backend" / "reputation"
+if not _SOURCE_ENV_DIR.exists():
+    _SOURCE_ENV_DIR = PACKAGE_DIR
+
+_CLOUD_RUN_RUNTIME = _is_cloud_run_runtime()
+_RUNTIME_ENV_DIR = Path(os.getenv("REPUTATION_RUNTIME_ENV_DIR", "/tmp/reputation"))
+_ACTIVE_ENV_DIR = _RUNTIME_ENV_DIR if _CLOUD_RUN_RUNTIME else _SOURCE_ENV_DIR
+
+REPUTATION_ENV_PATH = _ACTIVE_ENV_DIR / ".env.reputation"
+REPUTATION_ENV_EXAMPLE = _ACTIVE_ENV_DIR / ".env.reputation.example"
+REPUTATION_ADVANCED_ENV_PATH = _ACTIVE_ENV_DIR / ".env.reputation.advanced"
+REPUTATION_ADVANCED_ENV_EXAMPLE = _ACTIVE_ENV_DIR / ".env.reputation.advanced.example"
+
+_SOURCE_REPUTATION_ENV_PATH = _SOURCE_ENV_DIR / ".env.reputation"
+_SOURCE_REPUTATION_ENV_EXAMPLE = _SOURCE_ENV_DIR / ".env.reputation.example"
+_SOURCE_REPUTATION_ADVANCED_ENV_PATH = _SOURCE_ENV_DIR / ".env.reputation.advanced"
+_SOURCE_REPUTATION_ADVANCED_ENV_EXAMPLE = _SOURCE_ENV_DIR / ".env.reputation.advanced.example"
+
+STATE_KEY_REPUTATION_ENV = "backend/reputation/.env.reputation"
+STATE_KEY_REPUTATION_ENV_EXAMPLE = "backend/reputation/.env.reputation.example"
+STATE_KEY_REPUTATION_ADVANCED_ENV = "backend/reputation/.env.reputation.advanced"
+STATE_KEY_REPUTATION_ADVANCED_ENV_EXAMPLE = "backend/reputation/.env.reputation.advanced.example"
+STATE_KEY_PROFILE_STATE = "data/cache/reputation_profile.json"
 
 DEFAULT_CONFIG_PATH = REPO_ROOT / "data" / "reputation"
 DEFAULT_LLM_CONFIG_PATH = REPO_ROOT / "data" / "reputation_llm"
@@ -39,6 +72,9 @@ CLOUDRUN_ONLY_ENV_KEYS = {
     "AUTH_BYPASS_MUTATION_KEY",
     "AUTH_GOOGLE_CLIENT_ID",
     "GOOGLE_CLOUD_LOGIN_REQUESTED",
+    "REPUTATION_STATE_BUCKET",
+    "REPUTATION_STATE_PREFIX",
+    "REPUTATION_RUNTIME_ENV_DIR",
 }
 
 _DOTENV_MANAGED_KEYS: set[str] = set()
@@ -125,6 +161,10 @@ class ReputationSettings(BaseSettings):
     )
     auth_google_client_id: str = Field(default="", alias="AUTH_GOOGLE_CLIENT_ID")
     auth_allowed_emails: str = Field(default="", alias="AUTH_ALLOWED_EMAILS")
+    reputation_state_bucket: str = Field(default="", alias="REPUTATION_STATE_BUCKET")
+    reputation_state_prefix: str = Field(
+        default="reputation-state", alias="REPUTATION_STATE_PREFIX"
+    )
 
     def enabled_sources(self) -> List[str]:
         """Devuelve la lista de fuentes activas según los toggles."""
@@ -168,13 +208,67 @@ class ReputationSettings(BaseSettings):
 
 
 def _ensure_env_file() -> None:
+    if _CLOUD_RUN_RUNTIME:
+        _ACTIVE_ENV_DIR.mkdir(parents=True, exist_ok=True)
+        if not state_store_enabled():
+            logger.warning(
+                "Cloud Run without REPUTATION_STATE_BUCKET: runtime state will be ephemeral."
+            )
+        sync_reputation_env_files_from_state()
+
+        if not REPUTATION_ENV_EXAMPLE.exists() and _SOURCE_REPUTATION_ENV_EXAMPLE.exists():
+            REPUTATION_ENV_EXAMPLE.write_text(
+                _SOURCE_REPUTATION_ENV_EXAMPLE.read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+        if (
+            not REPUTATION_ADVANCED_ENV_EXAMPLE.exists()
+            and _SOURCE_REPUTATION_ADVANCED_ENV_EXAMPLE.exists()
+        ):
+            REPUTATION_ADVANCED_ENV_EXAMPLE.write_text(
+                _SOURCE_REPUTATION_ADVANCED_ENV_EXAMPLE.read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+        if (
+            not REPUTATION_ADVANCED_ENV_PATH.exists()
+            and _SOURCE_REPUTATION_ADVANCED_ENV_PATH.exists()
+        ):
+            REPUTATION_ADVANCED_ENV_PATH.write_text(
+                _SOURCE_REPUTATION_ADVANCED_ENV_PATH.read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
+        if not REPUTATION_ENV_PATH.exists() and _SOURCE_REPUTATION_ENV_PATH.exists():
+            REPUTATION_ENV_PATH.write_text(
+                _SOURCE_REPUTATION_ENV_PATH.read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
     env_path = REPUTATION_ENV_PATH
     example_path = REPUTATION_ENV_EXAMPLE
     if env_path.exists():
         return
     if not example_path.exists():
         return
+    env_path.parent.mkdir(parents=True, exist_ok=True)
     env_path.write_text(example_path.read_text(encoding="utf-8"), encoding="utf-8")
+    persist_reputation_env_files_to_state()
+
+
+def sync_reputation_env_files_from_state() -> None:
+    if not state_store_enabled():
+        return
+    sync_from_state(REPUTATION_ENV_EXAMPLE, key=STATE_KEY_REPUTATION_ENV_EXAMPLE)
+    sync_from_state(REPUTATION_ADVANCED_ENV_EXAMPLE, key=STATE_KEY_REPUTATION_ADVANCED_ENV_EXAMPLE)
+    sync_from_state(REPUTATION_ENV_PATH, key=STATE_KEY_REPUTATION_ENV)
+    sync_from_state(REPUTATION_ADVANCED_ENV_PATH, key=STATE_KEY_REPUTATION_ADVANCED_ENV)
+
+
+def persist_reputation_env_files_to_state() -> None:
+    if not state_store_enabled():
+        return
+    sync_to_state(REPUTATION_ENV_EXAMPLE, key=STATE_KEY_REPUTATION_ENV_EXAMPLE)
+    sync_to_state(REPUTATION_ADVANCED_ENV_EXAMPLE, key=STATE_KEY_REPUTATION_ADVANCED_ENV_EXAMPLE)
+    sync_to_state(REPUTATION_ENV_PATH, key=STATE_KEY_REPUTATION_ENV)
+    sync_to_state(REPUTATION_ADVANCED_ENV_PATH, key=STATE_KEY_REPUTATION_ADVANCED_ENV)
 
 
 def _load_reputation_env_to_os() -> None:
@@ -357,6 +451,12 @@ def _resolve_paths_for_source(source: str) -> tuple[Path, Path]:
 
 
 def _load_profile_state() -> dict[str, Any]:
+    if state_store_enabled():
+        sync_from_state(
+            PROFILE_STATE_PATH,
+            key=STATE_KEY_PROFILE_STATE,
+            repo_root=REPO_ROOT,
+        )
     if not PROFILE_STATE_PATH.exists():
         return {}
     try:
@@ -374,6 +474,12 @@ def _save_profile_state(source: str, profiles: Sequence[str]) -> None:
     PROFILE_STATE_PATH.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
     )
+    if state_store_enabled():
+        sync_to_state(
+            PROFILE_STATE_PATH,
+            key=STATE_KEY_PROFILE_STATE,
+            repo_root=REPO_ROOT,
+        )
 
 
 def _profile_key_from_files(files: Sequence[Path]) -> str:
@@ -517,6 +623,8 @@ def _clear_json_files(directory: Path) -> list[str]:
     for file_path in directory.glob("*.json"):
         if file_path.is_file():
             file_path.unlink()
+            if state_store_enabled():
+                delete_from_state(file_path, repo_root=REPO_ROOT)
             removed.append(file_path.name)
     return removed
 
@@ -528,6 +636,8 @@ def _copy_files(files: Sequence[Path], dest_dir: Path) -> list[str]:
     for file_path in files:
         dest_path = dest_dir / file_path.name
         shutil.copy2(file_path, dest_path)
+        if state_store_enabled():
+            sync_to_state(dest_path, repo_root=REPO_ROOT)
         copied.append(dest_path.name)
     return copied
 
@@ -637,6 +747,7 @@ _apply_profile_cache_paths(settings)
 def reload_reputation_settings() -> None:
     """Recarga settings desde .env.reputation y .env.reputation.advanced."""
     global BASE_CONFIG_PATH, BASE_LLM_CONFIG_PATH
+    sync_reputation_env_files_from_state()
     _load_reputation_env_to_os()
     new_settings = ReputationSettings()
 
@@ -660,6 +771,8 @@ def reload_reputation_settings() -> None:
 
 
 def _load_config_file(path: Path) -> Dict[str, Any]:
+    if state_store_enabled():
+        sync_from_state(path, repo_root=REPO_ROOT)
     with path.open("r", encoding="utf-8") as f:
         data = json.load(f)
     if not isinstance(data, dict):

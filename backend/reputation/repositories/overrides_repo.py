@@ -5,12 +5,17 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from reputation.config import REPO_ROOT
+from reputation.state_store import state_store_enabled, sync_from_state, sync_to_state
+
 
 class ReputationOverridesRepo:
     def __init__(self, path: Path) -> None:
         self._path = path
 
     def load(self) -> dict[str, dict[str, Any]]:
+        if state_store_enabled():
+            sync_from_state(self._path, repo_root=REPO_ROOT)
         if not self._path.exists():
             return {}
         try:
@@ -35,3 +40,5 @@ class ReputationOverridesRepo:
         }
         with self._path.open("w", encoding="utf-8") as f:
             json.dump(payload, f, ensure_ascii=False, indent=2)
+        if state_store_enabled():
+            sync_to_state(self._path, repo_root=REPO_ROOT)

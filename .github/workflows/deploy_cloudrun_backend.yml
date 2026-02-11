@@ -109,15 +109,19 @@ jobs:
         env:
           AUTH_GOOGLE_CLIENT_ID: ${{ secrets.AUTH_GOOGLE_CLIENT_ID }}
           AUTH_ALLOWED_EMAILS: ${{ secrets.AUTH_ALLOWED_EMAILS }}
+          REPUTATION_STATE_BUCKET: ${{ secrets.REPUTATION_STATE_BUCKET }}
+          REPUTATION_STATE_PREFIX: ${{ vars.REPUTATION_STATE_PREFIX }}
         run: |
           set -euo pipefail
 
           cp backend/reputation/cloudrun.env.example backend/reputation/cloudrun.env
-          awk '$0 !~ /^(AUTH_GOOGLE_CLIENT_ID|AUTH_ALLOWED_EMAILS|GOOGLE_CLOUD_LOGIN_REQUESTED|AUTH_BYPASS_MUTATION_KEY)=/' \
+          awk '$0 !~ /^(AUTH_GOOGLE_CLIENT_ID|AUTH_ALLOWED_EMAILS|GOOGLE_CLOUD_LOGIN_REQUESTED|AUTH_BYPASS_MUTATION_KEY|REPUTATION_STATE_BUCKET|REPUTATION_STATE_PREFIX)=/' \
             backend/reputation/cloudrun.env > backend/reputation/cloudrun.env.tmp
           mv backend/reputation/cloudrun.env.tmp backend/reputation/cloudrun.env
 
           LOGIN_REQUESTED="${{ steps.login_toggle.outputs.value }}"
+          STATE_BUCKET="$(echo "${REPUTATION_STATE_BUCKET:-}" | tr -d '\r\n')"
+          STATE_PREFIX="$(echo "${REPUTATION_STATE_PREFIX:-reputation-state}" | tr -d '\r\n')"
 
           if [ "${LOGIN_REQUESTED}" = "true" ] && [ -z "${AUTH_GOOGLE_CLIENT_ID:-}" ]; then
             echo "Missing AUTH_GOOGLE_CLIENT_ID secret."
@@ -127,11 +131,17 @@ jobs:
             echo "Missing AUTH_ALLOWED_EMAILS secret."
             exit 1
           fi
+          if [ -z "${STATE_BUCKET}" ]; then
+            echo "Missing REPUTATION_STATE_BUCKET secret (durable persistence required)."
+            exit 1
+          fi
 
           cat >> backend/reputation/cloudrun.env <<EOF
           AUTH_GOOGLE_CLIENT_ID=${AUTH_GOOGLE_CLIENT_ID}
           AUTH_ALLOWED_EMAILS=${AUTH_ALLOWED_EMAILS}
           GOOGLE_CLOUD_LOGIN_REQUESTED=${LOGIN_REQUESTED}
+          REPUTATION_STATE_BUCKET=${STATE_BUCKET}
+          REPUTATION_STATE_PREFIX=${STATE_PREFIX}
           EOF
 
       - name: Deploy backend (Cloud Run)
