@@ -17,13 +17,17 @@ afterEach(() => {
 });
 
 describe("proxy route", () => {
-  it("blocks mutating requests in auth-bypass mode when admin key is missing", async () => {
-    const fetchMock = vi.fn();
+  it("allows mutating requests in auth-bypass mode without admin key", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response("ok", {
+        status: 200,
+      })
+    );
     global.fetch = fetchMock as typeof fetch;
 
     const { POST } = await loadRoute({
       NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED: "false",
-      USE_SERVER_PROXY: "true",
+      USE_SERVER_PROXY: "false",
       API_PROXY_TARGET: "https://api.example.com",
     });
 
@@ -35,8 +39,8 @@ describe("proxy route", () => {
       params: Promise.resolve({ path: ["ingest", "reputation"] }),
     });
 
-    expect(res.status).toBe(403);
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(res.status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("allows read requests in auth-bypass mode without admin key", async () => {
@@ -72,7 +76,7 @@ describe("proxy route", () => {
     global.fetch = fetchMock as typeof fetch;
 
     const { GET } = await loadRoute({
-      NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED: "true",
+      NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED: "false",
       USE_SERVER_PROXY: "false",
       API_PROXY_TARGET: "https://api.example.com/",
     });
@@ -95,35 +99,6 @@ describe("proxy route", () => {
     const headers = (options as RequestInit).headers as Headers;
     expect(headers.get("connection")).toBeNull();
     expect(headers.get("x-gor-admin-key")).toBeNull();
-  });
-
-  it("allows mutating requests in auth-bypass mode when admin key is provided", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response("ok", {
-        status: 200,
-      })
-    );
-    global.fetch = fetchMock as typeof fetch;
-
-    const { POST } = await loadRoute({
-      NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED: "false",
-      USE_SERVER_PROXY: "false",
-      API_PROXY_TARGET: "https://api.example.com",
-    });
-
-    const req = new Request("http://localhost/api/ingest/reputation", {
-      method: "POST",
-      body: JSON.stringify({ force: false }),
-      headers: {
-        "x-gor-admin-key": "admin-key",
-      },
-    });
-    const res = await POST(req as unknown as NextRequest, {
-      params: Promise.resolve({ path: ["ingest", "reputation"] }),
-    });
-
-    expect(res.status).toBe(200);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("adds id token when server proxy is enabled", async () => {

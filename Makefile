@@ -222,11 +222,11 @@ cloudrun-config: ensure-cloudrun-env
 			"AUTH_ALLOWED_EMAILS=$${AUTH_ALLOWED_EMAILS_VAL}" \
 			"REPUTATION_STATE_BUCKET=$${REPUTATION_STATE_BUCKET_VAL}" \
 			"REPUTATION_STATE_PREFIX=$${REPUTATION_STATE_PREFIX_VAL}"; \
-	} >> "$$ENV_FILE"; \
-	if [ "$$GOOGLE_CLOUD_LOGIN_REQUESTED_VAL" != "true" ]; then \
-		echo "INFO: Modo bypass activo. AUTH_BYPASS_MUTATION_KEY se resolvera desde Secret Manager."; \
-	fi; \
-	echo "==> backend/reputation/cloudrun.env actualizado. Ahora puedes ejecutar: make deploy-cloudrun"
+		} >> "$$ENV_FILE"; \
+		if [ "$$GOOGLE_CLOUD_LOGIN_REQUESTED_VAL" != "true" ]; then \
+			echo "INFO: Modo bypass activo. No se requiere clave admin adicional."; \
+		fi; \
+		echo "==> backend/reputation/cloudrun.env actualizado. Ahora puedes ejecutar: make deploy-cloudrun"
 
 cloudrun-env: ensure-cloudrun-env
 	@echo "==> Validando backend/reputation/cloudrun.env..."
@@ -251,7 +251,7 @@ cloudrun-env: ensure-cloudrun-env
 	if [ -z "$$STATE_PREFIX_VAL" ]; then \
 		STATE_PREFIX_VAL="reputation-state"; \
 	fi; \
-	if [ "$$LOGIN_REQUESTED_VAL" = "true" ]; then \
+		if [ "$$LOGIN_REQUESTED_VAL" = "true" ]; then \
 		if [ -z "$$CLIENT_ID_VAL" ]; then \
 			echo "Falta AUTH_GOOGLE_CLIENT_ID (ponlo en backend/reputation/cloudrun.env)."; \
 			exit 1; \
@@ -264,9 +264,9 @@ cloudrun-env: ensure-cloudrun-env
 			echo "ERROR: AUTH_GOOGLE_CLIENT_ID debe ser un OAuth Client ID (termina en .apps.googleusercontent.com). Valor actual: $$CLIENT_ID_VAL"; \
 			exit 1; \
 		fi; \
-	else \
-		echo "INFO: GOOGLE_CLOUD_LOGIN_REQUESTED=false; AUTH_BYPASS_MUTATION_KEY se inyectara desde Secret Manager en deploy."; \
-	fi; \
+		else \
+			echo "INFO: GOOGLE_CLOUD_LOGIN_REQUESTED=false; el backend operara en modo bypass."; \
+		fi; \
 	TMP_FILE="$$ENV_FILE.tmp"; \
 	awk '$$0 !~ /^(AUTH_GOOGLE_CLIENT_ID|AUTH_ALLOWED_EMAILS|GOOGLE_CLOUD_LOGIN_REQUESTED|REPUTATION_STATE_BUCKET|REPUTATION_STATE_PREFIX)=/' "$$ENV_FILE" > "$$TMP_FILE"; \
 	mv "$$TMP_FILE" "$$ENV_FILE"; \
@@ -297,19 +297,13 @@ deploy-cloudrun-back: cloudrun-env
 		PROJECT_NUMBER=$$(gcloud projects describe "$$GCP_PROJECT" --format='value(projectNumber)'); \
 		BACKEND_SA="$$PROJECT_NUMBER-compute@developer.gserviceaccount.com"; \
 	fi; \
-	LOGIN_REQUESTED_VAL="$$(env_get GOOGLE_CLOUD_LOGIN_REQUESTED)"; \
-	LOGIN_REQUESTED_VAL=$$(echo "$$LOGIN_REQUESTED_VAL" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]'); \
-	if [ "$$LOGIN_REQUESTED_VAL" != "true" ]; then LOGIN_REQUESTED_VAL="false"; fi; \
-	# Prevent inherited CLOUDSDK_* vars from injecting conflicting env-var flags. \
-	unset CLOUDSDK_RUN_DEPLOY_ENV_VARS_FILE CLOUDSDK_RUN_DEPLOY_SET_ENV_VARS CLOUDSDK_RUN_DEPLOY_UPDATE_ENV_VARS CLOUDSDK_RUN_DEPLOY_REMOVE_ENV_VARS CLOUDSDK_RUN_DEPLOY_CLEAR_ENV_VARS; \
-	SECRET_FLAG=""; \
-	if [ "$$LOGIN_REQUESTED_VAL" = "true" ]; then \
-		SECRET_FLAG="--remove-secrets AUTH_BYPASS_MUTATION_KEY"; \
-	else \
-		SECRET_FLAG="--update-secrets AUTH_BYPASS_MUTATION_KEY=AUTH_BYPASS_MUTATION_KEY:latest"; \
-	fi; \
-	BUILD_VARS="GOOGLE_RUNTIME_VERSION=$(BACKEND_PYTHON_RUNTIME),GOOGLE_ENTRYPOINT=python -m uvicorn reputation.api.main:app --host 0.0.0.0 --port 8080"; \
-	gcloud run deploy "$$BACKEND_SERVICE" \
+		# Prevent inherited CLOUDSDK_* vars from injecting conflicting env-var flags. \
+		unset CLOUDSDK_RUN_DEPLOY_ENV_VARS_FILE CLOUDSDK_RUN_DEPLOY_SET_ENV_VARS CLOUDSDK_RUN_DEPLOY_UPDATE_ENV_VARS CLOUDSDK_RUN_DEPLOY_REMOVE_ENV_VARS CLOUDSDK_RUN_DEPLOY_CLEAR_ENV_VARS; \
+		mkdir -p backend/data; \
+		rsync -a --delete data/reputation_samples/ backend/data/reputation_samples/; \
+		rsync -a --delete data/reputation_llm_samples/ backend/data/reputation_llm_samples/; \
+		BUILD_VARS="GOOGLE_RUNTIME_VERSION=$(BACKEND_PYTHON_RUNTIME),GOOGLE_ENTRYPOINT=python -m uvicorn reputation.api.main:app --host 0.0.0.0 --port 8080"; \
+		gcloud run deploy "$$BACKEND_SERVICE" \
 		--project "$$GCP_PROJECT" \
 		--region "$$GCP_REGION" \
 		--source backend \
@@ -317,20 +311,15 @@ deploy-cloudrun-back: cloudrun-env
 		--no-allow-unauthenticated \
 		--min-instances 0 \
 		--max-instances $(BACKEND_MAX_INSTANCES) \
-		--concurrency $(BACKEND_CONCURRENCY) \
-		--cpu $(BACKEND_CPU) \
-		--memory $(BACKEND_MEMORY) \
-		--cpu-throttling \
-		--set-build-env-vars "$$BUILD_VARS" \
-		$$SECRET_FLAG \
-		--env-vars-file "$$ENV_FILE"; \
-	gcloud run services update "$$BACKEND_SERVICE" \
-		--project "$$GCP_PROJECT" \
-		--region "$$GCP_REGION" \
-		--remove-env-vars AUTH_BYPASS_ALLOW_MUTATIONS >/dev/null 2>&1 || true; \
-	# In some services, traffic may remain pinned to an older revision. Force latest. \
-	gcloud run services update-traffic "$$BACKEND_SERVICE" \
-		--project "$$GCP_PROJECT" \
+			--concurrency $(BACKEND_CONCURRENCY) \
+			--cpu $(BACKEND_CPU) \
+			--memory $(BACKEND_MEMORY) \
+			--cpu-throttling \
+			--set-build-env-vars "$$BUILD_VARS" \
+			--env-vars-file "$$ENV_FILE"; \
+		# In some services, traffic may remain pinned to an older revision. Force latest. \
+		gcloud run services update-traffic "$$BACKEND_SERVICE" \
+			--project "$$GCP_PROJECT" \
 		--region "$$GCP_REGION" \
 		--to-latest
 
@@ -399,47 +388,24 @@ ingest-cloudrun: cloudrun-env
 	GCP_REGION="$${GCP_REGION:-europe-southwest1}"; \
 	BACKEND_SERVICE="$${BACKEND_SERVICE:-$$(env_get BACKEND_SERVICE)}"; \
 	BACKEND_SERVICE="$${BACKEND_SERVICE:-gor-backend}"; \
-	LOGIN_REQUESTED_VAL="$$(env_get GOOGLE_CLOUD_LOGIN_REQUESTED)"; \
-	LOGIN_REQUESTED_VAL=$$(echo "$$LOGIN_REQUESTED_VAL" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]'); \
-	if [ "$$LOGIN_REQUESTED_VAL" != "true" ]; then LOGIN_REQUESTED_VAL="false"; fi; \
-	CLIENT_ID_VAL="$$(env_get AUTH_GOOGLE_CLIENT_ID)"; \
-	CLIENT_ID_VAL=$$(printf '%s' "$$CLIENT_ID_VAL" | tr -d '\r'); \
-	echo "==> Lanzando ingesta remota en Cloud Run ($$BACKEND_SERVICE)..."; \
-	ADMIN_KEY=""; \
-	CALLER_SERVICE_ACCOUNT_VAL="$${CALLER_SERVICE_ACCOUNT:-gor-github-deploy@$${GCP_PROJECT}.iam.gserviceaccount.com}"; \
-	if [ "$$LOGIN_REQUESTED_VAL" = "true" ]; then \
+		LOGIN_REQUESTED_VAL="$$(env_get GOOGLE_CLOUD_LOGIN_REQUESTED)"; \
+		LOGIN_REQUESTED_VAL=$$(echo "$$LOGIN_REQUESTED_VAL" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]'); \
+		if [ "$$LOGIN_REQUESTED_VAL" != "true" ]; then LOGIN_REQUESTED_VAL="false"; fi; \
+		CLIENT_ID_VAL="$$(env_get AUTH_GOOGLE_CLIENT_ID)"; \
+		CLIENT_ID_VAL=$$(printf '%s' "$$CLIENT_ID_VAL" | tr -d '\r'); \
+		echo "==> Lanzando ingesta remota en Cloud Run ($$BACKEND_SERVICE)..."; \
+		CALLER_SERVICE_ACCOUNT_VAL="$${CALLER_SERVICE_ACCOUNT:-gor-github-deploy@$${GCP_PROJECT}.iam.gserviceaccount.com}"; \
+		if [ "$$LOGIN_REQUESTED_VAL" = "true" ]; then \
 		if [ -z "$$CLIENT_ID_VAL" ]; then \
 			echo "Falta AUTH_GOOGLE_CLIENT_ID (ponlo en backend/reputation/cloudrun.env)."; \
 			exit 1; \
 		fi; \
-		if ! echo "$$CLIENT_ID_VAL" | grep -q '\\.apps\\.googleusercontent\\.com$$'; then \
-			echo "ERROR: AUTH_GOOGLE_CLIENT_ID debe ser un OAuth Client ID (termina en .apps.googleusercontent.com). Valor actual: $$CLIENT_ID_VAL"; \
-			exit 1; \
+			if ! echo "$$CLIENT_ID_VAL" | grep -q '\\.apps\\.googleusercontent\\.com$$'; then \
+				echo "ERROR: AUTH_GOOGLE_CLIENT_ID debe ser un OAuth Client ID (termina en .apps.googleusercontent.com). Valor actual: $$CLIENT_ID_VAL"; \
+				exit 1; \
+			fi; \
 		fi; \
-	else \
-		# Prefer Secret Manager (no guardar el admin key en backend/reputation/cloudrun.env). \
-		if [ -n "$$CALLER_SERVICE_ACCOUNT_VAL" ]; then \
-			ADMIN_KEY=$$(gcloud secrets versions access latest \
-				--secret AUTH_BYPASS_MUTATION_KEY \
-				--project "$$GCP_PROJECT" \
-				--impersonate-service-account "$$CALLER_SERVICE_ACCOUNT_VAL" 2>/dev/null || true); \
-		fi; \
-		if [ -z "$$ADMIN_KEY" ]; then \
-			ADMIN_KEY=$$(gcloud secrets versions access latest \
-				--secret AUTH_BYPASS_MUTATION_KEY \
-				--project "$$GCP_PROJECT" 2>/dev/null || true); \
-		fi; \
-		ADMIN_KEY=$$(echo "$$ADMIN_KEY" | tr -d '\r\n'); \
-		if [ -z "$$ADMIN_KEY" ]; then \
-			echo "Falta AUTH_BYPASS_MUTATION_KEY para mutaciones mientras GOOGLE_CLOUD_LOGIN_REQUESTED=false (no se pudo leer desde Secret Manager)."; \
-			exit 1; \
-		fi; \
-		if [ "$${#ADMIN_KEY}" -lt 32 ]; then \
-			echo "AUTH_BYPASS_MUTATION_KEY debe tener al menos 32 caracteres."; \
-			exit 1; \
-		fi; \
-	fi; \
-	BACKEND_URL=$$(gcloud run services describe "$$BACKEND_SERVICE" --project "$$GCP_PROJECT" --region "$$GCP_REGION" --format 'value(status.url)'); \
+		BACKEND_URL=$$(gcloud run services describe "$$BACKEND_SERVICE" --project "$$GCP_PROJECT" --region "$$GCP_REGION" --format 'value(status.url)'); \
 	if [ -z "$$BACKEND_URL" ]; then \
 		echo "No se pudo obtener BACKEND_URL. Verifica deploy del backend y permisos."; \
 		exit 1; \
@@ -453,13 +419,12 @@ ingest-cloudrun: cloudrun-env
 	USER_TOKEN=""; \
 	if [ "$$LOGIN_REQUESTED_VAL" = "true" ]; then \
 		USER_TOKEN=$$(gcloud auth print-identity-token "$${TOKEN_FLAGS[@]}" --audiences="$$CLIENT_ID_VAL" --include-email); \
-	fi; \
-	PAYLOAD="{\"force\":$(INGEST_FORCE),\"all_sources\":$(INGEST_ALL_SOURCES)}"; \
-	CURL_HEADERS=(-H "Authorization: Bearer $$RUN_TOKEN"); \
-	if [ -n "$$USER_TOKEN" ]; then CURL_HEADERS+=(-H "x-user-id-token: $$USER_TOKEN"); fi; \
-	if [ -n "$$ADMIN_KEY" ]; then CURL_HEADERS+=(-H "x-gor-admin-key: $$ADMIN_KEY"); fi; \
-	RESPONSE=$$(curl -sS -f -X POST "$$BACKEND_URL/ingest/reputation" \
-		"$${CURL_HEADERS[@]}" \
+		fi; \
+		PAYLOAD="{\"force\":$(INGEST_FORCE),\"all_sources\":$(INGEST_ALL_SOURCES)}"; \
+		CURL_HEADERS=(-H "Authorization: Bearer $$RUN_TOKEN"); \
+		if [ -n "$$USER_TOKEN" ]; then CURL_HEADERS+=(-H "x-user-id-token: $$USER_TOKEN"); fi; \
+		RESPONSE=$$(curl -sS -f -X POST "$$BACKEND_URL/ingest/reputation" \
+			"$${CURL_HEADERS[@]}" \
 		-H "Content-Type: application/json" \
 		-d "$$PAYLOAD"); \
 	JOB_ID=$$(printf '%s' "$$RESPONSE" | python3 -c 'import json,sys; print((json.loads(sys.stdin.read() or "{}")).get("id",""))'); \
