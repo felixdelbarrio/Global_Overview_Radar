@@ -93,6 +93,12 @@ type ReputationCompareResponse = {
 
 type DashboardMode = "dashboard" | "sentiment";
 type SentimentScope = "all" | "markets" | "press";
+type DashboardHeatSource = {
+  source: string;
+  total: number;
+  negative: number;
+  negative_ratio: number;
+};
 
 type SentimentViewProps = {
   mode?: DashboardMode;
@@ -971,6 +977,25 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
     () => dashboardMarketInsights?.source_friction ?? [],
     [dashboardMarketInsights],
   );
+  const dashboardHeatSources = useMemo<DashboardHeatSource[]>(() => {
+    const totalMentions = Number(dashboardMarketInsights?.kpis?.total_mentions ?? 0);
+    if (!Number.isFinite(totalMentions) || totalMentions <= 0) return [];
+    return dashboardSourceFriction
+      .map((entry) => {
+        const negative = Math.max(0, Number(entry.negative ?? 0));
+        return {
+          source: entry.source,
+          total: totalMentions,
+          negative,
+          negative_ratio: negative / totalMentions,
+        };
+      })
+      .sort((a, b) => {
+        if (b.negative_ratio !== a.negative_ratio) return b.negative_ratio - a.negative_ratio;
+        if (b.negative !== a.negative) return b.negative - a.negative;
+        return a.source.localeCompare(b.source);
+      });
+  }, [dashboardMarketInsights, dashboardSourceFriction]);
   const dashboardMaxFeatureCount = useMemo(
     () =>
       Math.max(
@@ -1145,163 +1170,220 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
       )}
 
       <div className="mt-6 grid grid-cols-1 lg:grid-cols-[1.2fr_1fr] gap-4">
-        <section
-          className="rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-5 shadow-[var(--shadow-md)] backdrop-blur-xl animate-rise"
-          style={{ animationDelay: "120ms" }}
-        >
-          <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
-            FILTROS PRINCIPALES
-          </div>
-          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {!isDashboard && (
-              <FilterField label="Desde">
-                <input
-                  type="date"
-                  value={fromDate}
-                  onChange={(e) => {
-                    touchCommonFilters();
-                    setFromDate(e.target.value);
-                  }}
-                  className="w-full rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_var(--inset-highlight)] outline-none focus:border-[color:var(--aqua)]/60 focus:ring-2 focus:ring-[color:var(--aqua)]/30"
-                />
+        <div className={isDashboard ? "flex h-full flex-col gap-4" : undefined}>
+          <section
+            className="rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-5 shadow-[var(--shadow-md)] backdrop-blur-xl animate-rise"
+            style={{ animationDelay: "120ms" }}
+          >
+            <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
+              FILTROS PRINCIPALES
+            </div>
+            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {!isDashboard && (
+                <FilterField label="Desde">
+                  <input
+                    type="date"
+                    value={fromDate}
+                    onChange={(e) => {
+                      touchCommonFilters();
+                      setFromDate(e.target.value);
+                    }}
+                    className="w-full rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_var(--inset-highlight)] outline-none focus:border-[color:var(--aqua)]/60 focus:ring-2 focus:ring-[color:var(--aqua)]/30"
+                  />
+                </FilterField>
+              )}
+              {!isDashboard && (
+                <FilterField label="Hasta">
+                  <input
+                    type="date"
+                    value={toDate}
+                    onChange={(e) => {
+                      touchCommonFilters();
+                      setToDate(e.target.value);
+                    }}
+                    className="w-full rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_var(--inset-highlight)] outline-none focus:border-[color:var(--aqua)]/60 focus:ring-2 focus:ring-[color:var(--aqua)]/30"
+                  />
+                </FilterField>
+              )}
+              <FilterField label="Entidad">
+                <div className="w-full rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_var(--inset-highlight)]">
+                  {actorPrincipalName}
+                </div>
               </FilterField>
-            )}
-            {!isDashboard && (
-              <FilterField label="Hasta">
-                <input
-                  type="date"
-                  value={toDate}
-                  onChange={(e) => {
-                    touchCommonFilters();
-                    setToDate(e.target.value);
-                  }}
-                  className="w-full rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_var(--inset-highlight)] outline-none focus:border-[color:var(--aqua)]/60 focus:ring-2 focus:ring-[color:var(--aqua)]/30"
-                />
-              </FilterField>
-            )}
-            <FilterField label="Entidad">
-              <div className="w-full rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_var(--inset-highlight)]">
-                {actorPrincipalName}
-              </div>
-            </FilterField>
-            {!isDashboard && (
-              <FilterField label="Sentimiento">
+              {!isDashboard && (
+                <FilterField label="Sentimiento">
+                  <select
+                    value={sentiment}
+                    onChange={(e) => {
+                      touchCommonFilters();
+                      setSentiment(e.target.value as SentimentFilter);
+                    }}
+                    className="w-full rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_var(--inset-highlight)] outline-none focus:border-[color:var(--aqua)]/60 focus:ring-2 focus:ring-[color:var(--aqua)]/30"
+                  >
+                    {SENTIMENTS.map((opt) => (
+                      <option key={opt} value={opt}>
+                        {opt === "all" ? "Todos" : opt}
+                      </option>
+                    ))}
+                  </select>
+                </FilterField>
+              )}
+              <FilterField label="País">
                 <select
-                  value={sentiment}
+                  value={geo}
                   onChange={(e) => {
                     touchCommonFilters();
-                    setSentiment(e.target.value as SentimentFilter);
+                    setGeo(e.target.value);
                   }}
                   className="w-full rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_var(--inset-highlight)] outline-none focus:border-[color:var(--aqua)]/60 focus:ring-2 focus:ring-[color:var(--aqua)]/30"
-                >
-                  {SENTIMENTS.map((opt) => (
-                    <option key={opt} value={opt}>
-                      {opt === "all" ? "Todos" : opt}
-                    </option>
-                  ))}
-                </select>
-              </FilterField>
-            )}
-            <FilterField label="País">
-              <select
-                value={geo}
-                onChange={(e) => {
-                  touchCommonFilters();
-                  setGeo(e.target.value);
-                }}
-                className="w-full rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_var(--inset-highlight)] outline-none focus:border-[color:var(--aqua)]/60 focus:ring-2 focus:ring-[color:var(--aqua)]/30"
-              >
-                <option value="all">Todos</option>
-                {geoOptions.map((opt) => (
-                  <option key={opt} value={opt}>
-                    {opt}
-                  </option>
-                ))}
-              </select>
-            </FilterField>
-            {!isDashboard && comparisonsEnabled && (
-              <FilterField label="Otros actores del mercado">
-                <select
-                  value={actor}
-                  onChange={(e) => {
-                    touchItemsFilters();
-                    setActor(e.target.value);
-                  }}
-                  className="w-full rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_var(--inset-highlight)] outline-none focus:border-[color:var(--aqua)]/60 focus:ring-2 focus:ring-[color:var(--aqua)]/30 disabled:opacity-60"
                 >
                   <option value="all">Todos</option>
-                  {actorOptions.map((opt) => (
+                  {geoOptions.map((opt) => (
                     <option key={opt} value={opt}>
                       {opt}
                     </option>
                   ))}
                 </select>
               </FilterField>
-            )}
-          </div>
-
-          <div className="mt-4">
-            <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
-              FUENTES
-            </div>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {sourcesOptions.map((src) => {
-                const active = sources.includes(src);
-                const count = sourceCounts[src];
-                const countPrincipalLabel = count?.principal.toLocaleString("es-ES");
-                const countComparisonLabel =
-                  count && !isDashboard && comparisonsEnabled
-                    ? count.others.toLocaleString("es-ES")
-                    : null;
-                return (
-                  <button
-                    key={src}
-                    onClick={() => {
-                      touchCommonFilters();
-                      toggleSource(src, sources, setSources);
+              {!isDashboard && comparisonsEnabled && (
+                <FilterField label="Otros actores del mercado">
+                  <select
+                    value={actor}
+                    onChange={(e) => {
+                      touchItemsFilters();
+                      setActor(e.target.value);
                     }}
-                    className={
-                      "rounded-full px-3 py-1.5 text-xs border transition shadow-sm " +
-                      (active
-                        ? "bg-[color:var(--blue)] text-white border-transparent"
-                        : "bg-[color:var(--surface-80)] text-[color:var(--brand-ink)] border-[color:var(--border-60)]")
-                    }
+                    className="w-full rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-3 py-2 text-sm text-[color:var(--ink)] shadow-[inset_0_1px_0_var(--inset-highlight)] outline-none focus:border-[color:var(--aqua)]/60 focus:ring-2 focus:ring-[color:var(--aqua)]/30 disabled:opacity-60"
                   >
-                    <span>{src}</span>
-                    {countPrincipalLabel && !itemsLoading && (
-                      <span
-                        className={
-                          "ml-2 rounded-full px-2 py-0.5 text-[10px] font-semibold " +
-                          (active
-                            ? "bg-[color:var(--surface-15)] text-white"
-                            : "bg-[color:var(--sand)] text-[color:var(--brand-ink)]")
-                        }
-                      >
-                        {formatVsValue(countPrincipalLabel, countComparisonLabel)}
-                      </span>
-                    )}
-                    {itemsLoading && (
-                      <LoadingPill
-                        className={
-                          "ml-2 h-2 w-6 " +
-                          (active
-                            ? "border-[color:var(--surface-15)]"
-                            : "border-[color:var(--border-60)]")
-                        }
-                        label={`Cargando ${src}`}
-                      />
-                    )}
-                  </button>
-                );
-              })}
-              {!sourcesOptions.length && (
-                <span className="text-xs text-[color:var(--text-40)]">
-                  Sin datos disponibles
-                </span>
+                    <option value="all">Todos</option>
+                    {actorOptions.map((opt) => (
+                      <option key={opt} value={opt}>
+                        {opt}
+                      </option>
+                    ))}
+                  </select>
+                </FilterField>
               )}
             </div>
-          </div>
-        </section>
+
+            <div className="mt-4">
+              <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
+                FUENTES
+              </div>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {sourcesOptions.map((src) => {
+                  const active = sources.includes(src);
+                  const count = sourceCounts[src];
+                  const countPrincipalLabel = count?.principal.toLocaleString("es-ES");
+                  const countComparisonLabel =
+                    count && !isDashboard && comparisonsEnabled
+                      ? count.others.toLocaleString("es-ES")
+                      : null;
+                  return (
+                    <button
+                      key={src}
+                      onClick={() => {
+                        touchCommonFilters();
+                        toggleSource(src, sources, setSources);
+                      }}
+                      className={
+                        "rounded-full px-3 py-1.5 text-xs border transition shadow-sm " +
+                        (active
+                          ? "bg-[color:var(--blue)] text-white border-transparent"
+                          : "bg-[color:var(--surface-80)] text-[color:var(--brand-ink)] border-[color:var(--border-60)]")
+                      }
+                    >
+                      <span>{src}</span>
+                      {countPrincipalLabel && !itemsLoading && (
+                        <span
+                          className={
+                            "ml-2 rounded-full px-2 py-0.5 text-[10px] font-semibold " +
+                            (active
+                              ? "bg-[color:var(--surface-15)] text-white"
+                              : "bg-[color:var(--sand)] text-[color:var(--brand-ink)]")
+                          }
+                        >
+                          {formatVsValue(countPrincipalLabel, countComparisonLabel)}
+                        </span>
+                      )}
+                      {itemsLoading && (
+                        <LoadingPill
+                          className={
+                            "ml-2 h-2 w-6 " +
+                            (active
+                              ? "border-[color:var(--surface-15)]"
+                              : "border-[color:var(--border-60)]")
+                          }
+                          label={`Cargando ${src}`}
+                        />
+                      )}
+                    </button>
+                  );
+                })}
+                {!sourcesOptions.length && (
+                  <span className="text-xs text-[color:var(--text-40)]">
+                    Sin datos disponibles
+                  </span>
+                )}
+              </div>
+            </div>
+          </section>
+
+          {isDashboard && (
+            <section
+              className="flex-1 rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-5 shadow-[var(--shadow-md)] backdrop-blur-xl animate-rise"
+              style={{ animationDelay: "240ms" }}
+            >
+              <h2 className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
+                MAPA DE CALOR DE OPINIONES NEGATIVAS EN LOS MARKETS
+              </h2>
+              <p className="mt-2 text-xs text-[color:var(--text-55)]">
+                Dónde se concentra la negatividad y con qué intensidad.
+              </p>
+              <div className="mt-4 space-y-3">
+                {dashboardMarketInsightsLoading && (
+                  <div className="space-y-2">
+                    <LoadingPill className="h-3 w-28" label="Cargando canales" />
+                    <LoadingPill className="h-3 w-full" label="Cargando canales" />
+                  </div>
+                )}
+                {!dashboardMarketInsightsLoading && dashboardMarketInsightsError && (
+                  <div className="rounded-xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-2 text-sm text-[color:var(--text-55)]">
+                    No se pudo cargar el mapa de calor de los markets.
+                  </div>
+                )}
+                {!dashboardMarketInsightsLoading &&
+                  !dashboardMarketInsightsError &&
+                  !dashboardHeatSources.length && (
+                    <div className="rounded-xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-2 text-sm text-[color:var(--text-55)]">
+                      Sin datos para el periodo.
+                    </div>
+                  )}
+                {!dashboardMarketInsightsLoading &&
+                  !dashboardMarketInsightsError &&
+                  dashboardHeatSources.slice(0, 10).map((source) => (
+                    <div
+                      key={source.source}
+                      className="rounded-xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-3 py-2"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="text-sm text-[color:var(--ink)]">{source.source}</div>
+                        <div className="text-xs text-[color:var(--text-55)]">
+                          {source.negative}/{source.total} negativas ({formatRatioPercent(source.negative_ratio)})
+                        </div>
+                      </div>
+                      <div className="mt-2 h-2 rounded-full bg-[color:var(--surface-60)] overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-gradient-to-r from-rose-400/80 to-amber-300/80"
+                          style={{ width: `${Math.min(Math.max(source.negative_ratio * 100, 0), 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </section>
+          )}
+        </div>
 
         <section
           className="rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-5 shadow-[var(--shadow-md)] backdrop-blur-xl animate-rise"
@@ -1723,59 +1805,6 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
                   ))}
               </div>
             </article>
-          </section>
-
-          <section
-            className="mt-4 rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-5 shadow-[var(--shadow-md)] backdrop-blur-xl animate-rise"
-            style={{ animationDelay: "420ms" }}
-          >
-            <h2 className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
-              MAPA DE CALOR DE LOS MARKETS
-            </h2>
-            <p className="mt-2 text-xs text-[color:var(--text-55)]">
-              Dónde se concentra la negatividad y con qué intensidad.
-            </p>
-            <div className="mt-4 space-y-3">
-              {dashboardMarketInsightsLoading && (
-                <div className="space-y-2">
-                  <LoadingPill className="h-3 w-28" label="Cargando canales" />
-                  <LoadingPill className="h-3 w-full" label="Cargando canales" />
-                </div>
-              )}
-              {!dashboardMarketInsightsLoading && dashboardMarketInsightsError && (
-                <div className="rounded-xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-2 text-sm text-[color:var(--text-55)]">
-                  No se pudo cargar el mapa de calor de los markets.
-                </div>
-              )}
-              {!dashboardMarketInsightsLoading &&
-                !dashboardMarketInsightsError &&
-                !dashboardSourceFriction.length && (
-                  <div className="rounded-xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-2 text-sm text-[color:var(--text-55)]">
-                    Sin datos para el periodo.
-                  </div>
-                )}
-              {!dashboardMarketInsightsLoading &&
-                !dashboardMarketInsightsError &&
-                dashboardSourceFriction.slice(0, 10).map((source) => (
-                  <div
-                    key={source.source}
-                    className="rounded-xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-3 py-2"
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="text-sm text-[color:var(--ink)]">{source.source}</div>
-                      <div className="text-xs text-[color:var(--text-55)]">
-                        {source.negative}/{source.total} negativas ({formatRatioPercent(source.negative_ratio)})
-                      </div>
-                    </div>
-                    <div className="mt-2 h-2 rounded-full bg-[color:var(--surface-60)] overflow-hidden">
-                      <div
-                        className="h-full rounded-full bg-gradient-to-r from-rose-400/80 to-amber-300/80"
-                        style={{ width: `${Math.max(source.negative_ratio * 100, 3)}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
-            </div>
           </section>
         </>
       ) : (
