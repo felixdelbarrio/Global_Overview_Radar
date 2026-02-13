@@ -498,20 +498,21 @@ export function Shell({ children }: { children: React.ReactNode }) {
     []
   );
 
+  const llmProviderDraft = String(settingsDraft["llm.provider"] ?? "openai").toLowerCase();
+  const llmEnabledDraft = Boolean(settingsDraft["llm.enabled"]);
+  const llmOpenAiKeyDraft = String(settingsDraft["llm.openai_key"] ?? "");
+  const llmGeminiKeyDraft = String(settingsDraft["llm.gemini_key"] ?? "");
+
   useEffect(() => {
-    const provider = String(settingsDraft["llm.provider"] ?? "openai").toLowerCase();
-    const providerKey = provider === "gemini" ? "llm.gemini_key" : "llm.openai_key";
-    const hasProviderKey = String(settingsDraft[providerKey] ?? "").trim().length > 0;
-    if (!hasProviderKey && Boolean(settingsDraft["llm.enabled"])) {
+    const provider = llmProviderDraft === "gemini" ? "gemini" : "openai";
+    const hasProviderKey =
+      provider === "gemini"
+        ? llmGeminiKeyDraft.trim().length > 0
+        : llmOpenAiKeyDraft.trim().length > 0;
+    if (!hasProviderKey && llmEnabledDraft) {
       setSettingsDraft((prev) => ({ ...prev, "llm.enabled": false }));
     }
-  }, [
-    settingsDraft,
-    settingsDraft["llm.enabled"],
-    settingsDraft["llm.gemini_key"],
-    settingsDraft["llm.openai_key"],
-    settingsDraft["llm.provider"],
-  ]);
+  }, [llmEnabledDraft, llmGeminiKeyDraft, llmOpenAiKeyDraft, llmProviderDraft]);
 
   const credentialIssues = useMemo(() => {
     const issues: { id: string; label: string; missing: string[] }[] = [];
