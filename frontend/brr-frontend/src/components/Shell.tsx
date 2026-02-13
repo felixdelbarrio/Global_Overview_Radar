@@ -477,7 +477,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
       {
         id: "reddit",
         toggleKey: "sources.reddit",
-        keyKeys: ["keys.reddit_id", "keys.reddit_secret"],
+        keyKeys: ["keys.reddit_id"],
       },
       {
         id: "twitter",
@@ -1923,66 +1923,62 @@ export function Shell({ children }: { children: React.ReactNode }) {
                                             </div>
                                           )}
                                         </div>
-                                        <div className="flex items-center gap-2">
-                                          <span className="text-[10px] uppercase tracking-[0.18em] text-[color:var(--text-55)]">
-                                            {enabled ? "ACTIVO" : "INACTIVO"}
-                                          </span>
-                                          <button
-                                            type="button"
-                                            aria-label={`Activar ${toggleField.label}`}
-                                            onClick={() =>
-                                              updateSettingValue(row.toggleKey, !enabled)
-                                            }
-                                            className={`settings-toggle ${
-                                              enabled ? "is-on" : "is-off"
-                                            } relative inline-flex shrink-0 h-6 w-11 items-center rounded-full border transition ${
-                                              enabled
-                                                ? "border-[color:var(--aqua)] bg-[color:var(--gradient-chip)]"
-                                                : "border-[color:var(--border-60)] bg-[color:var(--surface-60)]"
-                                            }`}
-                                          >
-                                            <span
-                                              className={`settings-toggle-knob inline-block h-4 w-4 transform rounded-full bg-white shadow transition ${
-                                                enabled ? "translate-x-5" : "translate-x-1"
-                                              }`}
-                                            />
-                                          </button>
-                                        </div>
-                                      </div>
-                                      <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                                        {row.keyKeys.map((key) => {
-                                          const field = settingsFieldMap.get(key);
-                                          if (!field) return null;
-                                          if (field.type === "select" && field.options?.length) {
-                                            const value = String(
-                                              settingsDraft[key] ?? field.options[0] ?? ""
-                                            );
-                                            return (
-                                              <select
-                                                key={key}
-                                                value={value}
-                                                onChange={(event) =>
-                                                  updateSettingValue(key, event.target.value)
-                                                }
-                                                className="w-full rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-60)] px-3 py-1 text-xs text-[color:var(--ink)]"
-                                              >
-                                                {field.options.map((option) => (
-                                                  <option key={option} value={option}>
-                                                    {option}
-                                                  </option>
-                                                ))}
-                                              </select>
-                                            );
+                                        <button
+                                          type="button"
+                                          aria-label={`Activar ${toggleField.label}`}
+                                          onClick={() =>
+                                            updateSettingValue(row.toggleKey, !enabled)
                                           }
-                                          const inputType =
-                                            field.type === "secret"
-                                              ? "password"
-                                              : field.type === "number"
-                                                ? "number"
-                                                : "text";
-                                          return (
-                                            <div key={key} className="flex items-center gap-2">
+                                          className={`settings-toggle ${
+                                            enabled ? "is-on" : "is-off"
+                                          } relative inline-flex shrink-0 h-6 w-11 items-center rounded-full border transition ${
+                                            enabled
+                                              ? "border-[color:var(--aqua)] bg-[color:var(--gradient-chip)]"
+                                              : "border-[color:var(--border-60)] bg-[color:var(--surface-60)]"
+                                          }`}
+                                        >
+                                          <span
+                                            className={`settings-toggle-knob inline-block h-4 w-4 transform rounded-full bg-white shadow transition ${
+                                              enabled ? "translate-x-5" : "translate-x-1"
+                                            }`}
+                                          />
+                                        </button>
+                                      </div>
+                                      <div className="mt-3 grid grid-cols-[1fr_auto] gap-2">
+                                        <div className="space-y-2">
+                                          {row.keyKeys.map((key) => {
+                                            const field = settingsFieldMap.get(key);
+                                            if (!field) return null;
+                                            if (field.type === "select" && field.options?.length) {
+                                              const value = String(
+                                                settingsDraft[key] ?? field.options[0] ?? ""
+                                              );
+                                              return (
+                                                <select
+                                                  key={key}
+                                                  value={value}
+                                                  onChange={(event) =>
+                                                    updateSettingValue(key, event.target.value)
+                                                  }
+                                                  className="w-full rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-60)] px-3 py-1 text-xs text-[color:var(--ink)]"
+                                                >
+                                                  {field.options.map((option) => (
+                                                    <option key={option} value={option}>
+                                                      {option}
+                                                    </option>
+                                                  ))}
+                                                </select>
+                                              );
+                                            }
+                                            const inputType =
+                                              field.type === "secret"
+                                                ? "password"
+                                                : field.type === "number"
+                                                  ? "number"
+                                                  : "text";
+                                            return (
                                               <input
+                                                key={key}
                                                 type={inputType}
                                                 value={String(settingsDraft[key] ?? "")}
                                                 onChange={(event) =>
@@ -1991,18 +1987,25 @@ export function Shell({ children }: { children: React.ReactNode }) {
                                                 placeholder={field.placeholder ?? field.label}
                                                 className="w-full rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-60)] px-3 py-1 text-xs text-[color:var(--ink)]"
                                               />
-                                              {field.type === "secret" && (
-                                                <button
-                                                  type="button"
-                                                  onClick={() => updateSettingValue(key, "")}
-                                                  className="rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-solid)] px-2 py-1 text-[10px] uppercase tracking-[0.2em] text-[color:var(--text-60)] hover:text-rose-500"
-                                                >
-                                                  RESET
-                                                </button>
-                                              )}
-                                            </div>
-                                          );
-                                        })}
+                                            );
+                                          })}
+                                        </div>
+                                        <div className="space-y-2">
+                                          {row.keyKeys.map((key) => {
+                                            const field = settingsFieldMap.get(key);
+                                            if (!field || field.type !== "secret") return null;
+                                            return (
+                                              <button
+                                                key={`${key}-reset`}
+                                                type="button"
+                                                onClick={() => updateSettingValue(key, "")}
+                                                className="rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-solid)] px-2 py-1 text-[10px] uppercase tracking-[0.2em] text-[color:var(--text-60)] hover:text-rose-500"
+                                              >
+                                                RESET
+                                              </button>
+                                            );
+                                          })}
+                                        </div>
                                       </div>
                                       {enabled && row.keyRequired !== false && missing.length > 0 && (
                                         <div className="mt-2 text-[10px] text-rose-500">

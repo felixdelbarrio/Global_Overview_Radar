@@ -109,11 +109,7 @@ type DashboardMention = {
 export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentViewProps) {
   const today = useMemo(() => new Date(), []);
   const defaultTo = useMemo(() => toDateInput(today), [today]);
-  const defaultFrom = useMemo(() => {
-    const d = new Date(today);
-    d.setFullYear(d.getFullYear() - 2);
-    return toDateInput(d);
-  }, [today]);
+  const defaultFrom = useMemo(() => toDateInput(startOfMonth(today)), [today]);
   const todayInput = useMemo(() => toDateInput(today), [today]);
   const currentDashboardMonth = useMemo(() => startOfMonth(today), [today]);
   const [dashboardMonthCursor, setDashboardMonthCursor] = useState(() => startOfMonth(today));
@@ -365,6 +361,20 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
   }, [sources, isDashboard, scopeAllowedSources]);
   const showResponsesSummary =
     isSentimentMarkets || (isDashboard && Boolean(meta?.ui_show_dashboard_responses));
+  const listedSentimentLabel = useMemo(
+    () => formatSentimentFilterLabel(effectiveSentiment),
+    [effectiveSentiment],
+  );
+  const listedGeoLabel = geo === "all" ? "Todos" : geo;
+  const listedFiltersLabel = useMemo(
+    () =>
+      [
+        `${formatDateInputLabel(effectiveFromDate)} - ${formatDateInputLabel(effectiveToDate)}`,
+        `SENTIMIENTO: ${listedSentimentLabel}`,
+        `PAÍS: ${listedGeoLabel}`,
+      ].join(" · "),
+    [effectiveFromDate, effectiveToDate, listedSentimentLabel, listedGeoLabel],
+  );
 
   useEffect(() => {
     let alive = true;
@@ -1630,8 +1640,13 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
       ) : (
         <section className="mt-6 rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-5 shadow-[var(--shadow-md)] backdrop-blur-xl animate-rise" style={{ animationDelay: "360ms" }}>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
-              LISTADO COMPLETO
+            <div>
+              <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
+                LISTADO
+              </div>
+              <div className="mt-1 text-[11px] text-[color:var(--text-55)]">
+                {listedFiltersLabel}
+              </div>
             </div>
             <div className="text-xs text-[color:var(--text-50)] sm:text-right">
               {mentionsLoading ? (
@@ -2766,6 +2781,20 @@ function buildRangeLabel(fromDate?: string, toDate?: string) {
     : "Inicio";
   const toLabel = toDate ? formatDate(`${toDate}T23:59:59`, false) : "Hoy";
   return `${fromLabel} → ${toLabel}`;
+}
+
+function formatDateInputLabel(value?: string | null) {
+  if (!value) return "Todos";
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+  if (!match) return value;
+  return `${match[3]}/${match[2]}/${match[1]}`;
+}
+
+function formatSentimentFilterLabel(value: SentimentFilter) {
+  if (value === "all") return "Todos";
+  if (value === "positive") return "Positivo";
+  if (value === "negative") return "Negativo";
+  return "Neutral";
 }
 
 function getLatestDate(items: ReputationItem[]) {

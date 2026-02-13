@@ -2340,7 +2340,6 @@ class ReputationIngestService:
             handled_sources.add("reddit")
             reddit_cfg = _as_dict(cfg.get("reddit"))
             client_id = os.getenv("REDDIT_CLIENT_ID", "").strip()
-            client_secret = os.getenv("REDDIT_CLIENT_SECRET", "").strip()
             user_agent = os.getenv("REDDIT_USER_AGENT", "global-overview-radar/0.1").strip()
 
             subreddits = _get_list_str(reddit_cfg, "subreddits")
@@ -2352,13 +2351,13 @@ class ReputationIngestService:
 
             queries = self._expand_queries(query_templates, entity_terms)
 
-            if not client_id or not client_secret or not user_agent:
+            if not client_id or not user_agent:
                 notes.append("reddit: missing credentials envs")
             else:
                 collectors.append(
                     RedditCollector(
                         client_id=client_id,
-                        client_secret=client_secret,
+                        client_secret=None,
                         user_agent=user_agent,
                         subreddits=subreddits,
                         queries=queries,
