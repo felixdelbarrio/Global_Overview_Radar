@@ -18,6 +18,7 @@ import {
   Loader2,
   MapPin,
   MessageSquare,
+  User,
   Star,
   PenSquare,
   Sparkles,
@@ -62,6 +63,12 @@ const MANUAL_OVERRIDE_BLOCKED_LABELS: Record<string, string> = {
   googlereviews: "Google Reviews",
   downdetector: "Downdetector",
 };
+const MARKET_OPINION_SOURCE_KEYS = new Set([
+  "appstore",
+  "googleplay",
+  "googlereviews",
+  "downdetector",
+]);
 
 type SentimentFilter = (typeof SENTIMENTS)[number];
 type SentimentValue = Exclude<SentimentFilter, "all">;
@@ -1979,6 +1986,7 @@ type MentionGroup = {
   text?: string;
   geo?: string;
   actor?: string;
+  author?: string;
   sentiment?: string;
   rating?: number | null;
   rating_source?: string | null;
@@ -1991,6 +1999,7 @@ type MentionGroup = {
   reply_author?: string;
   replied_at?: string | null;
   reply_item_date?: string | null;
+  author_item_date?: string | null;
 };
 
 function MentionCard({
@@ -2023,6 +2032,10 @@ function MentionCard({
   const ratingLabel = ratingValue !== null ? ratingValue.toFixed(1) : null;
   const blockedSources = item.sources.filter((src) => isManualOverrideBlockedSource(src));
   const ratingSourceKey = normalizeSourceKey(item.rating_source ?? "");
+  const hasMarketSource = item.sources.some((source) =>
+    MARKET_OPINION_SOURCE_KEYS.has(normalizeSourceKey(source.name)),
+  );
+  const opinionAuthor = item.author || (hasMarketSource ? "Autor sin nombre" : null);
   const manualOverrideBlocked =
     !manualControlsEnabled ||
     blockedSources.length > 0 ||
@@ -2095,6 +2108,15 @@ function MentionCard({
           <Building2 className="h-3.5 w-3.5 text-[color:var(--blue)]" />
           {item.actor || principalLabel}
         </span>
+        {opinionAuthor && (
+          <span
+            className="inline-flex max-w-[250px] items-center gap-1 rounded-full border border-[color:var(--border-70)] bg-[color:var(--surface-80)] px-2.5 py-1"
+            title={opinionAuthor}
+          >
+            <User className="h-3.5 w-3.5 text-[color:var(--blue)]" />
+            <span className="truncate">{opinionAuthor}</span>
+          </span>
+        )}
         <span className="inline-flex items-center gap-1 rounded-full border border-[color:var(--border-70)] bg-[color:var(--surface-80)] px-2.5 py-1">
           <Calendar className="h-3.5 w-3.5 text-[color:var(--blue)]" />
           {displayDate}
@@ -2141,7 +2163,7 @@ function MentionCard({
       {(item.reply_text || item.reply_author || item.replied_at) && (
         <div className="mt-3 rounded-2xl border border-[color:var(--aqua)]/35 bg-[color:var(--surface-80)] px-3 py-2">
           <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[color:var(--blue)]">
-            Respuesta del mercado
+            CONTESTACION
           </div>
           {item.reply_author && (
             <div className="mt-1 text-[11px] text-[color:var(--text-55)]">
@@ -2576,6 +2598,7 @@ function groupMentions(items: ReputationItem[]) {
 
   for (const item of items) {
     const extractedActor = extractActor(item);
+    const extractedAuthor = extractOpinionAuthor(item);
     const title = cleanText(item.title || "");
     const text = cleanText(item.text || "");
     const reply = extractReply(item);
@@ -2586,6 +2609,7 @@ function groupMentions(items: ReputationItem[]) {
       normalizeKey(base),
       item.geo || "",
       extractedActor || "",
+      extractedAuthor || "",
     ].join("|");
 
     if (!map.has(key)) {
@@ -2596,6 +2620,7 @@ function groupMentions(items: ReputationItem[]) {
         text: text || undefined,
         geo: item.geo || undefined,
         actor: extractedActor || undefined,
+        author: extractedAuthor || undefined,
         sentiment: item.sentiment || undefined,
         rating: extractRating(item),
         rating_source: extractRatingSource(item),
@@ -2608,6 +2633,7 @@ function groupMentions(items: ReputationItem[]) {
         reply_author: reply?.author,
         replied_at: reply?.replied_at ?? null,
         reply_item_date: reply ? itemDate : null,
+        author_item_date: extractedAuthor ? itemDate : null,
       });
     }
 
@@ -2649,6 +2675,15 @@ function groupMentions(items: ReputationItem[]) {
       group.actor = extractedActor;
     }
 
+    if (extractedAuthor) {
+      const currentAuthorDate = group.author_item_date || "";
+      const candidateAuthorDate = itemDate || "";
+      if (!group.author || (candidateAuthorDate && candidateAuthorDate > currentAuthorDate)) {
+        group.author = extractedAuthor;
+        group.author_item_date = itemDate;
+      }
+    }
+
     if (item.manual_override) {
       const candidateOverrideAt = item.manual_override.updated_at ?? "";
       const currentOverrideAt = group.manual_override?.updated_at ?? "";
@@ -2685,28 +2720,76 @@ function groupMentions(items: ReputationItem[]) {
 
 function extractRating(item: ReputationItem) {
   const signals = (item.signals || {}) as Record<string, unknown>;
+  const coerceStar = (raw: unknown): number | null => {
+    if (raw === null || raw === undefined || typeof raw === "boolean") return null;
+    let parsed: number | null = null;
+    if (typeof raw === "number" && Number.isFinite(raw)) {
+      parsed = raw;
+    } else if (typeof raw === "string") {
+      const compact = raw.trim().replace(",", ".");
+      const direct = Number(compact);
+      if (Number.isFinite(direct)) {
+        parsed = direct;
+      } else {
+        const firstNumber = compact.match(/-?\d+(?:\.\d+)?/);
+        if (firstNumber) {
+          const asNumber = Number(firstNumber[0]);
+          if (Number.isFinite(asNumber)) {
+            parsed = asNumber;
+          }
+        }
+      }
+    }
+    if (parsed === null || parsed <= 0) return null;
+    return Math.max(0, Math.min(5, parsed));
+  };
+  const fromCandidate = (candidate: unknown, depth = 0): number | null => {
+    if (depth > 3 || candidate === null || candidate === undefined) return null;
+    const direct = coerceStar(candidate);
+    if (direct !== null) return direct;
+    if (Array.isArray(candidate)) {
+      for (const entry of candidate) {
+        const nested = fromCandidate(entry, depth + 1);
+        if (nested !== null) return nested;
+      }
+      return null;
+    }
+    if (!candidate || typeof candidate !== "object") return null;
+    const record = candidate as Record<string, unknown>;
+    const nestedKeys = [
+      "value",
+      "rating",
+      "score",
+      "stars",
+      "starRating",
+      "star_rating",
+      "user_rating",
+      "userRating",
+      "rating_value",
+      "ratingValue",
+      "reviewRating",
+    ];
+    for (const key of nestedKeys) {
+      const nested = fromCandidate(record[key], depth + 1);
+      if (nested !== null) return nested;
+    }
+    return null;
+  };
   const candidates = [
     signals.rating,
     signals.score,
     signals.stars,
+    signals.starRating,
     signals.star_rating,
+    signals.userRating,
     signals.user_rating,
+    signals.ratingValue,
     signals.rating_value,
+    signals.reviewRating,
   ];
   for (const raw of candidates) {
-    if (raw === null || raw === undefined) continue;
-    if (typeof raw === "number" && Number.isFinite(raw)) {
-      return Math.max(0, Math.min(5, raw));
-    }
-    if (typeof raw === "string") {
-      const compact = raw.replace(/\s+/g, "").replace(",", ".");
-      const direct = Number(compact);
-      if (Number.isFinite(direct)) return Math.max(0, Math.min(5, direct));
-      const firstNumber = compact.match(/-?\d+(?:\.\d+)?/);
-      if (!firstNumber) continue;
-      const parsed = Number(firstNumber[0]);
-      if (Number.isFinite(parsed)) return Math.max(0, Math.min(5, parsed));
-    }
+    const value = fromCandidate(raw);
+    if (value !== null) return value;
   }
   return null;
 }
@@ -2718,6 +2801,67 @@ function extractActor(item: ReputationItem) {
   if (Array.isArray(raw)) {
     const first = raw.find((value) => typeof value === "string" && value.trim());
     if (typeof first === "string") return first;
+  }
+  return null;
+}
+
+function extractOpinionAuthor(item: ReputationItem) {
+  const normalizeText = (value: unknown): string => {
+    if (typeof value !== "string") return "";
+    return value.replace(/\s+/g, " ").trim();
+  };
+  const fromValue = (value: unknown): string => {
+    const direct = normalizeText(value);
+    if (direct) return direct;
+    if (!value || typeof value !== "object") return "";
+    if (Array.isArray(value)) {
+      for (const entry of value) {
+        const nested = fromValue(entry);
+        if (nested) return nested;
+      }
+      return "";
+    }
+    const record = value as Record<string, unknown>;
+    const keys = [
+      "author",
+      "author_name",
+      "authorName",
+      "user_name",
+      "userName",
+      "username",
+      "reviewer_name",
+      "reviewerName",
+      "nickname",
+      "nickName",
+      "name",
+      "display_name",
+      "displayName",
+    ];
+    for (const key of keys) {
+      const nested = fromValue(record[key]);
+      if (nested) return nested;
+    }
+    return "";
+  };
+
+  const direct = normalizeText(item.author);
+  if (direct) return direct;
+  const signals = (item.signals || {}) as Record<string, unknown>;
+  const signalKeys = [
+    "author",
+    "author_name",
+    "authorName",
+    "user_name",
+    "userName",
+    "username",
+    "reviewer_name",
+    "reviewerName",
+    "nickname",
+    "nickName",
+  ];
+  for (const key of signalKeys) {
+    const candidate = fromValue(signals[key]);
+    if (candidate) return candidate;
   }
   return null;
 }
@@ -3336,6 +3480,7 @@ const MENTIONS_HEADERS = [
   "texto",
   "pais",
   "actor",
+  "autor",
   "sentimiento",
   "rating",
   "fecha_publicada",
@@ -3352,6 +3497,7 @@ function buildMentionsRows(items: MentionGroup[]) {
     item.text ?? "",
     item.geo ?? "",
     item.actor ?? "",
+    item.author ?? "",
     item.sentiment ?? "",
     item.rating ?? "",
     item.published_at ?? "",

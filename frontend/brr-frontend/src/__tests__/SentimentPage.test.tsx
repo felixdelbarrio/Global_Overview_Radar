@@ -91,6 +91,7 @@ const itemsResponse = {
       source: "appstore",
       geo: "España",
       actor: "Acme Bank",
+      author: "Alexis",
       title: "Reseña App",
       text: "Muy bien",
       sentiment: "positive",
@@ -117,6 +118,7 @@ const itemsResponse = {
       source: "google_play",
       geo: "España",
       actor: "Beta Bank",
+      author: "Marina",
       title: "Beta Bank caída",
       text: "Baja puntuación",
       sentiment: "negative",
@@ -339,9 +341,10 @@ describe("Sentimiento page", () => {
 
     const mentionList = screen.getByText("LISTADO").closest("section");
     expect(mentionList).toBeTruthy();
-    expect(within(mentionList as HTMLElement).getByText("Respuesta del mercado")).toBeInTheDocument();
+    expect(within(mentionList as HTMLElement).getByText("CONTESTACION")).toBeInTheDocument();
     expect(within(mentionList as HTMLElement).getByText("Gracias por tu comentario")).toBeInTheDocument();
     expect(within(mentionList as HTMLElement).getByText("Soporte BBVA")).toBeInTheDocument();
+    expect(within(mentionList as HTMLElement).getByText("Alexis")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Otros actores del mercado/i }));
     expect(within(mentionList as HTMLElement).getByText("Lamentamos la incidencia")).toBeInTheDocument();
 
@@ -620,5 +623,76 @@ describe("Sentimiento page", () => {
     expect(mentionCard).toBeTruthy();
     expect(within(mentionCard as HTMLElement).getByText("1.0")).toBeInTheDocument();
     expect(within(mentionCard as HTMLElement).getByText("/5")).toBeInTheDocument();
+  });
+
+  it("renders Google Play stars when rating is nested in reviewRating", async () => {
+    const metaNestedResponse = {
+      ...metaResponse,
+      sources_enabled: ["google_play"],
+      sources_available: ["google_play"],
+    };
+    const itemsNestedResponse = {
+      ...itemsResponse,
+      sources_enabled: ["google_play"],
+      items: [
+        {
+          id: "gp-nested-1",
+          source: "google_play",
+          geo: "España",
+          actor: "Acme, Bank",
+          author: "Cliente GP",
+          title: "Google Play crítica nested",
+          text: "La app falla en login",
+          sentiment: "negative",
+          published_at: "2026-02-13T10:00:00Z",
+          signals: { reviewRating: { value: "1" } },
+        },
+      ],
+      stats: { count: 1 },
+    };
+    const handleGetNested = (path: string) => {
+      if (path.startsWith("/reputation/meta")) {
+        return Promise.resolve(metaNestedResponse);
+      }
+      if (path.startsWith("/reputation/profiles")) {
+        return Promise.resolve(profilesResponse);
+      }
+      if (path.startsWith("/reputation/items")) {
+        return Promise.resolve(itemsNestedResponse);
+      }
+      if (path.startsWith("/reputation/settings")) {
+        return Promise.resolve({ groups: [], advanced_options: [] });
+      }
+      if (path.startsWith("/reputation/responses/summary")) {
+        return Promise.resolve({
+          totals: {
+            opinions_total: 1,
+            answered_total: 0,
+            answered_ratio: 0,
+            answered_positive: 0,
+            answered_neutral: 0,
+            answered_negative: 0,
+            unanswered_positive: 0,
+            unanswered_neutral: 0,
+            unanswered_negative: 1,
+          },
+          actor_breakdown: [],
+          repeated_replies: [],
+          answered_items: [],
+        });
+      }
+      return Promise.resolve({ items: [] });
+    };
+    apiGetMock.mockImplementation(handleGetNested);
+    apiGetCachedMock.mockImplementation(handleGetNested);
+
+    render(<SentimentView mode="sentiment" scope="all" />);
+
+    const mentionTitle = await screen.findByText("Google Play crítica nested");
+    const mentionCard = mentionTitle.closest("article");
+    expect(mentionCard).toBeTruthy();
+    expect(within(mentionCard as HTMLElement).getByText("1.0")).toBeInTheDocument();
+    expect(within(mentionCard as HTMLElement).getByText("/5")).toBeInTheDocument();
+    expect(within(mentionCard as HTMLElement).getByText("Cliente GP")).toBeInTheDocument();
   });
 });
