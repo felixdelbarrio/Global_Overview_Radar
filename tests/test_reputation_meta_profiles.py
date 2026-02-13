@@ -131,7 +131,9 @@ def test_profiles_update_samples_applies_templates_to_default(
 
     called: dict[str, object] = {}
 
-    def _fake_apply_sample_profiles_to_default(profiles: list[str] | None) -> dict[str, object]:
+    def _fake_apply_sample_profiles_to_default(
+        profiles: list[str] | None,
+    ) -> dict[str, object]:
         called["profiles"] = profiles
         return {
             "active": {
