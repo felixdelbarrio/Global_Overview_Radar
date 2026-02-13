@@ -6,6 +6,7 @@ import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
+from functools import lru_cache
 from typing import Any, Callable, Iterable, Optional, Sequence, cast
 from urllib.parse import quote_plus, urlparse
 
@@ -109,6 +110,11 @@ _GOOGLE_PLAY_LOCALE_HINTS = {
 }
 
 
+@lru_cache(maxsize=8192)
+def _compile_single_keyword(keyword: str) -> CompiledKeywords:
+    return compile_keywords([keyword])
+
+
 def _primary_actor_canonical(cfg: dict[str, Any]) -> str:
     info = primary_actor_info(cfg)
     if not info:
@@ -170,9 +176,11 @@ class ReputationIngestService:
         else:
             raw_sources = [source for source in sources_override if source]
         sources_enabled: list[str] = []
+        seen_sources: set[str] = set()
         for source in raw_sources:
             normalized = source.strip().lower()
-            if normalized and normalized not in sources_enabled:
+            if normalized and normalized not in seen_sources:
+                seen_sources.add(normalized)
                 sources_enabled.append(normalized)
         enabled_sources = set(sources_enabled)
         existing = self._repo.load()
@@ -443,7 +451,7 @@ class ReputationIngestService:
             collector: ReputationCollector,
         ) -> tuple[list[ReputationItem], float]:
             started = time.perf_counter()
-            batch = list(collector.collect())
+            batch = ReputationIngestService._collector_batch(collector)
             duration = time.perf_counter() - started
             return batch, duration
 
@@ -465,6 +473,13 @@ class ReputationIngestService:
                     if progress:
                         progress(done, total, collector.source_name)
         return items
+
+    @staticmethod
+    def _collector_batch(collector: ReputationCollector) -> list[ReputationItem]:
+        collected = collector.collect()
+        if isinstance(collected, list):
+            return collected
+        return list(collected)
 
     @staticmethod
     def _drop_invalid_items(
@@ -1660,7 +1675,7 @@ class ReputationIngestService:
 
     @staticmethod
     def _tokens_match_keyword(tokens: set[str], keyword: str) -> bool:
-        compiled = compile_keywords([keyword])
+        compiled = _compile_single_keyword(keyword)
         return match_compiled(tokens, compiled)
 
     @classmethod
@@ -2011,9 +2026,7 @@ class ReputationIngestService:
         actors = self._all_actors(cfg, alias_map)
 
         existing_recent = (
-            self._normalize_items(list(existing_items), lookback_days, min_dt)
-            if existing_items
-            else []
+            self._normalize_items(existing_items, lookback_days, min_dt) if existing_items else []
         )
         combined = self._merge_items(existing_recent, items)
 
@@ -2111,7 +2124,7 @@ class ReputationIngestService:
                         rss_only=True,
                         filter_terms=entity_terms,
                     )
-                    new_items.extend(list(collector.collect()))
+                    new_items.extend(self._collector_batch(collector))
 
             if not new_items:
                 notes.append(

@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import logging
 from datetime import date, datetime, timezone
 from typing import Any, Iterable
 
 from fastapi import APIRouter, Body, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from reputation.actors import (
     actor_principal_terms,
@@ -42,6 +43,8 @@ from reputation.user_settings import (
     reset_user_settings_to_example,
     update_user_settings,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _refresh_settings() -> None:
@@ -114,7 +117,16 @@ def _apply_overrides(
         item_copy = item.model_copy(deep=True)
         override_data = overrides.get(item_copy.id)
         if override_data:
-            override = ReputationItemOverride.model_validate(override_data)
+            try:
+                override = ReputationItemOverride.model_validate(override_data)
+            except ValidationError:
+                logger.warning(
+                    "Skipping invalid override for item_id=%s",
+                    item_copy.id,
+                    exc_info=True,
+                )
+                result.append(item_copy)
+                continue
             item_copy.manual_override = override
             if override.geo:
                 item_copy.geo = override.geo

@@ -160,3 +160,36 @@ def test_compare_uses_overrides(
     group_items = body["groups"][0]["items"]
     assert len(group_items) == 1
     assert group_items[0]["id"] == "a1"
+
+
+def test_items_ignores_invalid_override_entry(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    items = [_make_item("a1", "ES", "neutral")]
+    cache_path = _write_cache(tmp_path, items)
+    overrides_path = tmp_path / "rep_overrides.json"
+    overrides_path.write_text(
+        json.dumps(
+            {
+                "updated_at": "2025-01-02T10:00:00+00:00",
+                "items": {
+                    "a1": {
+                        "geo": "US",
+                        "sentiment": "negative",
+                        "updated_at": {"bad": "value"},
+                    }
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    client = _client(monkeypatch, cache_path, overrides_path)
+
+    res = client.get("/reputation/items")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["stats"]["count"] == 1
+    assert body["items"][0]["id"] == "a1"
+    assert body["items"][0]["geo"] == "ES"
+    assert body["items"][0]["sentiment"] == "neutral"
