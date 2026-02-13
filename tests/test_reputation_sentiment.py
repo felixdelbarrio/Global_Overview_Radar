@@ -281,3 +281,26 @@ def test_collector_batch_returns_list_without_copying() -> None:
     batch = ReputationIngestService._collector_batch(collector)
 
     assert batch is payload
+
+
+def test_merge_items_backfills_author_and_reply_signals() -> None:
+    existing = ReputationItem(
+        id="merge-1",
+        source="google_play",
+        sentiment="negative",
+        signals={"reply_text": "Gracias"},
+    )
+    incoming = ReputationItem(
+        id="merge-1",
+        source="google_play",
+        author="Cliente Uno",
+        collected_at=None,
+        signals={"reply_text": None, "reply_author": "Acme Support"},
+    )
+
+    merged = ReputationIngestService._merge_items([existing], [incoming])
+
+    assert len(merged) == 1
+    assert merged[0].author == "Cliente Uno"
+    assert merged[0].signals.get("reply_text") == "Gracias"
+    assert merged[0].signals.get("reply_author") == "Acme Support"

@@ -206,3 +206,42 @@ def test_responses_summary_can_filter_actor_principal_only(
     body = res.json()
     assert body["totals"]["opinions_total"] == 1
     assert body["totals"]["answered_total"] == 1
+
+
+def test_responses_summary_uses_reply_datetime_for_old_reviews(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    config_path = _write_config(tmp_path / "profile.json")
+    cache_path = _write_cache(
+        tmp_path / "cache.json",
+        [
+            {
+                "id": "old-1",
+                "source": "appstore",
+                "geo": "ES",
+                "actor": "Acme Bank",
+                "author": "User old",
+                "title": "Reseña antigua",
+                "text": "Texto antiguo",
+                "published_at": "2025-05-01T10:00:00Z",
+                "sentiment": "negative",
+                "signals": {
+                    "has_reply": True,
+                    "reply_author": "Acme Bank",
+                    "reply_at": "2026-02-13T12:15:00Z",
+                },
+            }
+        ],
+    )
+    client = _client(monkeypatch, cache_path, config_path)
+
+    res = client.get(
+        "/reputation/responses/summary",
+        params={"from_date": "2026-02-13", "to_date": "2026-02-13"},
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["totals"]["opinions_total"] == 1
+    assert body["totals"]["answered_total"] == 1
+    assert body["answered_items"][0]["reply_author"] == "Acme Bank"

@@ -18,10 +18,25 @@ _REPLY_TEXT_KEYS = (
     "replyText",
     "replyContent",
     "developerReply",
+    "developerResponse",
+    "developerComment",
+    "developer_comment",
     "developer_response",
+    "reply",
+    "response",
     "responseText",
 )
-_REPLY_AUTHOR_KEYS = ("reply_author", "replyAuthor", "developerName", "ownerName")
+_REPLY_AUTHOR_KEYS = (
+    "reply_author",
+    "replyAuthor",
+    "developerName",
+    "developer_name",
+    "developer",
+    "developerDisplayName",
+    "ownerName",
+    "owner_name",
+    "responder",
+)
 _REPLY_DATE_KEYS = (
     "reply_at",
     "replyDate",
@@ -29,8 +44,23 @@ _REPLY_DATE_KEYS = (
     "repliedAt",
     "responseDate",
     "responseTime",
+    "lastModified",
+    "lastModifiedAt",
+    "updatedAt",
+    "modifiedAt",
+    "timestamp",
 )
-_REPLY_CONTAINER_KEYS = ("reply", "response", "developerReply", "developer_response")
+_REPLY_CONTAINER_KEYS = (
+    "reply",
+    "response",
+    "developerReply",
+    "developerResponse",
+    "developerComment",
+    "developer_comment",
+    "developer_response",
+    "ownerResponse",
+    "merchantReply",
+)
 
 
 class GooglePlayApiCollector(ReputationCollector):
@@ -268,12 +298,58 @@ def _extract_reply_text(value: object) -> str | None:
     direct = _as_text(value)
     if direct:
         return direct
+    if isinstance(value, list):
+        for entry in value:
+            nested = _extract_reply_text(entry)
+            if nested:
+                return nested
+        return None
     if not isinstance(value, dict):
         return None
-    for key in ("text", "content", "body", "message", "reply", "response"):
+    for key in (
+        "text",
+        "content",
+        "body",
+        "message",
+        "reply",
+        "response",
+        "comment",
+        "value",
+    ):
         candidate = _as_text(value.get(key))
         if candidate:
             return candidate
+    for key in _REPLY_CONTAINER_KEYS:
+        nested = _extract_reply_text(value.get(key))
+        if nested:
+            return nested
+    for nested_value in value.values():
+        nested = _extract_reply_text(nested_value)
+        if nested:
+            return nested
+    return None
+
+
+def _extract_reply_author(value: object) -> str | None:
+    direct = _as_text(value)
+    if direct:
+        return direct
+    if isinstance(value, list):
+        for entry in value:
+            nested = _extract_reply_author(entry)
+            if nested:
+                return nested
+        return None
+    if not isinstance(value, dict):
+        return None
+    for key in ("author", "name", "display_name", "developer", "owner", *_REPLY_AUTHOR_KEYS):
+        candidate = _as_text(value.get(key))
+        if candidate:
+            return candidate
+    for key in _REPLY_CONTAINER_KEYS:
+        nested = _extract_reply_author(value.get(key))
+        if nested:
+            return nested
     return None
 
 
@@ -289,9 +365,23 @@ def _extract_reply_date(value: object) -> datetime | None:
             return None
     if isinstance(value, str):
         return parse_datetime(value)
+    if isinstance(value, list):
+        for entry in value:
+            parsed = _extract_reply_date(entry)
+            if parsed:
+                return parsed
+        return None
     if isinstance(value, dict):
         for key in _REPLY_DATE_KEYS:
             parsed = _extract_reply_date(value.get(key))
+            if parsed:
+                return parsed
+        for key in _REPLY_CONTAINER_KEYS:
+            parsed = _extract_reply_date(value.get(key))
+            if parsed:
+                return parsed
+        for nested_value in value.values():
+            parsed = _extract_reply_date(nested_value)
             if parsed:
                 return parsed
     return None
@@ -308,22 +398,21 @@ def _extract_review_reply(review: dict[str, Any]) -> dict[str, str | None] | Non
             break
     for key in _REPLY_CONTAINER_KEYS:
         container = review.get(key)
-        if not isinstance(container, dict):
+        if not isinstance(container, (dict, list)):
             continue
         if reply_text is None:
             reply_text = _extract_reply_text(container)
         if reply_author is None:
-            for author_key in ("author", "name", *(_REPLY_AUTHOR_KEYS)):
-                reply_author = _as_text(container.get(author_key))
-                if reply_author:
-                    break
+            reply_author = _extract_reply_author(container)
         if reply_at is None:
             reply_at = _extract_reply_date(container)
     if reply_author is None:
         for key in _REPLY_AUTHOR_KEYS:
-            reply_author = _as_text(review.get(key))
+            reply_author = _extract_reply_author(review.get(key))
             if reply_author:
                 break
+    if reply_author is None:
+        reply_author = _extract_reply_author(review)
     if reply_at is None:
         for key in _REPLY_DATE_KEYS:
             reply_at = _extract_reply_date(review.get(key))
@@ -337,6 +426,31 @@ def _extract_review_reply(review: dict[str, Any]) -> dict[str, str | None] | Non
         "author": reply_author,
         "replied_at": reply_at.isoformat() if reply_at else None,
     }
+
+
+def _extract_review_rating(review: dict[str, Any]) -> float | int | str | None:
+    candidates: list[object] = [
+        review.get("rating"),
+        review.get("score"),
+        review.get("stars"),
+        review.get("starRating"),
+        review.get("user_rating"),
+        review.get("rating_value"),
+        review.get("reviewRating"),
+    ]
+    for candidate in candidates:
+        if candidate in (None, ""):
+            continue
+        if isinstance(candidate, (int, float, str)):
+            return candidate
+        if isinstance(candidate, dict):
+            for key in ("value", "rating", "score", "stars"):
+                nested = candidate.get(key)
+                if nested in (None, ""):
+                    continue
+                if isinstance(nested, (int, float, str)):
+                    return nested
+    return None
 
 
 def _map_play_review(
@@ -357,8 +471,9 @@ def _map_play_review(
         published_at = _parse_google_play_date(review.get("date_text"), language)
 
     reply = _extract_review_reply(review)
+    rating = _extract_review_rating(review)
     signals: dict[str, Any] = {
-        "rating": review.get("rating") or review.get("score"),
+        "rating": rating,
         "package_id": package_id,
         "country": country,
         "language": language,
@@ -381,7 +496,10 @@ def _map_play_review(
         geo=geo,
         language=language,
         published_at=published_at,
-        author=review.get("author") or review.get("userName"),
+        author=review.get("author")
+        or review.get("userName")
+        or review.get("author_name")
+        or review.get("reviewerName"),
         url=review.get("url"),
         title=review.get("title"),
         text=text,

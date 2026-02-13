@@ -251,3 +251,42 @@ def test_markets_insights_without_geo_returns_multiple_editions(
     assert editions
     edition_geos = {entry["geo"] for entry in editions}
     assert {"ES", "MX"}.issubset(edition_geos)
+
+
+def test_markets_insights_responses_include_replies_to_old_reviews(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    config_path = _write_config(tmp_path / "profile.json")
+    cache_path = _write_cache(
+        tmp_path / "cache.json",
+        [
+            _item(
+                "old-r1",
+                actor="Acme Bank",
+                source="appstore",
+                geo="ES",
+                author="Ana",
+                sentiment="negative",
+                published_at="2025-01-10T10:00:00Z",
+                title="Reseña antigua",
+                text="Texto antiguo",
+                signals={
+                    "has_reply": True,
+                    "reply_author": "Acme Bank",
+                    "reply_at": "2026-02-13T11:45:00Z",
+                },
+            )
+        ],
+    )
+    client = _client(monkeypatch, cache_path=cache_path, config_path=config_path)
+
+    res = client.get(
+        "/reputation/markets/insights",
+        params={"geo": "ES", "from_date": "2026-02-13", "to_date": "2026-02-13"},
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["kpis"]["total_mentions"] == 0
+    assert body["responses"]["totals"]["opinions_total"] == 1
+    assert body["responses"]["totals"]["answered_total"] == 1
