@@ -780,6 +780,89 @@ describe("Sentimiento page", () => {
     await waitFor(() => {
       expect(screen.queryByText("Rating oficial")).not.toBeInTheDocument();
       expect(screen.queryByText("Rating oficial otros actores")).not.toBeInTheDocument();
+      expect(screen.queryByText("ACTORES DEL MERCADO")).not.toBeInTheDocument();
+      expect(screen.getByText("MEDIOS EN PRENSA")).toBeInTheDocument();
+    });
+
+    const summarySection = screen.getByText("RESUMEN").closest("section");
+    expect(summarySection).toBeTruthy();
+    expect(within(summarySection as HTMLElement).queryByText("Score medio")).not.toBeInTheDocument();
+    expect(within(summarySection as HTMLElement).queryByText("Total menciones")).not.toBeInTheDocument();
+    expect(within(summarySection as HTMLElement).getByText(/menciones del/i)).toBeInTheDocument();
+  });
+
+  it("shows press publishers including downdetector and inferred news media", async () => {
+    const metaPressResponse = {
+      ...metaResponse,
+      sources_enabled: ["news", "downdetector"],
+      sources_available: ["news", "downdetector"],
+    };
+    const itemsPressResponse = {
+      ...itemsResponse,
+      sources_enabled: ["news", "downdetector"],
+      items: [
+        {
+          id: "press-news-1",
+          source: "news",
+          geo: "España",
+          actor: "Acme Bank",
+          title:
+            "Torres y Genç perciben un 3% menos de remuneración en 2025 pese al beneficio récord de BBVA - eleconomista.es",
+          text:
+            '<a href="https://news.google.com/rss/articles/abc?oc=5">Torres y Genç perciben un 3% menos de remuneración en 2025 pese al beneficio récord de BBVA</a>&nbsp;&nbsp;<font color="#6f6f6f">eleconomista.es</font>',
+          sentiment: "negative",
+          published_at: "2025-01-01T10:00:00Z",
+          signals: { source: "Google News" },
+          url: "https://news.google.com/rss/articles/abc?oc=5",
+        },
+        {
+          id: "press-dd-1",
+          source: "downdetector",
+          geo: "España",
+          actor: "Acme Bank",
+          title: "Usuarios reportan incidencias de acceso",
+          text: "Múltiples usuarios reportan problemas de login.",
+          sentiment: "neutral",
+          published_at: "2025-01-02T10:00:00Z",
+          signals: {
+            publisher_name: "Downdetector",
+            publisher_domain: "downdetector.es",
+          },
+          url: "https://downdetector.es",
+        },
+      ],
+      stats: { count: 2 },
+    };
+
+    const handleGetPressPublishers = (path: string) => {
+      if (path.startsWith("/reputation/meta")) {
+        return Promise.resolve(metaPressResponse);
+      }
+      if (path.startsWith("/reputation/profiles")) {
+        return Promise.resolve(profilesResponse);
+      }
+      if (path.startsWith("/reputation/items")) {
+        return Promise.resolve(itemsPressResponse);
+      }
+      if (path.startsWith("/reputation/settings")) {
+        return Promise.resolve({ groups: [], advanced_options: [] });
+      }
+      return Promise.resolve({ items: [] });
+    };
+
+    apiGetMock.mockImplementation(handleGetPressPublishers);
+    apiGetCachedMock.mockImplementation(handleGetPressPublishers);
+
+    render(<SentimentView mode="sentiment" scope="press" />);
+
+    expect(await screen.findByText("Sentimiento en Prensa")).toBeInTheDocument();
+    await waitFor(() => {
+      const publishersBlock = screen.getByText("MEDIOS EN PRENSA").parentElement;
+      expect(publishersBlock).toBeTruthy();
+      expect(within(publishersBlock as HTMLElement).getByText("eleconomista.es")).toBeInTheDocument();
+      expect(within(publishersBlock as HTMLElement).getByText("Downdetector")).toBeInTheDocument();
+      expect(within(publishersBlock as HTMLElement).getByText("News (1)")).toBeInTheDocument();
+      expect(within(publishersBlock as HTMLElement).getByText("Downdetector (1)")).toBeInTheDocument();
     });
   });
 
@@ -866,7 +949,12 @@ describe("Sentimiento page", () => {
       ).toBeInTheDocument();
       expect(within(totalCard as HTMLElement).queryByText(/vs/i)).not.toBeInTheDocument();
       expect(screen.queryByText("TOP FUENTES")).not.toBeInTheDocument();
-      expect(screen.queryByText("ACTORES DEL MERCADO")).not.toBeInTheDocument();
+      const actorsBlock = screen.getByText("ACTORES DEL MERCADO").parentElement;
+      expect(actorsBlock).toBeTruthy();
+      expect(within(actorsBlock as HTMLElement).getByText("Acme Bank")).toBeInTheDocument();
+      expect(within(actorsBlock as HTMLElement).queryByText("Beta Bank")).not.toBeInTheDocument();
+      expect(within(actorsBlock as HTMLElement).getByText("App Store (1)")).toBeInTheDocument();
+      expect(within(actorsBlock as HTMLElement).getByText("Google Play (0)")).toBeInTheDocument();
     });
   });
 

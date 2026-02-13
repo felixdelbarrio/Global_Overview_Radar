@@ -7,8 +7,10 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
+from html import unescape
 from typing import Any, Callable, Iterable, Optional, Sequence, cast
-from urllib.parse import quote_plus, urlparse
+from urllib.parse import parse_qs, quote_plus, unquote_plus, urlparse
+from urllib.request import Request, urlopen
 
 from reputation.actors import (
     actor_principal_canonicals,
@@ -111,6 +113,35 @@ _GOOGLE_PLAY_LOCALE_HINTS = {
     "tr": ("TR", "tr"),
     "us": ("US", "en"),
 }
+_PUBLISHER_GENERIC_LABELS = {
+    "google",
+    "google news",
+    "news",
+    "noticias",
+    "noticias de google",
+    "rss",
+    "feed",
+}
+_PUBLISHER_AGGREGATOR_DOMAINS = {
+    "google.com",
+    "news.google.com",
+    "news.googleusercontent.com",
+    "feedproxy.google.com",
+    "feeds.feedburner.com",
+}
+_PUBLISHER_SOURCE_KEYS = (
+    "publisher_name",
+    "source_name",
+    "site_name",
+    "source",
+)
+_PUBLISHER_DOMAIN_KEYS = (
+    "publisher_domain",
+    "domain",
+    "site",
+    "source_domain",
+)
+_COUNTRY_TLD_CODES = {"es", "mx", "pe", "co", "ar", "tr"}
 
 
 @lru_cache(maxsize=8192)
@@ -355,6 +386,7 @@ class ReputationIngestService:
         items = filter_enabled(items)
 
         items = self._normalize_items(items, lookback_days, incremental_since)
+        items = self._apply_publisher_metadata(items, notes)
         report("Normalizando señales", 52, {"items": len(items)})
         items = self._apply_geo_hints(cfg, items)
         report("Aplicando geografía", 58)
@@ -1344,6 +1376,7 @@ class ReputationIngestService:
             return items
 
         actor_geo_map = cls._build_actor_geo_map(cfg)
+        geo_country_codes = cls._build_geo_country_codes(geos, geo_aliases)
 
         for item in items:
             if not item.geo:
@@ -1362,6 +1395,12 @@ class ReputationIngestService:
                 if item.geo != content_geo:
                     item.geo = content_geo
                     item.signals["geo_source"] = "content"
+                continue
+
+            publisher_geo = cls._infer_geo_from_publisher(item, geo_country_codes)
+            if publisher_geo and item.geo != publisher_geo:
+                item.geo = publisher_geo
+                item.signals["geo_source"] = "publisher"
                 continue
 
             source_geo = cls._infer_geo_from_source(item, source_geo_map)
@@ -1437,7 +1476,7 @@ class ReputationIngestService:
                 or (
                     current.geo != item.geo
                     and item.signals
-                    and item.signals.get("geo_source") in {"source", "content"}
+                    and item.signals.get("geo_source") in {"source", "content", "publisher"}
                 )
             ):
                 current.geo = item.geo
@@ -3002,6 +3041,298 @@ class ReputationIngestService:
             cleaned = cleaned[4:]
         return cleaned.strip("/")
 
+    @staticmethod
+    def _signal_text(value: object) -> str:
+        if isinstance(value, str):
+            return value.strip()
+        if value is None:
+            return ""
+        return str(value).strip()
+
+    @staticmethod
+    def _clean_publisher_name(value: str) -> str:
+        if not value:
+            return ""
+        cleaned = unescape(value)
+        cleaned = re.sub(r"<[^>]+>", " ", cleaned)
+        cleaned = re.sub(r"\s+", " ", cleaned).strip(" \t\r\n-–—|,;:.")
+        if len(cleaned) > 120:
+            cleaned = cleaned[:120].strip()
+        return cleaned
+
+    @classmethod
+    def _is_aggregator_domain(cls, domain: str) -> bool:
+        normalized = cls._normalize_site_domain(domain)
+        if not normalized:
+            return True
+        if normalized in _PUBLISHER_AGGREGATOR_DOMAINS:
+            return True
+        return any(normalized.endswith(f".{entry}") for entry in _PUBLISHER_AGGREGATOR_DOMAINS)
+
+    @staticmethod
+    def _is_generic_publisher_label(name: str) -> bool:
+        normalized = normalize_text(name)
+        if not normalized:
+            return True
+        if normalized in _PUBLISHER_GENERIC_LABELS:
+            return True
+        if normalized.startswith("http"):
+            return True
+        if normalized in {"sin titulo", "sin título"}:
+            return True
+        return len(normalized) <= 1
+
+    @classmethod
+    def _normalize_publisher_domain(cls, value: object) -> str:
+        raw = cls._signal_text(value)
+        if not raw:
+            return ""
+        domain = cls._extract_domain(raw)
+        normalized = cls._normalize_site_domain(domain or raw)
+        if "/" in normalized:
+            normalized = normalized.split("/", 1)[0]
+        if ":" in normalized:
+            normalized = normalized.split(":", 1)[0]
+        if not normalized or "." not in normalized:
+            return ""
+        if cls._is_aggregator_domain(normalized):
+            return ""
+        return normalized
+
+    @classmethod
+    def _publisher_name_from_title(cls, title: str | None) -> str:
+        raw = cls._signal_text(title)
+        if not raw:
+            return ""
+        decoded = unescape(raw)
+        separators = (" - ", " | ", " — ", " – ")
+        for separator in separators:
+            if separator not in decoded:
+                continue
+            candidate = decoded.rsplit(separator, 1)[-1]
+            cleaned = cls._clean_publisher_name(candidate)
+            if cleaned:
+                return cleaned
+        return ""
+
+    @classmethod
+    def _publisher_name_from_html(cls, html_text: str | None) -> str:
+        raw = cls._signal_text(html_text)
+        if not raw:
+            return ""
+        for candidate in re.findall(
+            r"<font[^>]*>(.*?)</font>", raw, flags=re.IGNORECASE | re.DOTALL
+        ):
+            cleaned = cls._clean_publisher_name(candidate)
+            if cleaned:
+                return cleaned
+        return ""
+
+    @classmethod
+    def _extract_domain_from_query_url(cls, url: str) -> str:
+        if not url:
+            return ""
+        try:
+            parsed = urlparse(url)
+        except Exception:
+            return ""
+        if not parsed.query:
+            return ""
+        query = parse_qs(parsed.query)
+        for key in ("url", "u", "q"):
+            values = query.get(key, [])
+            if not values:
+                continue
+            for value in values:
+                domain = cls._normalize_publisher_domain(value)
+                if domain:
+                    return domain
+        return ""
+
+    @classmethod
+    def _is_google_news_url(cls, value: str | None) -> bool:
+        domain = cls._normalize_site_domain(cls._extract_domain(value or ""))
+        return domain == "news.google.com" or domain.endswith(".news.google.com")
+
+    @staticmethod
+    def _resolve_redirect_url(url: str, timeout_sec: int) -> str:
+        if not url:
+            return ""
+        timeout = max(1, timeout_sec)
+        try:
+            request = Request(url, headers={"User-Agent": "global-overview-radar/0.1"})
+            with urlopen(request, timeout=timeout) as response:
+                return response.geturl() or ""
+        except Exception:
+            return ""
+
+    @classmethod
+    def _resolve_google_news_domain(
+        cls,
+        url: str,
+        resolve_budget: dict[str, int],
+        redirect_cache: dict[str, str],
+        timeout_sec: int,
+    ) -> str:
+        if not cls._is_google_news_url(url):
+            return ""
+
+        from_query = cls._extract_domain_from_query_url(url)
+        if from_query:
+            return from_query
+
+        cached = redirect_cache.get(url)
+        if cached is None:
+            remaining = int(resolve_budget.get("remaining", 0))
+            if remaining <= 0:
+                return ""
+            resolve_budget["remaining"] = remaining - 1
+            cached = cls._resolve_redirect_url(url, timeout_sec)
+            redirect_cache[url] = cached
+
+        resolved_domain = cls._normalize_publisher_domain(cached)
+        if resolved_domain:
+            return resolved_domain
+        return cls._extract_domain_from_query_url(cached)
+
+    @classmethod
+    def _infer_publisher_domain(
+        cls,
+        item: ReputationItem,
+        signals: dict[str, Any],
+        *,
+        resolve_google_news: bool,
+        resolve_budget: dict[str, int],
+        redirect_cache: dict[str, str],
+        resolve_timeout_sec: int,
+    ) -> str:
+        for key in _PUBLISHER_DOMAIN_KEYS:
+            candidate = cls._normalize_publisher_domain(signals.get(key))
+            if candidate:
+                return candidate
+
+        source_value = cls._signal_text(signals.get("source"))
+        if source_value and "." in source_value:
+            source_domain = cls._normalize_publisher_domain(source_value)
+            if source_domain:
+                return source_domain
+
+        direct_domain = cls._normalize_publisher_domain(item.url)
+        if direct_domain:
+            return direct_domain
+
+        query_domain = cls._extract_domain_from_query_url(cls._signal_text(item.url))
+        if query_domain:
+            return query_domain
+
+        if resolve_google_news and item.url:
+            resolved = cls._resolve_google_news_domain(
+                item.url,
+                resolve_budget=resolve_budget,
+                redirect_cache=redirect_cache,
+                timeout_sec=resolve_timeout_sec,
+            )
+            if resolved:
+                return resolved
+
+        title_domain = cls._normalize_publisher_domain(cls._publisher_name_from_title(item.title))
+        if title_domain:
+            return title_domain
+
+        html_domain = cls._normalize_publisher_domain(cls._publisher_name_from_html(item.text))
+        if html_domain:
+            return html_domain
+        return ""
+
+    @classmethod
+    def _infer_publisher_name(
+        cls,
+        item: ReputationItem,
+        signals: dict[str, Any],
+        publisher_domain: str,
+    ) -> str:
+        for key in _PUBLISHER_SOURCE_KEYS:
+            candidate = cls._clean_publisher_name(cls._signal_text(signals.get(key)))
+            if candidate and not cls._is_generic_publisher_label(candidate):
+                return candidate
+
+        title_name = cls._clean_publisher_name(cls._publisher_name_from_title(item.title))
+        if title_name and not cls._is_generic_publisher_label(title_name):
+            return title_name
+
+        html_name = cls._clean_publisher_name(cls._publisher_name_from_html(item.text))
+        if html_name and not cls._is_generic_publisher_label(html_name):
+            return html_name
+
+        if publisher_domain:
+            return publisher_domain
+
+        url_domain = cls._normalize_publisher_domain(item.url)
+        if url_domain:
+            return url_domain
+        return ""
+
+    @classmethod
+    def _apply_publisher_metadata(
+        cls,
+        items: list[ReputationItem],
+        notes: list[str] | None = None,
+    ) -> list[ReputationItem]:
+        if not items:
+            return items
+
+        resolve_google_news = _env_bool(
+            os.getenv("REPUTATION_PUBLISHER_RESOLVE_GOOGLE_NEWS", "false")
+        )
+        resolve_timeout_sec = _env_int("REPUTATION_PUBLISHER_RESOLVE_TIMEOUT_SEC", 4)
+        resolve_limit = max(0, _env_int("REPUTATION_PUBLISHER_RESOLVE_LIMIT", 40))
+        resolve_budget = {"remaining": resolve_limit}
+        redirect_cache: dict[str, str] = {}
+        updated = 0
+
+        for item in items:
+            source = (item.source or "").strip().lower()
+            if source in {"appstore", "google_play", "google_reviews"}:
+                continue
+
+            signals = dict(item.signals or {})
+            original_name = cls._signal_text(signals.get("publisher_name"))
+            original_domain = cls._signal_text(signals.get("publisher_domain"))
+
+            publisher_domain = cls._normalize_publisher_domain(original_domain)
+            if not publisher_domain:
+                publisher_domain = cls._infer_publisher_domain(
+                    item,
+                    signals,
+                    resolve_google_news=resolve_google_news,
+                    resolve_budget=resolve_budget,
+                    redirect_cache=redirect_cache,
+                    resolve_timeout_sec=resolve_timeout_sec,
+                )
+
+            publisher_name = cls._clean_publisher_name(original_name)
+            if cls._is_generic_publisher_label(publisher_name):
+                publisher_name = ""
+            if not publisher_name:
+                publisher_name = cls._infer_publisher_name(item, signals, publisher_domain)
+
+            changed = False
+            if publisher_domain and publisher_domain != original_domain:
+                signals["publisher_domain"] = publisher_domain
+                changed = True
+            if publisher_name and publisher_name != original_name:
+                signals["publisher_name"] = publisher_name
+                changed = True
+
+            if changed:
+                item.signals = signals
+                updated += 1
+
+        if notes is not None and updated:
+            notes.append(f"publisher: enriched {updated} items")
+
+        return items
+
     @classmethod
     def _build_source_geo_map(cls, cfg: dict[str, Any], geos: list[str]) -> dict[str, str]:
         news_cfg = cfg.get("news") or {}
@@ -3025,7 +3356,8 @@ class ReputationIngestService:
     ) -> str | None:
         if not text or not geos:
             return None
-        normalized = normalize_text(text)
+        decoded = unquote_plus(unescape(text))
+        normalized = normalize_text(decoded)
         tokens = set(normalized.split())
         for geo in geos:
             geo_norm = normalize_text(geo)
@@ -3042,6 +3374,81 @@ class ReputationIngestService:
                     continue
                 if alias_norm in normalized:
                     return geo
+        return None
+
+    @classmethod
+    def _build_geo_country_codes(
+        cls,
+        geos: list[str],
+        geo_aliases: dict[str, list[str]],
+    ) -> dict[str, str]:
+        mapping: dict[str, str] = {}
+        for geo in geos:
+            geo_clean = geo.strip()
+            if not geo_clean:
+                continue
+            country_code = _guess_country_code(geo_clean)
+            aliases = geo_aliases.get(geo_clean, [])
+            if not country_code:
+                for alias in aliases:
+                    alias_code = _guess_country_code(alias)
+                    if alias_code:
+                        country_code = alias_code
+                        break
+            if not country_code:
+                for alias in aliases:
+                    alias_clean = normalize_text(alias).replace(" ", "")
+                    if len(alias_clean) == 2:
+                        country_code = alias_clean
+                        break
+            if country_code and len(country_code) == 2:
+                mapping.setdefault(country_code, geo_clean)
+        return mapping
+
+    @classmethod
+    def _country_code_from_domain(cls, domain: str) -> str:
+        normalized = cls._normalize_site_domain(domain)
+        if not normalized:
+            return ""
+        host = normalized.split("/", 1)[0]
+        if ":" in host:
+            host = host.split(":", 1)[0]
+        parts = [part for part in host.split(".") if part]
+        if not parts:
+            return ""
+        last = parts[-1]
+        if len(last) == 2 and last in _COUNTRY_TLD_CODES:
+            return last
+        if len(parts) >= 2 and parts[-2] == "com" and len(last) == 2 and last in _COUNTRY_TLD_CODES:
+            return last
+        return ""
+
+    @classmethod
+    def _infer_geo_from_publisher(
+        cls, item: ReputationItem, geo_country_codes: dict[str, str]
+    ) -> str | None:
+        if not geo_country_codes:
+            return None
+        signals = item.signals or {}
+        candidates: list[str] = []
+        for key in _PUBLISHER_DOMAIN_KEYS:
+            value = cls._signal_text(signals.get(key))
+            if value:
+                candidates.append(value)
+        if item.url:
+            candidates.append(item.url)
+
+        for candidate in candidates:
+            domain = cls._extract_domain(candidate)
+            normalized_domain = cls._normalize_site_domain(domain or candidate)
+            if not normalized_domain:
+                continue
+            country_code = cls._country_code_from_domain(normalized_domain)
+            if not country_code:
+                continue
+            geo = geo_country_codes.get(country_code)
+            if geo:
+                return geo
         return None
 
     @staticmethod

@@ -315,26 +315,29 @@ describe("SentimentView dashboard", () => {
     }
 
     const ratioRows = await waitFor(
-      () => sectionQueries.getAllByText(/^\d+\/\d+ negativas \(\d+\.\d%\)$/),
+      () => sectionQueries.getAllByText(/^\d+ negativas \(\d+\.\d%\)$/),
       { timeout: 7000 }
     );
     const ratioTexts = ratioRows.map((row) => row.textContent?.trim() ?? "");
     const parseRatio = (text: string) => {
-      const match = /^(\d+)\/(\d+) negativas \((\d+\.\d)%\)$/.exec(text);
+      const match = /^(\d+) negativas \((\d+\.\d)%\)$/.exec(text);
       expect(match).not.toBeNull();
       return {
         negative: Number(match?.[1] ?? 0),
-        total: Number(match?.[2] ?? 0),
-        percent: Number(match?.[3] ?? 0),
+        percent: Number(match?.[2] ?? 0),
       };
     };
     const topRatio = parseRatio(ratioTexts[0] ?? "");
     const secondRatio = parseRatio(ratioTexts[1] ?? "");
     expect(topRatio.negative).toBe(32);
     expect(secondRatio.negative).toBe(2);
-    expect(topRatio.total).toBe(secondRatio.total);
     expect(topRatio.percent).toBeGreaterThan(secondRatio.percent);
-    expect(sectionQueries.queryByText(/1\/\d+ negativas \(\d+\.\d%\)/)).not.toBeInTheDocument();
+    const baseRow = Array.from((heatmapSection as HTMLElement).querySelectorAll("div")).find((node) =>
+      (node.textContent || "").includes("opiniones contestables (App Store + Google Play)."),
+    );
+    expect(baseRow).toBeTruthy();
+    expect(baseRow).toHaveTextContent(/42/);
+    expect(sectionQueries.queryByText(/^1 negativas \(\d+\.\d%\)$/)).not.toBeInTheDocument();
     expect(sectionQueries.queryByText(/Downdetector ha identificado/i)).not.toBeInTheDocument();
   });
 

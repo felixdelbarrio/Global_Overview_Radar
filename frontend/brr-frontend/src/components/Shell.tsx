@@ -976,16 +976,6 @@ export function Shell({ children }: { children: React.ReactNode }) {
       icon: LayoutDashboard,
       description: "Señales clave",
     },
-    ...(pressTabsVisible
-      ? [
-          {
-            href: "/sentimiento/prensa",
-            label: "Sentimiento Prensa",
-            icon: HeartPulse,
-            description: "Histórico en medios",
-          },
-        ]
-      : []),
     ...(marketTabsVisible
       ? [
           {
@@ -994,6 +984,20 @@ export function Shell({ children }: { children: React.ReactNode }) {
             icon: HeartPulse,
             description: "Apps y marketplaces",
           },
+        ]
+      : []),
+    ...(pressTabsVisible
+      ? [
+          {
+            href: "/sentimiento/prensa",
+            label: "Sentimiento Prensa",
+            icon: Newspaper,
+            description: "Histórico en medios",
+          },
+        ]
+      : []),
+    ...(marketTabsVisible
+      ? [
           {
             href: "/markets",
             label: "Markets WoW",
