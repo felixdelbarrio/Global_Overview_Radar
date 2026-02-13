@@ -1414,13 +1414,14 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
           <div className="mt-4 grid grid-cols-2 gap-3">
             {isDashboard ? (
               <>
-                <SummaryCard
-                  label="Score medio"
-                  value={scoreSummaryPrincipal}
+                <PrincipalMentionsCard
+                  totalMentions={mentionsSummaryPrincipal}
+                  positiveMentions={positivesSummaryPrincipal}
+                  neutralMentions={neutralsSummaryPrincipal}
+                  negativeMentions={negativesSummaryPrincipal}
                   loading={itemsLoading}
-                  className={showStoreRatingsForGeo ? undefined : "col-span-2"}
                 />
-                {showStoreRatingsForGeo && (
+                <div className="col-span-2">
                   <StoreRatingCard
                     label="Rating oficial"
                     ratings={principalStoreRatings}
@@ -1429,14 +1430,7 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
                     history={marketRatingsHistory}
                     layout="columns"
                   />
-                )}
-                <PrincipalMentionsCard
-                  totalMentions={mentionsSummaryPrincipal}
-                  positiveMentions={positivesSummaryPrincipal}
-                  neutralMentions={neutralsSummaryPrincipal}
-                  negativeMentions={negativesSummaryPrincipal}
-                  loading={itemsLoading}
-                />
+                </div>
               </>
             ) : (
               <>

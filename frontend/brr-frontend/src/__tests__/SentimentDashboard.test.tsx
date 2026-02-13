@@ -409,10 +409,20 @@ describe("SentimentView dashboard", () => {
 
     render(<SentimentView mode="dashboard" />);
 
-    expect(await screen.findByText("Menciones actor principal")).toBeInTheDocument();
+    const mentionsBlock = await screen.findByText("Menciones actor principal");
+    const ratingBlock = await screen.findByText("Rating oficial");
+    const responsesBlock = await screen.findByText("opiniones del market contestadas");
+    expect(Boolean(mentionsBlock.compareDocumentPosition(ratingBlock) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(ratingBlock.compareDocumentPosition(responsesBlock) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+
+    const summarySection = mentionsBlock.closest("section");
+    expect(summarySection).toBeTruthy();
+    expect((summarySection?.textContent || "").includes("Score medio")).toBe(false);
+
     expect(await screen.findByText("opiniones del market contestadas")).toBeInTheDocument();
     expect(screen.getByText("Apple")).toBeInTheDocument();
     expect(screen.getByText("Android")).toBeInTheDocument();
+    expect(screen.getByText("Score medio")).toBeInTheDocument();
 
     const responsesTitle = screen.getByTestId("responses-summary-title");
     expect(responsesTitle).toHaveTextContent("2/3");
