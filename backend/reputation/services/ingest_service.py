@@ -156,6 +156,16 @@ _REPLY_SIGNAL_KEYS = {
     "reply",
     "response",
 }
+_STAR_SENTIMENT_SOURCES = {"appstore", "google_play", "google_reviews"}
+_STAR_RATING_SIGNAL_KEYS = (
+    "rating",
+    "score",
+    "stars",
+    "star_rating",
+    "user_rating",
+    "rating_value",
+)
+_SENTIMENT_PRIORITY_PROVIDERS = {"manual_override", "stars", "source_rule"}
 
 
 class ReputationIngestService:
@@ -1401,6 +1411,60 @@ class ReputationIngestService:
         return geos[0]
 
     @staticmethod
+    def _signal_truthy(value: object) -> bool:
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            return value != 0
+        if isinstance(value, str):
+            return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+        return False
+
+    @classmethod
+    def _item_sentiment_locked(cls, item: ReputationItem) -> bool:
+        if item.manual_override and item.manual_override.sentiment:
+            return True
+        signals = item.signals or {}
+        provider = str(signals.get("sentiment_provider") or "").strip().lower()
+        if provider == "manual_override":
+            return True
+        return cls._signal_truthy(signals.get("sentiment_locked")) or cls._signal_truthy(
+            signals.get("manual_sentiment")
+        )
+
+    @staticmethod
+    def _extract_star_rating_from_item(item: ReputationItem) -> float | None:
+        signals = item.signals or {}
+        for key in _STAR_RATING_SIGNAL_KEYS:
+            value = _to_float(signals.get(key))
+            if value is None or value <= 0:
+                continue
+            return min(5.0, max(0.0, value))
+        return None
+
+    @classmethod
+    def _should_refresh_existing_sentiment(cls, item: ReputationItem) -> bool:
+        source = (item.source or "").strip().lower()
+        if source not in _STAR_SENTIMENT_SOURCES:
+            return False
+        if cls._item_sentiment_locked(item):
+            return False
+        return cls._extract_star_rating_from_item(item) is not None
+
+    @classmethod
+    def _should_replace_sentiment(cls, current: ReputationItem, incoming: ReputationItem) -> bool:
+        if not incoming.sentiment:
+            return False
+        if not current.sentiment:
+            return True
+        if current.sentiment == incoming.sentiment:
+            return False
+        if cls._item_sentiment_locked(current):
+            return False
+        provider = str((incoming.signals or {}).get("sentiment_provider") or "").strip().lower()
+        return provider in _SENTIMENT_PRIORITY_PROVIDERS
+
+    @staticmethod
     def _merge_items(
         existing: list[ReputationItem], incoming: list[ReputationItem]
     ) -> list[ReputationItem]:
@@ -1430,11 +1494,14 @@ class ReputationIngestService:
                 current.title = item.title
             if item.text and (not current.text or len(item.text) > len(current.text)):
                 current.text = item.text
-            if not current.sentiment and item.sentiment:
+            if ReputationIngestService._should_replace_sentiment(current, item):
                 current.sentiment = item.sentiment
             if item.signals:
                 merged_signals = dict(current.signals)
-                merged_signals.update(item.signals)
+                for signal_key, signal_value in item.signals.items():
+                    if signal_value is None and signal_key in merged_signals:
+                        continue
+                    merged_signals[signal_key] = signal_value
                 actors = set()
                 for value in (current.signals.get("actors"), item.signals.get("actors")):
                     if isinstance(value, list):
@@ -1498,12 +1565,15 @@ class ReputationIngestService:
         target_language = _resolve_translation_language()
         existing_keys = {(item.source, item.id) for item in existing} if existing else set()
         if existing_keys:
-            new_items = [
-                item for item in valid_items if (item.source, item.id) not in existing_keys
+            items_to_analyze = [
+                item
+                for item in valid_items
+                if (item.source, item.id) not in existing_keys
+                or self._should_refresh_existing_sentiment(item)
             ]
-            if target_language:
-                new_items = service.translate_items(new_items, target_language)
-            updated = service.analyze_items(new_items)
+            if target_language and items_to_analyze:
+                items_to_analyze = service.translate_items(items_to_analyze, target_language)
+            updated = service.analyze_items(items_to_analyze) if items_to_analyze else []
             updated_map = {(item.source, item.id): item for item in updated}
             result_map = {
                 (item.source, item.id): updated_map.get((item.source, item.id), item)

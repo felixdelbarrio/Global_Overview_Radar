@@ -184,3 +184,24 @@ def test_google_play_scraper_extracts_developer_reply_block() -> None:
     assert item is not None
     assert item.signals.get("has_reply") is True
     assert item.signals.get("reply_text") == "Hola. Disculpa las molestias."
+
+
+def test_google_play_map_review_reads_nested_rating_payload() -> None:
+    review = {
+        "id": "gp-nested",
+        "title": "Muy mala",
+        "content": "Falla al abrir",
+        "reviewRating": {"value": "1"},
+    }
+
+    item = _map_play_review(
+        review,
+        source="google_play",
+        package_id="com.bankinter.empresas",
+        country="ES",
+        language="es",
+        geo="España",
+    )
+
+    assert item is not None
+    assert item.signals.get("rating") == "1"

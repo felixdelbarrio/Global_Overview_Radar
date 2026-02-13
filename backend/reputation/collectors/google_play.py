@@ -339,6 +339,31 @@ def _extract_review_reply(review: dict[str, Any]) -> dict[str, str | None] | Non
     }
 
 
+def _extract_review_rating(review: dict[str, Any]) -> float | int | str | None:
+    candidates: list[object] = [
+        review.get("rating"),
+        review.get("score"),
+        review.get("stars"),
+        review.get("starRating"),
+        review.get("user_rating"),
+        review.get("rating_value"),
+        review.get("reviewRating"),
+    ]
+    for candidate in candidates:
+        if candidate in (None, ""):
+            continue
+        if isinstance(candidate, (int, float, str)):
+            return candidate
+        if isinstance(candidate, dict):
+            for key in ("value", "rating", "score", "stars"):
+                nested = candidate.get(key)
+                if nested in (None, ""):
+                    continue
+                if isinstance(nested, (int, float, str)):
+                    return nested
+    return None
+
+
 def _map_play_review(
     review: dict[str, Any],
     source: str,
@@ -357,8 +382,9 @@ def _map_play_review(
         published_at = _parse_google_play_date(review.get("date_text"), language)
 
     reply = _extract_review_reply(review)
+    rating = _extract_review_rating(review)
     signals: dict[str, Any] = {
-        "rating": review.get("rating") or review.get("score"),
+        "rating": rating,
         "package_id": package_id,
         "country": country,
         "language": language,

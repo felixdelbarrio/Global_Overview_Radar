@@ -36,26 +36,40 @@ _COUNTRY_CODE_MAP = {
 
 _STAR_SENTIMENT_SOURCES = {"appstore", "google_play", "google_reviews"}
 _ACTOR_TEXT_REQUIRED_SOURCES = {"news", "blogs", "gdelt", "newsapi", "guardian"}
+_STAR_RATING_SIGNAL_KEYS = (
+    "rating",
+    "score",
+    "stars",
+    "star_rating",
+    "user_rating",
+    "rating_value",
+)
+
+
+def _parse_rating_value(raw: object) -> float | None:
+    if isinstance(raw, (int, float)):
+        return float(raw)
+    if isinstance(raw, str):
+        try:
+            return float(raw.replace(",", "."))
+        except ValueError:
+            return None
+    if isinstance(raw, dict):
+        for key in ("value", "rating", "score", "stars"):
+            value = _parse_rating_value(raw.get(key))
+            if value is not None:
+                return value
+    return None
 
 
 def _extract_star_rating(item: ReputationItem) -> float | None:
     signals = item.signals or {}
-    raw = signals.get("rating")
-    if raw is None:
-        return None
-    value: float | None = None
-    if isinstance(raw, (int, float)):
-        value = float(raw)
-    elif isinstance(raw, str):
-        try:
-            value = float(raw.replace(",", "."))
-        except ValueError:
-            value = None
-    if value is None:
-        return None
-    if value <= 0:
-        return None
-    return min(5.0, max(0.0, value))
+    for key in _STAR_RATING_SIGNAL_KEYS:
+        value = _parse_rating_value(signals.get(key))
+        if value is None or value <= 0:
+            continue
+        return min(5.0, max(0.0, value))
+    return None
 
 
 def _sentiment_from_stars(stars: float) -> tuple[str, float]:

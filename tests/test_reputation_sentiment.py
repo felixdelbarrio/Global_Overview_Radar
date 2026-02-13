@@ -70,6 +70,24 @@ def test_google_play_rating_uses_stars_and_skips_llm(
     assert result.signals.get("client_sentiment") is True
 
 
+def test_google_play_score_signal_uses_stars(monkeypatch: pytest.MonkeyPatch) -> None:
+    service = _service(monkeypatch, llm_enabled=True)
+
+    item = ReputationItem(
+        id="gp-score",
+        source="google_play",
+        title="Fatal",
+        text="No funciona",
+        signals={"score": "1"},
+    )
+
+    result = service.analyze_item(item)
+
+    assert result.sentiment == "negative"
+    assert result.signals.get("sentiment_provider") == "stars"
+    assert result.signals.get("client_sentiment") is True
+
+
 def test_existing_star_classification_is_not_reprocessed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -240,6 +258,75 @@ def test_ingest_service_forces_downdetector_as_negative(
         == "downdetector_always_negative"
     )
     assert by_id["news-1"].signals.get("source_sentiment_rule") is None
+
+
+def test_ingest_service_refreshes_star_sentiment_for_existing_items(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LLM_ENABLED", "true")
+    service = ReputationIngestService()
+    items = [
+        ReputationItem(
+            id="gp-refresh",
+            source="google_play",
+            title="Mala",
+            text="Falla",
+            signals={"score": "1"},
+        )
+    ]
+    existing = [
+        ReputationItem(
+            id="gp-refresh",
+            source="google_play",
+            sentiment="neutral",
+            signals={"sentiment_provider": "openai", "sentiment_score": 0.0},
+        )
+    ]
+
+    result = service._apply_sentiment({}, items, existing=existing, notes=[])
+
+    assert result[0].sentiment == "negative"
+    assert result[0].signals.get("sentiment_provider") == "stars"
+
+
+def test_merge_items_keeps_existing_rating_when_incoming_is_none() -> None:
+    existing = ReputationItem(
+        id="gp-merge-rating",
+        source="google_play",
+        sentiment="negative",
+        signals={"rating": 1, "sentiment_provider": "stars", "sentiment_score": -1.0},
+    )
+    incoming = ReputationItem(
+        id="gp-merge-rating",
+        source="google_play",
+        signals={"rating": None, "reply_text": "Respuesta oficial"},
+    )
+
+    merged = ReputationIngestService._merge_items([existing], [incoming])
+
+    assert merged[0].signals.get("rating") == 1
+    assert merged[0].signals.get("reply_text") == "Respuesta oficial"
+
+
+def test_merge_items_replaces_stale_sentiment_with_stars() -> None:
+    existing = ReputationItem(
+        id="gp-merge-sentiment",
+        source="google_play",
+        sentiment="neutral",
+        signals={"sentiment_provider": "openai", "sentiment_score": 0.0},
+    )
+    incoming = ReputationItem(
+        id="gp-merge-sentiment",
+        source="google_play",
+        sentiment="negative",
+        signals={"sentiment_provider": "stars", "sentiment_score": -1.0, "rating": 1},
+    )
+
+    merged = ReputationIngestService._merge_items([existing], [incoming])
+
+    assert merged[0].sentiment == "negative"
+    assert merged[0].signals.get("sentiment_provider") == "stars"
+    assert merged[0].signals.get("sentiment_score") == -1.0
 
 
 def test_tokens_match_keyword_reuses_compiled_cache(
