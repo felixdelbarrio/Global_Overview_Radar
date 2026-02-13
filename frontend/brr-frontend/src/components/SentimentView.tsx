@@ -73,9 +73,28 @@ const MARKET_OPINION_SOURCE_KEYS = new Set([
   "downdetector",
 ]);
 const MARKET_REPLY_TRACKED_SOURCE_KEYS = new Set(["appstore", "googleplay"]);
+const MARKET_ACTOR_SOURCE_ORDER = ["appstore", "google_play", "downdetector"] as const;
+const MARKET_ACTOR_SOURCE_LABELS: Record<MarketActorSourceKey, string> = {
+  appstore: "App Store",
+  google_play: "Google Play",
+  downdetector: "Downdetector",
+};
+const MARKET_ACTOR_SOURCE_COLOR_CLASS: Record<MarketActorSourceKey, string> = {
+  appstore: "bg-[#2EA0FF]",
+  google_play: "bg-[#46D694]",
+  downdetector: "bg-[#F4B04D]",
+};
 
 type SentimentFilter = (typeof SENTIMENTS)[number];
 type SentimentValue = Exclude<SentimentFilter, "all">;
+type MarketActorSourceKey = (typeof MARKET_ACTOR_SOURCE_ORDER)[number];
+type MarketActorSourceCounts = Record<MarketActorSourceKey, number>;
+type MarketActorRow = {
+  key: string;
+  label: string;
+  count: number;
+  sourceCounts: MarketActorSourceCounts;
+};
 type OverridePayload = {
   ids: string[];
   geo?: string;
@@ -827,21 +846,6 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
     () => (splitSummaryByActor ? otherSentimentSummary.negative.toLocaleString("es-ES") : null),
     [splitSummaryByActor, otherSentimentSummary.negative],
   );
-  const topSourcesItems = useMemo(
-    () => (!isDashboard && !comparisonsEnabled ? principalItems : items),
-    [isDashboard, comparisonsEnabled, principalItems, items],
-  );
-  const topSources = useMemo(() => topCounts(topSourcesItems, (i) => i.source), [topSourcesItems]);
-  const topActores = useMemo(
-    () =>
-      topCounts(
-        items.filter(
-          (item) => !isPrincipalName(item.actor || "", principalAliasKeys),
-        ),
-        (i) => i.actor || "Sin actor",
-      ),
-    [items, principalAliasKeys],
-  );
   const sentimentSeries = useMemo(
     () =>
       buildComparativeSeries(
@@ -906,6 +910,23 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
   const selectedActorKey = useMemo(
     () => (selectedActor ? normalizeKey(selectedActor) : null),
     [selectedActor],
+  );
+  const filteredSecondaryItems = useMemo(
+    () =>
+      selectedActorKey
+        ? otherItems.filter(
+            (item) => normalizeKey(item.actor || "") === selectedActorKey,
+          )
+        : otherItems,
+    [otherItems, selectedActorKey],
+  );
+  const marketActorRows = useMemo(
+    () => buildMarketActorRows(filteredSecondaryItems),
+    [filteredSecondaryItems],
+  );
+  const marketSourceTotals = useMemo(
+    () => countMarketSourceTotals(filteredSecondaryItems),
+    [filteredSecondaryItems],
   );
   const selectedMarketActorLabel = selectedActor || "Otro actor del mercado";
   const storeSourcesEnabled = useMemo(
@@ -1407,53 +1428,39 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
             </div>
           </section>
 
-          {!isDashboard && (
+          {!isDashboard && comparisonsEnabled && (
             <section
               className="rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-5 shadow-[var(--shadow-md)] backdrop-blur-xl animate-rise"
               style={{ animationDelay: "180ms" }}
             >
               <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
-                TOP FUENTES
+                OTROS ACTORES DEL MERCADO
               </div>
               <div className="mt-2 space-y-2">
                 {itemsLoading ? (
                   <SkeletonRows count={4} />
+                ) : !marketActorRows.length ? (
+                  <div className="rounded-xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-2 text-sm text-[color:var(--text-55)]">
+                    Sin datos disponibles
+                  </div>
                 ) : (
                   (() => {
-                    const maxValue = Math.max(1, ...topSources.map((row) => row.count));
-                    return topSources.map((row) => (
-                      <RowMeter
+                    const maxValue = Math.max(1, ...marketActorRows.map((row) => row.count));
+                    return marketActorRows.map((row) => (
+                      <MarketActorRowMeter
                         key={row.key}
-                        label={row.key}
+                        label={row.label}
                         value={row.count}
                         maxValue={maxValue}
+                        sourceCounts={row.sourceCounts}
                       />
                     ));
                   })()
                 )}
               </div>
-              {comparisonsEnabled && (
-                <div className="mt-4">
-                  <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
-                    TOP OTROS ACTORES DEL MERCADO
-                  </div>
-                  <div className="mt-2 space-y-2">
-                    {itemsLoading ? (
-                      <SkeletonRows count={4} />
-                    ) : (
-                      (() => {
-                        const maxValue = Math.max(1, ...topActores.map((row) => row.count));
-                        return topActores.map((row) => (
-                          <RowMeter
-                            key={row.key}
-                            label={row.key}
-                            value={row.count}
-                            maxValue={maxValue}
-                          />
-                        ));
-                      })()
-                    )}
-                  </div>
+              {!itemsLoading && (
+                <div className="mt-3">
+                  <MarketActorSourcesLegend sourceTotals={marketSourceTotals} />
                 </div>
               )}
             </section>
@@ -2463,27 +2470,73 @@ function StoreRatingRow({
   );
 }
 
-function RowMeter({
+function MarketActorRowMeter({
   label,
   value,
   maxValue,
+  sourceCounts,
 }: {
   label: string;
   value: number;
   maxValue: number;
+  sourceCounts: MarketActorSourceCounts;
 }) {
   const safeMax = Math.max(1, maxValue);
-  const ratio = Math.min(1, value / safeMax);
+  const ratio = Math.min(1, Math.max(0, value / safeMax));
+  const fillWidthPercent = Math.round(ratio * 100);
+  const sourceTotal = MARKET_ACTOR_SOURCE_ORDER.reduce(
+    (sum, sourceKey) => sum + sourceCounts[sourceKey],
+    0,
+  );
+  const segments = MARKET_ACTOR_SOURCE_ORDER.filter((sourceKey) => sourceCounts[sourceKey] > 0);
+  if (sourceTotal <= 0 || !segments.length) return null;
+
   return (
     <div className="flex items-center gap-3">
       <div className="w-28 text-xs text-[color:var(--text-55)] truncate">{label}</div>
       <div className="flex-1 h-2 rounded-full bg-[color:var(--surface-70)] overflow-hidden border border-[color:var(--border-70)]">
         <div
-          className="h-full rounded-full bg-gradient-to-r from-[color:var(--blue)] to-[color:var(--aqua)]"
-          style={{ width: `${Math.round(ratio * 100)}%` }}
-        />
+          className="flex h-full overflow-hidden rounded-full"
+          style={{ width: `${fillWidthPercent}%` }}
+        >
+          {segments.map((sourceKey) => (
+            <div
+              key={sourceKey}
+              className={`${MARKET_ACTOR_SOURCE_COLOR_CLASS[sourceKey]} h-full`}
+              style={{ width: `${(sourceCounts[sourceKey] / sourceTotal) * 100}%` }}
+              title={`${MARKET_ACTOR_SOURCE_LABELS[sourceKey]}: ${sourceCounts[sourceKey].toLocaleString("es-ES")}`}
+            />
+          ))}
+        </div>
       </div>
-      <div className="w-8 text-right text-xs text-[color:var(--text-55)]">{value}</div>
+      <div className="w-12 text-right text-xs text-[color:var(--text-55)]">
+        {value.toLocaleString("es-ES")}
+      </div>
+    </div>
+  );
+}
+
+function MarketActorSourcesLegend({
+  sourceTotals,
+}: {
+  sourceTotals: MarketActorSourceCounts;
+}) {
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-3 text-[10px] text-[color:var(--text-55)]">
+      <span className="uppercase tracking-[0.14em] text-[color:var(--text-45)]">
+        Leyenda:
+      </span>
+      {MARKET_ACTOR_SOURCE_ORDER.map((sourceKey) => (
+        <span key={sourceKey} className="inline-flex items-center gap-1.5">
+          <span
+            className={`h-2.5 w-2.5 rounded-full ${MARKET_ACTOR_SOURCE_COLOR_CLASS[sourceKey]}`}
+          />
+          <span>
+            {MARKET_ACTOR_SOURCE_LABELS[sourceKey]} (
+            {sourceTotals[sourceKey].toLocaleString("es-ES")})
+          </span>
+        </span>
+      ))}
     </div>
   );
 }
@@ -3805,16 +3858,56 @@ function formatVsValue(
   );
 }
 
-function topCounts(items: ReputationItem[], getKey: (item: ReputationItem) => string) {
-  const map = new Map<string, number>();
+function createMarketActorSourceCounts(): MarketActorSourceCounts {
+  return {
+    appstore: 0,
+    google_play: 0,
+    downdetector: 0,
+  };
+}
+
+function normalizeMarketActorSourceKey(source?: string | null): MarketActorSourceKey | null {
+  const normalizedSource = normalizeSourceKey(source ?? "");
+  if (normalizedSource === "appstore") return "appstore";
+  if (normalizedSource === "googleplay") return "google_play";
+  if (normalizedSource === "downdetector") return "downdetector";
+  return null;
+}
+
+function countMarketSourceTotals(items: ReputationItem[]): MarketActorSourceCounts {
+  const totals = createMarketActorSourceCounts();
   for (const item of items) {
-    const key = getKey(item);
-    map.set(key, (map.get(key) || 0) + 1);
+    const sourceKey = normalizeMarketActorSourceKey(item.source);
+    if (!sourceKey) continue;
+    totals[sourceKey] += 1;
   }
-  return Array.from(map.entries())
-    .map(([key, count]) => ({ key, count }))
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 5);
+  return totals;
+}
+
+function buildMarketActorRows(items: ReputationItem[]): MarketActorRow[] {
+  const map = new Map<string, MarketActorRow>();
+  for (const item of items) {
+    const actorLabel = item.actor?.trim() || "Sin actor";
+    const sourceKey = normalizeMarketActorSourceKey(item.source);
+    if (!sourceKey) continue;
+    const actorKey = normalizeKey(actorLabel) || actorLabel.toLowerCase();
+    if (!map.has(actorKey)) {
+      map.set(actorKey, {
+        key: actorKey,
+        label: actorLabel,
+        count: 0,
+        sourceCounts: createMarketActorSourceCounts(),
+      });
+    }
+    const row = map.get(actorKey);
+    if (!row) continue;
+    row.count += 1;
+    row.sourceCounts[sourceKey] += 1;
+  }
+  return Array.from(map.values()).sort((a, b) => {
+    if (b.count !== a.count) return b.count - a.count;
+    return a.label.localeCompare(b.label);
+  });
 }
 
 function buildComparativeSeries(
