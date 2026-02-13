@@ -91,11 +91,17 @@ const itemsResponse = {
       source: "appstore",
       geo: "España",
       actor: "Acme Bank",
+      author: "Alexis",
       title: "Reseña App",
       text: "Muy bien",
       sentiment: "positive",
       published_at: "2025-01-02T10:00:00Z",
-      signals: { rating: 4.5, sentiment_score: 0.4 },
+      signals: {
+        rating: 4.5,
+        sentiment_score: 0.4,
+        reply_text: "Gracias por tu comentario",
+        reply_author: "Soporte BBVA",
+      },
     },
     {
       id: "b1",
@@ -112,11 +118,16 @@ const itemsResponse = {
       source: "google_play",
       geo: "España",
       actor: "Beta Bank",
+      author: "Marina",
       title: "Beta Bank caída",
       text: "Baja puntuación",
       sentiment: "negative",
       published_at: "2025-01-04T10:00:00Z",
-      signals: { sentiment_score: -0.5 },
+      signals: {
+        sentiment_score: -0.5,
+        reply_text: "Lamentamos la incidencia",
+        reply_author: "Beta Support",
+      },
     },
   ],
   stats: { count: 4 },
@@ -148,21 +159,127 @@ describe("Sentimiento page", () => {
         return Promise.resolve(itemsResponse);
       }
       if (path.startsWith("/reputation/responses/summary")) {
+        const isPrincipalSummary = path.includes("entity=actor_principal");
+        if (isPrincipalSummary) {
+          return Promise.resolve({
+            totals: {
+              opinions_total: 4,
+              answered_total: 2,
+              answered_ratio: 0.5,
+              answered_positive: 1,
+              answered_neutral: 1,
+              answered_negative: 0,
+              unanswered_positive: 0,
+              unanswered_neutral: 1,
+              unanswered_negative: 1,
+            },
+            actor_breakdown: [],
+            repeated_replies: [],
+            answered_items: [
+              {
+                id: "rp1",
+                source: "appstore",
+                geo: "España",
+                sentiment: "neutral",
+                actor: "Acme Bank",
+                actor_canonical: "Acme Bank",
+                responder_actor: "Acme Bank",
+                responder_actor_type: "principal",
+                reply_text: "Gracias por tu comentario. Estamos revisando.",
+                reply_excerpt: "Neutra principal",
+                reply_author: "Acme Soporte",
+                replied_at: "2025-01-03T10:30:00Z",
+                published_at: "2025-01-03T10:00:00Z",
+                title: "Reseña App",
+                url: null,
+              },
+              {
+                id: "rp2",
+                source: "google_play",
+                geo: "España",
+                sentiment: "positive",
+                actor: "Acme Bank",
+                actor_canonical: "Acme Bank",
+                responder_actor: "Acme Bank",
+                responder_actor_type: "principal",
+                reply_text: "Nos alegra que te haya servido.",
+                reply_excerpt: "Positiva principal",
+                reply_author: "Acme Soporte",
+                replied_at: "2025-01-02T10:30:00Z",
+                published_at: "2025-01-02T10:00:00Z",
+                title: "Muy útil",
+                url: null,
+              },
+            ],
+          });
+        }
         return Promise.resolve({
           totals: {
-            opinions_total: 4,
-            answered_total: 2,
+            opinions_total: 6,
+            answered_total: 3,
             answered_ratio: 0.5,
-            answered_positive: 1,
-            answered_neutral: 0,
+            answered_positive: 0,
+            answered_neutral: 2,
             answered_negative: 1,
             unanswered_positive: 1,
-            unanswered_neutral: 0,
+            unanswered_neutral: 1,
             unanswered_negative: 1,
           },
           actor_breakdown: [],
           repeated_replies: [],
-          answered_items: [],
+          answered_items: [
+            {
+              id: "ro1",
+              source: "appstore",
+              geo: "España",
+              sentiment: "neutral",
+              actor: "Beta Bank",
+              actor_canonical: "Beta Bank",
+              responder_actor: "Beta Bank",
+              responder_actor_type: "secondary",
+              reply_text: "Seguimos tu caso.",
+              reply_excerpt: "Neutra beta 1",
+              reply_author: "Beta Support",
+              replied_at: "2025-01-04T12:30:00Z",
+              published_at: "2025-01-04T12:00:00Z",
+              title: "Neutra beta 1",
+              url: null,
+            },
+            {
+              id: "ro2",
+              source: "google_play",
+              geo: "España",
+              sentiment: "neutral",
+              actor: "Beta Bank",
+              actor_canonical: "Beta Bank",
+              responder_actor: "Beta Bank",
+              responder_actor_type: "secondary",
+              reply_text: "Te escribimos por privado.",
+              reply_excerpt: "Neutra beta 2",
+              reply_author: "Beta Support",
+              replied_at: "2025-01-05T08:30:00Z",
+              published_at: "2025-01-05T08:00:00Z",
+              title: "Neutra beta 2",
+              url: null,
+            },
+            {
+              id: "ro3",
+              source: "google_play",
+              geo: "España",
+              sentiment: "negative",
+              actor: "Beta Bank",
+              actor_canonical: "Beta Bank",
+              responder_actor: "Beta Bank",
+              responder_actor_type: "secondary",
+              reply_text: "Lamentamos la incidencia.",
+              reply_excerpt: "Negativa beta",
+              reply_author: "Beta Support",
+              replied_at: "2025-01-05T09:30:00Z",
+              published_at: "2025-01-05T09:00:00Z",
+              title: "Negativa beta",
+              url: null,
+            },
+          ],
         });
       }
       if (path.startsWith("/reputation/settings")) {
@@ -211,6 +328,31 @@ describe("Sentimiento page", () => {
     await screen.findByRole("option", { name: "España" });
     const geoSelect = screen.getByLabelText("País");
     fireEvent.change(geoSelect, { target: { value: "España" } });
+
+    const responsesHeading = await screen.findByText("Opiniones contestadas");
+    const responsesCard = responsesHeading.parentElement;
+    expect(responsesCard).toBeTruthy();
+    expect(within(responsesCard as HTMLElement).getByText("Positivas")).toBeInTheDocument();
+    const totalCard = within(responsesCard as HTMLElement).getByText("Total").parentElement;
+    expect(totalCard).toBeTruthy();
+    expect(totalCard as HTMLElement).toHaveTextContent(/1/);
+    expect(totalCard as HTMLElement).toHaveTextContent(/vs/i);
+    expect(within(responsesCard as HTMLElement).queryByText("Comentarios contestados")).not.toBeInTheDocument();
+
+    const mentionList = screen.getByText("LISTADO").closest("section");
+    expect(mentionList).toBeTruthy();
+    expect(within(mentionList as HTMLElement).getByText("CONTESTACION")).toBeInTheDocument();
+    expect(within(mentionList as HTMLElement).getByText("Gracias por tu comentario")).toBeInTheDocument();
+    expect(within(mentionList as HTMLElement).getByText("Soporte BBVA")).toBeInTheDocument();
+    expect(within(mentionList as HTMLElement).getByText("Alexis")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Otros actores del mercado/i }));
+    expect(within(mentionList as HTMLElement).getByText("Lamentamos la incidencia")).toBeInTheDocument();
+
+    const listedFilters = within(mentionList as HTMLElement).getByText(/SENTIMIENTO:/i);
+    expect(listedFilters).toBeInTheDocument();
+    expect(listedFilters).toHaveTextContent(/PAÍS: España/i);
+    expect(listedFilters).toHaveTextContent(/SENTIMIENTO: Todos/i);
+    expect(totalCard as HTMLElement).toHaveTextContent(/vs/i);
 
     fireEvent.click(screen.getByText("Descargar gráfico"));
 
@@ -481,5 +623,76 @@ describe("Sentimiento page", () => {
     expect(mentionCard).toBeTruthy();
     expect(within(mentionCard as HTMLElement).getByText("1.0")).toBeInTheDocument();
     expect(within(mentionCard as HTMLElement).getByText("/5")).toBeInTheDocument();
+  });
+
+  it("renders Google Play stars when rating is nested in reviewRating", async () => {
+    const metaNestedResponse = {
+      ...metaResponse,
+      sources_enabled: ["google_play"],
+      sources_available: ["google_play"],
+    };
+    const itemsNestedResponse = {
+      ...itemsResponse,
+      sources_enabled: ["google_play"],
+      items: [
+        {
+          id: "gp-nested-1",
+          source: "google_play",
+          geo: "España",
+          actor: "Acme, Bank",
+          author: "Cliente GP",
+          title: "Google Play crítica nested",
+          text: "La app falla en login",
+          sentiment: "negative",
+          published_at: "2026-02-13T10:00:00Z",
+          signals: { reviewRating: { value: "1" } },
+        },
+      ],
+      stats: { count: 1 },
+    };
+    const handleGetNested = (path: string) => {
+      if (path.startsWith("/reputation/meta")) {
+        return Promise.resolve(metaNestedResponse);
+      }
+      if (path.startsWith("/reputation/profiles")) {
+        return Promise.resolve(profilesResponse);
+      }
+      if (path.startsWith("/reputation/items")) {
+        return Promise.resolve(itemsNestedResponse);
+      }
+      if (path.startsWith("/reputation/settings")) {
+        return Promise.resolve({ groups: [], advanced_options: [] });
+      }
+      if (path.startsWith("/reputation/responses/summary")) {
+        return Promise.resolve({
+          totals: {
+            opinions_total: 1,
+            answered_total: 0,
+            answered_ratio: 0,
+            answered_positive: 0,
+            answered_neutral: 0,
+            answered_negative: 0,
+            unanswered_positive: 0,
+            unanswered_neutral: 0,
+            unanswered_negative: 1,
+          },
+          actor_breakdown: [],
+          repeated_replies: [],
+          answered_items: [],
+        });
+      }
+      return Promise.resolve({ items: [] });
+    };
+    apiGetMock.mockImplementation(handleGetNested);
+    apiGetCachedMock.mockImplementation(handleGetNested);
+
+    render(<SentimentView mode="sentiment" scope="all" />);
+
+    const mentionTitle = await screen.findByText("Google Play crítica nested");
+    const mentionCard = mentionTitle.closest("article");
+    expect(mentionCard).toBeTruthy();
+    expect(within(mentionCard as HTMLElement).getByText("1.0")).toBeInTheDocument();
+    expect(within(mentionCard as HTMLElement).getByText("/5")).toBeInTheDocument();
+    expect(within(mentionCard as HTMLElement).getByText("Cliente GP")).toBeInTheDocument();
   });
 });

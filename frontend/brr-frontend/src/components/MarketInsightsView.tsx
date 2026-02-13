@@ -373,7 +373,7 @@ export function MarketInsightsView() {
                 Respuestas oficiales
               </h2>
               <p className="mt-2 text-xs text-[color:var(--text-55)]">
-                Opiniones contestadas por el mercado en el periodo seleccionado.
+                Opiniones contestadas por el mercado en el periodo seleccionado, agrupadas por similitud (&gt;=70%).
               </p>
               <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-2">
                 <MetricPill
@@ -392,7 +392,7 @@ export function MarketInsightsView() {
               <div className="mt-4 space-y-3">
                 {repeatedReplies.length === 0 && (
                   <div className="rounded-xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-2 text-sm text-[color:var(--text-55)]">
-                    No se detectan respuestas repetidas.
+                    No se detectan respuestas generales.
                   </div>
                 )}
                 {repeatedReplies.slice(0, 5).map((entry) => (
@@ -402,7 +402,9 @@ export function MarketInsightsView() {
                   >
                     <div className="flex items-center justify-between gap-3">
                       <div className="text-xs uppercase tracking-[0.16em] text-[color:var(--text-55)]">
-                        Repetida {entry.count} veces
+                        {entry.count > 1
+                          ? `Respuesta general · ${entry.count} comentarios`
+                          : "Respuesta única · 1 comentario"}
                       </div>
                       <div className="text-xs text-[color:var(--text-55)]">
                         {entry.actors.slice(0, 2).map((actor) => actor.actor).join(" · ")}
