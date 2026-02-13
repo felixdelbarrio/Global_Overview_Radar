@@ -40,6 +40,7 @@ import {
 } from "@/lib/events";
 import {
   filterSourcesByScope,
+  PRESS_REPUTATION_SOURCE_SET,
 } from "@/lib/reputationSources";
 import type {
   ActorPrincipalMeta,
@@ -79,6 +80,47 @@ const MARKET_ACTOR_SOURCE_COLOR_CLASS: Record<MarketActorSourceKey, string> = {
   appstore: "bg-[#2EA0FF]",
   google_play: "bg-[#46D694]",
 };
+const PRESS_SOURCE_LABELS: Record<string, string> = {
+  news: "News",
+  newsapi: "NewsAPI",
+  guardian: "The Guardian",
+  gdelt: "GDELT",
+  downdetector: "Downdetector",
+  blogs: "Blogs",
+  forums: "Foros",
+  trustpilot: "Trustpilot",
+  google_reviews: "Google Reviews",
+  youtube: "YouTube",
+  reddit: "Reddit",
+  twitter: "X/Twitter",
+};
+const PRESS_SOURCE_COLOR_BY_LABEL: Record<string, string> = {
+  news: "#1D4ED8",
+  newsapi: "#EA580C",
+  "the guardian": "#16A34A",
+  gdelt: "#DC2626",
+  downdetector: "#7C3AED",
+  blogs: "#0F766E",
+  foros: "#B45309",
+  trustpilot: "#059669",
+  "google reviews": "#A16207",
+  youtube: "#E11D48",
+  reddit: "#F97316",
+  "x twitter": "#0EA5E9",
+  desconocida: "#64748B",
+};
+const PRESS_SOURCE_COLOR_FALLBACK = [
+  "#2563EB",
+  "#10B981",
+  "#F59E0B",
+  "#EF4444",
+  "#8B5CF6",
+  "#14B8A6",
+  "#F97316",
+  "#84CC16",
+  "#EC4899",
+  "#06B6D4",
+];
 
 type SentimentFilter = (typeof SENTIMENTS)[number];
 type SentimentValue = Exclude<SentimentFilter, "all">;
@@ -89,6 +131,12 @@ type MarketActorRow = {
   label: string;
   count: number;
   sourceCounts: MarketActorSourceCounts;
+};
+type PressPublisherRow = {
+  key: string;
+  label: string;
+  count: number;
+  sourceCounts: Record<string, number>;
 };
 type OverridePayload = {
   ids: string[];
@@ -913,14 +961,37 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
         : items,
     [items, principalAliasKeys, selectedActorKey],
   );
+  const marketActorItems = useMemo(
+    () =>
+      comparisonsEnabled
+        ? filteredMarketItems
+        : filteredMarketItems.filter((item) => isPrincipalItem(item, principalAliasKeys)),
+    [comparisonsEnabled, filteredMarketItems, principalAliasKeys],
+  );
   const marketActorRows = useMemo(
-    () => buildMarketActorRows(filteredMarketItems),
-    [filteredMarketItems],
+    () => buildMarketActorRows(marketActorItems),
+    [marketActorItems],
   );
   const marketSourceTotals = useMemo(
-    () => countMarketSourceTotals(filteredMarketItems),
-    [filteredMarketItems],
+    () => countMarketSourceTotals(marketActorItems),
+    [marketActorItems],
   );
+  const pressItems = useMemo(
+    () =>
+      items.filter((item) =>
+        PRESS_REPUTATION_SOURCE_SET.has((item.source || "").trim().toLowerCase()),
+      ),
+    [items],
+  );
+  const pressPublisherRows = useMemo(
+    () => buildPressPublisherRows(pressItems),
+    [pressItems],
+  );
+  const pressPublisherSourceTotals = useMemo(
+    () => countPressPublisherSourceTotals(pressItems),
+    [pressItems],
+  );
+  const showPressPublishersBlock = !isDashboard && !isSentimentMarkets;
   const selectedMarketActorLabel = selectedActor || "Otro actor del mercado";
   const storeSourcesEnabled = useMemo(
     () => new Set((meta?.sources_enabled ?? []).map((src) => src.toLowerCase())),
@@ -1410,7 +1481,7 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
             </div>
           </section>
 
-          {!isDashboard && comparisonsEnabled && (
+          {!isDashboard && !isSentimentPress && (
             <section
               className="rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-5 shadow-[var(--shadow-md)] backdrop-blur-xl animate-rise"
               style={{ animationDelay: "180ms" }}
@@ -1443,6 +1514,44 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
               {!itemsLoading && (
                 <div className="mt-3">
                   <MarketActorSourcesLegend sourceTotals={marketSourceTotals} />
+                </div>
+              )}
+            </section>
+          )}
+
+          {showPressPublishersBlock && (
+            <section
+              className="rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-5 shadow-[var(--shadow-md)] backdrop-blur-xl animate-rise"
+              style={{ animationDelay: "210ms" }}
+            >
+              <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
+                MEDIOS EN PRENSA
+              </div>
+              <div className="mt-2 space-y-2">
+                {itemsLoading ? (
+                  <SkeletonRows count={4} />
+                ) : !pressPublisherRows.length ? (
+                  <div className="rounded-xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-2 text-sm text-[color:var(--text-55)]">
+                    Sin datos disponibles
+                  </div>
+                ) : (
+                  (() => {
+                    const maxValue = Math.max(1, ...pressPublisherRows.map((row) => row.count));
+                    return pressPublisherRows.slice(0, 12).map((row) => (
+                      <PressPublisherRowMeter
+                        key={row.key}
+                        label={row.label}
+                        value={row.count}
+                        maxValue={maxValue}
+                        sourceCounts={row.sourceCounts}
+                      />
+                    ));
+                  })()
+                )}
+              </div>
+              {!itemsLoading && (
+                <div className="mt-3">
+                  <PressPublisherSourcesLegend sourceTotals={pressPublisherSourceTotals} />
                 </div>
               )}
             </section>
@@ -2501,6 +2610,95 @@ function MarketActorSourcesLegend({
           <span>
             {MARKET_ACTOR_SOURCE_LABELS[sourceKey]} (
             {sourceTotals[sourceKey].toLocaleString("es-ES")})
+          </span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function PressPublisherRowMeter({
+  label,
+  value,
+  maxValue,
+  sourceCounts,
+}: {
+  label: string;
+  value: number;
+  maxValue: number;
+  sourceCounts: Record<string, number>;
+}) {
+  const safeMax = Math.max(1, maxValue);
+  const ratio = Math.min(1, Math.max(0, value / safeMax));
+  const fillWidthPercent = Math.round(ratio * 100);
+  const sourceEntries = Object.entries(sourceCounts)
+    .filter(([, count]) => count > 0)
+    .sort((left, right) => {
+      if (right[1] !== left[1]) return right[1] - left[1];
+      return left[0].localeCompare(right[0]);
+    });
+  const sourceTotal = sourceEntries.reduce((sum, [, count]) => sum + count, 0);
+  if (!sourceEntries.length || sourceTotal <= 0) return null;
+  const subtitle = sourceEntries
+    .slice(0, 3)
+    .map(([source, count]) => `${source}: ${count.toLocaleString("es-ES")}`)
+    .join(" · ");
+
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center gap-3">
+        <div className="w-32 text-xs text-[color:var(--text-55)] truncate">{label}</div>
+        <div className="flex-1 h-2 rounded-full bg-[color:var(--surface-70)] overflow-hidden border border-[color:var(--border-70)]">
+          <div
+            className="flex h-full overflow-hidden rounded-full"
+            style={{ width: `${fillWidthPercent}%` }}
+          >
+            {sourceEntries.map(([source, count]) => (
+              <div
+                key={`${label}-${source}`}
+                className="h-full"
+                style={{
+                  width: `${(count / sourceTotal) * 100}%`,
+                  backgroundColor: pressSourceColorHex(source),
+                }}
+                title={`${source}: ${count.toLocaleString("es-ES")}`}
+              />
+            ))}
+          </div>
+        </div>
+        <div className="w-12 text-right text-xs text-[color:var(--text-55)]">
+          {value.toLocaleString("es-ES")}
+        </div>
+      </div>
+      <div className="pl-[8.5rem] text-[10px] text-[color:var(--text-45)] truncate">{subtitle}</div>
+    </div>
+  );
+}
+
+function PressPublisherSourcesLegend({
+  sourceTotals,
+}: {
+  sourceTotals: Record<string, number>;
+}) {
+  const entries = Object.entries(sourceTotals)
+    .filter(([, count]) => count > 0)
+    .sort((left, right) => {
+      if (right[1] !== left[1]) return right[1] - left[1];
+      return left[0].localeCompare(right[0]);
+    })
+    .slice(0, 8);
+  if (!entries.length) return null;
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-3 text-[10px] text-[color:var(--text-55)]">
+      <span className="uppercase tracking-[0.14em] text-[color:var(--text-45)]">Fuentes:</span>
+      {entries.map(([source, count]) => (
+        <span key={source} className="inline-flex items-center gap-1.5">
+          <span
+            className="h-2.5 w-2.5 rounded-full"
+            style={{ backgroundColor: pressSourceColorHex(source) }}
+          />
+          <span>
+            {source} ({count.toLocaleString("es-ES")})
           </span>
         </span>
       ))}
@@ -3872,6 +4070,139 @@ function buildMarketActorRows(items: ReputationItem[]): MarketActorRow[] {
   return Array.from(map.values()).sort((a, b) => {
     if (b.count !== a.count) return b.count - a.count;
     return a.label.localeCompare(b.label);
+  });
+}
+
+function formatPressSourceLabel(source?: string | null): string {
+  const normalized = normalizeSourceKey(source ?? "");
+  if (!normalized) return "Desconocida";
+  return PRESS_SOURCE_LABELS[normalized] ?? source?.trim() ?? normalized;
+}
+
+function pressSourceColorHex(sourceLabel: string): string {
+  const key = normalizeKey(sourceLabel || "Desconocida");
+  const fixed = PRESS_SOURCE_COLOR_BY_LABEL[key];
+  if (fixed) return fixed;
+  const hash = sourceLabel
+    .split("")
+    .reduce((sum, char, idx) => sum + char.charCodeAt(0) * (idx + 1), 0);
+  return PRESS_SOURCE_COLOR_FALLBACK[Math.abs(hash) % PRESS_SOURCE_COLOR_FALLBACK.length];
+}
+
+function normalizePublisherDomain(value?: string | null): string {
+  if (!value) return "";
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  try {
+    const parsed = new URL(trimmed);
+    return parsed.hostname.replace(/^www\./i, "").toLowerCase();
+  } catch {
+    const cleaned = trimmed
+      .replace(/^https?:\/\//i, "")
+      .replace(/^www\./i, "")
+      .split(/[/?#]/)[0]
+      .toLowerCase();
+    return cleaned.includes(".") ? cleaned : "";
+  }
+}
+
+function isGoogleAggregatorDomain(domain: string): boolean {
+  if (!domain) return false;
+  return (
+    domain === "news.google.com" ||
+    domain.endsWith(".news.google.com") ||
+    domain === "news.googleusercontent.com" ||
+    domain.endsWith(".googleusercontent.com")
+  );
+}
+
+function cleanPublisherLabel(value?: string | null): string {
+  const cleaned = cleanText(value || "").trim().replace(/\s+/g, " ");
+  return cleaned.replace(/^[\s\-–—|,;:.]+|[\s\-–—|,;:.]+$/g, "");
+}
+
+function extractPublisherFromTitle(title?: string | null): string {
+  const cleanedTitle = cleanPublisherLabel(title);
+  if (!cleanedTitle) return "";
+  const parts = cleanedTitle.split(/\s(?:-|–|—|\|)\s/);
+  if (parts.length < 2) return "";
+  return cleanPublisherLabel(parts[parts.length - 1]);
+}
+
+function extractPublisherFromHtmlSnippet(text?: string | null): string {
+  if (!text) return "";
+  const fontMatch = /<font[^>]*>(.*?)<\/font>/is.exec(text);
+  if (fontMatch?.[1]) {
+    return cleanPublisherLabel(fontMatch[1]);
+  }
+  return "";
+}
+
+function extractPublisherLabel(item: ReputationItem): string | null {
+  const signals = (item.signals || {}) as Record<string, unknown>;
+  const signalPublisherName = cleanPublisherLabel(String(signals.publisher_name || ""));
+  if (signalPublisherName && normalizeKey(signalPublisherName) !== "google news") {
+    return signalPublisherName;
+  }
+
+  const signalSource = cleanPublisherLabel(String(signals.source || ""));
+  if (signalSource && normalizeKey(signalSource) !== "google news") {
+    return signalSource;
+  }
+
+  const titlePublisher = cleanPublisherLabel(extractPublisherFromTitle(item.title));
+  if (titlePublisher && normalizeKey(titlePublisher) !== "google news") {
+    return titlePublisher;
+  }
+
+  const htmlPublisher = cleanPublisherLabel(extractPublisherFromHtmlSnippet(item.text));
+  if (htmlPublisher && normalizeKey(htmlPublisher) !== "google news") {
+    return htmlPublisher;
+  }
+
+  const signalDomain = normalizePublisherDomain(String(signals.publisher_domain || ""));
+  if (signalDomain && !isGoogleAggregatorDomain(signalDomain)) {
+    return signalDomain;
+  }
+
+  const urlDomain = normalizePublisherDomain(item.url);
+  if (urlDomain && !isGoogleAggregatorDomain(urlDomain)) {
+    return urlDomain;
+  }
+  return null;
+}
+
+function countPressPublisherSourceTotals(items: ReputationItem[]): Record<string, number> {
+  const totals: Record<string, number> = {};
+  for (const item of items) {
+    const sourceLabel = formatPressSourceLabel(item.source);
+    totals[sourceLabel] = (totals[sourceLabel] || 0) + 1;
+  }
+  return totals;
+}
+
+function buildPressPublisherRows(items: ReputationItem[]): PressPublisherRow[] {
+  const map = new Map<string, PressPublisherRow>();
+  for (const item of items) {
+    const sourceLabel = formatPressSourceLabel(item.source);
+    const publisherLabel = extractPublisherLabel(item) || "Medio no identificado";
+    const key = normalizeKey(publisherLabel) || publisherLabel.toLowerCase();
+    if (!map.has(key)) {
+      map.set(key, {
+        key,
+        label: publisherLabel,
+        count: 0,
+        sourceCounts: {},
+      });
+    }
+    const row = map.get(key);
+    if (!row) continue;
+    row.count += 1;
+    row.sourceCounts[sourceLabel] = (row.sourceCounts[sourceLabel] || 0) + 1;
+  }
+  return Array.from(map.values()).sort((left, right) => {
+    if (right.count !== left.count) return right.count - left.count;
+    return left.label.localeCompare(right.label);
   });
 }
 

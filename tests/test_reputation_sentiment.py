@@ -471,3 +471,107 @@ def test_merge_items_backfills_author_and_reply_signals() -> None:
     assert merged[0].author == "Cliente Uno"
     assert merged[0].signals.get("reply_text") == "Gracias"
     assert merged[0].signals.get("reply_author") == "Acme Support"
+
+
+def test_ingest_service_extracts_publisher_from_google_news_metadata() -> None:
+    item = ReputationItem(
+        id="news-1",
+        source="news",
+        url="https://news.google.com/rss/articles/abc?oc=5",
+        title=(
+            "Torres y Genç perciben un 3% menos de remuneración en 2025 "
+            "pese al beneficio récord de BBVA - eleconomista.es"
+        ),
+        text=(
+            '<a href="https://news.google.com/rss/articles/abc?oc=5" target="_blank">'
+            "Torres y Genç perciben un 3% menos de remuneración en 2025 "
+            "pese al beneficio récord de BBVA</a>&nbsp;&nbsp;"
+            '<font color="#6f6f6f">eleconomista.es</font>'
+        ),
+        signals={"source": "Google News"},
+    )
+
+    ReputationIngestService._apply_publisher_metadata([item], notes=[])
+
+    assert item.signals.get("publisher_domain") == "eleconomista.es"
+    assert item.signals.get("publisher_name") == "eleconomista.es"
+
+
+def test_ingest_service_extracts_publisher_from_direct_url() -> None:
+    item = ReputationItem(
+        id="news-2",
+        source="news",
+        url="https://www.cantabriaeconomica.com/empresa/rankia-awards-2025/",
+        title="BBVA, Trade Republic, Sabadell... lideran los Rankia Awards 2025",
+        text="Detalle de noticia",
+        signals={},
+    )
+
+    ReputationIngestService._apply_publisher_metadata([item], notes=[])
+
+    assert item.signals.get("publisher_domain") == "cantabriaeconomica.com"
+    assert item.signals.get("publisher_name") == "cantabriaeconomica.com"
+
+
+def test_apply_geo_hints_prefers_publisher_country_tld() -> None:
+    cfg = {
+        "geografias": ["España", "México"],
+        "geografias_aliases": {
+            "España": ["Spain", "ES"],
+            "México": ["Mexico", "MX"],
+        },
+    }
+    item = ReputationItem(
+        id="geo-pub-1",
+        source="news",
+        geo="España",
+        title="BBVA y AMAV acuerdan apoyo financiero y digital para agencias de viajes",
+        signals={"publisher_domain": "expansion.com.mx"},
+    )
+
+    result = ReputationIngestService._apply_geo_hints(cfg, [item])
+
+    assert result[0].geo == "México"
+    assert result[0].signals.get("geo_source") == "publisher"
+
+
+def test_apply_geo_hints_detects_geo_with_html_and_url_encoding() -> None:
+    cfg = {
+        "geografias": ["España", "México"],
+        "geografias_aliases": {
+            "España": ["Spain", "ES"],
+            "México": ["Mexico", "MX"],
+        },
+    }
+    item = ReputationItem(
+        id="geo-encoded-1",
+        source="news",
+        geo="España",
+        title="BBVA M%C3%A9xico y AMAV firman acuerdo",
+        text="<p>BBVA M&eacute;xico refuerza su estrategia.</p>",
+        signals={},
+    )
+
+    result = ReputationIngestService._apply_geo_hints(cfg, [item])
+
+    assert result[0].geo == "México"
+    assert result[0].signals.get("geo_source") == "content"
+
+
+def test_merge_items_accepts_publisher_geo_override() -> None:
+    existing = ReputationItem(
+        id="merge-geo-1",
+        source="news",
+        geo="España",
+        signals={},
+    )
+    incoming = ReputationItem(
+        id="merge-geo-1",
+        source="news",
+        geo="México",
+        signals={"geo_source": "publisher"},
+    )
+
+    merged = ReputationIngestService._merge_items([existing], [incoming])
+
+    assert merged[0].geo == "México"
