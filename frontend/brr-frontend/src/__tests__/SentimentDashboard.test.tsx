@@ -1,7 +1,7 @@
 /** Tests del modo dashboard de SentimentView. */
 
 import React from "react";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next/link", () => ({
@@ -78,6 +78,24 @@ describe("SentimentView dashboard", () => {
       if (path.startsWith("/reputation/items")) {
         return Promise.resolve(itemsResponse);
       }
+      if (path.startsWith("/reputation/responses/summary")) {
+        return Promise.resolve({
+          totals: {
+            opinions_total: 1,
+            answered_total: 0,
+            answered_ratio: 0,
+            answered_positive: 0,
+            answered_neutral: 0,
+            answered_negative: 0,
+            unanswered_positive: 1,
+            unanswered_neutral: 0,
+            unanswered_negative: 0,
+          },
+          actor_breakdown: [],
+          repeated_replies: [],
+          answered_items: [],
+        });
+      }
       if (path.startsWith("/reputation/settings")) {
         return Promise.resolve({ groups: [], advanced_options: [] });
       }
@@ -92,4 +110,67 @@ describe("SentimentView dashboard", () => {
     render(<SentimentView mode="dashboard" />);
     expect(await screen.findByText("Dashboard reputacional")).toBeInTheDocument();
   });
+
+  it("uses natural month range and supports month navigation", async () => {
+    render(<SentimentView mode="dashboard" />);
+    await screen.findByText("Dashboard reputacional");
+
+    const now = new Date();
+    const currentStart = toDate(new Date(now.getFullYear(), now.getMonth(), 1));
+    const currentEnd = toDate(now);
+    const currentLabel = monthLabel(new Date(now.getFullYear(), now.getMonth(), 1));
+
+    expect(screen.getByTestId("dashboard-month-label")).toHaveTextContent(currentLabel);
+    expect(screen.getByRole("button", { name: "Mes siguiente" })).toBeDisabled();
+
+    await waitFor(() => {
+      const queriedCurrentMonth = apiGetMock.mock.calls.some(([path]) => {
+        if (typeof path !== "string") return false;
+        return (
+          path.startsWith("/reputation/items?") &&
+          path.includes(`from_date=${currentStart}`) &&
+          path.includes(`to_date=${currentEnd}`)
+        );
+      });
+      expect(queriedCurrentMonth).toBe(true);
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Mes anterior" }));
+
+    const previousDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const previousStart = toDate(previousDate);
+    const previousEnd = toDate(
+      new Date(previousDate.getFullYear(), previousDate.getMonth() + 1, 0),
+    );
+    const previousLabel = monthLabel(previousDate);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("dashboard-month-label")).toHaveTextContent(previousLabel);
+      const queriedPreviousMonth = apiGetMock.mock.calls.some(([path]) => {
+        if (typeof path !== "string") return false;
+        return (
+          path.startsWith("/reputation/items?") &&
+          path.includes(`from_date=${previousStart}`) &&
+          path.includes(`to_date=${previousEnd}`)
+        );
+      });
+      expect(queriedPreviousMonth).toBe(true);
+    });
+
+    expect(screen.getByRole("button", { name: "Mes siguiente" })).not.toBeDisabled();
+  });
 });
+
+function toDate(d: Date) {
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000)
+    .toISOString()
+    .slice(0, 10);
+}
+
+function monthLabel(d: Date) {
+  const value = new Intl.DateTimeFormat("es-ES", {
+    month: "long",
+    year: "numeric",
+  }).format(d);
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}

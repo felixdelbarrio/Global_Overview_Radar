@@ -138,6 +138,24 @@ def _guess_google_play_locale(geo: str | None) -> tuple[str, str]:
 
 
 DEFAULT_LOOKBACK_DAYS = 730
+_REPLY_TRACKED_SOURCES = {"appstore", "google_play"}
+_REPLY_SIGNAL_KEYS = {
+    "has_reply",
+    "reply_text",
+    "reply_author",
+    "reply_at",
+    "response_text",
+    "response_author",
+    "response_at",
+    "developer_reply",
+    "developer_response",
+    "developer_response_at",
+    "owner_response",
+    "owner_response_at",
+    "business_response",
+    "reply",
+    "response",
+}
 
 
 class ReputationIngestService:
@@ -372,6 +390,7 @@ class ReputationIngestService:
         merged_items = filter_enabled(merged_items)
         report("Fusionando items", 94)
         merged_items = self._filter_noise_items(cfg, merged_items, notes)
+        merged_items = self._strip_non_market_reply_signals(merged_items)
         report("Último ajuste", 96)
         market_ratings = self._collect_market_ratings(cfg, notes, sources_enabled)
         market_ratings_history = self._merge_market_ratings_history(
@@ -498,6 +517,23 @@ class ReputationIngestService:
         if dropped:
             notes.append(f"sanity: dropped {dropped} items missing id/source")
         return filtered
+
+    @staticmethod
+    def _strip_non_market_reply_signals(items: list[ReputationItem]) -> list[ReputationItem]:
+        if not items:
+            return items
+        for item in items:
+            if item.source in _REPLY_TRACKED_SOURCES:
+                continue
+            cleaned = dict(item.signals or {})
+            removed = False
+            for key in _REPLY_SIGNAL_KEYS:
+                if key in cleaned:
+                    cleaned.pop(key, None)
+                    removed = True
+            if removed:
+                item.signals = cleaned
+        return items
 
     @classmethod
     def _apply_appstore_actor_map(
@@ -944,6 +980,18 @@ class ReputationIngestService:
             "sentiment_scale",
         ):
             item.signals.pop(key, None)
+
+    @staticmethod
+    def _apply_source_sentiment_rules(items: list[ReputationItem]) -> None:
+        for item in items:
+            source = (item.source or "").strip().lower()
+            if source != "downdetector":
+                continue
+            item.sentiment = "negative"
+            item.signals["sentiment_score"] = -1.0
+            item.signals["sentiment_provider"] = "source_rule"
+            item.signals["sentiment_scale"] = "-1-1"
+            item.signals["source_sentiment_rule"] = "downdetector_always_negative"
 
     @staticmethod
     def _is_invalid_segment(item: ReputationItem) -> bool:
@@ -1470,6 +1518,7 @@ class ReputationIngestService:
         if service.llm_warning and notes is not None:
             notes.append(service.llm_warning)
         if not result_map:
+            self._apply_source_sentiment_rules(items)
             return items
         result: list[ReputationItem] = []
         for item in items:
@@ -1477,6 +1526,7 @@ class ReputationIngestService:
                 result.append(item)
             else:
                 result.append(result_map.get((item.source, item.id), item))
+        self._apply_source_sentiment_rules(result)
         return result
 
     @classmethod
@@ -2288,7 +2338,6 @@ class ReputationIngestService:
             handled_sources.add("reddit")
             reddit_cfg = _as_dict(cfg.get("reddit"))
             client_id = os.getenv("REDDIT_CLIENT_ID", "").strip()
-            client_secret = os.getenv("REDDIT_CLIENT_SECRET", "").strip()
             user_agent = os.getenv("REDDIT_USER_AGENT", "global-overview-radar/0.1").strip()
 
             subreddits = _get_list_str(reddit_cfg, "subreddits")
@@ -2300,13 +2349,13 @@ class ReputationIngestService:
 
             queries = self._expand_queries(query_templates, entity_terms)
 
-            if not client_id or not client_secret or not user_agent:
+            if not client_id or not user_agent:
                 notes.append("reddit: missing credentials envs")
             else:
                 collectors.append(
                     RedditCollector(
                         client_id=client_id,
-                        client_secret=client_secret,
+                        client_secret=None,
                         user_agent=user_agent,
                         subreddits=subreddits,
                         queries=queries,

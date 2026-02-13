@@ -41,14 +41,19 @@ GROUPS: list[dict[str, str]] = [
         "description": "Selecciona el idioma general para noticias y traducciones de opiniones.",
     },
     {
-        "id": "sources_public",
-        "label": "Fuentes sin credenciales",
-        "description": "Activa o desactiva fuentes que no requieren API Key.",
+        "id": "sources_markets",
+        "label": "Fuentes Markets",
+        "description": ("Activa o desactiva fuentes de marketplaces y reseñas de producto."),
+    },
+    {
+        "id": "sources_press",
+        "label": "Fuentes Prensa OPEN",
+        "description": ("Activa o desactiva fuentes abiertas (prensa, social, foros y blogs)."),
     },
     {
         "id": "sources_credentials",
-        "label": "Fuentes con credenciales",
-        "description": "Activa fuentes que requieren API Key.",
+        "label": "Fuentes Prensa API KEY REQUESTED",
+        "description": "Configura API Keys y activación de las fuentes que las requieren.",
     },
     {
         "id": "news",
@@ -109,9 +114,18 @@ FIELDS: list[UserSettingField] = [
         default=False,
     ),
     UserSettingField(
+        key="visualization.show_dashboard_responses",
+        env="REPUTATION_UI_SHOW_DASHBOARD_RESPONSES",
+        group="language",
+        label="Opiniones contestadas en Dashboard",
+        description=("Si está activado, el Dashboard muestra el bloque de opiniones contestadas."),
+        kind="boolean",
+        default=False,
+    ),
+    UserSettingField(
         key="sources.news",
         env="REPUTATION_SOURCE_NEWS",
-        group="sources_public",
+        group="sources_press",
         label="Noticias (RSS)",
         description="Agregadores y RSS.",
         kind="boolean",
@@ -129,7 +143,7 @@ FIELDS: list[UserSettingField] = [
     UserSettingField(
         key="sources.gdelt",
         env="REPUTATION_SOURCE_GDELT",
-        group="sources_public",
+        group="sources_press",
         label="GDELT",
         description="Global Database of Events.",
         kind="boolean",
@@ -147,7 +161,7 @@ FIELDS: list[UserSettingField] = [
     UserSettingField(
         key="sources.forums",
         env="REPUTATION_SOURCE_FORUMS",
-        group="sources_public",
+        group="sources_press",
         label="Foros",
         description="Foros y comunidades.",
         kind="boolean",
@@ -156,7 +170,7 @@ FIELDS: list[UserSettingField] = [
     UserSettingField(
         key="sources.blogs",
         env="REPUTATION_SOURCE_BLOGS_RSS",
-        group="sources_public",
+        group="sources_press",
         label="Blogs",
         description="Blogs RSS.",
         kind="boolean",
@@ -165,7 +179,7 @@ FIELDS: list[UserSettingField] = [
     UserSettingField(
         key="sources.appstore",
         env="REPUTATION_SOURCE_APPSTORE",
-        group="sources_public",
+        group="sources_markets",
         label="App Store",
         description="Opiniones en App Store.",
         kind="boolean",
@@ -174,7 +188,7 @@ FIELDS: list[UserSettingField] = [
     UserSettingField(
         key="sources.trustpilot",
         env="REPUTATION_SOURCE_TRUSTPILOT",
-        group="sources_public",
+        group="sources_press",
         label="Trustpilot",
         description="Reseñas Trustpilot.",
         kind="boolean",
@@ -192,7 +206,7 @@ FIELDS: list[UserSettingField] = [
     UserSettingField(
         key="sources.google_play",
         env="REPUTATION_SOURCE_GOOGLE_PLAY",
-        group="sources_public",
+        group="sources_markets",
         label="Google Play",
         description="Opiniones en Google Play.",
         kind="boolean",
@@ -228,7 +242,7 @@ FIELDS: list[UserSettingField] = [
     UserSettingField(
         key="sources.downdetector",
         env="REPUTATION_SOURCE_DOWNDETECTOR",
-        group="sources_public",
+        group="sources_markets",
         label="Downdetector",
         description="Incidencias y caídas.",
         kind="boolean",
@@ -304,17 +318,8 @@ FIELDS: list[UserSettingField] = [
         key="keys.reddit_id",
         env="REDDIT_CLIENT_ID",
         group="sources_credentials",
-        label="Reddit Client ID",
-        description="Credencial de Reddit.",
-        kind="secret",
-        default="",
-    ),
-    UserSettingField(
-        key="keys.reddit_secret",
-        env="REDDIT_CLIENT_SECRET",
-        group="sources_credentials",
-        label="Reddit Client Secret",
-        description="Secreto de Reddit.",
+        label="Reddit Reader API Key",
+        description="Credencial de lectura de Reddit.",
         kind="secret",
         default="",
     ),
@@ -402,7 +407,7 @@ ADVANCED_FIELD_ENVS = {field.env for field in ADVANCED_FIELDS}
 SOURCE_CREDENTIAL_REQUIREMENTS: dict[str, list[str]] = {
     "REPUTATION_SOURCE_NEWSAPI": ["NEWSAPI_API_KEY"],
     "REPUTATION_SOURCE_GUARDIAN": ["GUARDIAN_API_KEY"],
-    "REPUTATION_SOURCE_REDDIT": ["REDDIT_CLIENT_ID", "REDDIT_CLIENT_SECRET"],
+    "REPUTATION_SOURCE_REDDIT": ["REDDIT_CLIENT_ID"],
     "REPUTATION_SOURCE_TWITTER": ["TWITTER_BEARER_TOKEN"],
     "REPUTATION_SOURCE_GOOGLE_REVIEWS": ["GOOGLE_PLACES_API_KEY"],
     "REPUTATION_SOURCE_YOUTUBE": ["YOUTUBE_API_KEY"],
@@ -485,7 +490,6 @@ ADVANCED_ENV_CANDIDATES = {
     "NEWS_SITE_QUERY_PER_SITE",
     "NEWS_SOURCES",
     "REDDIT_CLIENT_ID",
-    "REDDIT_CLIENT_SECRET",
     "REDDIT_LIMIT_PER_QUERY",
     "REDDIT_USER_AGENT",
     "REPUTATION_BALANCE_ENABLED",
@@ -660,6 +664,15 @@ def _resolve_language_preference(env_values: dict[str, str], default: str) -> st
     return default
 
 
+def _llm_provider(env_values: dict[str, str]) -> str:
+    raw_provider = (env_values.get("LLM_PROVIDER") or "openai").strip().lower()
+    return "gemini" if raw_provider == "gemini" else "openai"
+
+
+def _active_llm_api_key_env(env_values: dict[str, str]) -> str:
+    return "GEMINI_API_KEY" if _llm_provider(env_values) == "gemini" else "OPENAI_API_KEY"
+
+
 def _render_main_env_file(values: dict[str, str]) -> str:
     lines: list[str] = []
     lines.append("# === Configuracion reputacional (cliente final) ===")
@@ -801,6 +814,11 @@ def get_user_settings_snapshot() -> dict[str, Any]:
         values_by_key[language_field.key] = _resolve_language_preference(
             main_env_values, language_field.default
         )
+    llm_enabled_field = FIELDS_BY_KEY.get("llm.enabled")
+    if llm_enabled_field:
+        llm_key_env = _active_llm_api_key_env(main_env_values)
+        if not main_env_values.get(llm_key_env, "").strip():
+            values_by_key[llm_enabled_field.key] = False
 
     groups_payload: list[dict[str, Any]] = []
     for group in GROUPS:
@@ -967,6 +985,10 @@ def update_user_settings(values: dict[str, Any]) -> dict[str, Any]:
             main_env_values[field.env] = _format_env_value(coerced, field)
         if field.key == "language.preference":
             main_env_values["NEWSAPI_LANGUAGE"] = main_env_values[field.env]
+
+    llm_key_env = _active_llm_api_key_env(main_env_values)
+    if not main_env_values.get(llm_key_env, "").strip():
+        main_env_values["LLM_ENABLED"] = "false"
 
     log_enabled = _env_truthy(advanced_env_values.get("REPUTATION_LOG_ENABLED"))
     if not log_enabled:
