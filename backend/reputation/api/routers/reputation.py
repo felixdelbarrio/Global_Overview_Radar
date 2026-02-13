@@ -1767,7 +1767,8 @@ def reputation_markets_insights(
         count = int(bucket.get("opinions_count") or 0)
         if count < 2:
             continue
-        opinions = list(bucket.get("opinions") or [])
+        raw_opinions = bucket.get("opinions")
+        opinions = list(raw_opinions) if isinstance(raw_opinions, list) else []
         opinions.sort(key=lambda entry: str(entry.get("published_at") or ""), reverse=True)
         recurring_authors.append(
             {
@@ -1840,7 +1841,8 @@ def reputation_markets_insights(
     source_friction.sort(
         key=lambda entry: (-float(entry["negative_ratio"]), -int(entry["total"]), entry["source"])
     )
-    response_totals = response_summary.get("totals") if isinstance(response_summary, dict) else {}
+    response_totals_raw = response_summary.get("totals") if isinstance(response_summary, dict) else {}
+    response_totals = response_totals_raw if isinstance(response_totals_raw, dict) else {}
     response_opinions_total = int(response_totals.get("opinions_total") or 0)
     response_friction_denominator = response_opinions_total
     if response_friction_denominator <= 0:
@@ -1870,9 +1872,15 @@ def reputation_markets_insights(
             }
         )
     response_source_friction.sort(
-        key=lambda entry: (-float(entry["negative_ratio"]), -int(entry["negative"]), entry["source"])
+        key=lambda entry: (
+            -float(entry["negative_ratio"]),
+            -int(entry["negative"]),
+            entry["source"],
+        )
     )
-    downdetector_incidents = sum(1 for item in scoped_items if (item.source or "") == "downdetector")
+    downdetector_incidents = sum(
+        1 for item in scoped_items if (item.source or "") == "downdetector"
+    )
 
     geo_summary: list[dict[str, Any]] = []
     for item_geo, stats in geo_stats.items():
