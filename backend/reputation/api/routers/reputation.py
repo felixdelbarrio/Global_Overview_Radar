@@ -863,9 +863,7 @@ def _reply_similarity_tokens(reply_text: str) -> set[str]:
     if not raw_tokens:
         return set()
     informative = {
-        token
-        for token in raw_tokens
-        if len(token) > 2 and token not in _REPLY_SIMILARITY_STOPWORDS
+        token for token in raw_tokens if len(token) > 2 and token not in _REPLY_SIMILARITY_STOPWORDS
     }
     return informative or set(raw_tokens)
 
@@ -1188,6 +1186,8 @@ def _filter_response_items(
     aliases_by_canonical: dict[str, list[str]],
     principal_canonical: str | None,
     principal_terms: list[str],
+    *,
+    include_reply_datetime: bool = False,
 ) -> list[ReputationItem]:
     base_group = dict(group)
     base_group["from_date"] = None
@@ -1211,7 +1211,7 @@ def _filter_response_items(
             item,
             from_dt=from_dt,
             to_dt=to_dt,
-            include_reply_datetime=False,
+            include_reply_datetime=include_reply_datetime,
         )
     ]
 
@@ -1625,6 +1625,7 @@ def reputation_markets_insights(
         aliases_by_canonical,
         principal_canonical,
         principal_terms,
+        include_reply_datetime=True,
     )
     response_summary = _build_response_summary(
         items=response_items,
