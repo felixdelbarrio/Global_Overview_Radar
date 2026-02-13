@@ -777,17 +777,6 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
     () => items.filter((item) => !isPrincipalItem(item, principalAliasKeys)),
     [items, principalAliasKeys],
   );
-  const comparisonItems = useMemo(() => {
-    if (isDashboard || !comparisonsEnabled) return [];
-    if (effectiveActor === "all" || isPrincipalName(effectiveActor, principalAliasKeys)) {
-      return otherItems;
-    }
-    const actorKey = normalizeKey(effectiveActor);
-    return items.filter((item) => {
-      if (isPrincipalItem(item, principalAliasKeys)) return false;
-      return normalizeKey(item.actor || "") === actorKey;
-    });
-  }, [isDashboard, comparisonsEnabled, effectiveActor, principalAliasKeys, otherItems, items]);
   const principalSentimentSummary = useMemo(() => summarize(principalItems), [principalItems]);
   const otherSentimentSummary = useMemo(() => summarize(otherItems), [otherItems]);
   const splitSummaryByActor = !isDashboard && comparisonsEnabled;
@@ -837,31 +826,6 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
   const negativesSummaryComparison = useMemo(
     () => (splitSummaryByActor ? otherSentimentSummary.negative.toLocaleString("es-ES") : null),
     [splitSummaryByActor, otherSentimentSummary.negative],
-  );
-  const geoSummaryPrincipal = useMemo(
-    () => summarizeByGeo(principalItems),
-    [principalItems],
-  );
-  const geoSummaryComparison = useMemo(
-    () => summarizeByGeo(comparisonItems),
-    [comparisonItems],
-  );
-  const geoTableRows = useMemo(() => {
-    if (isDashboard || !comparisonsEnabled) {
-      return geoSummaryPrincipal.map((row) => ({ geo: row.geo, principal: row, comparison: null }));
-    }
-    return buildGeoComparisonRows(geoSummaryPrincipal, geoSummaryComparison);
-  }, [isDashboard, comparisonsEnabled, geoSummaryPrincipal, geoSummaryComparison]);
-  const geoTableComparisonLabel = useMemo(() => {
-    if (isDashboard || !comparisonsEnabled) return "";
-    if (effectiveActor !== "all" && !isPrincipalName(effectiveActor, principalAliasKeys)) {
-      return effectiveActor;
-    }
-    return "Todos los otros actores";
-  }, [isDashboard, comparisonsEnabled, effectiveActor, principalAliasKeys]);
-  const geoTableTitlePrincipal = useMemo(
-    () => `SENTIMIENTO POR PAÍS: ${actorPrincipalName}`,
-    [actorPrincipalName],
   );
   const topSourcesItems = useMemo(
     () => (!isDashboard && !comparisonsEnabled ? principalItems : items),
@@ -1443,6 +1407,58 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
             </div>
           </section>
 
+          {!isDashboard && (
+            <section
+              className="rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-5 shadow-[var(--shadow-md)] backdrop-blur-xl animate-rise"
+              style={{ animationDelay: "180ms" }}
+            >
+              <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
+                TOP FUENTES
+              </div>
+              <div className="mt-2 space-y-2">
+                {itemsLoading ? (
+                  <SkeletonRows count={4} />
+                ) : (
+                  (() => {
+                    const maxValue = Math.max(1, ...topSources.map((row) => row.count));
+                    return topSources.map((row) => (
+                      <RowMeter
+                        key={row.key}
+                        label={row.key}
+                        value={row.count}
+                        maxValue={maxValue}
+                      />
+                    ));
+                  })()
+                )}
+              </div>
+              {comparisonsEnabled && (
+                <div className="mt-4">
+                  <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
+                    TOP OTROS ACTORES DEL MERCADO
+                  </div>
+                  <div className="mt-2 space-y-2">
+                    {itemsLoading ? (
+                      <SkeletonRows count={4} />
+                    ) : (
+                      (() => {
+                        const maxValue = Math.max(1, ...topActores.map((row) => row.count));
+                        return topActores.map((row) => (
+                          <RowMeter
+                            key={row.key}
+                            label={row.key}
+                            value={row.count}
+                            maxValue={maxValue}
+                          />
+                        ));
+                      })()
+                    )}
+                  </div>
+                </div>
+              )}
+            </section>
+          )}
+
           {isDashboard && (
             <section
               className="flex-1 rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-5 shadow-[var(--shadow-md)] backdrop-blur-xl animate-rise"
@@ -1536,8 +1552,6 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
             {isDashboard ? (
               <>
                 <PrincipalMentionsCard
-                  title={actorPrincipalName}
-                  showActorLine={false}
                   totalMentions={mentionsSummaryPrincipal}
                   positiveMentions={positivesSummaryPrincipal}
                   neutralMentions={neutralsSummaryPrincipal}
@@ -1818,136 +1832,8 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
               </>
             )}
           </div>
-          {!isDashboard && (
-            <div className="mt-5">
-              <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
-                TOP FUENTES
-              </div>
-              <div className="mt-2 space-y-2">
-                {itemsLoading ? (
-                  <SkeletonRows count={4} />
-                ) : (
-                  (() => {
-                    const maxValue = Math.max(1, ...topSources.map((row) => row.count));
-                    return topSources.map((row) => (
-                      <RowMeter
-                        key={row.key}
-                        label={row.key}
-                        value={row.count}
-                        maxValue={maxValue}
-                      />
-                    ));
-                  })()
-                )}
-              </div>
-            </div>
-          )}
-          {!isDashboard && comparisonsEnabled && (
-            <div className="mt-4">
-              <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
-                TOP OTROS ACTORES DEL MERCADO
-              </div>
-              <div className="mt-2 space-y-2">
-                {itemsLoading ? (
-                  <SkeletonRows count={4} />
-                ) : (
-                  (() => {
-                    const maxValue = Math.max(1, ...topActores.map((row) => row.count));
-                    return topActores.map((row) => (
-                      <RowMeter
-                        key={row.key}
-                        label={row.key}
-                        value={row.count}
-                        maxValue={maxValue}
-                      />
-                    ));
-                  })()
-                )}
-              </div>
-            </div>
-          )}
         </section>
       </div>
-
-      {!isDashboard && (
-        <section className="mt-6 rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-5 shadow-[var(--shadow-md)] backdrop-blur-xl animate-rise" style={{ animationDelay: "240ms" }}>
-          <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
-            {formatVsValue(
-              geoTableTitlePrincipal,
-              isDashboard || !comparisonsEnabled ? undefined : geoTableComparisonLabel,
-              {
-                containerClassName: "inline-flex items-center whitespace-nowrap",
-                vsClassName:
-                  "mx-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-[color:var(--text-45)]",
-              },
-            )}
-          </div>
-          <div className="mt-3 overflow-auto">
-            <table className="min-w-full text-sm">
-              <thead>
-                <tr className="text-[11px] uppercase tracking-[0.2em] text-[color:var(--text-45)]">
-                  <th className="py-2 pr-4 text-left">País</th>
-                  <th className="py-2 px-2 text-center">Menciones</th>
-                  <th className="py-2 px-2 text-center">Score medio</th>
-                  <th className="py-2 px-2 text-center">Positivas</th>
-                  <th className="py-2 px-2 text-center">Neutrales</th>
-                  <th className="py-2 px-2 text-center">Negativas</th>
-                </tr>
-              </thead>
-              <tbody>
-                {itemsLoading ? (
-                  <SkeletonTableRows columns={6} rows={3} />
-                ) : (
-                  geoTableRows.map((row) => (
-                    <tr key={row.geo} className="border-t border-[color:var(--border-60)]">
-                      <td className="py-2 pr-4 font-semibold text-[color:var(--ink)]">
-                        {row.geo}
-                      </td>
-                      <td className="py-2 px-2 text-center">
-                        {formatVsValue(
-                          row.principal.count.toLocaleString("es-ES"),
-                          row.comparison?.count.toLocaleString("es-ES"),
-                        )}
-                      </td>
-                      <td className="py-2 px-2 text-center">
-                        {formatVsValue(
-                          row.principal.avgScore.toFixed(2),
-                          row.comparison?.avgScore.toFixed(2),
-                        )}
-                      </td>
-                      <td className="py-2 px-2 text-center">
-                        {formatVsValue(
-                          row.principal.positive.toLocaleString("es-ES"),
-                          row.comparison?.positive.toLocaleString("es-ES"),
-                        )}
-                      </td>
-                      <td className="py-2 px-2 text-center">
-                        {formatVsValue(
-                          row.principal.neutral.toLocaleString("es-ES"),
-                          row.comparison?.neutral.toLocaleString("es-ES"),
-                        )}
-                      </td>
-                      <td className="py-2 px-2 text-center">
-                        {formatVsValue(
-                          row.principal.negative.toLocaleString("es-ES"),
-                          row.comparison?.negative.toLocaleString("es-ES"),
-                        )}
-                      </td>
-                    </tr>
-                  ))
-                )}
-                {!itemsLoading && !geoTableRows.length && (
-                  <tr>
-                    <td className="py-3 text-sm text-[color:var(--text-45)]" colSpan={6}>
-                      No hay datos para los filtros seleccionados.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      )}
 
       <section className="mt-6 rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-5 shadow-[var(--shadow-md)] backdrop-blur-xl animate-rise" style={{ animationDelay: "300ms" }}>
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -2611,22 +2497,6 @@ function SkeletonRows({ count }: { count: number }) {
           <div className="flex-1 h-2 rounded-full bg-[color:var(--surface-70)] border border-[color:var(--border-60)]" />
           <div className="h-3 w-8 rounded-full bg-[color:var(--surface-70)] border border-[color:var(--border-60)]" />
         </div>
-      ))}
-    </>
-  );
-}
-
-function SkeletonTableRows({ columns, rows }: { columns: number; rows: number }) {
-  return (
-    <>
-      {Array.from({ length: rows }).map((_, rowIdx) => (
-        <tr key={rowIdx} className="border-t border-[color:var(--border-60)] animate-pulse">
-          {Array.from({ length: columns }).map((_, colIdx) => (
-            <td key={colIdx} className="py-2 pr-4">
-              <div className="h-3 w-full max-w-[120px] rounded-full bg-[color:var(--surface-70)] border border-[color:var(--border-60)]" />
-            </td>
-          ))}
-        </tr>
       ))}
     </>
   );
@@ -3915,42 +3785,6 @@ function summarize(items: ReputationItem[]) {
   };
 }
 
-function summarizeByGeo(items: ReputationItem[]) {
-  const map = new Map<
-    string,
-    { count: number; positive: number; neutral: number; negative: number; score: number; scored: number }
-  >();
-
-  for (const item of items) {
-    const geo = item.geo || "Sin país";
-    if (!map.has(geo)) {
-      map.set(geo, { count: 0, positive: 0, neutral: 0, negative: 0, score: 0, scored: 0 });
-    }
-    const entry = map.get(geo);
-    if (!entry) continue;
-    entry.count += 1;
-    if (item.sentiment === "positive") entry.positive += 1;
-    if (item.sentiment === "neutral") entry.neutral += 1;
-    if (item.sentiment === "negative") entry.negative += 1;
-    const score = Number((item.signals as Record<string, unknown>)?.sentiment_score);
-    if (!Number.isNaN(score)) {
-      entry.score += score;
-      entry.scored += 1;
-    }
-  }
-
-  return Array.from(map.entries())
-    .map(([geo, entry]) => ({
-      geo,
-      count: entry.count,
-      positive: entry.positive,
-      neutral: entry.neutral,
-      negative: entry.negative,
-      avgScore: entry.scored ? entry.score / entry.scored : 0,
-    }))
-    .sort((a, b) => b.count - a.count);
-}
-
 function formatVsValue(
   principal: ReactNode,
   comparison?: ReactNode | null,
@@ -3969,33 +3803,6 @@ function formatVsValue(
       <span>{comparison}</span>
     </span>
   );
-}
-
-function buildGeoComparisonRows(
-  principalRows: ReturnType<typeof summarizeByGeo>,
-  comparisonRows: ReturnType<typeof summarizeByGeo>,
-) {
-  const principalMap = new Map(principalRows.map((row) => [row.geo, row] as const));
-  const comparisonMap = new Map(comparisonRows.map((row) => [row.geo, row] as const));
-  const orderedGeos = [
-    ...principalRows.map((row) => row.geo),
-    ...comparisonRows
-      .map((row) => row.geo)
-      .filter((geo) => !principalMap.has(geo)),
-  ];
-  const empty = {
-    geo: "",
-    count: 0,
-    positive: 0,
-    neutral: 0,
-    negative: 0,
-    avgScore: 0,
-  };
-  return orderedGeos.map((geo) => ({
-    geo,
-    principal: principalMap.get(geo) ?? { ...empty, geo },
-    comparison: comparisonMap.get(geo) ?? { ...empty, geo },
-  }));
 }
 
 function topCounts(items: ReputationItem[], getKey: (item: ReputationItem) => string) {

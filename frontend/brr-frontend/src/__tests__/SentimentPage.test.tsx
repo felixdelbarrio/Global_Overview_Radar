@@ -462,20 +462,6 @@ describe("Sentimiento page", () => {
     await waitFor(() => {
       const newsChip = screen.getByRole("button", { name: /news/i });
       expect(newsChip).toHaveTextContent(/1\s*vs\s*1/);
-      const comparisonCells = screen
-        .getAllByRole("cell")
-        .filter((cell) => /2\s*vs\s*2/.test(cell.textContent || ""));
-      expect(comparisonCells.length).toBeGreaterThanOrEqual(1);
-      const geoTitle = Array.from(document.querySelectorAll("div")).find((element) =>
-        (element.textContent || "").trim().startsWith("SENTIMIENTO POR PAÍS:"),
-      );
-      expect(geoTitle).toBeTruthy();
-      expect(geoTitle?.textContent || "").toMatch(/vs/i);
-      const geoCell = screen.getByText("España", { selector: "td" });
-      const geoRow = geoCell.closest("tr");
-      expect(geoRow).toBeTruthy();
-      const mentionsCell = within(geoRow as HTMLElement).getAllByRole("cell")[1];
-      expect(mentionsCell).toHaveTextContent(/2\s*vs\s*2/);
 
       const topSourcesBlock = screen.getByText("TOP FUENTES").parentElement;
       expect(topSourcesBlock).toBeTruthy();
@@ -514,11 +500,6 @@ describe("Sentimiento page", () => {
       const newsChip = screen.getByRole("button", { name: /news/i });
       expect(within(newsChip).getByText("1")).toBeInTheDocument();
       expect(within(newsChip).queryByText(/vs/i)).not.toBeInTheDocument();
-      const geoTitle = Array.from(document.querySelectorAll("div")).find((element) =>
-        (element.textContent || "").trim().startsWith("SENTIMIENTO POR PAÍS:"),
-      );
-      expect(geoTitle).toBeTruthy();
-      expect(geoTitle?.textContent || "").not.toMatch(/vs/i);
       const totalCard = screen.getByText("Total menciones").parentElement;
       expect(totalCard).toBeTruthy();
       expect(
