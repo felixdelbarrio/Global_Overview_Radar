@@ -814,6 +814,13 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
     () => (splitSummaryByActor ? otherSentimentSummary.positive.toLocaleString("es-ES") : null),
     [splitSummaryByActor, otherSentimentSummary.positive],
   );
+  const neutralsSummaryPrincipal = useMemo(
+    () =>
+      (isDashboard ? sentimentSummary.neutral : principalSentimentSummary.neutral).toLocaleString(
+        "es-ES",
+      ),
+    [isDashboard, sentimentSummary.neutral, principalSentimentSummary.neutral],
+  );
   const negativesSummaryPrincipal = useMemo(
     () =>
       (isDashboard ? sentimentSummary.negative : principalSentimentSummary.negative).toLocaleString(
@@ -950,7 +957,6 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
     }),
     [appleStoreEnabled, googlePlayEnabled],
   );
-  const stackSentimentSummary = isDashboard && showStoreRatingsForGeo;
   const principalMentions = useMemo(
     () => groupedMentions.filter((item) => isPrincipalGroup(item, principalAliasKeys)),
     [groupedMentions, principalAliasKeys],
@@ -1023,9 +1029,22 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
     splitResponsesByActor && responseTotalsComparison
       ? responseTotalsComparison.answeredTotal.toLocaleString("es-ES")
       : null;
-  const responseCoveragePrincipal = formatResponseCoverageFromMentions(responseTotalsPrincipal);
+  const answeredOverTotalPrincipalLabel = `${responseTotalsPrincipal.answeredTotal.toLocaleString(
+    "es-ES",
+  )}/${responseTotalsPrincipal.opinionsTotal.toLocaleString("es-ES")}`;
+  const answeredOverTotalComparisonLabel =
+    splitResponsesByActor && responseTotalsComparison
+      ? `${responseTotalsComparison.answeredTotal.toLocaleString(
+          "es-ES",
+        )}/${responseTotalsComparison.opinionsTotal.toLocaleString("es-ES")}`
+      : null;
+  const responseCoveragePrincipal = formatResponseCoverageFromMentions(responseTotalsPrincipal, {
+    includeTotals: !isDashboard,
+  });
   const responseCoverageComparison = responseTotalsComparison
-    ? formatResponseCoverageFromMentions(responseTotalsComparison)
+    ? formatResponseCoverageFromMentions(responseTotalsComparison, {
+        includeTotals: !isDashboard,
+      })
     : null;
   const headerEyebrow = isDashboard
     ? "Dashboard"
@@ -1393,50 +1412,63 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
             RESUMEN
           </div>
           <div className="mt-4 grid grid-cols-2 gap-3">
-            <SummaryCard
-              label="Total menciones"
-              value={formatVsValue(mentionsSummaryPrincipal, mentionsSummaryComparison)}
-              loading={itemsLoading}
-            />
-            <SummaryCard
-              label="Score medio"
-              value={formatVsValue(scoreSummaryPrincipal, scoreSummaryComparison)}
-              loading={itemsLoading}
-            />
-            {showStoreRatingsForGeo && (
-              <StoreRatingCard
-                label="Rating oficial"
-                ratings={principalStoreRatings}
-                loading={itemsLoading}
-                visibility={storeRatingVisibility}
-                history={marketRatingsHistory}
-              />
-            )}
-            {showStoreRatingsForGeo && !isDashboard && comparisonsEnabled && (
-              <StoreRatingCard
-                label="Rating oficial otros actores"
-                ratings={actorStoreRatings}
-                loading={itemsLoading}
-                visibility={storeRatingVisibility}
-                history={marketRatingsHistory}
-                emptyLabel="Selecciona actor"
-              />
-            )}
-            {stackSentimentSummary ? (
-              <div className="flex flex-col gap-3">
+            {isDashboard ? (
+              <>
                 <SummaryCard
-                  label="Positivas"
-                  value={formatVsValue(positivesSummaryPrincipal, positivesSummaryComparison)}
+                  label="Score medio"
+                  value={scoreSummaryPrincipal}
+                  loading={itemsLoading}
+                  className={showStoreRatingsForGeo ? undefined : "col-span-2"}
+                />
+                {showStoreRatingsForGeo && (
+                  <StoreRatingCard
+                    label="Rating oficial"
+                    ratings={principalStoreRatings}
+                    loading={itemsLoading}
+                    visibility={storeRatingVisibility}
+                    history={marketRatingsHistory}
+                    layout="columns"
+                  />
+                )}
+                <PrincipalMentionsCard
+                  totalMentions={mentionsSummaryPrincipal}
+                  positiveMentions={positivesSummaryPrincipal}
+                  neutralMentions={neutralsSummaryPrincipal}
+                  negativeMentions={negativesSummaryPrincipal}
                   loading={itemsLoading}
                 />
-                <SummaryCard
-                  label="Negativas"
-                  value={formatVsValue(negativesSummaryPrincipal, negativesSummaryComparison)}
-                  loading={itemsLoading}
-                />
-              </div>
+              </>
             ) : (
               <>
+                <SummaryCard
+                  label="Total menciones"
+                  value={formatVsValue(mentionsSummaryPrincipal, mentionsSummaryComparison)}
+                  loading={itemsLoading}
+                />
+                <SummaryCard
+                  label="Score medio"
+                  value={formatVsValue(scoreSummaryPrincipal, scoreSummaryComparison)}
+                  loading={itemsLoading}
+                />
+                {showStoreRatingsForGeo && (
+                  <StoreRatingCard
+                    label="Rating oficial"
+                    ratings={principalStoreRatings}
+                    loading={itemsLoading}
+                    visibility={storeRatingVisibility}
+                    history={marketRatingsHistory}
+                  />
+                )}
+                {showStoreRatingsForGeo && comparisonsEnabled && (
+                  <StoreRatingCard
+                    label="Rating oficial otros actores"
+                    ratings={actorStoreRatings}
+                    loading={itemsLoading}
+                    visibility={storeRatingVisibility}
+                    history={marketRatingsHistory}
+                    emptyLabel="Selecciona actor"
+                  />
+                )}
                 <SummaryCard
                   label="Positivas"
                   value={formatVsValue(positivesSummaryPrincipal, positivesSummaryComparison)}
@@ -1457,12 +1489,20 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
                   className="text-[11px] uppercase tracking-[0.16em] text-[color:var(--text-45)]"
                 >
                   <span className="inline-flex items-center gap-1">
-                    {formatVsValue(answeredTotalPrincipalLabel, answeredTotalComparisonLabel, {
-                      containerClassName: "inline-flex items-center whitespace-nowrap",
-                      vsClassName:
-                        "mx-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-[color:var(--text-45)]",
-                    })}
-                    <span>opiniones contestadas</span>
+                    {formatVsValue(
+                      isDashboard ? answeredOverTotalPrincipalLabel : answeredTotalPrincipalLabel,
+                      isDashboard ? answeredOverTotalComparisonLabel : answeredTotalComparisonLabel,
+                      {
+                        containerClassName: "inline-flex items-center whitespace-nowrap",
+                        vsClassName:
+                          "mx-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-[color:var(--text-45)]",
+                      },
+                    )}
+                    <span>
+                      {isDashboard
+                        ? "opiniones del market contestadas"
+                        : "opiniones contestadas"}
+                    </span>
                   </span>
                 </div>
                 <div className="mt-1 text-[10px] text-[color:var(--text-55)]">
@@ -1483,17 +1523,33 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
                       <ResponseStat
                         label="Positivas"
                         value={responseTotalsPrincipal.answeredPositive}
+                        denominator={
+                          isDashboard ? responseTotalsPrincipal.opinionsPositive : null
+                        }
                         comparisonValue={responseTotalsComparison?.answeredPositive ?? null}
+                        comparisonDenominator={
+                          isDashboard ? responseTotalsComparison?.opinionsPositive ?? null : null
+                        }
                       />
                       <ResponseStat
                         label="Neutras"
                         value={responseTotalsPrincipal.answeredNeutral}
+                        denominator={isDashboard ? responseTotalsPrincipal.opinionsNeutral : null}
                         comparisonValue={responseTotalsComparison?.answeredNeutral ?? null}
+                        comparisonDenominator={
+                          isDashboard ? responseTotalsComparison?.opinionsNeutral ?? null : null
+                        }
                       />
                       <ResponseStat
                         label="Negativas"
                         value={responseTotalsPrincipal.answeredNegative}
+                        denominator={
+                          isDashboard ? responseTotalsPrincipal.opinionsNegative : null
+                        }
                         comparisonValue={responseTotalsComparison?.answeredNegative ?? null}
+                        comparisonDenominator={
+                          isDashboard ? responseTotalsComparison?.opinionsNegative ?? null : null
+                        }
                       />
                     </div>
                     <div className="mt-2 text-[11px] text-[color:var(--text-55)]">
@@ -1957,13 +2013,17 @@ function SummaryCard({
   label,
   value,
   loading = false,
+  className = "",
 }: {
   label: string;
   value: ReactNode;
   loading?: boolean;
+  className?: string;
 }) {
   return (
-    <div className="relative overflow-hidden rounded-2xl border border-[color:var(--border-70)] bg-[color:var(--surface-80)] px-4 py-3 shadow-[var(--shadow-soft)]">
+    <div
+      className={`relative overflow-hidden rounded-2xl border border-[color:var(--border-70)] bg-[color:var(--surface-80)] px-4 py-3 shadow-[var(--shadow-soft)] ${className}`.trim()}
+    >
       <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-[color:var(--aqua)] via-[color:var(--blue)] to-transparent" />
       <div className="text-[11px] uppercase tracking-[0.16em] text-[color:var(--text-45)]">
         {label}
@@ -1979,18 +2039,83 @@ function SummaryCard({
   );
 }
 
+function PrincipalMentionsCard({
+  totalMentions,
+  positiveMentions,
+  neutralMentions,
+  negativeMentions,
+  loading = false,
+}: {
+  totalMentions: ReactNode;
+  positiveMentions: ReactNode;
+  neutralMentions: ReactNode;
+  negativeMentions: ReactNode;
+  loading?: boolean;
+}) {
+  return (
+    <div className="col-span-2 relative overflow-hidden rounded-2xl border border-[color:var(--border-70)] bg-[color:var(--surface-80)] px-4 py-3 shadow-[var(--shadow-soft)]">
+      <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-[color:var(--aqua)] via-[color:var(--blue)] to-transparent" />
+      <div className="text-[11px] uppercase tracking-[0.16em] text-[color:var(--text-45)]">
+        Menciones actor principal
+      </div>
+      {loading ? (
+        <div className="mt-3 space-y-2">
+          <LoadingPill className="h-6 w-28" label="Cargando menciones actor principal" />
+          <LoadingPill className="h-3 w-full" label="Cargando menciones actor principal" />
+        </div>
+      ) : (
+        <>
+          <div className="mt-2 text-2xl font-display font-semibold text-[color:var(--ink)]">
+            {totalMentions}
+            <span className="ml-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--text-45)]">
+              menciones actor principal
+            </span>
+          </div>
+          <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3 text-xs">
+            <ResponseStat label="Positivas" value={toNumberOrZero(positiveMentions)} />
+            <ResponseStat label="Neutras" value={toNumberOrZero(neutralMentions)} />
+            <ResponseStat label="Negativas" value={toNumberOrZero(negativeMentions)} />
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function toNumberOrZero(value: ReactNode): number {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const normalized = value.replace(/\./g, "").replace(",", ".");
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+}
+
+function formatCountRatioLabel(value: number, denominator?: number | null): string {
+  const numeratorLabel = value.toLocaleString("es-ES");
+  if (typeof denominator !== "number") return numeratorLabel;
+  return `${numeratorLabel}/${denominator.toLocaleString("es-ES")}`;
+}
+
 function ResponseStat({
   label,
   value,
+  denominator = null,
   comparisonValue = null,
+  comparisonDenominator = null,
 }: {
   label: string;
   value: number;
+  denominator?: number | null;
   comparisonValue?: number | null;
+  comparisonDenominator?: number | null;
 }) {
-  const principal = value.toLocaleString("es-ES");
+  const principal = formatCountRatioLabel(value, denominator);
   const comparison =
-    typeof comparisonValue === "number" ? comparisonValue.toLocaleString("es-ES") : null;
+    typeof comparisonValue === "number"
+      ? formatCountRatioLabel(comparisonValue, comparisonDenominator)
+      : null;
   return (
     <div className="rounded-xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-2 py-1.5 text-center">
       <div className="text-[10px] uppercase tracking-[0.16em] text-[color:var(--text-45)]">
@@ -2014,6 +2139,7 @@ function StoreRatingCard({
   visibility,
   emptyLabel = "—",
   history,
+  layout = "stack",
 }: {
   label: string;
   ratings: ActorStoreRatings | null;
@@ -2021,10 +2147,40 @@ function StoreRatingCard({
   visibility: { showApple: boolean; showGoogle: boolean };
   emptyLabel?: string;
   history?: MarketRating[];
+  layout?: "stack" | "columns";
 }) {
   const showApple = visibility.showApple;
   const showGoogle = visibility.showGoogle;
-  const showRows = showApple || showGoogle;
+  const rows = [
+    showApple
+      ? {
+          key: "apple",
+          icon: <AppleMark className="h-5 w-5" />,
+          current: ratings?.appstore ?? null,
+          tone: "apple" as const,
+          platformLabel: "Apple",
+        }
+      : null,
+    showGoogle
+      ? {
+          key: "google",
+          icon: <AndroidMark className="h-5 w-5" />,
+          current: ratings?.google_play ?? null,
+          tone: "google" as const,
+          platformLabel: "Android",
+        }
+      : null,
+  ].filter(Boolean) as Array<{
+    key: string;
+    icon: ReactNode;
+    current: MarketRating | null;
+    tone: "apple" | "google";
+    platformLabel: string;
+  }>;
+  const rowsClassName =
+    layout === "columns"
+      ? "mt-3 mt-auto grid grid-cols-2 gap-2"
+      : "mt-3 mt-auto space-y-2";
   return (
     <div className="relative flex h-full flex-col overflow-hidden rounded-2xl border border-[color:var(--border-70)] bg-[color:var(--surface-80)] px-4 py-3 shadow-[var(--shadow-soft)]">
       <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-[color:var(--aqua)] via-[color:var(--blue)] to-transparent" />
@@ -2039,26 +2195,20 @@ function StoreRatingCard({
       ) : !ratings ? (
         <div className="mt-3 text-sm text-[color:var(--text-55)]">{emptyLabel}</div>
       ) : (
-        <div className="mt-3 mt-auto space-y-2">
-          {showRows && showApple && (
-            <StoreRatingRow
-              icon={<AppleMark className="h-5 w-5" />}
-              current={ratings.appstore ?? null}
-              history={history}
-              tone="apple"
-            />
-          )}
-          {showRows && showGoogle && (
-            <StoreRatingRow
-              icon={<AndroidMark className="h-5 w-5" />}
-              current={ratings.google_play ?? null}
-              history={history}
-              tone="google"
-            />
-          )}
-          {!showRows && (
+        <div className={rowsClassName}>
+          {rows.length === 0 && (
             <div className="text-sm text-[color:var(--text-55)]">—</div>
           )}
+          {rows.map((row) => (
+            <StoreRatingRow
+              key={row.key}
+              icon={row.icon}
+              current={row.current}
+              history={history}
+              tone={row.tone}
+              platformLabel={row.platformLabel}
+            />
+          ))}
         </div>
       )}
     </div>
@@ -2070,11 +2220,13 @@ function StoreRatingRow({
   current,
   history,
   tone,
+  platformLabel,
 }: {
   icon: ReactNode;
   current: MarketRating | null;
   history?: MarketRating[];
   tone: "apple" | "google";
+  platformLabel?: string;
 }) {
   const value = current?.rating ?? null;
   const hasValue = typeof value === "number" && Number.isFinite(value);
@@ -2097,17 +2249,24 @@ function StoreRatingRow({
       >
         {icon}
       </div>
-      <div
-        className={`text-right text-lg font-display font-semibold ${
-          hasValue ? "text-[color:var(--ink)]" : "text-[color:var(--text-45)]"
-        }`}
-      >
-        {hasValue ? value.toFixed(2) : "—"}
-        {hasValue && (
-          <span className="ml-1 text-[11px] text-[color:var(--text-45)]">
-            /5
-          </span>
+      <div className="text-right">
+        {platformLabel && (
+          <div className="text-[9px] uppercase tracking-[0.14em] text-[color:var(--text-45)]">
+            {platformLabel}
+          </div>
         )}
+        <div
+          className={`text-lg font-display font-semibold ${
+            hasValue ? "text-[color:var(--ink)]" : "text-[color:var(--text-45)]"
+          }`}
+        >
+          {hasValue ? value.toFixed(2) : "—"}
+          {hasValue && (
+            <span className="ml-1 text-[11px] text-[color:var(--text-45)]">
+              /5
+            </span>
+          )}
+        </div>
       </div>
       <span
         title={trendTooltip}
@@ -3275,6 +3434,9 @@ function cleanText(value?: string | null) {
 
 type AnsweredMentionTotals = {
   opinionsTotal: number;
+  opinionsPositive: number;
+  opinionsNeutral: number;
+  opinionsNegative: number;
   answeredTotal: number;
   answeredPositive: number;
   answeredNeutral: number;
@@ -3285,6 +3447,9 @@ type AnsweredMentionTotals = {
 function summarizeAnsweredMentions(items: MentionGroup[]): AnsweredMentionTotals {
   const totals: AnsweredMentionTotals = {
     opinionsTotal: items.length,
+    opinionsPositive: 0,
+    opinionsNeutral: 0,
+    opinionsNegative: 0,
     answeredTotal: 0,
     answeredPositive: 0,
     answeredNeutral: 0,
@@ -3292,6 +3457,9 @@ function summarizeAnsweredMentions(items: MentionGroup[]): AnsweredMentionTotals
     answeredRatio: 0,
   };
   for (const item of items) {
+    if (item.sentiment === "positive") totals.opinionsPositive += 1;
+    if (item.sentiment === "neutral") totals.opinionsNeutral += 1;
+    if (item.sentiment === "negative") totals.opinionsNegative += 1;
     const isAnswered = Boolean(item.reply_text || item.reply_author || item.replied_at);
     if (!isAnswered) continue;
     totals.answeredTotal += 1;
@@ -3305,8 +3473,13 @@ function summarizeAnsweredMentions(items: MentionGroup[]): AnsweredMentionTotals
   return totals;
 }
 
-function formatResponseCoverageFromMentions(totals: AnsweredMentionTotals): string {
-  return `${(totals.answeredRatio * 100).toFixed(1)}% (${totals.answeredTotal}/${totals.opinionsTotal})`;
+function formatResponseCoverageFromMentions(
+  totals: AnsweredMentionTotals,
+  options?: { includeTotals?: boolean },
+): string {
+  const percent = `${(totals.answeredRatio * 100).toFixed(1)}%`;
+  if (options?.includeTotals === false) return percent;
+  return `${percent} (${totals.answeredTotal}/${totals.opinionsTotal})`;
 }
 
 function formatDate(value?: string | null, withTime = true) {

@@ -275,6 +275,155 @@ describe("SentimentView dashboard", () => {
     expect(Boolean(googlePlay.compareDocumentPosition(downdetector) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
   });
 
+  it("renders dashboard summary with actor mentions, market responses ratios and response coverage percent", async () => {
+    const handleGet = (path: string) => {
+      if (path.startsWith("/reputation/meta")) {
+        return Promise.resolve({
+          ...metaResponse,
+          ui_show_dashboard_responses: true,
+          sources_enabled: ["appstore", "google_play"],
+          sources_available: ["appstore", "google_play"],
+          market_ratings: [
+            {
+              source: "appstore",
+              actor: "Acme Bank",
+              geo: "España",
+              rating: 4.12,
+              rating_count: 120,
+              collected_at: "2025-01-01T00:00:00Z",
+            },
+            {
+              source: "google_play",
+              actor: "Acme Bank",
+              geo: "España",
+              rating: 4.6,
+              rating_count: 240,
+              collected_at: "2025-01-01T00:00:00Z",
+            },
+          ],
+        });
+      }
+      if (path.startsWith("/reputation/profiles")) {
+        return Promise.resolve(profilesResponse);
+      }
+      if (path.startsWith("/reputation/items")) {
+        return Promise.resolve({
+          ...itemsResponse,
+          sources_enabled: ["appstore", "google_play"],
+          items: [
+            {
+              id: "dash-1",
+              source: "appstore",
+              geo: "España",
+              actor: "Acme Bank",
+              title: "Muy buena",
+              text: "Me gusta la app",
+              sentiment: "positive",
+              published_at: "2025-01-01T10:00:00Z",
+              signals: {
+                sentiment_score: 0.6,
+                reply_text: "Gracias por tu comentario",
+              },
+            },
+            {
+              id: "dash-2",
+              source: "google_play",
+              geo: "España",
+              actor: "Acme Bank",
+              title: "Puede mejorar",
+              text: "Regular",
+              sentiment: "neutral",
+              published_at: "2025-01-02T10:00:00Z",
+              signals: { sentiment_score: 0.0 },
+            },
+            {
+              id: "dash-3",
+              source: "google_play",
+              geo: "España",
+              actor: "Acme Bank",
+              title: "Mala experiencia",
+              text: "No funciona",
+              sentiment: "negative",
+              published_at: "2025-01-03T10:00:00Z",
+              signals: {
+                sentiment_score: -0.8,
+                reply_text: "Estamos revisándolo",
+              },
+            },
+          ],
+          stats: { count: 3 },
+        });
+      }
+      if (path.startsWith("/reputation/responses/summary")) {
+        return Promise.resolve({
+          totals: {
+            opinions_total: 3,
+            answered_total: 2,
+            answered_ratio: 2 / 3,
+            answered_positive: 1,
+            answered_neutral: 0,
+            answered_negative: 1,
+            unanswered_positive: 0,
+            unanswered_neutral: 1,
+            unanswered_negative: 0,
+          },
+          actor_breakdown: [],
+          repeated_replies: [],
+          answered_items: [],
+        });
+      }
+      if (path.startsWith("/reputation/markets/insights")) {
+        return Promise.resolve({
+          generated_at: "2025-01-12T00:00:00Z",
+          principal_actor: "Acme Bank",
+          comparisons_enabled: false,
+          filters: { geo: "España", from_date: "2025-01-01", to_date: "2025-01-31", sources: [] },
+          kpis: {
+            total_mentions: 3,
+            negative_mentions: 1,
+            negative_ratio: 1 / 3,
+            positive_mentions: 1,
+            neutral_mentions: 1,
+            unique_authors: 3,
+            recurring_authors: 0,
+            average_sentiment_score: -0.07,
+          },
+          daily_volume: [{ date: "2025-01-01", count: 3 }],
+          geo_summary: [],
+          recurring_authors: [],
+          top_penalized_features: [{ feature: "login", key: "login", count: 2, evidence: [] }],
+          source_friction: [],
+          alerts: [],
+          responses: undefined,
+          newsletter_by_geo: [],
+        });
+      }
+      if (path.startsWith("/reputation/settings")) {
+        return Promise.resolve({ groups: [], advanced_options: [] });
+      }
+      return Promise.resolve({});
+    };
+
+    apiGetMock.mockImplementation(handleGet);
+    apiGetCachedMock.mockImplementation(handleGet);
+
+    render(<SentimentView mode="dashboard" />);
+
+    expect(await screen.findByText("Menciones actor principal")).toBeInTheDocument();
+    expect(await screen.findByText("opiniones del market contestadas")).toBeInTheDocument();
+    expect(screen.getByText("Apple")).toBeInTheDocument();
+    expect(screen.getByText("Android")).toBeInTheDocument();
+
+    const responsesTitle = screen.getByTestId("responses-summary-title");
+    expect(responsesTitle).toHaveTextContent("2/3");
+    const responsesCard = responsesTitle.parentElement?.parentElement;
+    expect(responsesCard).toBeTruthy();
+    expect((responsesCard?.textContent || "").includes("1/1")).toBe(true);
+    expect((responsesCard?.textContent || "").includes("0/1")).toBe(true);
+    expect((responsesCard?.textContent || "").includes("66.7%")).toBe(true);
+    expect((responsesCard?.textContent || "").includes("(2/3)")).toBe(false);
+  });
+
   it("uses natural month range and supports month navigation", async () => {
     render(<SentimentView mode="dashboard" />);
     await screen.findByText("Dashboard reputacional");
