@@ -1,14 +1,19 @@
 from __future__ import annotations
 
+import logging
 import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+from pydantic import ValidationError
+
 from reputation.actors import build_actor_alias_map, canonicalize_actor
 from reputation.config import REPO_ROOT
 from reputation.models import ReputationCacheDocument
 from reputation.state_store import state_store_enabled, sync_from_state, sync_to_state
+
+logger = logging.getLogger(__name__)
 
 
 class ReputationCacheRepo:
@@ -22,9 +27,18 @@ class ReputationCacheRepo:
             return None
         import json
 
-        with self._path.open("r", encoding="utf-8") as f:
-            data = json.load(f)
-        doc = ReputationCacheDocument.model_validate(data)
+        try:
+            with self._path.open("r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception:
+            logger.exception("Failed to parse reputation cache JSON at %s", self._path)
+            return None
+
+        try:
+            doc = ReputationCacheDocument.model_validate(data)
+        except ValidationError:
+            logger.exception("Invalid reputation cache document at %s", self._path)
+            return None
 
         # Cargar aliases desde el fichero central de configuración
         # `data/reputation/config.json` si está disponible. Este fichero
