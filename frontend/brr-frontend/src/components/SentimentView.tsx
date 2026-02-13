@@ -911,22 +911,24 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
     () => (selectedActor ? normalizeKey(selectedActor) : null),
     [selectedActor],
   );
-  const filteredSecondaryItems = useMemo(
+  const filteredMarketItems = useMemo(
     () =>
       selectedActorKey
-        ? otherItems.filter(
-            (item) => normalizeKey(item.actor || "") === selectedActorKey,
+        ? items.filter(
+            (item) =>
+              isPrincipalItem(item, principalAliasKeys) ||
+              normalizeKey(item.actor || "") === selectedActorKey,
           )
-        : otherItems,
-    [otherItems, selectedActorKey],
+        : items,
+    [items, principalAliasKeys, selectedActorKey],
   );
   const marketActorRows = useMemo(
-    () => buildMarketActorRows(filteredSecondaryItems),
-    [filteredSecondaryItems],
+    () => buildMarketActorRows(filteredMarketItems),
+    [filteredMarketItems],
   );
   const marketSourceTotals = useMemo(
-    () => countMarketSourceTotals(filteredSecondaryItems),
-    [filteredSecondaryItems],
+    () => countMarketSourceTotals(filteredMarketItems),
+    [filteredMarketItems],
   );
   const selectedMarketActorLabel = selectedActor || "Otro actor del mercado";
   const storeSourcesEnabled = useMemo(
@@ -1434,7 +1436,7 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
               style={{ animationDelay: "180ms" }}
             >
               <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
-                OTROS ACTORES DEL MERCADO
+                ACTORES DEL MERCADO
               </div>
               <div className="mt-2 space-y-2">
                 {itemsLoading ? (

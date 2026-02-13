@@ -578,12 +578,13 @@ describe("Sentimiento page", () => {
 
     await waitFor(() => {
       expect(screen.queryByText("TOP OTROS ACTORES DEL MERCADO")).not.toBeInTheDocument();
-      const actorsTitle = screen.getByText("OTROS ACTORES DEL MERCADO");
+      const actorsTitle = screen.getByText("ACTORES DEL MERCADO");
       const actorsBlock = actorsTitle.parentElement;
       expect(actorsBlock).toBeTruthy();
-      expect(within(actorsBlock as HTMLElement).getByText("App Store (3)")).toBeInTheDocument();
+      expect(within(actorsBlock as HTMLElement).getByText("App Store (4)")).toBeInTheDocument();
       expect(within(actorsBlock as HTMLElement).getByText("Google Play (4)")).toBeInTheDocument();
       expect(within(actorsBlock as HTMLElement).getByText("Downdetector (3)")).toBeInTheDocument();
+      expect(within(actorsBlock as HTMLElement).getByText("Acme Bank")).toBeInTheDocument();
       expect(within(actorsBlock as HTMLElement).getByText("Revolut")).toBeInTheDocument();
       expect(within(actorsBlock as HTMLElement).getByText("CaixaBank")).toBeInTheDocument();
       expect(within(actorsBlock as HTMLElement).getByText("Openbank")).toBeInTheDocument();
@@ -759,11 +760,12 @@ describe("Sentimiento page", () => {
     fireEvent.change(actorSelect, { target: { value: "Santander" } });
 
     await waitFor(() => {
-      const actorsBlock = screen.getByText("OTROS ACTORES DEL MERCADO").parentElement;
+      const actorsBlock = screen.getByText("ACTORES DEL MERCADO").parentElement;
       expect(actorsBlock).toBeTruthy();
+      expect(within(actorsBlock as HTMLElement).getByText("Acme Bank")).toBeInTheDocument();
       expect(within(actorsBlock as HTMLElement).getByText("Santander")).toBeInTheDocument();
       expect(within(actorsBlock as HTMLElement).queryByText("CaixaBank")).not.toBeInTheDocument();
-      expect(within(actorsBlock as HTMLElement).getByText("App Store (1)")).toBeInTheDocument();
+      expect(within(actorsBlock as HTMLElement).getByText("App Store (2)")).toBeInTheDocument();
       expect(within(actorsBlock as HTMLElement).getByText("Google Play (0)")).toBeInTheDocument();
       expect(within(actorsBlock as HTMLElement).getByText("Downdetector (1)")).toBeInTheDocument();
     });
@@ -823,13 +825,13 @@ describe("Sentimiento page", () => {
       expect(newsChip).toHaveTextContent(/1\s*vs\s*1/);
       expect(screen.queryByText("TOP FUENTES")).not.toBeInTheDocument();
 
-      const actorsBlock = screen.getByText("OTROS ACTORES DEL MERCADO").parentElement;
+      const actorsBlock = screen.getByText("ACTORES DEL MERCADO").parentElement;
       expect(actorsBlock).toBeTruthy();
-      expect(within(actorsBlock as HTMLElement).getByText("App Store (0)")).toBeInTheDocument();
+      expect(within(actorsBlock as HTMLElement).getByText("App Store (1)")).toBeInTheDocument();
       expect(within(actorsBlock as HTMLElement).getByText("Google Play (1)")).toBeInTheDocument();
       expect(within(actorsBlock as HTMLElement).getByText("Downdetector (0)")).toBeInTheDocument();
+      expect(within(actorsBlock as HTMLElement).getByText("Acme Bank")).toBeInTheDocument();
       expect(within(actorsBlock as HTMLElement).getByText("Beta Bank")).toBeInTheDocument();
-      expect(within(actorsBlock as HTMLElement).getByText("1")).toBeInTheDocument();
     });
   });
 
@@ -868,7 +870,7 @@ describe("Sentimiento page", () => {
       ).toBeInTheDocument();
       expect(within(totalCard as HTMLElement).queryByText(/vs/i)).not.toBeInTheDocument();
       expect(screen.queryByText("TOP FUENTES")).not.toBeInTheDocument();
-      expect(screen.queryByText("OTROS ACTORES DEL MERCADO")).not.toBeInTheDocument();
+      expect(screen.queryByText("ACTORES DEL MERCADO")).not.toBeInTheDocument();
     });
   });
 
