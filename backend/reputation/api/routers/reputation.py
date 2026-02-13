@@ -153,8 +153,6 @@ def _enforce_star_sentiment(item: ReputationItem) -> None:
     if stars is None:
         return
     label, score = _sentiment_from_stars(stars)
-    if not isinstance(item.signals, dict):
-        item.signals = {}
     item.sentiment = label
     item.signals["sentiment_score"] = score
     item.signals["sentiment_provider"] = "stars"

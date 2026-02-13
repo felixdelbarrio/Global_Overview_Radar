@@ -1532,8 +1532,7 @@ class ReputationIngestService:
             star_items = [
                 item
                 for item in valid_items
-                if item.source in _STAR_SENTIMENT_SOURCES
-                and _extract_star_rating(item) is not None
+                if item.source in _STAR_SENTIMENT_SOURCES and _extract_star_rating(item) is not None
             ]
             new_items = [
                 item for item in valid_items if (item.source, item.id) not in existing_keys

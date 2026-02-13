@@ -287,7 +287,11 @@ def test_ingest_service_ignores_manual_override_for_market_sources(
     service = ReputationIngestService()
     items = [
         ReputationItem(
-            id="market-1", source="google_play", title="x", text="y", signals={"rating": 1}
+            id="market-1",
+            source="google_play",
+            title="x",
+            text="y",
+            signals={"rating": 1},
         ),
         ReputationItem(id="news-1", source="news", title="x", text="y", signals={}),
     ]
@@ -351,7 +355,11 @@ def test_ingest_service_recomputes_store_sentiment_even_for_existing_ids(
             title="Antes",
             text="",
             sentiment="neutral",
-            signals={"rating": 1, "sentiment_provider": "stars", "sentiment_score": 0.0},
+            signals={
+                "rating": 1,
+                "sentiment_provider": "stars",
+                "sentiment_score": 0.0,
+            },
         )
     ]
     incoming = [
