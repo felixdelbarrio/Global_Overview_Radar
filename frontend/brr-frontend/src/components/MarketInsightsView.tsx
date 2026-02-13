@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import {
-  AlertTriangle,
   Calendar,
   CheckCircle2,
   Clipboard,
@@ -61,14 +60,6 @@ function buildOpinionComment(title: string | undefined, excerpt: string | undefi
       : `${cleanTitle} ${cleanExcerpt}`;
   }
   return cleanTitle || cleanExcerpt;
-}
-
-function severityTone(severity: string): string {
-  const normalized = severity.toLowerCase();
-  if (normalized === "critical") return "text-rose-300 border-rose-400/40 bg-rose-500/10";
-  if (normalized === "high") return "text-amber-300 border-amber-400/40 bg-amber-500/10";
-  if (normalized === "medium") return "text-sky-300 border-sky-400/40 bg-sky-500/10";
-  return "text-emerald-300 border-emerald-400/40 bg-emerald-500/10";
 }
 
 export function MarketInsightsView() {
@@ -217,17 +208,8 @@ export function MarketInsightsView() {
     window.URL.revokeObjectURL(url);
   };
 
-  const maxFeatureCount = useMemo(
-    () =>
-      Math.max(
-        1,
-        ...(insights?.top_penalized_features.map((entry) => entry.count) ?? [1]),
-      ),
-    [insights],
-  );
-
   const headerSubtitle =
-    "Inteligencia de mercado lista para acción: voces insistentes, funcionalidades más penalizadas, alertas y edición de newsletter por geografía. Solo actor principal.";
+    "Inteligencia de mercado lista para acción: voces insistentes, respuestas oficiales y edición de newsletter por geografía. Solo actor principal.";
   const responseTotals = insights?.responses?.totals;
   const repeatedReplies = insights?.responses?.repeated_replies ?? [];
   const actorReplies = insights?.responses?.actor_breakdown ?? [];
@@ -451,7 +433,7 @@ export function MarketInsightsView() {
             </article>
           </section>
 
-          <section className="mt-4 grid grid-cols-1 xl:grid-cols-[1.2fr_1fr] gap-4">
+          <section className="mt-4">
             <article className="rounded-[24px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-5 shadow-[var(--shadow-md)]">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-sm font-semibold tracking-[0.2em] uppercase text-[color:var(--blue)]">
@@ -524,107 +506,6 @@ export function MarketInsightsView() {
                       })}
                     </ul>
                   </details>
-                ))}
-              </div>
-            </article>
-
-            <article className="rounded-[24px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-5 shadow-[var(--shadow-md)]">
-              <h2 className="text-sm font-semibold tracking-[0.2em] uppercase text-[color:var(--blue)]">
-                Top 10 funcionalidades penalizadas
-              </h2>
-              <p className="mt-2 text-xs text-[color:var(--text-55)]">
-                Ranking de fricción en opiniones negativas.
-              </p>
-              <div className="mt-4 space-y-3">
-                {insights.top_penalized_features.length === 0 && (
-                  <div className="rounded-xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-2 text-sm text-[color:var(--text-55)]">
-                    No hay volumen negativo suficiente para construir ranking.
-                  </div>
-                )}
-                {insights.top_penalized_features.map((entry, index) => (
-                  <div
-                    key={entry.key}
-                    className="rounded-xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-3 py-2"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="text-sm text-[color:var(--ink)]">
-                        {index + 1}. {entry.feature}
-                      </div>
-                      <span className="text-xs text-[color:var(--text-55)]">{entry.count}</span>
-                    </div>
-                    <div className="mt-2 h-2 rounded-full bg-[color:var(--surface-60)] overflow-hidden">
-                      <div
-                        className="h-full rounded-full bg-gradient-to-r from-[color:var(--aqua)] to-[color:var(--blue)]"
-                        style={{ width: `${(entry.count / maxFeatureCount) * 100}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </article>
-          </section>
-
-          <section className="mt-4 grid grid-cols-1 xl:grid-cols-[1.15fr_1fr] gap-4">
-            <article className="rounded-[24px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-5 shadow-[var(--shadow-md)]">
-              <h2 className="text-sm font-semibold tracking-[0.2em] uppercase text-[color:var(--blue)]">
-                Fricción por canal
-              </h2>
-              <p className="mt-2 text-xs text-[color:var(--text-55)]">
-                Dónde se concentra la negatividad y con qué intensidad.
-              </p>
-              <div className="mt-4 space-y-3">
-                {insights.source_friction.length === 0 && (
-                  <div className="rounded-xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-2 text-sm text-[color:var(--text-55)]">
-                    Sin datos para el periodo.
-                  </div>
-                )}
-                {insights.source_friction.slice(0, 8).map((source) => (
-                  <div
-                    key={source.source}
-                    className="rounded-xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-3 py-2"
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="text-sm text-[color:var(--ink)]">{source.source}</div>
-                      <div className="text-xs text-[color:var(--text-55)]">
-                        {source.negative}/{source.total} negativas ({fmtPercent(source.negative_ratio)})
-                      </div>
-                    </div>
-                    <div className="mt-2 h-2 rounded-full bg-[color:var(--surface-60)] overflow-hidden">
-                      <div
-                        className="h-full rounded-full bg-gradient-to-r from-rose-400/80 to-amber-300/80"
-                        style={{ width: `${Math.max(source.negative_ratio * 100, 3)}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </article>
-
-            <article className="rounded-[24px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-5 shadow-[var(--shadow-md)]">
-              <h2 className="text-sm font-semibold tracking-[0.2em] uppercase text-[color:var(--blue)]">
-                Alertas calientes
-              </h2>
-              <p className="mt-2 text-xs text-[color:var(--text-55)]">
-                Señales críticas para activar respuesta inmediata.
-              </p>
-              <div className="mt-4 space-y-3">
-                {insights.alerts.length === 0 && (
-                  <div className="rounded-xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-2 text-sm text-[color:var(--text-55)]">
-                    Sin alertas críticas en este corte.
-                  </div>
-                )}
-                {insights.alerts.map((alert) => (
-                  <div
-                    key={alert.id}
-                    className={`rounded-xl border px-3 py-2 ${severityTone(alert.severity)}`}
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="text-xs uppercase tracking-[0.18em]">{alert.severity}</div>
-                      <AlertTriangle className="h-4 w-4" />
-                    </div>
-                    <div className="mt-1 text-sm font-semibold">{alert.title}</div>
-                    <div className="mt-1 text-xs opacity-90">{alert.summary}</div>
-                  </div>
                 ))}
               </div>
             </article>

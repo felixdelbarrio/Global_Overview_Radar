@@ -188,9 +188,11 @@ describe("MarketsPage", () => {
 
     expect(await screen.findByText("Wow Radar de mercado")).toBeInTheDocument();
     expect(await screen.findByText("Voces insistentes")).toBeInTheDocument();
-    expect(await screen.findByText("Top 10 funcionalidades penalizadas")).toBeInTheDocument();
     expect(await screen.findByText("Newsletter por geografía")).toBeInTheDocument();
     expect(await screen.findByText("Respuestas oficiales")).toBeInTheDocument();
+    expect(screen.queryByText("Top 10 funcionalidades penalizadas")).not.toBeInTheDocument();
+    expect(screen.queryByText("Fricción por canal")).not.toBeInTheDocument();
+    expect(screen.queryByText("Alertas calientes")).not.toBeInTheDocument();
     expect(await screen.findByText("Ana")).toBeInTheDocument();
     expect(await screen.findByText("Autor: ana_1989")).toBeInTheDocument();
     expect(await screen.findByText("ID: a1")).toBeInTheDocument();

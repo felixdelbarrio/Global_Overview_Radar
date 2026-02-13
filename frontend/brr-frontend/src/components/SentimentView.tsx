@@ -8,6 +8,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import dynamic from "next/dynamic";
 import {
+  AlertTriangle,
   ArrowUpRight,
   Building2,
   Calendar,
@@ -42,6 +43,7 @@ import {
 } from "@/lib/reputationSources";
 import type {
   ActorPrincipalMeta,
+  MarketInsightsResponse,
   MarketRating,
   IngestJob,
   ReputationCacheDocument,
@@ -106,19 +108,6 @@ const DashboardChart = dynamic(
   { ssr: false }
 );
 
-type DashboardMention = {
-  key: string;
-  kind: "sentiment";
-  title: string;
-  text?: string;
-  geo?: string;
-  actor?: string;
-  sentiment?: string | null;
-  rating?: number | null;
-  date?: string | null;
-  sources?: string[];
-};
-
 export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentViewProps) {
   const today = useMemo(() => new Date(), []);
   const defaultTo = useMemo(() => toDateInput(today), [today]);
@@ -145,6 +134,12 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
   const [meta, setMeta] = useState<ReputationMeta | null>(null);
   const [marketRatings, setMarketRatings] = useState<MarketRating[]>([]);
   const [marketRatingsHistory, setMarketRatingsHistory] = useState<MarketRating[]>([]);
+  const [dashboardMarketInsights, setDashboardMarketInsights] =
+    useState<MarketInsightsResponse | null>(null);
+  const [dashboardMarketInsightsLoading, setDashboardMarketInsightsLoading] =
+    useState(false);
+  const [dashboardMarketInsightsError, setDashboardMarketInsightsError] =
+    useState<string | null>(null);
 
   const [fromDate, setFromDate] = useState(defaultFrom);
   const [toDate, setToDate] = useState(defaultTo);
@@ -548,6 +543,60 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
     reputationRefresh,
   ]);
 
+  useEffect(() => {
+    let alive = true;
+    if (!isDashboard) {
+      setDashboardMarketInsights(null);
+      setDashboardMarketInsightsLoading(false);
+      setDashboardMarketInsightsError(null);
+      return () => {
+        alive = false;
+      };
+    }
+
+    setDashboardMarketInsightsLoading(true);
+    setDashboardMarketInsightsError(null);
+
+    const params = new URLSearchParams();
+    if (effectiveFromDate) params.set("from_date", effectiveFromDate);
+    if (effectiveToDate) params.set("to_date", effectiveToDate);
+    if (geo !== "all") params.set("geo", geo);
+    const validSources = effectiveSourcesForQuery.filter(
+      (source) => source && source !== DISABLED_SCOPE_SOURCE_SENTINEL,
+    );
+    if (validSources.length) {
+      params.set("sources", validSources.join(","));
+    }
+
+    apiGet<MarketInsightsResponse>(`/reputation/markets/insights?${params.toString()}`)
+      .then((doc) => {
+        if (!alive) return;
+        setDashboardMarketInsights(doc);
+      })
+      .catch((e) => {
+        if (!alive) return;
+        setDashboardMarketInsights(null);
+        setDashboardMarketInsightsError(String(e));
+      })
+      .finally(() => {
+        if (alive) {
+          setDashboardMarketInsightsLoading(false);
+        }
+      });
+
+    return () => {
+      alive = false;
+    };
+  }, [
+    isDashboard,
+    effectiveFromDate,
+    effectiveToDate,
+    geo,
+    effectiveSourcesForQuery,
+    profileRefresh,
+    reputationRefresh,
+  ]);
+
   const sourceCounts = useMemo(() => {
     const counts: Record<string, { principal: number; others: number; total: number }> = {};
     for (const item of items) {
@@ -910,30 +959,26 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
       }),
     [groupedMentions, principalAliasKeys, selectedActorKey],
   );
-  const dashboardMentions = useMemo(() => {
-    const sentimentBase = isDashboard
-      ? groupedMentions.filter((item) => isPrincipalGroup(item, principalAliasKeys))
-      : groupedMentions;
-    const sentimentMentions = sentimentBase.map((group) => ({
-      key: `sentiment:${group.key}`,
-      kind: "sentiment" as const,
-      title: group.title,
-      text: group.text,
-      geo: group.geo,
-      actor: group.actor,
-      sentiment: group.sentiment,
-      rating: group.rating ?? null,
-      date: group.published_at || group.collected_at || null,
-      sources: group.sources.map((src) => src.name),
-    }));
-    return sentimentMentions
-      .sort((a, b) => {
-        const da = a.date || "";
-        const db = b.date || "";
-        return db.localeCompare(da);
-      })
-      .slice(0, 20);
-  }, [groupedMentions, isDashboard, principalAliasKeys]);
+  const dashboardTopPenalizedFeatures = useMemo(
+    () => (dashboardMarketInsights?.top_penalized_features ?? []).slice(0, 10),
+    [dashboardMarketInsights],
+  );
+  const dashboardAlerts = useMemo(
+    () => dashboardMarketInsights?.alerts ?? [],
+    [dashboardMarketInsights],
+  );
+  const dashboardSourceFriction = useMemo(
+    () => dashboardMarketInsights?.source_friction ?? [],
+    [dashboardMarketInsights],
+  );
+  const dashboardMaxFeatureCount = useMemo(
+    () =>
+      Math.max(
+        1,
+        ...dashboardTopPenalizedFeatures.map((entry) => Number(entry.count || 0)),
+      ),
+    [dashboardTopPenalizedFeatures],
+  );
   const [mentionsTab, setMentionsTab] = useState<"principal" | "actor">("principal");
   const effectiveMentionsTab = comparisonsEnabled ? mentionsTab : "principal";
 
@@ -1570,42 +1615,159 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
 
 
       {mode === "dashboard" ? (
-        <section className="mt-6 rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-5 shadow-[var(--shadow-md)] backdrop-blur-xl animate-rise" style={{ animationDelay: "360ms" }}>
-          <div className="flex items-center justify-between gap-3">
-            <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
-              ÚLTIMAS MENCIONES
-            </div>
-            <div className="text-xs text-[color:var(--text-50)]">
-              {mentionsLoading ? (
-                <LoadingPill className="h-2 w-24" label="Cargando menciones" />
-              ) : (
-                <>
-                  Mostrando {dashboardMentions.length} recientes ·{" "}
-                  Sentimiento
-                </>
-              )}
-            </div>
-          </div>
-          <div className="mt-4 space-y-3">
-            {mentionsLoading && (
-              <div className="text-sm text-[color:var(--text-50)]">Cargando sentimiento…</div>
-            )}
-            {!mentionsLoading &&
-              dashboardMentions.map((item, index) => (
-                <DashboardMentionCard
-                  key={item.key}
-                  item={item}
-                  index={index}
-                  principalLabel={actorPrincipalName}
-                />
-              ))}
-            {!mentionsLoading && !dashboardMentions.length && (
-              <div className="text-sm text-[color:var(--text-45)]">
-                No hay menciones para mostrar.
+        <>
+          <section
+            className="mt-6 grid grid-cols-1 xl:grid-cols-[1.2fr_1fr] gap-4 animate-rise"
+            style={{ animationDelay: "360ms" }}
+          >
+            <article className="rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-5 shadow-[var(--shadow-md)] backdrop-blur-xl">
+              <h2 className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
+                TOP 10 FUNCIONALIDADES PENALIZADAS
+              </h2>
+              <p className="mt-2 text-xs text-[color:var(--text-55)]">
+                Ranking de fricción en opiniones negativas del periodo seleccionado.
+              </p>
+              <div className="mt-4 space-y-3">
+                {dashboardMarketInsightsLoading && (
+                  <div className="space-y-2">
+                    <LoadingPill className="h-3 w-40" label="Cargando funcionalidades" />
+                    <LoadingPill className="h-3 w-full" label="Cargando funcionalidades" />
+                  </div>
+                )}
+                {!dashboardMarketInsightsLoading && dashboardMarketInsightsError && (
+                  <div className="rounded-xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-2 text-sm text-[color:var(--text-55)]">
+                    No se pudo cargar funcionalidades penalizadas para el dashboard.
+                  </div>
+                )}
+                {!dashboardMarketInsightsLoading &&
+                  !dashboardMarketInsightsError &&
+                  !dashboardTopPenalizedFeatures.length && (
+                    <div className="rounded-xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-2 text-sm text-[color:var(--text-55)]">
+                      No hay volumen negativo suficiente para construir ranking.
+                    </div>
+                  )}
+                {!dashboardMarketInsightsLoading &&
+                  !dashboardMarketInsightsError &&
+                  dashboardTopPenalizedFeatures.map((entry, index) => (
+                    <div
+                      key={entry.key}
+                      className="rounded-xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-3 py-2"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="text-sm text-[color:var(--ink)]">
+                          {index + 1}. {entry.feature}
+                        </div>
+                        <span className="text-xs text-[color:var(--text-55)]">{entry.count}</span>
+                      </div>
+                      <div className="mt-2 h-2 rounded-full bg-[color:var(--surface-60)] overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-gradient-to-r from-[color:var(--aqua)] to-[color:var(--blue)]"
+                          style={{ width: `${(entry.count / dashboardMaxFeatureCount) * 100}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
               </div>
-            )}
-          </div>
-        </section>
+            </article>
+
+            <article className="rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-5 shadow-[var(--shadow-md)] backdrop-blur-xl">
+              <h2 className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
+                ALERTAS CALIENTES
+              </h2>
+              <p className="mt-2 text-xs text-[color:var(--text-55)]">
+                Señales críticas para activar respuesta inmediata.
+              </p>
+              <div className="mt-4 space-y-3">
+                {dashboardMarketInsightsLoading && (
+                  <div className="space-y-2">
+                    <LoadingPill className="h-3 w-24" label="Cargando alertas" />
+                    <LoadingPill className="h-3 w-full" label="Cargando alertas" />
+                  </div>
+                )}
+                {!dashboardMarketInsightsLoading && dashboardMarketInsightsError && (
+                  <div className="rounded-xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-2 text-sm text-[color:var(--text-55)]">
+                    No se pudieron cargar alertas para el dashboard.
+                  </div>
+                )}
+                {!dashboardMarketInsightsLoading &&
+                  !dashboardMarketInsightsError &&
+                  !dashboardAlerts.length && (
+                    <div className="rounded-xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-2 text-sm text-[color:var(--text-55)]">
+                      Sin alertas críticas en este corte.
+                    </div>
+                  )}
+                {!dashboardMarketInsightsLoading &&
+                  !dashboardMarketInsightsError &&
+                  dashboardAlerts.map((alert) => (
+                    <div
+                      key={alert.id}
+                      className={`rounded-xl border px-3 py-2 ${marketAlertTone(alert.severity)}`}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="text-xs uppercase tracking-[0.18em]">{alert.severity}</div>
+                        <AlertTriangle className="h-4 w-4" />
+                      </div>
+                      <div className="mt-1 text-sm font-semibold">{alert.title}</div>
+                      <div className="mt-1 text-xs opacity-90">{alert.summary}</div>
+                    </div>
+                  ))}
+              </div>
+            </article>
+          </section>
+
+          <section
+            className="mt-4 rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-5 shadow-[var(--shadow-md)] backdrop-blur-xl animate-rise"
+            style={{ animationDelay: "420ms" }}
+          >
+            <h2 className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
+              MAPA DE CALOR DE LOS MARKETS
+            </h2>
+            <p className="mt-2 text-xs text-[color:var(--text-55)]">
+              Dónde se concentra la negatividad y con qué intensidad.
+            </p>
+            <div className="mt-4 space-y-3">
+              {dashboardMarketInsightsLoading && (
+                <div className="space-y-2">
+                  <LoadingPill className="h-3 w-28" label="Cargando canales" />
+                  <LoadingPill className="h-3 w-full" label="Cargando canales" />
+                </div>
+              )}
+              {!dashboardMarketInsightsLoading && dashboardMarketInsightsError && (
+                <div className="rounded-xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-2 text-sm text-[color:var(--text-55)]">
+                  No se pudo cargar el mapa de calor de los markets.
+                </div>
+              )}
+              {!dashboardMarketInsightsLoading &&
+                !dashboardMarketInsightsError &&
+                !dashboardSourceFriction.length && (
+                  <div className="rounded-xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-2 text-sm text-[color:var(--text-55)]">
+                    Sin datos para el periodo.
+                  </div>
+                )}
+              {!dashboardMarketInsightsLoading &&
+                !dashboardMarketInsightsError &&
+                dashboardSourceFriction.slice(0, 10).map((source) => (
+                  <div
+                    key={source.source}
+                    className="rounded-xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-3 py-2"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-sm text-[color:var(--ink)]">{source.source}</div>
+                      <div className="text-xs text-[color:var(--text-55)]">
+                        {source.negative}/{source.total} negativas ({formatRatioPercent(source.negative_ratio)})
+                      </div>
+                    </div>
+                    <div className="mt-2 h-2 rounded-full bg-[color:var(--surface-60)] overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-gradient-to-r from-rose-400/80 to-amber-300/80"
+                        style={{ width: `${Math.max(source.negative_ratio * 100, 3)}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+            </div>
+          </section>
+        </>
       ) : (
         <section className="mt-6 rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-5 shadow-[var(--shadow-md)] backdrop-blur-xl animate-rise" style={{ animationDelay: "360ms" }}>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -3140,6 +3302,19 @@ function formatSentimentFilterLabel(value: SentimentFilter) {
   return "Neutral";
 }
 
+function formatRatioPercent(value: number | null | undefined) {
+  if (typeof value !== "number" || Number.isNaN(value)) return "0.0%";
+  return `${(value * 100).toFixed(1)}%`;
+}
+
+function marketAlertTone(severity: string) {
+  const normalized = (severity || "").toLowerCase();
+  if (normalized === "critical") return "text-rose-300 border-rose-400/40 bg-rose-500/10";
+  if (normalized === "high") return "text-amber-300 border-amber-400/40 bg-amber-500/10";
+  if (normalized === "medium") return "text-sky-300 border-sky-400/40 bg-sky-500/10";
+  return "text-emerald-300 border-emerald-400/40 bg-emerald-500/10";
+}
+
 function getLatestDate(items: ReputationItem[]) {
   let latest = "";
   for (const item of items) {
@@ -3392,64 +3567,6 @@ function buildComparativeSeries(
   }
 
   return result;
-}
-
-function DashboardMentionCard({
-  item,
-  index,
-  principalLabel,
-}: {
-  item: DashboardMention;
-  index: number;
-  principalLabel: string;
-}) {
-  const displayDate = formatDate(item.date || null);
-  const sentimentTone = getSentimentTone(item.sentiment);
-  const ratingValue = typeof item.rating === "number" ? item.rating : null;
-  const title = cleanText(item.title) || "Sin título";
-  const text = cleanText(item.text);
-
-  return (
-    <article
-      className="group relative overflow-hidden rounded-[22px] border border-[color:var(--border-70)] bg-[color:var(--surface-85)] p-4 shadow-[var(--shadow-card)] animate-rise"
-      style={{ animationDelay: `${Math.min(index, 8) * 60}ms` }}
-    >
-      <div className="absolute inset-y-0 left-0 w-1 bg-gradient-to-b from-[color:var(--aqua)] via-[color:var(--blue)] to-transparent opacity-70" />
-      <div className="flex flex-wrap items-center gap-2 text-[11px] text-[color:var(--text-55)]">
-        <span className="inline-flex items-center gap-1 rounded-full border border-[color:var(--border-70)] bg-[color:var(--surface-80)] px-2.5 py-1">
-          <MapPin className="h-3.5 w-3.5 text-[color:var(--blue)]" />
-          {item.geo || "Global"}
-        </span>
-        <span className="inline-flex items-center gap-1 rounded-full border border-[color:var(--border-70)] bg-[color:var(--surface-80)] px-2.5 py-1">
-          <Building2 className="h-3.5 w-3.5 text-[color:var(--blue)]" />
-          {item.actor || principalLabel}
-        </span>
-        <span className="inline-flex items-center gap-1 rounded-full border border-[color:var(--border-70)] bg-[color:var(--surface-80)] px-2.5 py-1">
-          <Calendar className="h-3.5 w-3.5 text-[color:var(--blue)]" />
-          {displayDate}
-        </span>
-        {sentimentTone && (
-          <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 ${sentimentTone.className}`}>
-            {sentimentTone.icon}
-            {sentimentTone.label}
-          </span>
-        )}
-        {ratingValue !== null && (
-          <span className="inline-flex items-center gap-2 rounded-full border border-[color:var(--aqua)]/40 [background-image:var(--gradient-chip)] px-2.5 py-1 text-[11px] text-[color:var(--brand-ink)] shadow-[var(--shadow-pill)]">
-            <StarMeter rating={ratingValue} />
-            <span className="font-semibold">{ratingValue.toFixed(1)}</span>
-            <span className="text-[10px] uppercase tracking-[0.2em] text-[color:var(--text-45)]">/5</span>
-          </span>
-        )}
-      </div>
-      <div className="mt-3 text-sm font-semibold text-[color:var(--ink)]">
-        {title}
-      </div>
-      {text && (
-        <p className="mt-2 text-sm text-[color:var(--text-60)] line-clamp-3">{text}</p>
-      )}
-    </article>
-  );
 }
 
 function downloadChartCsv(
