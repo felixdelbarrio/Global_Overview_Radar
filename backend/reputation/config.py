@@ -59,8 +59,20 @@ STATE_KEY_PROFILE_STATE = "data/cache/reputation_profile.json"
 
 DEFAULT_CONFIG_PATH = REPO_ROOT / "data" / "reputation"
 DEFAULT_LLM_CONFIG_PATH = REPO_ROOT / "data" / "reputation_llm"
-DEFAULT_SAMPLE_CONFIG_PATH = REPO_ROOT / "data" / "reputation_samples"
-DEFAULT_SAMPLE_LLM_CONFIG_PATH = REPO_ROOT / "data" / "reputation_llm_samples"
+_IMMUTABLE_SAMPLE_CONFIG_PATH = REPO_ROOT / "backend" / "data" / "reputation_samples"
+_IMMUTABLE_SAMPLE_LLM_CONFIG_PATH = REPO_ROOT / "backend" / "data" / "reputation_llm_samples"
+_FALLBACK_SAMPLE_CONFIG_PATH = REPO_ROOT / "data" / "reputation_samples"
+_FALLBACK_SAMPLE_LLM_CONFIG_PATH = REPO_ROOT / "data" / "reputation_llm_samples"
+DEFAULT_SAMPLE_CONFIG_PATH = (
+    _IMMUTABLE_SAMPLE_CONFIG_PATH
+    if _IMMUTABLE_SAMPLE_CONFIG_PATH.exists()
+    else _FALLBACK_SAMPLE_CONFIG_PATH
+)
+DEFAULT_SAMPLE_LLM_CONFIG_PATH = (
+    _IMMUTABLE_SAMPLE_LLM_CONFIG_PATH
+    if _IMMUTABLE_SAMPLE_LLM_CONFIG_PATH.exists()
+    else _FALLBACK_SAMPLE_LLM_CONFIG_PATH
+)
 DEFAULT_CACHE_PATH = REPO_ROOT / "data" / "cache" / "reputation_cache.json"
 DEFAULT_OVERRIDES_PATH = REPO_ROOT / "data" / "cache" / "reputation_overrides.json"
 PROFILE_STATE_PATH = REPO_ROOT / "data" / "cache" / "reputation_profile.json"
@@ -553,7 +565,39 @@ def _resolve_config_files(cfg_path: Path, profiles: Sequence[str] | None = None)
 def _resolve_paths_for_source(source: str) -> tuple[Path, Path]:
     if source == "samples":
         return (DEFAULT_SAMPLE_CONFIG_PATH, DEFAULT_SAMPLE_LLM_CONFIG_PATH)
-    return (BASE_CONFIG_PATH, BASE_LLM_CONFIG_PATH)
+    return _resolve_default_workspace_paths()
+
+
+def _path_is_within(path: Path, root: Path) -> bool:
+    try:
+        path.resolve().relative_to(root.resolve())
+        return True
+    except Exception:
+        return False
+
+
+def _resolve_default_workspace_paths() -> tuple[Path, Path]:
+    cfg_path = BASE_CONFIG_PATH
+    llm_path = BASE_LLM_CONFIG_PATH
+
+    if _path_is_within(cfg_path, DEFAULT_SAMPLE_CONFIG_PATH):
+        logger.warning(
+            "REPUTATION_CONFIG_PATH points to samples (%s); using default workspace path (%s).",
+            cfg_path,
+            DEFAULT_CONFIG_PATH,
+        )
+        cfg_path = DEFAULT_CONFIG_PATH
+
+    if _path_is_within(llm_path, DEFAULT_SAMPLE_LLM_CONFIG_PATH):
+        logger.warning(
+            "REPUTATION_LLM_CONFIG_PATH points to sample llm (%s); using default workspace "
+            "path (%s).",
+            llm_path,
+            DEFAULT_LLM_CONFIG_PATH,
+        )
+        llm_path = DEFAULT_LLM_CONFIG_PATH
+
+    return cfg_path, llm_path
 
 
 def _load_profile_state() -> dict[str, Any]:
@@ -825,11 +869,13 @@ def apply_sample_profiles_to_default(
         )
     llm_files, llm_missing = _resolve_llm_candidates(cfg_files, DEFAULT_SAMPLE_LLM_CONFIG_PATH)
 
-    removed_cfg = _clear_json_files(BASE_CONFIG_PATH)
-    removed_llm = _clear_json_files(BASE_LLM_CONFIG_PATH)
+    default_cfg_path, default_llm_path = _resolve_default_workspace_paths()
 
-    copied_cfg = _copy_files(cfg_files, BASE_CONFIG_PATH)
-    copied_llm = _copy_files(llm_files, BASE_LLM_CONFIG_PATH)
+    removed_cfg = _clear_json_files(default_cfg_path)
+    removed_llm = _clear_json_files(default_llm_path)
+
+    copied_cfg = _copy_files(cfg_files, default_cfg_path)
+    copied_llm = _copy_files(llm_files, default_llm_path)
 
     active = set_profile_state("default", profile_list)
     return {
