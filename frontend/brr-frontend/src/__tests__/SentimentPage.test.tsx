@@ -148,21 +148,127 @@ describe("Sentimiento page", () => {
         return Promise.resolve(itemsResponse);
       }
       if (path.startsWith("/reputation/responses/summary")) {
+        const isPrincipalSummary = path.includes("entity=actor_principal");
+        if (isPrincipalSummary) {
+          return Promise.resolve({
+            totals: {
+              opinions_total: 4,
+              answered_total: 2,
+              answered_ratio: 0.5,
+              answered_positive: 1,
+              answered_neutral: 1,
+              answered_negative: 0,
+              unanswered_positive: 0,
+              unanswered_neutral: 1,
+              unanswered_negative: 1,
+            },
+            actor_breakdown: [],
+            repeated_replies: [],
+            answered_items: [
+              {
+                id: "rp1",
+                source: "appstore",
+                geo: "España",
+                sentiment: "neutral",
+                actor: "Acme Bank",
+                actor_canonical: "Acme Bank",
+                responder_actor: "Acme Bank",
+                responder_actor_type: "principal",
+                reply_text: "Gracias por tu comentario. Estamos revisando.",
+                reply_excerpt: "Neutra principal",
+                reply_author: "Acme Soporte",
+                replied_at: "2025-01-03T10:30:00Z",
+                published_at: "2025-01-03T10:00:00Z",
+                title: "Reseña App",
+                url: null,
+              },
+              {
+                id: "rp2",
+                source: "google_play",
+                geo: "España",
+                sentiment: "positive",
+                actor: "Acme Bank",
+                actor_canonical: "Acme Bank",
+                responder_actor: "Acme Bank",
+                responder_actor_type: "principal",
+                reply_text: "Nos alegra que te haya servido.",
+                reply_excerpt: "Positiva principal",
+                reply_author: "Acme Soporte",
+                replied_at: "2025-01-02T10:30:00Z",
+                published_at: "2025-01-02T10:00:00Z",
+                title: "Muy útil",
+                url: null,
+              },
+            ],
+          });
+        }
         return Promise.resolve({
           totals: {
-            opinions_total: 4,
-            answered_total: 2,
+            opinions_total: 6,
+            answered_total: 3,
             answered_ratio: 0.5,
-            answered_positive: 1,
-            answered_neutral: 0,
+            answered_positive: 0,
+            answered_neutral: 2,
             answered_negative: 1,
             unanswered_positive: 1,
-            unanswered_neutral: 0,
+            unanswered_neutral: 1,
             unanswered_negative: 1,
           },
           actor_breakdown: [],
           repeated_replies: [],
-          answered_items: [],
+          answered_items: [
+            {
+              id: "ro1",
+              source: "appstore",
+              geo: "España",
+              sentiment: "neutral",
+              actor: "Beta Bank",
+              actor_canonical: "Beta Bank",
+              responder_actor: "Beta Bank",
+              responder_actor_type: "secondary",
+              reply_text: "Seguimos tu caso.",
+              reply_excerpt: "Neutra beta 1",
+              reply_author: "Beta Support",
+              replied_at: "2025-01-04T12:30:00Z",
+              published_at: "2025-01-04T12:00:00Z",
+              title: "Neutra beta 1",
+              url: null,
+            },
+            {
+              id: "ro2",
+              source: "google_play",
+              geo: "España",
+              sentiment: "neutral",
+              actor: "Beta Bank",
+              actor_canonical: "Beta Bank",
+              responder_actor: "Beta Bank",
+              responder_actor_type: "secondary",
+              reply_text: "Te escribimos por privado.",
+              reply_excerpt: "Neutra beta 2",
+              reply_author: "Beta Support",
+              replied_at: "2025-01-05T08:30:00Z",
+              published_at: "2025-01-05T08:00:00Z",
+              title: "Neutra beta 2",
+              url: null,
+            },
+            {
+              id: "ro3",
+              source: "google_play",
+              geo: "España",
+              sentiment: "negative",
+              actor: "Beta Bank",
+              actor_canonical: "Beta Bank",
+              responder_actor: "Beta Bank",
+              responder_actor_type: "secondary",
+              reply_text: "Lamentamos la incidencia.",
+              reply_excerpt: "Negativa beta",
+              reply_author: "Beta Support",
+              replied_at: "2025-01-05T09:30:00Z",
+              published_at: "2025-01-05T09:00:00Z",
+              title: "Negativa beta",
+              url: null,
+            },
+          ],
         });
       }
       if (path.startsWith("/reputation/settings")) {
@@ -211,6 +317,35 @@ describe("Sentimiento page", () => {
     await screen.findByRole("option", { name: "España" });
     const geoSelect = screen.getByLabelText("País");
     fireEvent.change(geoSelect, { target: { value: "España" } });
+
+    const responsesHeading = await screen.findByText("Opiniones contestadas");
+    const responsesCard = responsesHeading.parentElement;
+    expect(responsesCard).toBeTruthy();
+    expect(within(responsesCard as HTMLElement).getByText("Neutras")).toBeInTheDocument();
+    const totalCard = within(responsesCard as HTMLElement).getByText("Total").parentElement;
+    expect(totalCard).toBeTruthy();
+    expect(totalCard as HTMLElement).toHaveTextContent(/2/);
+    expect(totalCard as HTMLElement).toHaveTextContent(/3/);
+    expect(totalCard as HTMLElement).toHaveTextContent(/vs/i);
+    expect(within(responsesCard as HTMLElement).getByText("Neutra principal")).toBeInTheDocument();
+    expect(within(responsesCard as HTMLElement).getByText("Neutra beta 1")).toBeInTheDocument();
+    expect(within(responsesCard as HTMLElement).getByText("Neutra beta 2")).toBeInTheDocument();
+
+    await waitFor(() => {
+      const summaryCalls = apiGetMock.mock.calls.filter(
+        ([path]) =>
+          typeof path === "string" && path.startsWith("/reputation/responses/summary?"),
+      );
+      expect(summaryCalls.length).toBeGreaterThan(0);
+      const allCallsHaveRange = summaryCalls.every(
+        ([path]) => typeof path === "string" && path.includes("from_date=") && path.includes("to_date="),
+      );
+      const hasGeoFilter = summaryCalls.some(
+        ([path]) => typeof path === "string" && path.includes("geo=Espa%C3%B1a"),
+      );
+      expect(allCallsHaveRange).toBe(true);
+      expect(hasGeoFilter).toBe(true);
+    });
 
     fireEvent.click(screen.getByText("Descargar gráfico"));
 

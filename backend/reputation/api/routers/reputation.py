@@ -428,6 +428,13 @@ _ITEM_AUTHOR_SIGNAL_KEYS = (
     "nickname",
     "nickName",
 )
+_OTHER_ACTORS_ENTITY_KEYS = {
+    "other_actors",
+    "otheractors",
+    "otros_actores",
+    "otrosactores",
+    "others",
+}
 
 
 def _ratio(part: int, whole: int) -> float:
@@ -1068,6 +1075,8 @@ def _filter_items(
         principal_canonical=principal_canonical,
         principal_terms=principal_terms,
     )
+    entity_filter = _normalize_scalar(group.get("entity"))
+    exclude_principal = entity_filter in _OTHER_ACTORS_ENTITY_KEYS
     geo_filter = _normalize_scalar(group.get("geo"))
     sentiment_filter = _normalize_scalar(group.get("sentiment"))
     sources_filter = _parse_sources(group.get("sources") or group.get("source"))
@@ -1087,6 +1096,13 @@ def _filter_items(
             if not item_sentiment or item_sentiment != sentiment_filter:
                 continue
         if not _item_matches_date_range(item, from_dt=from_dt, to_dt=to_dt):
+            continue
+        if exclude_principal and _actor_matches(
+            item,
+            principal_canonical,
+            principal_terms,
+            alias_map,
+        ):
             continue
         if not _actor_matches(item, canonical, terms, alias_map):
             continue

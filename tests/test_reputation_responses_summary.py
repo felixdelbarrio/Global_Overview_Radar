@@ -208,6 +208,49 @@ def test_responses_summary_can_filter_actor_principal_only(
     assert body["totals"]["answered_total"] == 1
 
 
+def test_responses_summary_can_filter_other_actors_only(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    config_path = _write_config(tmp_path / "profile.json")
+    cache_path = _write_cache(
+        tmp_path / "cache.json",
+        [
+            {
+                "id": "p1",
+                "source": "appstore",
+                "geo": "ES",
+                "actor": "Acme Bank",
+                "title": "Principal",
+                "text": "Texto",
+                "published_at": "2026-02-10T10:00:00Z",
+                "sentiment": "negative",
+                "signals": {"reply_text": "Recibido principal"},
+            },
+            {
+                "id": "s1",
+                "source": "google_play",
+                "geo": "ES",
+                "actor": "Beta Bank",
+                "title": "Secundario",
+                "text": "Texto",
+                "published_at": "2026-02-10T10:00:00Z",
+                "sentiment": "neutral",
+                "signals": {"reply_text": "Recibido secundario"},
+            },
+        ],
+    )
+    client = _client(monkeypatch, cache_path, config_path)
+
+    res = client.get("/reputation/responses/summary", params={"entity": "other_actors"})
+    assert res.status_code == 200
+    body = res.json()
+    assert body["totals"]["opinions_total"] == 1
+    assert body["totals"]["answered_total"] == 1
+    assert body["totals"]["answered_neutral"] == 1
+    assert body["answered_items"][0]["id"] == "s1"
+
+
 def test_responses_summary_uses_reply_datetime_for_old_reviews(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

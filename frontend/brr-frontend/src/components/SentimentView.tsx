@@ -46,6 +46,8 @@ import type {
   ReputationCacheDocument,
   ReputationItem,
   ReputationMeta,
+  ResponseSummaryAnsweredItem,
+  ResponseSummaryTotals,
   ReputationResponsesSummary,
 } from "@/lib/types";
 
@@ -135,9 +137,10 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
   const [chartLoading, setChartLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [chartError, setChartError] = useState<string | null>(null);
-  const [responsesSummary, setResponsesSummary] = useState<ReputationResponsesSummary | null>(
-    null,
-  );
+  const [responsesSummaryPrincipal, setResponsesSummaryPrincipal] =
+    useState<ReputationResponsesSummary | null>(null);
+  const [responsesSummaryComparison, setResponsesSummaryComparison] =
+    useState<ReputationResponsesSummary | null>(null);
   const [responsesLoading, setResponsesLoading] = useState(true);
   const [actorPrincipal, setActorPrincipal] = useState<ActorPrincipalMeta | null>(null);
   const [meta, setMeta] = useState<ReputationMeta | null>(null);
@@ -549,40 +552,59 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
   useEffect(() => {
     let alive = true;
     if (!showResponsesSummary) {
-      setResponsesSummary(null);
+      setResponsesSummaryPrincipal(null);
+      setResponsesSummaryComparison(null);
       setResponsesLoading(false);
       return () => {
         alive = false;
       };
     }
     setResponsesLoading(true);
-    const params = new URLSearchParams();
-    if (effectiveFromDate) params.set("from_date", effectiveFromDate);
-    if (effectiveToDate) params.set("to_date", effectiveToDate);
-    if (effectiveSentiment !== "all") params.set("sentiment", effectiveSentiment);
-    if (geo !== "all") params.set("geo", geo);
-    if (effectiveSourcesForQuery.length) {
-      params.set("sources", effectiveSourcesForQuery.join(","));
-    }
-    params.set("entity", isDashboard ? "actor_principal" : "all");
-    if (
-      !isDashboard &&
-      comparisonsEnabled &&
+    const splitResponsesByActor = !isDashboard && comparisonsEnabled;
+    const comparisonUsesSpecificActor =
+      splitResponsesByActor &&
       effectiveActor !== "all" &&
-      !isPrincipalName(effectiveActor, principalAliasKeys)
-    ) {
-      params.set("actor", effectiveActor);
-    }
-    params.set("detail_limit", "80");
+      !isPrincipalName(effectiveActor, principalAliasKeys);
 
-    apiGet<ReputationResponsesSummary>(`/reputation/responses/summary?${params.toString()}`)
-      .then((summary) => {
+    const buildSummaryParams = (target: "principal" | "comparison") => {
+      const params = new URLSearchParams();
+      if (effectiveFromDate) params.set("from_date", effectiveFromDate);
+      if (effectiveToDate) params.set("to_date", effectiveToDate);
+      if (effectiveSentiment !== "all") params.set("sentiment", effectiveSentiment);
+      if (geo !== "all") params.set("geo", geo);
+      if (effectiveSourcesForQuery.length) {
+        params.set("sources", effectiveSourcesForQuery.join(","));
+      }
+      if (target === "principal") {
+        params.set("entity", "actor_principal");
+      } else if (comparisonUsesSpecificActor) {
+        params.set("actor", effectiveActor);
+      } else {
+        params.set("entity", "other_actors");
+      }
+      params.set("detail_limit", "5000");
+      return params;
+    };
+
+    const principalRequest = apiGet<ReputationResponsesSummary>(
+      `/reputation/responses/summary?${buildSummaryParams("principal").toString()}`,
+    );
+    const comparisonRequest = splitResponsesByActor
+      ? apiGet<ReputationResponsesSummary>(
+          `/reputation/responses/summary?${buildSummaryParams("comparison").toString()}`,
+        )
+      : Promise.resolve<ReputationResponsesSummary | null>(null);
+
+    Promise.all([principalRequest, comparisonRequest])
+      .then(([principalSummary, comparisonSummary]) => {
         if (!alive) return;
-        setResponsesSummary(summary);
+        setResponsesSummaryPrincipal(principalSummary);
+        setResponsesSummaryComparison(comparisonSummary);
       })
       .catch(() => {
         if (!alive) return;
-        setResponsesSummary(null);
+        setResponsesSummaryPrincipal(null);
+        setResponsesSummaryComparison(null);
       })
       .finally(() => {
         if (alive) setResponsesLoading(false);
@@ -1001,8 +1023,20 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
   const errorMessage = error || chartError;
   // "Ultimas menciones" depende solo del dataset de items, no del fetch del grafico.
   const mentionsLoading = itemsLoading;
-  const responseTotals = responsesSummary?.totals;
-  const repeatedReplies = responsesSummary?.repeated_replies ?? [];
+  const splitResponsesByActor = !isDashboard && comparisonsEnabled;
+  const responseTotalsPrincipal = responsesSummaryPrincipal?.totals;
+  const responseTotalsComparison = splitResponsesByActor
+    ? responsesSummaryComparison?.totals ?? null
+    : null;
+  const repeatedRepliesPrincipal = responsesSummaryPrincipal?.repeated_replies ?? [];
+  const answeredItemsPrincipal = sortAnsweredItems(responsesSummaryPrincipal?.answered_items ?? []);
+  const answeredItemsComparison = sortAnsweredItems(
+    responsesSummaryComparison?.answered_items ?? [],
+  );
+  const responseCoveragePrincipal = formatResponseCoverage(responseTotalsPrincipal);
+  const responseCoverageComparison = responseTotalsComparison
+    ? formatResponseCoverage(responseTotalsComparison)
+    : null;
   const headerEyebrow = isDashboard
     ? "Dashboard"
     : isSentimentMarkets
@@ -1374,6 +1408,13 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
                 <div className="text-[11px] uppercase tracking-[0.16em] text-[color:var(--text-45)]">
                   Opiniones contestadas
                 </div>
+                <div className="mt-1 text-[10px] text-[color:var(--text-55)]">
+                  {formatVsValue(actorPrincipalName, splitResponsesByActor ? actorLabel : null, {
+                    containerClassName: "inline-flex items-center whitespace-nowrap",
+                    vsClassName:
+                      "mx-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-[color:var(--text-45)]",
+                  })}
+                </div>
                 {responsesLoading ? (
                   <div className="mt-3 space-y-2">
                     <LoadingPill className="h-4 w-28" label="Cargando respuestas" />
@@ -1382,29 +1423,38 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
                 ) : (
                   <>
                     <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-                      <ResponseStat label="Total" value={responseTotals?.answered_total ?? 0} />
                       <ResponseStat
-                        label="+ contestadas"
-                        value={responseTotals?.answered_positive ?? 0}
+                        label="Total"
+                        value={responseTotalsPrincipal?.answered_total ?? 0}
+                        comparisonValue={responseTotalsComparison?.answered_total ?? null}
                       />
                       <ResponseStat
-                        label="= contestadas"
-                        value={responseTotals?.answered_neutral ?? 0}
+                        label="Positivas"
+                        value={responseTotalsPrincipal?.answered_positive ?? 0}
+                        comparisonValue={responseTotalsComparison?.answered_positive ?? null}
                       />
                       <ResponseStat
-                        label="- contestadas"
-                        value={responseTotals?.answered_negative ?? 0}
+                        label="Neutras"
+                        value={responseTotalsPrincipal?.answered_neutral ?? 0}
+                        comparisonValue={responseTotalsComparison?.answered_neutral ?? null}
+                      />
+                      <ResponseStat
+                        label="Negativas"
+                        value={responseTotalsPrincipal?.answered_negative ?? 0}
+                        comparisonValue={responseTotalsComparison?.answered_negative ?? null}
                       />
                     </div>
                     <div className="mt-2 text-[11px] text-[color:var(--text-55)]">
                       Cobertura de respuesta:{" "}
-                      {responseTotals
-                        ? `${(responseTotals.answered_ratio * 100).toFixed(1)}% (${responseTotals.answered_total}/${responseTotals.opinions_total})`
-                        : "0.0% (0/0)"}
+                      {formatVsValue(responseCoveragePrincipal, responseCoverageComparison, {
+                        containerClassName: "inline-flex items-center whitespace-nowrap",
+                        vsClassName:
+                          "mx-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-[color:var(--text-45)]",
+                      })}
                     </div>
-                    {!!repeatedReplies.length && (
+                    {!!repeatedRepliesPrincipal.length && (
                       <div className="mt-2 space-y-1">
-                        {repeatedReplies.slice(0, 3).map((reply) => (
+                        {repeatedRepliesPrincipal.slice(0, 3).map((reply) => (
                           <div
                             key={`${reply.reply_text}-${reply.count}`}
                             className="rounded-lg border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-2 py-1.5"
@@ -1419,6 +1469,24 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
                         ))}
                       </div>
                     )}
+                    <div
+                      className={
+                        splitResponsesByActor
+                          ? "mt-3 grid grid-cols-1 xl:grid-cols-2 gap-2"
+                          : "mt-3"
+                      }
+                    >
+                      <AnsweredResponsesList
+                        title={actorPrincipalName}
+                        items={answeredItemsPrincipal}
+                      />
+                      {splitResponsesByActor && (
+                        <AnsweredResponsesList
+                          title={actorLabel}
+                          items={answeredItemsComparison}
+                        />
+                      )}
+                    </div>
                   </>
                 )}
               </div>
@@ -1757,6 +1825,7 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
                   index={index}
                   principalLabel={actorPrincipalName}
                   geoOptions={geoOptions}
+                  manualControlsEnabled={!isSentimentMarkets}
                   onOverride={handleOverride}
                 />
               ))}
@@ -1829,13 +1898,76 @@ function SummaryCard({
   );
 }
 
-function ResponseStat({ label, value }: { label: string; value: number }) {
+function ResponseStat({
+  label,
+  value,
+  comparisonValue = null,
+}: {
+  label: string;
+  value: number;
+  comparisonValue?: number | null;
+}) {
+  const principal = value.toLocaleString("es-ES");
+  const comparison =
+    typeof comparisonValue === "number" ? comparisonValue.toLocaleString("es-ES") : null;
   return (
     <div className="rounded-xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-2 py-1.5">
       <div className="text-[10px] uppercase tracking-[0.16em] text-[color:var(--text-45)]">
         {label}
       </div>
-      <div className="mt-1 text-sm font-semibold text-[color:var(--ink)]">{value}</div>
+      <div className="mt-1 text-sm font-semibold text-[color:var(--ink)]">
+        {formatVsValue(principal, comparison, {
+          containerClassName: "inline-flex items-center whitespace-nowrap",
+          vsClassName:
+            "mx-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-[color:var(--text-45)]",
+        })}
+      </div>
+    </div>
+  );
+}
+
+function AnsweredResponsesList({
+  title,
+  items,
+}: {
+  title: string;
+  items: ResponseSummaryAnsweredItem[];
+}) {
+  return (
+    <div className="rounded-xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-2">
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-[10px] uppercase tracking-[0.16em] text-[color:var(--text-45)]">
+          Comentarios contestados
+        </div>
+        <div className="text-[10px] text-[color:var(--text-55)]">{title}</div>
+      </div>
+      {items.length === 0 ? (
+        <div className="mt-2 text-xs text-[color:var(--text-55)]">
+          Sin comentarios contestados para estos filtros.
+        </div>
+      ) : (
+        <div className="mt-2 max-h-56 space-y-2 overflow-auto pr-1">
+          {items.map((entry) => (
+            <article
+              key={`${entry.id}-${entry.replied_at ?? entry.published_at ?? "n/a"}`}
+              className="rounded-lg border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-2.5 py-2"
+            >
+              <div className="flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-[0.16em] text-[color:var(--text-45)]">
+                <span>{entry.source}</span>
+                <span>{entry.geo}</span>
+                <span>{entry.sentiment}</span>
+                <span>{formatDate(entry.replied_at || entry.published_at)}</span>
+              </div>
+              <div className="mt-1 text-[11px] text-[color:var(--text-55)]">
+                Responde: {entry.reply_author || entry.responder_actor || "Actor desconocido"}
+              </div>
+              <div className="mt-1 rounded-md border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-2 py-1.5 text-xs text-[color:var(--ink)]">
+                {cleanText(entry.reply_excerpt || entry.reply_text) || "Sin texto"}
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -2035,12 +2167,14 @@ function MentionCard({
   index,
   principalLabel,
   geoOptions,
+  manualControlsEnabled = true,
   onOverride,
 }: {
   item: MentionGroup;
   index: number;
   principalLabel: string;
   geoOptions: string[];
+  manualControlsEnabled?: boolean;
   onOverride: (payload: OverridePayload) => Promise<void>;
 }) {
   const sentimentTone = getSentimentTone(item.sentiment);
@@ -2059,6 +2193,7 @@ function MentionCard({
   const blockedSources = item.sources.filter((src) => isManualOverrideBlockedSource(src));
   const ratingSourceKey = normalizeSourceKey(item.rating_source ?? "");
   const manualOverrideBlocked =
+    !manualControlsEnabled ||
     blockedSources.length > 0 ||
     (ratingSourceKey && MANUAL_OVERRIDE_BLOCKED_SOURCES.has(ratingSourceKey));
   const blockedLabels = blockedSources.map((src) => {
@@ -2784,6 +2919,19 @@ function cleanText(value?: string | null) {
   }
   const doc = new DOMParser().parseFromString(value, "text/html");
   return (doc.body.textContent || "").replace(/\s+/g, " ").trim();
+}
+
+function formatResponseCoverage(totals: ResponseSummaryTotals | null | undefined): string {
+  if (!totals) return "0.0% (0/0)";
+  return `${(totals.answered_ratio * 100).toFixed(1)}% (${totals.answered_total}/${totals.opinions_total})`;
+}
+
+function sortAnsweredItems(items: ResponseSummaryAnsweredItem[]): ResponseSummaryAnsweredItem[] {
+  return [...items].sort((a, b) => {
+    const left = a.replied_at || a.published_at || "";
+    const right = b.replied_at || b.published_at || "";
+    return right.localeCompare(left);
+  });
 }
 
 function formatDate(value?: string | null, withTime = true) {
