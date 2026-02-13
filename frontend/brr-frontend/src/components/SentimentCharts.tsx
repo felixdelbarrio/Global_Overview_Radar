@@ -95,6 +95,20 @@ export function DashboardChart({
     }
     return value ?? "";
   };
+  const averageSentiment = (() => {
+    const values = data
+      .map((row) => row.sentiment)
+      .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+    if (!values.length) return null;
+    return values.reduce((acc, value) => acc + value, 0) / values.length;
+  })();
+  const showAverageLine = typeof averageSentiment === "number" && Number.isFinite(averageSentiment);
+  const chartData = showAverageLine
+    ? data.map((row) => ({
+        ...row,
+        average_sentiment: averageSentiment,
+      }))
+    : data;
 
   if (!data.length) {
     return (
@@ -106,7 +120,7 @@ export function DashboardChart({
 
   return (
     <ResponsiveContainer width="100%" height="100%">
-      <LineChart data={data}>
+      <LineChart data={chartData}>
         <CartesianGrid stroke="var(--chart-grid)" vertical={false} />
         <XAxis dataKey="date" tickFormatter={(d: string) => d.slice(5)} fontSize={11} />
         <YAxis yAxisId="sentiment" fontSize={11} />
@@ -119,6 +133,20 @@ export function DashboardChart({
           }}
         />
         <Legend wrapperStyle={{ fontSize: 12 }} />
+        {showAverageLine && (
+          <Line
+            type="monotone"
+            dataKey="average_sentiment"
+            name="Score medio"
+            stroke="#2dcccd"
+            strokeWidth={2}
+            dot={false}
+            strokeDasharray="6 4"
+            yAxisId="sentiment"
+            connectNulls
+            isAnimationActive={false}
+          />
+        )}
         <Line
           type="monotone"
           dataKey="sentiment"
