@@ -220,3 +220,34 @@ def test_items_filters_by_geo_sentiment_and_date(
     body = res.json()
     assert body["stats"]["count"] == 1
     assert body["items"][0]["id"] == "p1"
+
+
+def test_items_returns_empty_when_cache_document_is_invalid(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    config_path = _write_config(tmp_path / "profile.json")
+    cache_path = tmp_path / "cache.json"
+    cache_path.write_text(
+        json.dumps(
+            {
+                "generated_at": datetime(2025, 1, 1, tzinfo=timezone.utc).isoformat(),
+                "config_hash": "x",
+                "sources_enabled": ["news"],
+                "items": [{"id": "bad-item-no-source"}],
+                "stats": {"count": 1},
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    client = _client(monkeypatch, cache_path, config_path)
+    res = client.get(
+        "/reputation/items",
+        params={"from_date": "2026-01-15", "to_date": "2026-02-13", "geo": "España"},
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["stats"]["count"] == 0
+    assert body["items"] == []
