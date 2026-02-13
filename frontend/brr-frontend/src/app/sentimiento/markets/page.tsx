@@ -8,6 +8,6 @@ const SentimentView = dynamic(
   { ssr: false, loading: () => <PageSkeleton title="Sentimiento en Markets" /> }
 );
 
-export default function SentimientoPage() {
+export default function SentimientoMarketsPage() {
   return <SentimentView mode="sentiment" scope="markets" />;
 }

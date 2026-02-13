@@ -16,6 +16,7 @@ import {
   Layers,
   Loader2,
   Moon,
+  Newspaper,
   Search,
   Sun,
   Sparkles,
@@ -29,8 +30,11 @@ import {
   dispatchProfileChanged,
   dispatchSettingsChanged,
   INGEST_STARTED_EVENT,
+  PROFILE_CHANGED_EVENT,
+  SETTINGS_CHANGED_EVENT,
 } from "@/lib/events";
-import type { IngestJob, IngestJobKind } from "@/lib/types";
+import { hasMarketSourcesEnabled, hasPressSourcesEnabled } from "@/lib/reputationSources";
+import type { IngestJob, IngestJobKind, ReputationMeta } from "@/lib/types";
 
 type ProfileOptionsResponse = {
   active: {
@@ -176,6 +180,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
   );
   const [advancedEnvExists, setAdvancedEnvExists] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [metaSourcesEnabled, setMetaSourcesEnabled] = useState<string[] | null>(null);
 
   type FloatingPanel = "ingest" | "profiles" | "settings";
 
@@ -254,6 +259,40 @@ export function Shell({ children }: { children: React.ReactNode }) {
       alive = false;
     };
   }, []);
+
+  const refreshMetaSources = useCallback((force = false) => {
+    apiGetCached<ReputationMeta>("/reputation/meta", { ttlMs: 60000, force })
+      .then((meta) => {
+        const raw = meta.sources_enabled;
+        if (!Array.isArray(raw)) {
+          setMetaSourcesEnabled(null);
+          return;
+        }
+        setMetaSourcesEnabled(
+          raw.filter((entry): entry is string => typeof entry === "string" && entry.length > 0),
+        );
+      })
+      .catch(() => {
+        setMetaSourcesEnabled(null);
+      });
+  }, []);
+
+  useEffect(() => {
+    refreshMetaSources(false);
+  }, [refreshMetaSources]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    const handler = () => {
+      refreshMetaSources(true);
+    };
+    window.addEventListener(PROFILE_CHANGED_EVENT, handler as EventListener);
+    window.addEventListener(SETTINGS_CHANGED_EVENT, handler as EventListener);
+    return () => {
+      window.removeEventListener(PROFILE_CHANGED_EVENT, handler as EventListener);
+      window.removeEventListener(SETTINGS_CHANGED_EVENT, handler as EventListener);
+    };
+  }, [refreshMetaSources]);
 
   useEffect(() => {
     try {
@@ -853,7 +892,27 @@ export function Shell({ children }: { children: React.ReactNode }) {
           })
           .catch((err) => {
             if (!alive) return;
-            setIngestError(err instanceof Error ? err.message : "Error al consultar ingesta");
+            const message =
+              err instanceof Error ? err.message : "Error al consultar ingesta";
+            if (
+              message.includes("/ingest/jobs/") &&
+              message.includes("404") &&
+              message.toLowerCase().includes("job not found")
+            ) {
+              setIngestJobs((prev) => ({
+                ...prev,
+                [job.kind]: {
+                  ...job,
+                  status: "error",
+                  progress: 100,
+                  stage: "expired",
+                  finished_at: new Date().toISOString(),
+                  error: "job not found",
+                },
+              }));
+              return;
+            }
+            setIngestError(message);
           });
       });
     };
@@ -874,6 +933,11 @@ export function Shell({ children }: { children: React.ReactNode }) {
     return Math.round(total / active.length);
   }, [ingestJobs]);
 
+  const marketTabsVisible =
+    metaSourcesEnabled === null || hasMarketSourcesEnabled(metaSourcesEnabled);
+  const pressTabsVisible =
+    metaSourcesEnabled === null || hasPressSourcesEnabled(metaSourcesEnabled);
+
   /** Definicion de items de navegacion. */
   const nav = [
     {
@@ -882,12 +946,32 @@ export function Shell({ children }: { children: React.ReactNode }) {
       icon: LayoutDashboard,
       description: "Señales clave",
     },
-    {
-      href: "/sentimiento",
-      label: "Sentimiento",
-      icon: HeartPulse,
-      description: "Histórico y análisis",
-    },
+    ...(pressTabsVisible
+      ? [
+          {
+            href: "/sentimiento/prensa",
+            label: "Sentimiento Prensa",
+            icon: HeartPulse,
+            description: "Histórico en medios",
+          },
+        ]
+      : []),
+    ...(marketTabsVisible
+      ? [
+          {
+            href: "/sentimiento/markets",
+            label: "Sentimiento Markets",
+            icon: HeartPulse,
+            description: "Apps y marketplaces",
+          },
+          {
+            href: "/markets",
+            label: "Markets WoW",
+            icon: Newspaper,
+            description: "WOW intelligence",
+          },
+        ]
+      : []),
   ];
   const anyPanelOpen = ingestOpen || profilesOpen || settingsOpen;
 
@@ -1645,25 +1729,15 @@ export function Shell({ children }: { children: React.ReactNode }) {
                                             </div>
                                           )}
                                         </div>
-                                        <button
-                                          type="button"
-                                          onClick={() =>
-                                            updateSettingValue(row.toggleKey, !enabled)
-                                          }
-                                          className={`settings-toggle ${
-                                            enabled ? "is-on" : "is-off"
-                                          } relative inline-flex shrink-0 h-6 w-11 items-center rounded-full border transition ${
+                                        <span
+                                          className={`rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] ${
                                             enabled
-                                              ? "border-[color:var(--aqua)] bg-[color:var(--gradient-chip)]"
-                                              : "border-[color:var(--border-60)] bg-[color:var(--surface-60)]"
+                                              ? "border-[color:var(--aqua)] text-[color:var(--aqua)]"
+                                              : "border-[color:var(--border-60)] text-[color:var(--text-55)]"
                                           }`}
                                         >
-                                          <span
-                                            className={`settings-toggle-knob inline-block h-4 w-4 transform rounded-full bg-white shadow transition ${
-                                              enabled ? "translate-x-5" : "translate-x-1"
-                                            }`}
-                                          />
-                                        </button>
+                                          {enabled ? "Activa" : "Inactiva"}
+                                        </span>
                                       </div>
                                       <div className="mt-3 grid gap-2 sm:grid-cols-2">
                                         {row.keyKeys.map((key) => {

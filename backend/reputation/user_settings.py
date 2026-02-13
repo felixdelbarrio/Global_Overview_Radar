@@ -41,14 +41,19 @@ GROUPS: list[dict[str, str]] = [
         "description": "Selecciona el idioma general para noticias y traducciones de opiniones.",
     },
     {
-        "id": "sources_public",
-        "label": "Fuentes sin credenciales",
-        "description": "Activa o desactiva fuentes que no requieren API Key.",
+        "id": "sources_markets",
+        "label": "Fuentes Markets",
+        "description": ("Activa o desactiva fuentes de marketplaces y reseñas de producto."),
+    },
+    {
+        "id": "sources_press",
+        "label": "Fuentes Prensa",
+        "description": ("Activa o desactiva el resto de orígenes (prensa, social, foros y blogs)."),
     },
     {
         "id": "sources_credentials",
-        "label": "Fuentes con credenciales",
-        "description": "Activa fuentes que requieren API Key.",
+        "label": "Credenciales API",
+        "description": "Configura las API Keys de las fuentes que las necesitan.",
     },
     {
         "id": "news",
@@ -109,9 +114,18 @@ FIELDS: list[UserSettingField] = [
         default=False,
     ),
     UserSettingField(
+        key="visualization.show_dashboard_responses",
+        env="REPUTATION_UI_SHOW_DASHBOARD_RESPONSES",
+        group="language",
+        label="Opiniones contestadas en Dashboard",
+        description=("Si está activado, el Dashboard muestra el bloque de opiniones contestadas."),
+        kind="boolean",
+        default=False,
+    ),
+    UserSettingField(
         key="sources.news",
         env="REPUTATION_SOURCE_NEWS",
-        group="sources_public",
+        group="sources_press",
         label="Noticias (RSS)",
         description="Agregadores y RSS.",
         kind="boolean",
@@ -120,7 +134,7 @@ FIELDS: list[UserSettingField] = [
     UserSettingField(
         key="sources.newsapi",
         env="REPUTATION_SOURCE_NEWSAPI",
-        group="sources_credentials",
+        group="sources_press",
         label="NewsAPI",
         description="Proveedor NewsAPI.",
         kind="boolean",
@@ -129,7 +143,7 @@ FIELDS: list[UserSettingField] = [
     UserSettingField(
         key="sources.gdelt",
         env="REPUTATION_SOURCE_GDELT",
-        group="sources_public",
+        group="sources_press",
         label="GDELT",
         description="Global Database of Events.",
         kind="boolean",
@@ -138,7 +152,7 @@ FIELDS: list[UserSettingField] = [
     UserSettingField(
         key="sources.guardian",
         env="REPUTATION_SOURCE_GUARDIAN",
-        group="sources_credentials",
+        group="sources_press",
         label="The Guardian",
         description="Open Platform.",
         kind="boolean",
@@ -147,7 +161,7 @@ FIELDS: list[UserSettingField] = [
     UserSettingField(
         key="sources.forums",
         env="REPUTATION_SOURCE_FORUMS",
-        group="sources_public",
+        group="sources_press",
         label="Foros",
         description="Foros y comunidades.",
         kind="boolean",
@@ -156,7 +170,7 @@ FIELDS: list[UserSettingField] = [
     UserSettingField(
         key="sources.blogs",
         env="REPUTATION_SOURCE_BLOGS_RSS",
-        group="sources_public",
+        group="sources_press",
         label="Blogs",
         description="Blogs RSS.",
         kind="boolean",
@@ -165,7 +179,7 @@ FIELDS: list[UserSettingField] = [
     UserSettingField(
         key="sources.appstore",
         env="REPUTATION_SOURCE_APPSTORE",
-        group="sources_public",
+        group="sources_markets",
         label="App Store",
         description="Opiniones en App Store.",
         kind="boolean",
@@ -174,7 +188,7 @@ FIELDS: list[UserSettingField] = [
     UserSettingField(
         key="sources.trustpilot",
         env="REPUTATION_SOURCE_TRUSTPILOT",
-        group="sources_public",
+        group="sources_markets",
         label="Trustpilot",
         description="Reseñas Trustpilot.",
         kind="boolean",
@@ -183,7 +197,7 @@ FIELDS: list[UserSettingField] = [
     UserSettingField(
         key="sources.google_reviews",
         env="REPUTATION_SOURCE_GOOGLE_REVIEWS",
-        group="sources_credentials",
+        group="sources_press",
         label="Google Reviews",
         description="Reseñas de Google.",
         kind="boolean",
@@ -192,7 +206,7 @@ FIELDS: list[UserSettingField] = [
     UserSettingField(
         key="sources.google_play",
         env="REPUTATION_SOURCE_GOOGLE_PLAY",
-        group="sources_public",
+        group="sources_markets",
         label="Google Play",
         description="Opiniones en Google Play.",
         kind="boolean",
@@ -201,7 +215,7 @@ FIELDS: list[UserSettingField] = [
     UserSettingField(
         key="sources.youtube",
         env="REPUTATION_SOURCE_YOUTUBE",
-        group="sources_credentials",
+        group="sources_press",
         label="YouTube",
         description="Comentarios y menciones en YouTube.",
         kind="boolean",
@@ -210,7 +224,7 @@ FIELDS: list[UserSettingField] = [
     UserSettingField(
         key="sources.reddit",
         env="REPUTATION_SOURCE_REDDIT",
-        group="sources_credentials",
+        group="sources_press",
         label="Reddit",
         description="Conversaciones en Reddit.",
         kind="boolean",
@@ -219,7 +233,7 @@ FIELDS: list[UserSettingField] = [
     UserSettingField(
         key="sources.twitter",
         env="REPUTATION_SOURCE_TWITTER",
-        group="sources_credentials",
+        group="sources_press",
         label="X / Twitter",
         description="Conversaciones en X (Twitter).",
         kind="boolean",
@@ -228,7 +242,7 @@ FIELDS: list[UserSettingField] = [
     UserSettingField(
         key="sources.downdetector",
         env="REPUTATION_SOURCE_DOWNDETECTOR",
-        group="sources_public",
+        group="sources_markets",
         label="Downdetector",
         description="Incidencias y caídas.",
         kind="boolean",

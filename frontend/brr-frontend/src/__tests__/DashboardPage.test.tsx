@@ -79,6 +79,24 @@ it("renders dashboard header and combined mentions", async () => {
         stats: { count: 2 },
       });
     }
+    if (path.startsWith("/reputation/responses/summary")) {
+      return Promise.resolve({
+        totals: {
+          opinions_total: 2,
+          answered_total: 1,
+          answered_ratio: 0.5,
+          answered_positive: 1,
+          answered_neutral: 0,
+          answered_negative: 0,
+          unanswered_positive: 1,
+          unanswered_neutral: 0,
+          unanswered_negative: 0,
+        },
+        actor_breakdown: [],
+        repeated_replies: [],
+        answered_items: [],
+      });
+    }
     return Promise.resolve({});
   };
   apiGetMock.mockImplementation(handleGet);

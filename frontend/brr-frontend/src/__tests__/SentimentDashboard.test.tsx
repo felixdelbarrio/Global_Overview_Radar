@@ -78,6 +78,24 @@ describe("SentimentView dashboard", () => {
       if (path.startsWith("/reputation/items")) {
         return Promise.resolve(itemsResponse);
       }
+      if (path.startsWith("/reputation/responses/summary")) {
+        return Promise.resolve({
+          totals: {
+            opinions_total: 1,
+            answered_total: 0,
+            answered_ratio: 0,
+            answered_positive: 0,
+            answered_neutral: 0,
+            answered_negative: 0,
+            unanswered_positive: 1,
+            unanswered_neutral: 0,
+            unanswered_negative: 0,
+          },
+          actor_breakdown: [],
+          repeated_replies: [],
+          answered_items: [],
+        });
+      }
       if (path.startsWith("/reputation/settings")) {
         return Promise.resolve({ groups: [], advanced_options: [] });
       }

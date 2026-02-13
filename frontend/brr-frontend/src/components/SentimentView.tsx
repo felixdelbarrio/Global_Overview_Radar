@@ -34,6 +34,9 @@ import {
   SETTINGS_CHANGED_EVENT,
   type IngestSuccessDetail,
 } from "@/lib/events";
+import {
+  filterSourcesByScope,
+} from "@/lib/reputationSources";
 import type {
   ActorPrincipalMeta,
   MarketRating,
@@ -41,9 +44,11 @@ import type {
   ReputationCacheDocument,
   ReputationItem,
   ReputationMeta,
+  ReputationResponsesSummary,
 } from "@/lib/types";
 
 const SENTIMENTS = ["all", "positive", "neutral", "negative"] as const;
+const DISABLED_SCOPE_SOURCE_SENTINEL = "__none__";
 const MANUAL_OVERRIDE_BLOCKED_SOURCES = new Set(["appstore", "googlereviews"]);
 const MANUAL_OVERRIDE_BLOCKED_LABELS: Record<string, string> = {
   appstore: "App Store",
@@ -70,9 +75,11 @@ type ReputationCompareResponse = {
 };
 
 type DashboardMode = "dashboard" | "sentiment";
+type SentimentScope = "all" | "markets" | "press";
 
 type SentimentViewProps = {
   mode?: DashboardMode;
+  scope?: SentimentScope;
 };
 
 const SentimentChart = dynamic(
@@ -97,7 +104,7 @@ type DashboardMention = {
   sources?: string[];
 };
 
-export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
+export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentViewProps) {
   const today = useMemo(() => new Date(), []);
   const defaultTo = useMemo(() => toDateInput(today), [today]);
   const defaultFrom = useMemo(() => {
@@ -119,6 +126,10 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
   const [chartLoading, setChartLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [chartError, setChartError] = useState<string | null>(null);
+  const [responsesSummary, setResponsesSummary] = useState<ReputationResponsesSummary | null>(
+    null,
+  );
+  const [responsesLoading, setResponsesLoading] = useState(true);
   const [actorPrincipal, setActorPrincipal] = useState<ActorPrincipalMeta | null>(null);
   const [meta, setMeta] = useState<ReputationMeta | null>(null);
   const [marketRatings, setMarketRatings] = useState<MarketRating[]>([]);
@@ -149,6 +160,8 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
   const [cacheNoticeDismissed, setCacheNoticeDismissed] = useState(false);
   const defaultGeoAppliedRef = useRef(false);
   const isDashboard = mode === "dashboard";
+  const isSentimentMarkets = !isDashboard && scope === "markets";
+  const isSentimentPress = !isDashboard && scope === "press";
   const effectiveSentiment = isDashboard ? "all" : sentiment;
   const effectiveActor = isDashboard ? "all" : actor;
   const comparisonsEnabled = !isDashboard && Boolean(meta?.ui_show_comparisons);
@@ -310,10 +323,26 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
       Array.from(new Set(principalAliases.map(normalizeKey).filter(Boolean))),
     [principalAliases],
   );
+  const scopeAllowedSources = useMemo(() => {
+    const fromMeta = (meta?.sources_enabled ?? meta?.sources_available ?? []).filter(Boolean);
+    if (isDashboard) return fromMeta;
+    return filterSourcesByScope(fromMeta, scope);
+  }, [meta, isDashboard, scope]);
+  const effectiveSourcesForQuery = useMemo(() => {
+    if (sources.length) return sources;
+    if (isDashboard) return [];
+    if (scopeAllowedSources.length) return scopeAllowedSources;
+    return [DISABLED_SCOPE_SOURCE_SENTINEL];
+  }, [sources, isDashboard, scopeAllowedSources]);
+  const showResponsesSummary =
+    isSentimentMarkets || (isDashboard && Boolean(meta?.ui_show_dashboard_responses));
 
   useEffect(() => {
     let alive = true;
-    apiGetCached<ReputationMeta>("/reputation/meta", { ttlMs: 60000 })
+    apiGetCached<ReputationMeta>("/reputation/meta", {
+      ttlMs: 60000,
+      force: profileRefresh > 0,
+    })
       .then((meta) => {
         if (!alive) return;
         setActorPrincipal(meta.actor_principal ?? null);
@@ -350,7 +379,9 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
           if (effectiveToDate) f.to_date = effectiveToDate;
           if (effectiveSentiment !== "all") f.sentiment = effectiveSentiment;
           if (geo !== "all") f.geo = geo;
-          if (sources.length) f.sources = sources.join(",");
+          if (effectiveSourcesForQuery.length) {
+            f.sources = effectiveSourcesForQuery.join(",");
+          }
           return { ...f, ...overrides };
         };
 
@@ -382,7 +413,9 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
       params.set("entity", entityParam);
       if (geo !== "all") params.set("geo", geo);
       // When actor is specific, compare flow handles filters. Otherwise use entityParam.
-      if (sources.length) params.set("sources", sources.join(","));
+      if (effectiveSourcesForQuery.length) {
+        params.set("sources", effectiveSourcesForQuery.join(","));
+      }
 
       try {
         const doc = await apiGet<ReputationCacheDocument>(`/reputation/items?${params.toString()}`);
@@ -410,7 +443,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
     entityParam,
     geo,
     effectiveActor,
-    sources,
+    effectiveSourcesForQuery,
     principalAliasKeys,
     overrideRefresh,
     reputationRefresh,
@@ -423,7 +456,9 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
     if (effectiveToDate) params.set("to_date", effectiveToDate);
     if (effectiveSentiment !== "all") params.set("sentiment", effectiveSentiment);
     if (geo !== "all") params.set("geo", geo);
-    if (sources.length) params.set("sources", sources.join(","));
+    if (effectiveSourcesForQuery.length) {
+      params.set("sources", effectiveSourcesForQuery.join(","));
+    }
 
     apiGet<ReputationCacheDocument>(`/reputation/items?${params.toString()}`)
       .then((doc) => {
@@ -447,7 +482,67 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
     effectiveToDate,
     effectiveSentiment,
     geo,
-    sources,
+    effectiveSourcesForQuery,
+    overrideRefresh,
+    reputationRefresh,
+  ]);
+
+  useEffect(() => {
+    let alive = true;
+    if (!showResponsesSummary) {
+      setResponsesSummary(null);
+      setResponsesLoading(false);
+      return () => {
+        alive = false;
+      };
+    }
+    setResponsesLoading(true);
+    const params = new URLSearchParams();
+    if (effectiveFromDate) params.set("from_date", effectiveFromDate);
+    if (effectiveToDate) params.set("to_date", effectiveToDate);
+    if (effectiveSentiment !== "all") params.set("sentiment", effectiveSentiment);
+    if (geo !== "all") params.set("geo", geo);
+    if (effectiveSourcesForQuery.length) {
+      params.set("sources", effectiveSourcesForQuery.join(","));
+    }
+    params.set("entity", isDashboard ? "actor_principal" : "all");
+    if (
+      !isDashboard &&
+      comparisonsEnabled &&
+      effectiveActor !== "all" &&
+      !isPrincipalName(effectiveActor, principalAliasKeys)
+    ) {
+      params.set("actor", effectiveActor);
+    }
+    params.set("detail_limit", "80");
+
+    apiGet<ReputationResponsesSummary>(`/reputation/responses/summary?${params.toString()}`)
+      .then((summary) => {
+        if (!alive) return;
+        setResponsesSummary(summary);
+      })
+      .catch(() => {
+        if (!alive) return;
+        setResponsesSummary(null);
+      })
+      .finally(() => {
+        if (alive) setResponsesLoading(false);
+      });
+
+    return () => {
+      alive = false;
+    };
+  }, [
+    effectiveFromDate,
+    effectiveToDate,
+    effectiveSentiment,
+    geo,
+    effectiveSourcesForQuery,
+    showResponsesSummary,
+    isDashboard,
+    comparisonsEnabled,
+    effectiveActor,
+    principalAliasKeys,
     overrideRefresh,
     reputationRefresh,
   ]);
@@ -463,11 +558,15 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
   const sourcesOptions = useMemo(() => {
     const fromCounts = Object.keys(sourceCounts);
     if (fromCounts.length) {
-      return fromCounts.sort((a, b) => a.localeCompare(b));
+      return filterSourcesByScope(fromCounts, isDashboard ? "all" : scope).sort((a, b) =>
+        a.localeCompare(b),
+      );
     }
     const fromMeta = meta?.sources_available ?? meta?.sources_enabled ?? [];
-    return fromMeta.filter(Boolean).sort((a, b) => a.localeCompare(b));
-  }, [sourceCounts, meta]);
+    return filterSourcesByScope(fromMeta.filter(Boolean), isDashboard ? "all" : scope).sort(
+      (a, b) => a.localeCompare(b),
+    );
+  }, [sourceCounts, meta, isDashboard, scope]);
   const sortedSources = useMemo(() => [...sources].sort(), [sources]);
   useEffect(() => {
     sentimentRef.current = sentiment;
@@ -687,7 +786,7 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
   );
   const appleStoreEnabled = storeSourcesEnabled.has("appstore");
   const googlePlayEnabled = storeSourcesEnabled.has("google_play");
-  const showStoreRatings = appleStoreEnabled || googlePlayEnabled;
+  const showStoreRatings = !isSentimentPress && (appleStoreEnabled || googlePlayEnabled);
   const hasGeoSelection = geo !== "all";
   const showStoreRatingsForGeo = showStoreRatings && hasGeoSelection;
   const principalStoreRatings = useMemo(
@@ -752,12 +851,29 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
   const mentionsLabel = effectiveMentionsTab === "principal" ? principalLabel : actorLabel;
   const errorMessage = error || chartError;
   const mentionsLoading = itemsLoading || chartLoading;
-  const headerEyebrow = mode === "dashboard" ? "Dashboard" : "Panorama reputacional";
-  const headerTitle =
-    mode === "dashboard" ? "Dashboard reputacional" : "Sentimiento histórico";
+  const responseTotals = responsesSummary?.totals;
+  const repeatedReplies = responsesSummary?.repeated_replies ?? [];
+  const headerEyebrow = isDashboard
+    ? "Dashboard"
+    : isSentimentMarkets
+      ? "Sentimiento Markets"
+      : isSentimentPress
+        ? "Sentimiento Prensa"
+        : "Panorama reputacional";
+  const headerTitle = isDashboard
+    ? "Dashboard reputacional"
+    : isSentimentMarkets
+      ? "Sentimiento en Markets"
+      : isSentimentPress
+        ? "Sentimiento en Prensa"
+        : "Sentimiento histórico";
   const headerSubtitle =
-    mode === "dashboard"
+    isDashboard
       ? "Señales de percepción y salud operativa en un mismo vistazo."
+      : isSentimentMarkets
+        ? "Analiza conversación en app stores y marketplaces. Incluye bloque de opiniones contestadas."
+        : isSentimentPress
+          ? "Analiza conversación en prensa, social, foros y blogs (sin bloque de opiniones contestadas)."
       : comparisonsEnabled
         ? "Analiza la conversación por país, periodo y fuente. Detecta señales tempranas y compara impacto entre entidades."
         : "Analiza la conversación por país, periodo y fuente para el actor principal.";
@@ -1063,6 +1179,61 @@ export function SentimentView({ mode = "sentiment" }: SentimentViewProps) {
                   loading={itemsLoading}
                 />
               </>
+            )}
+            {showResponsesSummary && (
+              <div className="col-span-2 relative overflow-hidden rounded-2xl border border-[color:var(--border-70)] bg-[color:var(--surface-80)] px-4 py-3 shadow-[var(--shadow-soft)]">
+                <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-[color:var(--aqua)] via-[color:var(--blue)] to-transparent" />
+                <div className="text-[11px] uppercase tracking-[0.16em] text-[color:var(--text-45)]">
+                  Opiniones contestadas
+                </div>
+                {responsesLoading ? (
+                  <div className="mt-3 space-y-2">
+                    <LoadingPill className="h-4 w-28" label="Cargando respuestas" />
+                    <LoadingPill className="h-3 w-full" label="Cargando respuestas" />
+                  </div>
+                ) : (
+                  <>
+                    <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                      <ResponseStat label="Total" value={responseTotals?.answered_total ?? 0} />
+                      <ResponseStat
+                        label="+ contestadas"
+                        value={responseTotals?.answered_positive ?? 0}
+                      />
+                      <ResponseStat
+                        label="= contestadas"
+                        value={responseTotals?.answered_neutral ?? 0}
+                      />
+                      <ResponseStat
+                        label="- contestadas"
+                        value={responseTotals?.answered_negative ?? 0}
+                      />
+                    </div>
+                    <div className="mt-2 text-[11px] text-[color:var(--text-55)]">
+                      Cobertura de respuesta:{" "}
+                      {responseTotals
+                        ? `${(responseTotals.answered_ratio * 100).toFixed(1)}% (${responseTotals.answered_total}/${responseTotals.opinions_total})`
+                        : "0.0% (0/0)"}
+                    </div>
+                    {!!repeatedReplies.length && (
+                      <div className="mt-2 space-y-1">
+                        {repeatedReplies.slice(0, 3).map((reply) => (
+                          <div
+                            key={`${reply.reply_text}-${reply.count}`}
+                            className="rounded-lg border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-2 py-1.5"
+                          >
+                            <div className="text-[10px] uppercase tracking-[0.16em] text-[color:var(--text-45)]">
+                              Respuesta repetida {reply.count} veces
+                            </div>
+                            <div className="mt-1 text-xs text-[color:var(--ink)]">
+                              {cleanText(reply.reply_text) || "Sin texto"}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
             )}
           </div>
           {!isDashboard && (
@@ -1418,6 +1589,17 @@ function SummaryCard({
           value
         )}
       </div>
+    </div>
+  );
+}
+
+function ResponseStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-2 py-1.5">
+      <div className="text-[10px] uppercase tracking-[0.16em] text-[color:var(--text-45)]">
+        {label}
+      </div>
+      <div className="mt-1 text-sm font-semibold text-[color:var(--ink)]">{value}</div>
     </div>
   );
 }

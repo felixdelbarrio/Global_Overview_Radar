@@ -13,6 +13,25 @@ from reputation.models import ReputationItem
 
 logger = get_logger(__name__)
 
+_REPLY_TEXT_KEYS = (
+    "reply_text",
+    "replyText",
+    "replyContent",
+    "developerReply",
+    "developer_response",
+    "responseText",
+)
+_REPLY_AUTHOR_KEYS = ("reply_author", "replyAuthor", "developerName", "ownerName")
+_REPLY_DATE_KEYS = (
+    "reply_at",
+    "replyDate",
+    "replyTime",
+    "repliedAt",
+    "responseDate",
+    "responseTime",
+)
+_REPLY_CONTAINER_KEYS = ("reply", "response", "developerReply", "developer_response")
+
 
 class GooglePlayApiCollector(ReputationCollector):
     source_name = "google_play"
@@ -110,7 +129,11 @@ class GooglePlayScraperCollector(ReputationCollector):
             logger.warning("Google Play scrape failed: %s", exc)
             return []
 
-        reviews = _extract_reviews_from_html(html, limit=self._max_reviews)
+        reviews = _extract_reviews_from_html(
+            html,
+            limit=self._max_reviews,
+            language=self._language,
+        )
         items: list[ReputationItem] = []
         for review in reviews:
             item = _map_play_review(
@@ -138,7 +161,9 @@ def _extract_reviews_from_api(data: object) -> list[dict[str, Any]]:
     return []
 
 
-def _extract_reviews_from_html(html: str, limit: int) -> list[dict[str, Any]]:
+def _extract_reviews_from_html(
+    html: str, limit: int, language: str | None = None
+) -> list[dict[str, Any]]:
     reviews: list[dict[str, Any]] = []
     headers = list(re.finditer(r"<header class=\"c1bOId\"[^>]*data-review-id=\"([^\"]+)\"", html))
     for idx, match in enumerate(headers):
@@ -151,6 +176,10 @@ def _extract_reviews_from_html(html: str, limit: int) -> list[dict[str, Any]]:
         date_text = _extract_text(block, r"<span class=\"bp9Aid\">(.*?)</span>")
         rating = _extract_rating(block)
         content = _extract_text(block, r"<div class=\"h3YV2d\">(.*?)</div>", strip_tags=True)
+        reply = _extract_reply_from_block(block, language=language)
+        reply_author = reply.get("replyAuthor") if reply else None
+        reply_date = reply.get("replyDate") if reply else None
+        reply_text = reply.get("replyText") if reply else None
 
         reviews.append(
             {
@@ -159,6 +188,9 @@ def _extract_reviews_from_html(html: str, limit: int) -> list[dict[str, Any]]:
                 "date_text": date_text,
                 "rating": rating,
                 "text": content,
+                "replyText": reply_text,
+                "replyAuthor": reply_author,
+                "replyDate": reply_date,
             }
         )
         if len(reviews) >= limit:
@@ -179,15 +211,41 @@ def _extract_text(block: str, pattern: str, strip_tags: bool = False) -> str | N
 
 def _extract_rating(block: str) -> float | None:
     patterns = [
-        r"aria-label=\"Valoración:\\s*([0-9.,]+)",
-        r"aria-label=\"Rated\\s*([0-9.,]+)\\s*stars",
-        r"aria-label=\"([0-9.,]+)\\s*estrellas",
+        r'aria-label="[^"]*?([0-9]+(?:[.,][0-9]+)?)\s*(?:estrellas?|stars?)',
+        r'aria-label="(?:Valoración|Rated):?\s*([0-9]+(?:[.,][0-9]+)?)',
+        r'data-rating="([0-9]+(?:[.,][0-9]+)?)"',
     ]
     for pattern in patterns:
         match = re.search(pattern, block)
         if match:
             return _to_float(match.group(1))
     return None
+
+
+def _extract_reply_from_block(block: str, language: str | None) -> dict[str, str] | None:
+    # Google Play renders developer answers in a dedicated block (`ocpBU`).
+    reply_text = _extract_text(
+        block,
+        r'<div class="ras4vb">\s*<div>(.*?)</div>\s*</div>',
+        strip_tags=True,
+    ) or _extract_text(block, r'<div class="ras4vb">(.*?)</div>', strip_tags=True)
+    if not reply_text:
+        return None
+
+    reply_author = _extract_text(block, r'<div class="I6j64d">(.*?)</div>', strip_tags=True)
+    reply_date_text = _extract_text(block, r'<div class="I9Jtec">(.*?)</div>', strip_tags=True)
+    reply_date = parse_datetime(reply_date_text) or _parse_google_play_date(
+        reply_date_text, language
+    )
+
+    payload: dict[str, str] = {"replyText": reply_text}
+    if reply_author:
+        payload["replyAuthor"] = reply_author
+    if reply_date:
+        payload["replyDate"] = reply_date.isoformat()
+    elif reply_date_text:
+        payload["replyDate"] = reply_date_text
+    return payload
 
 
 def _to_float(value: str | None) -> float | None:
@@ -197,6 +255,88 @@ def _to_float(value: str | None) -> float | None:
         return float(value.replace(",", "."))
     except ValueError:
         return None
+
+
+def _as_text(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    cleaned = " ".join(value.split())
+    return cleaned or None
+
+
+def _extract_reply_text(value: object) -> str | None:
+    direct = _as_text(value)
+    if direct:
+        return direct
+    if not isinstance(value, dict):
+        return None
+    for key in ("text", "content", "body", "message", "reply", "response"):
+        candidate = _as_text(value.get(key))
+        if candidate:
+            return candidate
+    return None
+
+
+def _extract_reply_date(value: object) -> datetime | None:
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
+    if isinstance(value, (int, float)):
+        try:
+            return datetime.fromtimestamp(float(value), tz=timezone.utc)
+        except (OverflowError, OSError, ValueError):
+            return None
+    if isinstance(value, str):
+        return parse_datetime(value)
+    if isinstance(value, dict):
+        for key in _REPLY_DATE_KEYS:
+            parsed = _extract_reply_date(value.get(key))
+            if parsed:
+                return parsed
+    return None
+
+
+def _extract_review_reply(review: dict[str, Any]) -> dict[str, str | None] | None:
+    reply_text: str | None = None
+    reply_author: str | None = None
+    reply_at: datetime | None = None
+
+    for key in _REPLY_TEXT_KEYS:
+        reply_text = _extract_reply_text(review.get(key))
+        if reply_text:
+            break
+    for key in _REPLY_CONTAINER_KEYS:
+        container = review.get(key)
+        if not isinstance(container, dict):
+            continue
+        if reply_text is None:
+            reply_text = _extract_reply_text(container)
+        if reply_author is None:
+            for author_key in ("author", "name", *(_REPLY_AUTHOR_KEYS)):
+                reply_author = _as_text(container.get(author_key))
+                if reply_author:
+                    break
+        if reply_at is None:
+            reply_at = _extract_reply_date(container)
+    if reply_author is None:
+        for key in _REPLY_AUTHOR_KEYS:
+            reply_author = _as_text(review.get(key))
+            if reply_author:
+                break
+    if reply_at is None:
+        for key in _REPLY_DATE_KEYS:
+            reply_at = _extract_reply_date(review.get(key))
+            if reply_at:
+                break
+
+    if not reply_text:
+        return None
+    return {
+        "text": reply_text,
+        "author": reply_author,
+        "replied_at": reply_at.isoformat() if reply_at else None,
+    }
 
 
 def _map_play_review(
@@ -216,6 +356,25 @@ def _map_play_review(
     if published_at is None:
         published_at = _parse_google_play_date(review.get("date_text"), language)
 
+    reply = _extract_review_reply(review)
+    signals: dict[str, Any] = {
+        "rating": review.get("rating") or review.get("score"),
+        "package_id": package_id,
+        "country": country,
+        "language": language,
+        "geo": geo,
+        "date_text": review.get("date_text"),
+    }
+    if reply:
+        signals.update(
+            {
+                "has_reply": True,
+                "reply_text": reply.get("text"),
+                "reply_author": reply.get("author"),
+                "reply_at": reply.get("replied_at"),
+            }
+        )
+
     return ReputationItem(
         id=str(review_id or f"{package_id}:{country}:{text or ''}"),
         source=source,
@@ -226,14 +385,7 @@ def _map_play_review(
         url=review.get("url"),
         title=review.get("title"),
         text=text,
-        signals={
-            "rating": review.get("rating") or review.get("score"),
-            "package_id": package_id,
-            "country": country,
-            "language": language,
-            "geo": geo,
-            "date_text": review.get("date_text"),
-        },
+        signals=signals,
     )
 
 

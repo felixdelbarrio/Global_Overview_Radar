@@ -23,8 +23,9 @@ vi.mock("@/lib/api", () => ({
 }));
 
 import { apiGet, apiGetCached, apiPost } from "@/lib/api";
-import { INGEST_SUCCESS_EVENT } from "@/lib/events";
+import { INGEST_SUCCESS_EVENT, SETTINGS_CHANGED_EVENT } from "@/lib/events";
 import SentimientoPage from "@/app/sentimiento/page";
+import { SentimentView } from "@/components/SentimentView";
 
 const apiGetMock = vi.mocked(apiGet);
 const apiGetCachedMock = vi.mocked(apiGetCached);
@@ -146,6 +147,24 @@ describe("Sentimiento page", () => {
       if (path.startsWith("/reputation/items")) {
         return Promise.resolve(itemsResponse);
       }
+      if (path.startsWith("/reputation/responses/summary")) {
+        return Promise.resolve({
+          totals: {
+            opinions_total: 4,
+            answered_total: 2,
+            answered_ratio: 0.5,
+            answered_positive: 1,
+            answered_neutral: 0,
+            answered_negative: 1,
+            unanswered_positive: 1,
+            unanswered_neutral: 0,
+            unanswered_negative: 1,
+          },
+          actor_breakdown: [],
+          repeated_replies: [],
+          answered_items: [],
+        });
+      }
       if (path.startsWith("/reputation/settings")) {
         return Promise.resolve({ groups: [], advanced_options: [] });
       }
@@ -188,8 +207,7 @@ describe("Sentimiento page", () => {
 
     render(<SentimientoPage />);
 
-    expect(await screen.findByText("Sentimiento histórico")).toBeInTheDocument();
-
+    await screen.findByLabelText("País");
     await screen.findByRole("option", { name: "España" });
     const geoSelect = screen.getByLabelText("País");
     fireEvent.change(geoSelect, { target: { value: "España" } });
@@ -235,8 +253,7 @@ describe("Sentimiento page", () => {
   it("requests comparison when selecting another actor", async () => {
     render(<SentimientoPage />);
 
-    expect(await screen.findByText("Sentimiento histórico")).toBeInTheDocument();
-
+    await screen.findByLabelText("País");
     const geoSelect = screen.getByLabelText("País");
     fireEvent.change(geoSelect, { target: { value: "España" } });
 
@@ -248,6 +265,50 @@ describe("Sentimiento page", () => {
         "/reputation/items/compare",
         expect.anything()
       );
+    });
+  });
+
+  it("hides market ratings in press scope", async () => {
+    render(<SentimentView mode="sentiment" scope="press" />);
+
+    expect(await screen.findByText("Sentimiento en Prensa")).toBeInTheDocument();
+
+    await screen.findByRole("option", { name: "España" });
+    const geoSelect = screen.getByLabelText("País");
+    fireEvent.change(geoSelect, { target: { value: "España" } });
+
+    await waitFor(() => {
+      expect(screen.queryByText("Rating oficial")).not.toBeInTheDocument();
+      expect(screen.queryByText("Rating oficial otros actores")).not.toBeInTheDocument();
+    });
+  });
+
+  it("refreshes reputation meta bypassing cache after settings change", async () => {
+    render(<SentimientoPage />);
+
+    await screen.findByLabelText("País");
+
+    await waitFor(() => {
+      expect(apiGetCachedMock).toHaveBeenCalledWith(
+        "/reputation/meta",
+        expect.objectContaining({ ttlMs: 60000, force: false })
+      );
+    });
+
+    window.dispatchEvent(
+      new CustomEvent(SETTINGS_CHANGED_EVENT, { detail: { updated_at: "2026-02-13T12:00:00Z" } })
+    );
+
+    await waitFor(() => {
+      const hasForcedMetaRefresh = apiGetCachedMock.mock.calls.some(
+        ([path, options]) =>
+          path === "/reputation/meta" &&
+          typeof options === "object" &&
+          options !== null &&
+          "force" in options &&
+          options.force === true
+      );
+      expect(hasForcedMetaRefresh).toBe(true);
     });
   });
 });
