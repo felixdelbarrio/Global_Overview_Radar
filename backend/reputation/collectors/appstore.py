@@ -167,7 +167,9 @@ def _reply_signals(reply: dict[str, str | None]) -> dict[str, str | bool | None]
 def _extract_json_script_candidates(html: str) -> list[str]:
     prioritized: list[str] = []
     fallback: list[str] = []
-    for match in re.finditer(r"<script(?P<attrs>[^>]*)>(?P<body>.*?)</script\b[^>]*>", html, re.S | re.I):
+    for match in re.finditer(
+        r"<script(?P<attrs>[^>]*)>(?P<body>.*?)</script\b[^>]*>", html, re.S | re.I
+    ):
         attrs = match.group("attrs")
         body = match.group("body").strip()
         if not body:
