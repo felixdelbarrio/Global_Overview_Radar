@@ -137,10 +137,7 @@ def _sentiment_from_stars(stars: float) -> tuple[str, float]:
     else:
         label = "neutral"
 
-    if stars <= 2.5:
-        score = (stars - 2.5) / 1.5
-    else:
-        score = (stars - 2.5) / 2.5
+    score = (stars - 2.5) / 1.5 if stars <= 2.5 else (stars - 2.5) / 2.5
     score = max(-1.0, min(1.0, score))
     return label, score
 

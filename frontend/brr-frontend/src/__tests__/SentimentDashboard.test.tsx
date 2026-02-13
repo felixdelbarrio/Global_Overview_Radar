@@ -154,8 +154,125 @@ describe("SentimentView dashboard", () => {
     expect(await screen.findByText("Dashboard reputacional")).toBeInTheDocument();
     expect(await screen.findByText("TOP 10 FUNCIONALIDADES PENALIZADAS")).toBeInTheDocument();
     expect(await screen.findByText("ALERTAS CALIENTES")).toBeInTheDocument();
-    expect(await screen.findByText("MAPA DE CALOR DE LOS MARKETS")).toBeInTheDocument();
+    expect(await screen.findByText("MAPA DE CALOR DE OPINIONES NEGATIVAS EN LOS MARKETS")).toBeInTheDocument();
     expect(screen.queryByText("ÚLTIMAS MENCIONES")).not.toBeInTheDocument();
+  });
+
+  it("renders heatmap between filtros principales and sentimiento chart", async () => {
+    render(<SentimentView mode="dashboard" />);
+
+    const filtros = await screen.findByText("FILTROS PRINCIPALES");
+    const heatmap = await screen.findByText("MAPA DE CALOR DE OPINIONES NEGATIVAS EN LOS MARKETS");
+    const sentimiento = await screen.findByText("SENTIMIENTO");
+
+    expect(Boolean(filtros.compareDocumentPosition(heatmap) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(heatmap.compareDocumentPosition(sentimiento) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+  });
+
+  it("uses global mentions as denominator and ranks heat rows by share", async () => {
+    const handleGet = (path: string) => {
+      if (path.startsWith("/reputation/meta")) {
+        return Promise.resolve(metaResponse);
+      }
+      if (path.startsWith("/reputation/profiles")) {
+        return Promise.resolve(profilesResponse);
+      }
+      if (path.startsWith("/reputation/items")) {
+        return Promise.resolve(itemsResponse);
+      }
+      if (path.startsWith("/reputation/responses/summary")) {
+        return Promise.resolve({
+          totals: {
+            opinions_total: 42,
+            answered_total: 0,
+            answered_ratio: 0,
+            answered_positive: 0,
+            answered_neutral: 0,
+            answered_negative: 0,
+            unanswered_positive: 0,
+            unanswered_neutral: 0,
+            unanswered_negative: 42,
+          },
+          actor_breakdown: [],
+          repeated_replies: [],
+          answered_items: [],
+        });
+      }
+      if (path.startsWith("/reputation/markets/insights")) {
+        return Promise.resolve({
+          generated_at: "2025-01-12T00:00:00Z",
+          principal_actor: "Acme Bank",
+          comparisons_enabled: false,
+          filters: { geo: "España", from_date: "2025-01-01", to_date: "2025-01-31", sources: [] },
+          kpis: {
+            total_mentions: 42,
+            negative_mentions: 35,
+            negative_ratio: 35 / 42,
+            positive_mentions: 7,
+            neutral_mentions: 0,
+            unique_authors: 10,
+            recurring_authors: 0,
+            average_sentiment_score: -0.4,
+          },
+          daily_volume: [{ date: "2025-01-01", count: 42 }],
+          geo_summary: [],
+          recurring_authors: [],
+          top_penalized_features: [{ feature: "login", key: "login", count: 3, evidence: [] }],
+          source_friction: [
+            {
+              source: "google_play",
+              total: 2,
+              negative: 2,
+              positive: 0,
+              neutral: 0,
+              negative_ratio: 1,
+              top_features: [],
+            },
+            {
+              source: "downdetector",
+              total: 1,
+              negative: 1,
+              positive: 0,
+              neutral: 0,
+              negative_ratio: 1,
+              top_features: [],
+            },
+            {
+              source: "appstore",
+              total: 39,
+              negative: 32,
+              positive: 7,
+              neutral: 0,
+              negative_ratio: 32 / 39,
+              top_features: [],
+            },
+          ],
+          alerts: [],
+          responses: undefined,
+          newsletter_by_geo: [],
+        });
+      }
+      if (path.startsWith("/reputation/settings")) {
+        return Promise.resolve({ groups: [], advanced_options: [] });
+      }
+      return Promise.resolve({});
+    };
+
+    apiGetMock.mockImplementation(handleGet);
+    apiGetCachedMock.mockImplementation(handleGet);
+
+    render(<SentimentView mode="dashboard" />);
+
+    expect(await screen.findByText("32/42 negativas (76.2%)")).toBeInTheDocument();
+    expect(await screen.findByText("2/42 negativas (4.8%)")).toBeInTheDocument();
+    expect(await screen.findByText("1/42 negativas (2.4%)")).toBeInTheDocument();
+
+    const appstore = screen.getByText("appstore");
+    const googlePlay = screen.getByText("google_play");
+    const downdetector = screen.getByText("downdetector");
+
+    expect(Boolean(appstore.compareDocumentPosition(googlePlay) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    expect(Boolean(googlePlay.compareDocumentPosition(downdetector) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
   });
 
   it("uses natural month range and supports month navigation", async () => {

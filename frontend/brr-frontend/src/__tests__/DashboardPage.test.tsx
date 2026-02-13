@@ -150,7 +150,7 @@ it("renders dashboard header and combined mentions", async () => {
   expect(await screen.findByText("Dashboard reputacional")).toBeInTheDocument();
   expect(await screen.findByText("TOP 10 FUNCIONALIDADES PENALIZADAS")).toBeInTheDocument();
   expect(await screen.findByText("ALERTAS CALIENTES")).toBeInTheDocument();
-  expect(await screen.findByText("MAPA DE CALOR DE LOS MARKETS")).toBeInTheDocument();
+  expect(await screen.findByText("MAPA DE CALOR DE OPINIONES NEGATIVAS EN LOS MARKETS")).toBeInTheDocument();
   expect(screen.queryByText("ÚLTIMAS MENCIONES")).not.toBeInTheDocument();
 });
 
