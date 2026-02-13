@@ -1500,6 +1500,7 @@ def reputation_markets_insights(
                     opinions.append(
                         {
                             "id": item.id,
+                            "author": _safe_author(raw_author),
                             "source": source,
                             "geo": item_geo,
                             "sentiment": sentiment,
