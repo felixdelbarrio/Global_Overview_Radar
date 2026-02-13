@@ -107,3 +107,80 @@ it("renders dashboard header and combined mentions", async () => {
   expect(await screen.findByText("Dashboard reputacional")).toBeInTheDocument();
   expect(await screen.findByText("Comentario positivo")).toBeInTheDocument();
 });
+
+it("renders latest mentions without waiting for chart dataset", async () => {
+  const pendingChartRequest = new Promise<never>(() => {
+    // intentionally unresolved: emulates slow chart query on first load
+  });
+
+  const handleCachedGet = (path: string) => {
+    if (path.startsWith("/reputation/meta")) {
+      return Promise.resolve({
+        actor_principal: { canonical: "BBVA" },
+        geos: ["España"],
+        sources_enabled: ["gdelt", "appstore"],
+        sources_available: ["gdelt", "appstore"],
+      });
+    }
+    if (path.startsWith("/reputation/profiles")) {
+      return Promise.resolve({
+        active: { source: "samples", profiles: [], profile_key: "default" },
+        options: { default: [], samples: [] },
+      });
+    }
+    return Promise.resolve({});
+  };
+
+  const handleGet = (path: string) => {
+    if (path.startsWith("/reputation/items")) {
+      if (!path.includes("entity=actor_principal")) {
+        return pendingChartRequest;
+      }
+      return Promise.resolve({
+        generated_at: "2025-01-02T00:00:00Z",
+        config_hash: "hash",
+        sources_enabled: ["gdelt", "appstore"],
+        items: [
+          {
+            id: "1",
+            source: "gdelt",
+            geo: "España",
+            actor: "BBVA",
+            title: "Comentario positivo",
+            text: "Excelente servicio",
+            sentiment: "positive",
+            published_at: "2025-01-01T10:00:00Z",
+            signals: { sentiment_score: 0.5 },
+          },
+        ],
+        stats: { count: 1 },
+      });
+    }
+    if (path.startsWith("/reputation/responses/summary")) {
+      return Promise.resolve({
+        totals: {
+          opinions_total: 1,
+          answered_total: 0,
+          answered_ratio: 0,
+          answered_positive: 0,
+          answered_neutral: 0,
+          answered_negative: 0,
+          unanswered_positive: 1,
+          unanswered_neutral: 0,
+          unanswered_negative: 0,
+        },
+        actor_breakdown: [],
+        repeated_replies: [],
+        answered_items: [],
+      });
+    }
+    return Promise.resolve({});
+  };
+
+  apiGetCachedMock.mockImplementation(handleCachedGet);
+  apiGetMock.mockImplementation(handleGet);
+
+  render(<DashboardPage />);
+
+  expect(await screen.findByText("Comentario positivo")).toBeInTheDocument();
+});

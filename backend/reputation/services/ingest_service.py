@@ -62,7 +62,10 @@ from reputation.models import (
 )
 from reputation.repositories.cache_repo import ReputationCacheRepo
 from reputation.repositories.overrides_repo import ReputationOverridesRepo
-from reputation.services.sentiment_service import ReputationSentimentService
+from reputation.services.sentiment_service import (
+    ReputationSentimentService,
+    _extract_star_rating,
+)
 
 logger = get_logger(__name__)
 ProgressCallback = Callable[[str, int, Optional[dict[str, Any]]], None]
@@ -139,6 +142,13 @@ def _guess_google_play_locale(geo: str | None) -> tuple[str, str]:
 
 DEFAULT_LOOKBACK_DAYS = 730
 _REPLY_TRACKED_SOURCES = {"appstore", "google_play"}
+_MANUAL_OVERRIDE_BLOCKED_SOURCES = {
+    "appstore",
+    "google_play",
+    "google_reviews",
+    "downdetector",
+}
+_STAR_SENTIMENT_SOURCES = {"appstore", "google_play", "google_reviews"}
 _REPLY_SIGNAL_KEYS = {
     "has_reply",
     "reply_text",
@@ -1440,6 +1450,12 @@ class ReputationIngestService:
                 current.title = item.title
             if item.text and (not current.text or len(item.text) > len(current.text)):
                 current.text = item.text
+            if (
+                item.source in _STAR_SENTIMENT_SOURCES
+                and item.sentiment
+                and _extract_star_rating(item) is not None
+            ):
+                current.sentiment = item.sentiment
             if not current.sentiment and item.sentiment:
                 current.sentiment = item.sentiment
             if item.signals:
@@ -1485,6 +1501,8 @@ class ReputationIngestService:
             sentiment = overrides.get(item.id)
             if not sentiment:
                 continue
+            if item.source.strip().lower() in _MANUAL_OVERRIDE_BLOCKED_SOURCES:
+                continue
             item.sentiment = sentiment
             item.signals["manual_sentiment"] = True
             item.signals["sentiment_locked"] = True
@@ -1511,12 +1529,21 @@ class ReputationIngestService:
         target_language = _resolve_translation_language()
         existing_keys = {(item.source, item.id) for item in existing} if existing else set()
         if existing_keys:
+            star_items = [
+                item
+                for item in valid_items
+                if item.source in _STAR_SENTIMENT_SOURCES
+                and _extract_star_rating(item) is not None
+            ]
             new_items = [
                 item for item in valid_items if (item.source, item.id) not in existing_keys
             ]
-            if target_language:
+            if target_language and new_items:
                 new_items = service.translate_items(new_items, target_language)
-            updated = service.analyze_items(new_items)
+            pending_by_key = {(item.source, item.id): item for item in new_items}
+            for star_item in star_items:
+                pending_by_key[(star_item.source, star_item.id)] = star_item
+            updated = service.analyze_items(list(pending_by_key.values()))
             updated_map = {(item.source, item.id): item for item in updated}
             result_map = {
                 (item.source, item.id): updated_map.get((item.source, item.id), item)

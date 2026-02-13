@@ -186,7 +186,7 @@ describe("Sentimiento page", () => {
     });
   });
 
-  it("renders sentiment view with filters, overrides, and download", async () => {
+  it("renders sentiment view with filters, without manual controls in markets, and download", async () => {
     if (!("createObjectURL" in URL)) {
       Object.defineProperty(URL, "createObjectURL", {
         value: vi.fn(() => "blob:mock"),
@@ -214,18 +214,9 @@ describe("Sentimiento page", () => {
 
     fireEvent.click(screen.getByText("Descargar gráfico"));
 
-    const adjustButtons = await screen.findAllByText("Ajustar");
-    fireEvent.click(adjustButtons[0]);
-
-    const geoInput = screen.getByPlaceholderText("Ej: España");
-    fireEvent.change(geoInput, { target: { value: "USA" } });
-
-    fireEvent.click(screen.getByText("Guardar ajuste"));
     await waitFor(() => {
-      expect(apiPostMock).toHaveBeenCalledWith(
-        "/reputation/items/override",
-        expect.anything()
-      );
+      expect(screen.queryByText("Control manual")).not.toBeInTheDocument();
+      expect(screen.queryByText("Ajustar")).not.toBeInTheDocument();
     });
 
     fireEvent.click(screen.getByText("Descargar listado"));
