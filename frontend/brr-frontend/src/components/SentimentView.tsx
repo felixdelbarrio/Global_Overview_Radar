@@ -71,6 +71,7 @@ const MARKET_OPINION_SOURCE_KEYS = new Set([
   "googlereviews",
   "downdetector",
 ]);
+const MARKET_REPLY_TRACKED_SOURCE_KEYS = new Set(["appstore", "googleplay"]);
 
 type SentimentFilter = (typeof SENTIMENTS)[number];
 type SentimentValue = Exclude<SentimentFilter, "all">;
@@ -219,6 +220,10 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
   const dashboardMonthLabel = useMemo(
     () => formatMonthLabel(dashboardMonthCursor),
     [dashboardMonthCursor],
+  );
+  const dashboardMonthShortLabel = useMemo(
+    () => dashboardMonthLabel.split(" de ")[0] || dashboardMonthLabel,
+    [dashboardMonthLabel],
   );
   const handleDashboardPrevMonth = () => {
     touchCommonFilters();
@@ -983,17 +988,44 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
     () => dashboardMarketInsights?.source_friction ?? [],
     [dashboardMarketInsights],
   );
+  const dashboardResponseSourceFriction = useMemo(
+    () => dashboardMarketInsights?.response_source_friction ?? [],
+    [dashboardMarketInsights],
+  );
+  const dashboardResponseOpinionsTotal = useMemo(() => {
+    const total = Number(dashboardMarketInsights?.responses?.totals?.opinions_total ?? 0);
+    if (!Number.isFinite(total) || total <= 0) return 0;
+    return total;
+  }, [dashboardMarketInsights]);
+  const dashboardDowndetectorIncidents = useMemo(() => {
+    const explicit = Number(dashboardMarketInsights?.downdetector_incidents ?? 0);
+    if (Number.isFinite(explicit) && explicit > 0) return Math.trunc(explicit);
+    const fallback = dashboardSourceFriction.find(
+      (entry) => normalizeSourceKey(entry.source) === "downdetector",
+    );
+    if (!fallback) return 0;
+    const count = Number(fallback.total ?? fallback.negative ?? 0);
+    if (!Number.isFinite(count) || count <= 0) return 0;
+    return Math.trunc(count);
+  }, [dashboardMarketInsights, dashboardSourceFriction]);
   const dashboardHeatSources = useMemo<DashboardHeatSource[]>(() => {
-    const totalMentions = Number(dashboardMarketInsights?.kpis?.total_mentions ?? 0);
-    if (!Number.isFinite(totalMentions) || totalMentions <= 0) return [];
-    return dashboardSourceFriction
+    const sourceRows = (dashboardResponseSourceFriction.length
+      ? dashboardResponseSourceFriction
+      : dashboardSourceFriction
+    ).filter((entry) => MARKET_REPLY_TRACKED_SOURCE_KEYS.has(normalizeSourceKey(entry.source)));
+    const denominator =
+      dashboardResponseOpinionsTotal > 0
+        ? dashboardResponseOpinionsTotal
+        : sourceRows.reduce((sum, entry) => sum + Math.max(0, Number(entry.total ?? 0)), 0);
+    if (!Number.isFinite(denominator) || denominator <= 0) return [];
+    return sourceRows
       .map((entry) => {
         const negative = Math.max(0, Number(entry.negative ?? 0));
         return {
           source: entry.source,
-          total: totalMentions,
+          total: denominator,
           negative,
-          negative_ratio: negative / totalMentions,
+          negative_ratio: negative / denominator,
         };
       })
       .sort((a, b) => {
@@ -1001,7 +1033,7 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
         if (b.negative !== a.negative) return b.negative - a.negative;
         return a.source.localeCompare(b.source);
       });
-  }, [dashboardMarketInsights, dashboardSourceFriction]);
+  }, [dashboardResponseSourceFriction, dashboardSourceFriction, dashboardResponseOpinionsTotal]);
   const dashboardMaxFeatureCount = useMemo(
     () =>
       Math.max(
@@ -1025,18 +1057,10 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
     ? summarizeAnsweredMentions(actorMentions)
     : null;
   const answeredTotalPrincipalLabel = responseTotalsPrincipal.answeredTotal.toLocaleString("es-ES");
+  const opinionsTotalPrincipalLabel = responseTotalsPrincipal.opinionsTotal.toLocaleString("es-ES");
   const answeredTotalComparisonLabel =
     splitResponsesByActor && responseTotalsComparison
       ? responseTotalsComparison.answeredTotal.toLocaleString("es-ES")
-      : null;
-  const answeredOverTotalPrincipalLabel = `${responseTotalsPrincipal.answeredTotal.toLocaleString(
-    "es-ES",
-  )}/${responseTotalsPrincipal.opinionsTotal.toLocaleString("es-ES")}`;
-  const answeredOverTotalComparisonLabel =
-    splitResponsesByActor && responseTotalsComparison
-      ? `${responseTotalsComparison.answeredTotal.toLocaleString(
-          "es-ES",
-        )}/${responseTotalsComparison.opinionsTotal.toLocaleString("es-ES")}`
       : null;
   const responseCoveragePrincipal = formatResponseCoverageFromMentions(responseTotalsPrincipal, {
     includeTotals: !isDashboard,
@@ -1399,6 +1423,21 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
                       </div>
                     </div>
                   ))}
+                {!dashboardMarketInsightsLoading &&
+                  !dashboardMarketInsightsError &&
+                  dashboardDowndetectorIncidents > 0 && (
+                    <div className="rounded-xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-3 py-2 text-xs text-[color:var(--text-55)]">
+                      Downdetector ha identificado{" "}
+                      <span className="font-semibold text-[color:var(--ink)]">
+                        {dashboardDowndetectorIncidents.toLocaleString("es-ES")}
+                      </span>{" "}
+                      {dashboardDowndetectorIncidents === 1 ? "caída" : "caídas"} en{" "}
+                      <span className="font-semibold text-[color:var(--ink)]">
+                        {dashboardMonthShortLabel}
+                      </span>
+                      .
+                    </div>
+                  )}
               </div>
             </section>
           )}
@@ -1419,6 +1458,8 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
                   positiveMentions={positivesSummaryPrincipal}
                   neutralMentions={neutralsSummaryPrincipal}
                   negativeMentions={negativesSummaryPrincipal}
+                  actorName={actorPrincipalName}
+                  monthLabel={dashboardMonthShortLabel}
                   loading={itemsLoading}
                 />
                 <div className="col-span-2">
@@ -1482,22 +1523,26 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
                   data-testid="responses-summary-title"
                   className="text-[11px] uppercase tracking-[0.16em] text-[color:var(--text-45)]"
                 >
-                  <span className="inline-flex items-center gap-1">
-                    {formatVsValue(
-                      isDashboard ? answeredOverTotalPrincipalLabel : answeredTotalPrincipalLabel,
-                      isDashboard ? answeredOverTotalComparisonLabel : answeredTotalComparisonLabel,
-                      {
+                  {isDashboard ? (
+                    <span className="inline-flex items-end gap-1">
+                      <span className="text-2xl font-display font-semibold leading-none text-[color:var(--ink)]">
+                        {answeredTotalPrincipalLabel}
+                      </span>
+                      <span className="pb-0.5 text-base font-semibold leading-none text-[color:var(--text-45)]">
+                        /{opinionsTotalPrincipalLabel}
+                      </span>
+                      <span className="pb-0.5">opiniones del market contestadas</span>
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1">
+                      {formatVsValue(answeredTotalPrincipalLabel, answeredTotalComparisonLabel, {
                         containerClassName: "inline-flex items-center whitespace-nowrap",
                         vsClassName:
                           "mx-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-[color:var(--text-45)]",
-                      },
-                    )}
-                    <span>
-                      {isDashboard
-                        ? "opiniones del market contestadas"
-                        : "opiniones contestadas"}
+                      })}
+                      <span>opiniones contestadas</span>
                     </span>
-                  </span>
+                  )}
                 </div>
                 <div className="mt-1 text-[10px] text-[color:var(--text-55)]">
                   {formatVsValue(actorPrincipalName, splitResponsesByActor ? actorLabel : null, {
@@ -1524,6 +1569,7 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
                         comparisonDenominator={
                           isDashboard ? responseTotalsComparison?.opinionsPositive ?? null : null
                         }
+                        prominentRatio={isDashboard}
                       />
                       <ResponseStat
                         label="Neutras"
@@ -1533,6 +1579,7 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
                         comparisonDenominator={
                           isDashboard ? responseTotalsComparison?.opinionsNeutral ?? null : null
                         }
+                        prominentRatio={isDashboard}
                       />
                       <ResponseStat
                         label="Negativas"
@@ -1544,6 +1591,7 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
                         comparisonDenominator={
                           isDashboard ? responseTotalsComparison?.opinionsNegative ?? null : null
                         }
+                        prominentRatio={isDashboard}
                       />
                     </div>
                     <div className="mt-2 text-[11px] text-[color:var(--text-55)]">
@@ -2038,12 +2086,16 @@ function PrincipalMentionsCard({
   positiveMentions,
   neutralMentions,
   negativeMentions,
+  actorName,
+  monthLabel,
   loading = false,
 }: {
   totalMentions: ReactNode;
   positiveMentions: ReactNode;
   neutralMentions: ReactNode;
   negativeMentions: ReactNode;
+  actorName: string;
+  monthLabel: string;
   loading?: boolean;
 }) {
   return (
@@ -2062,7 +2114,7 @@ function PrincipalMentionsCard({
           <div className="mt-2 text-2xl font-display font-semibold text-[color:var(--ink)]">
             {totalMentions}
             <span className="ml-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--text-45)]">
-              menciones actor principal
+              {`menciones ${actorName} en ${monthLabel}`.toUpperCase()}
             </span>
           </div>
           <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3 text-xs">
@@ -2092,30 +2144,52 @@ function formatCountRatioLabel(value: number, denominator?: number | null): stri
   return `${numeratorLabel}/${denominator.toLocaleString("es-ES")}`;
 }
 
+function formatCountRatioValue(
+  value: number,
+  denominator: number | null | undefined,
+  prominentRatio: boolean,
+): ReactNode {
+  if (!prominentRatio || typeof denominator !== "number") {
+    return formatCountRatioLabel(value, denominator);
+  }
+  return (
+    <span className="inline-flex items-end whitespace-nowrap">
+      <span className="text-2xl font-display font-semibold leading-none text-[color:var(--ink)]">
+        {value.toLocaleString("es-ES")}
+      </span>
+      <span className="ml-0.5 pb-0.5 text-xs font-semibold leading-none text-[color:var(--text-45)]">
+        /{denominator.toLocaleString("es-ES")}
+      </span>
+    </span>
+  );
+}
+
 function ResponseStat({
   label,
   value,
   denominator = null,
   comparisonValue = null,
   comparisonDenominator = null,
+  prominentRatio = false,
 }: {
   label: string;
   value: number;
   denominator?: number | null;
   comparisonValue?: number | null;
   comparisonDenominator?: number | null;
+  prominentRatio?: boolean;
 }) {
-  const principal = formatCountRatioLabel(value, denominator);
+  const principal = formatCountRatioValue(value, denominator, prominentRatio);
   const comparison =
     typeof comparisonValue === "number"
-      ? formatCountRatioLabel(comparisonValue, comparisonDenominator)
+      ? formatCountRatioValue(comparisonValue, comparisonDenominator, prominentRatio)
       : null;
   return (
     <div className="rounded-xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-2 py-1.5 text-center">
       <div className="text-[10px] uppercase tracking-[0.16em] text-[color:var(--text-45)]">
         {label}
       </div>
-      <div className="mt-1 text-sm font-semibold text-[color:var(--ink)]">
+      <div className={`mt-1 ${prominentRatio ? "text-base" : "text-sm"} font-semibold text-[color:var(--ink)]`}>
         {formatVsValue(principal, comparison, {
           containerClassName: "inline-flex items-center justify-center whitespace-nowrap",
           vsClassName:

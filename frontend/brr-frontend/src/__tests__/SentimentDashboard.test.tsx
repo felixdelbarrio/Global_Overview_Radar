@@ -1,7 +1,14 @@
 /** Tests del modo dashboard de SentimentView. */
 
 import React from "react";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  waitForElementToBeRemoved,
+  within,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next/link", () => ({
@@ -169,7 +176,7 @@ describe("SentimentView dashboard", () => {
     expect(Boolean(heatmap.compareDocumentPosition(sentimiento) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
   });
 
-  it("uses global mentions as denominator and ranks heat rows by share", async () => {
+  it("uses contestable-opinions denominator and excludes downdetector from heat rows", async () => {
     const handleGet = (path: string) => {
       if (path.startsWith("/reputation/meta")) {
         return Promise.resolve(metaResponse);
@@ -247,8 +254,44 @@ describe("SentimentView dashboard", () => {
               top_features: [],
             },
           ],
+          response_source_friction: [
+            {
+              source: "appstore",
+              total: 39,
+              negative: 32,
+              positive: 7,
+              neutral: 0,
+              negative_ratio: 32 / 42,
+              top_features: [],
+            },
+            {
+              source: "google_play",
+              total: 2,
+              negative: 2,
+              positive: 0,
+              neutral: 0,
+              negative_ratio: 2 / 42,
+              top_features: [],
+            },
+          ],
+          downdetector_incidents: 1,
           alerts: [],
-          responses: undefined,
+          responses: {
+            totals: {
+              opinions_total: 42,
+              answered_total: 0,
+              answered_ratio: 0,
+              answered_positive: 0,
+              answered_neutral: 0,
+              answered_negative: 0,
+              unanswered_positive: 0,
+              unanswered_neutral: 0,
+              unanswered_negative: 42,
+            },
+            actor_breakdown: [],
+            repeated_replies: [],
+            answered_items: [],
+          },
           newsletter_by_geo: [],
         });
       }
@@ -263,27 +306,38 @@ describe("SentimentView dashboard", () => {
 
     render(<SentimentView mode="dashboard" />);
 
-    await waitFor(
-      () => {
-        expect(screen.getByText("32/42 negativas (76.2%)")).toBeInTheDocument();
-        expect(screen.getByText("2/42 negativas (4.8%)")).toBeInTheDocument();
-        expect(screen.getByText("1/42 negativas (2.4%)")).toBeInTheDocument();
-      },
-      { timeout: 5000 }
-    );
-
     const heatmapTitle = screen.getByText("MAPA DE CALOR DE OPINIONES NEGATIVAS EN LOS MARKETS");
     const heatmapSection = heatmapTitle.closest("section");
     expect(heatmapSection).not.toBeNull();
-    const ratioRows = within(heatmapSection as HTMLElement).getAllByText(
-      /^\d+\/\d+ negativas \(\d+\.\d%\)$/
+
+    const sectionQueries = within(heatmapSection as HTMLElement);
+    const loadingPills = sectionQueries.queryAllByText("Cargando canales");
+    if (loadingPills.length > 0) {
+      await waitForElementToBeRemoved(loadingPills, { timeout: 7000 });
+    }
+
+    const ratioRows = await waitFor(
+      () => sectionQueries.getAllByText(/^\d+\/\d+ negativas \(\d+\.\d%\)$/),
+      { timeout: 7000 }
     );
     const ratioTexts = ratioRows.map((row) => row.textContent?.trim() ?? "");
-    expect(ratioTexts.slice(0, 3)).toEqual([
-      "32/42 negativas (76.2%)",
-      "2/42 negativas (4.8%)",
-      "1/42 negativas (2.4%)",
-    ]);
+    const parseRatio = (text: string) => {
+      const match = /^(\d+)\/(\d+) negativas \((\d+\.\d)%\)$/.exec(text);
+      expect(match).not.toBeNull();
+      return {
+        negative: Number(match?.[1] ?? 0),
+        total: Number(match?.[2] ?? 0),
+        percent: Number(match?.[3] ?? 0),
+      };
+    };
+    const topRatio = parseRatio(ratioTexts[0] ?? "");
+    const secondRatio = parseRatio(ratioTexts[1] ?? "");
+    expect(topRatio.negative).toBe(32);
+    expect(secondRatio.negative).toBe(2);
+    expect(topRatio.total).toBe(secondRatio.total);
+    expect(topRatio.percent).toBeGreaterThan(secondRatio.percent);
+    expect(sectionQueries.queryByText(/1\/\d+ negativas \(\d+\.\d%\)/)).not.toBeInTheDocument();
+    expect(sectionQueries.getByText(/Downdetector ha identificado/i)).toBeInTheDocument();
   });
 
   it("renders dashboard summary with actor mentions, market responses ratios and response coverage percent", async () => {

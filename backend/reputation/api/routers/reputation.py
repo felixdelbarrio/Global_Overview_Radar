@@ -1631,6 +1631,18 @@ def reputation_markets_insights(
         secondary_canonicals=secondary_canonicals,
         detail_limit=120,
     )
+    response_source_stats: dict[str, dict[str, int]] = {}
+    for response_item in response_items:
+        source = response_item.source or "desconocida"
+        if source not in _RESPONSE_TRACKED_SOURCES:
+            continue
+        sentiment = _safe_sentiment(response_item.sentiment)
+        bucket = response_source_stats.setdefault(
+            source,
+            {"total": 0, "positive": 0, "neutral": 0, "negative": 0, "unknown": 0},
+        )
+        bucket["total"] += 1
+        bucket[sentiment] = bucket.get(sentiment, 0) + 1
 
     total_mentions = len(scoped_items)
     sentiment_counts: Counter[str] = Counter()
@@ -1828,6 +1840,39 @@ def reputation_markets_insights(
     source_friction.sort(
         key=lambda entry: (-float(entry["negative_ratio"]), -int(entry["total"]), entry["source"])
     )
+    response_totals = response_summary.get("totals") if isinstance(response_summary, dict) else {}
+    response_opinions_total = int(response_totals.get("opinions_total") or 0)
+    response_friction_denominator = response_opinions_total
+    if response_friction_denominator <= 0:
+        response_friction_denominator = sum(
+            int(stats.get("total") or 0) for stats in response_source_stats.values()
+        )
+
+    response_source_friction: list[dict[str, Any]] = []
+    for source, stats in response_source_stats.items():
+        total = int(stats.get("total") or 0)
+        negative = int(stats.get("negative") or 0)
+        response_source_friction.append(
+            {
+                "source": source,
+                "total": total,
+                "negative": negative,
+                "positive": int(stats.get("positive") or 0),
+                "neutral": int(stats.get("neutral") or 0),
+                "negative_ratio": _ratio(negative, response_friction_denominator),
+                "top_features": [
+                    {
+                        "feature": feature_display.get(feature_key, feature_key),
+                        "count": count,
+                    }
+                    for feature_key, count in source_feature_counts[source].most_common(3)
+                ],
+            }
+        )
+    response_source_friction.sort(
+        key=lambda entry: (-float(entry["negative_ratio"]), -int(entry["negative"]), entry["source"])
+    )
+    downdetector_incidents = sum(1 for item in scoped_items if (item.source or "") == "downdetector")
 
     geo_summary: list[dict[str, Any]] = []
     for item_geo, stats in geo_stats.items():
@@ -2073,6 +2118,8 @@ def reputation_markets_insights(
         "recurring_authors": recurring_authors,
         "top_penalized_features": top_penalized_features,
         "source_friction": source_friction,
+        "response_source_friction": response_source_friction,
+        "downdetector_incidents": downdetector_incidents,
         "alerts": alerts,
         "responses": response_summary,
         "newsletter_by_geo": newsletter_by_geo,

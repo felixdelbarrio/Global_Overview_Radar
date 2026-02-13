@@ -239,6 +239,8 @@ export type MarketInsightsResponse = {
   recurring_authors: MarketRecurringAuthor[];
   top_penalized_features: MarketPenalizedFeature[];
   source_friction: MarketSourceFriction[];
+  response_source_friction?: MarketSourceFriction[];
+  downdetector_incidents?: number;
   alerts: MarketAlert[];
   responses?: ReputationResponsesSummary;
   newsletter_by_geo: MarketNewsletterEdition[];
