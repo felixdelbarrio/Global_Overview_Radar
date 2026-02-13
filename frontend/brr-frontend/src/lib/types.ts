@@ -77,6 +77,7 @@ export type ReputationMeta = {
 
 export type MarketRecurringOpinion = {
   id: string;
+  author?: string;
   source: string;
   geo: string;
   sentiment: string;

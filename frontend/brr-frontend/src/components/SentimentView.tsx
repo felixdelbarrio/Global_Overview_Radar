@@ -51,10 +51,17 @@ import type {
 
 const SENTIMENTS = ["all", "positive", "neutral", "negative"] as const;
 const DISABLED_SCOPE_SOURCE_SENTINEL = "__none__";
-const MANUAL_OVERRIDE_BLOCKED_SOURCES = new Set(["appstore", "googlereviews"]);
+const MANUAL_OVERRIDE_BLOCKED_SOURCES = new Set([
+  "appstore",
+  "googleplay",
+  "googlereviews",
+  "downdetector",
+]);
 const MANUAL_OVERRIDE_BLOCKED_LABELS: Record<string, string> = {
   appstore: "App Store",
+  googleplay: "Google Play",
   googlereviews: "Google Reviews",
+  downdetector: "Downdetector",
 };
 
 type SentimentFilter = (typeof SENTIMENTS)[number];
@@ -992,7 +999,8 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
     effectiveMentionsTab === "principal" ? principalMentions : actorMentions;
   const mentionsLabel = effectiveMentionsTab === "principal" ? principalLabel : actorLabel;
   const errorMessage = error || chartError;
-  const mentionsLoading = itemsLoading || chartLoading;
+  // "Ultimas menciones" depende solo del dataset de items, no del fetch del grafico.
+  const mentionsLoading = itemsLoading;
   const responseTotals = responsesSummary?.totals;
   const repeatedReplies = responsesSummary?.repeated_replies ?? [];
   const headerEyebrow = isDashboard

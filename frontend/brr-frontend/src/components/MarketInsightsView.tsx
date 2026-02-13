@@ -48,6 +48,21 @@ function fmtDateTime(value: string | null | undefined): string {
   }).format(date);
 }
 
+function compactText(value: string | null | undefined): string {
+  return (value ?? "").trim().split(/\s+/).filter(Boolean).join(" ");
+}
+
+function buildOpinionComment(title: string | undefined, excerpt: string | undefined): string {
+  const cleanTitle = compactText(title);
+  const cleanExcerpt = compactText(excerpt);
+  if (cleanTitle && cleanExcerpt) {
+    return cleanTitle.toLowerCase() === cleanExcerpt.toLowerCase()
+      ? cleanTitle
+      : `${cleanTitle} ${cleanExcerpt}`;
+  }
+  return cleanTitle || cleanExcerpt;
+}
+
 function severityTone(severity: string): string {
   const normalized = severity.toLowerCase();
   if (normalized === "critical") return "text-rose-300 border-rose-400/40 bg-rose-500/10";
@@ -472,27 +487,39 @@ export function MarketInsightsView() {
                       </div>
                     </summary>
                     <ul className="mt-3 space-y-2">
-                      {author.opinions.map((opinion) => (
-                        <li
-                          key={opinion.id}
-                          className="rounded-lg border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-2"
-                        >
-                          <div className="flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-[0.16em] text-[color:var(--text-55)]">
-                            <span>{opinion.source}</span>
-                            <span>{opinion.geo}</span>
-                            <span>{opinion.sentiment}</span>
-                            <span>{fmtDateTime(opinion.published_at)}</span>
-                          </div>
-                          <div className="mt-1 text-sm text-[color:var(--ink)]">
-                            {opinion.title || "Sin título"}
-                          </div>
-                          {opinion.excerpt && (
-                            <div className="mt-1 text-xs text-[color:var(--text-60)]">
-                              {opinion.excerpt}
+                      {author.opinions.map((opinion) => {
+                        const opinionComment = buildOpinionComment(opinion.title, opinion.excerpt);
+                        const opinionAuthor = compactText(opinion.author || author.author);
+                        return (
+                          <li
+                            key={opinion.id}
+                            className="rounded-lg border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-2"
+                          >
+                            <div className="flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-[0.16em] text-[color:var(--text-55)]">
+                              <span>{opinion.source}</span>
+                              <span>{opinion.geo}</span>
+                              <span>{opinion.sentiment}</span>
+                              <span>{fmtDateTime(opinion.published_at)}</span>
                             </div>
-                          )}
-                        </li>
-                      ))}
+                            <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-[color:var(--text-55)]">
+                              <span className="rounded-full border border-[color:var(--border-60)] px-2 py-0.5">
+                                Autor: {opinionAuthor || "Autor sin nombre"}
+                              </span>
+                              <span className="rounded-full border border-[color:var(--border-60)] px-2 py-0.5">
+                                ID: {opinion.id}
+                              </span>
+                            </div>
+                            <div className="mt-2 rounded-lg border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-3 py-2">
+                              <div className="text-[10px] uppercase tracking-[0.16em] text-[color:var(--text-55)]">
+                                Comentario
+                              </div>
+                              <div className="mt-1 text-sm text-[color:var(--ink)]">
+                                {opinionComment || "Sin texto de comentario"}
+                              </div>
+                            </div>
+                          </li>
+                        );
+                      })}
                     </ul>
                   </details>
                 ))}

@@ -70,6 +70,65 @@ def test_google_play_rating_uses_stars_and_skips_llm(
     assert result.signals.get("client_sentiment") is True
 
 
+@pytest.mark.parametrize(
+    ("rating", "expected_label", "expected_score"),
+    [
+        (1.0, "negative", -1.0),
+        (2.5, "neutral", 0.0),
+        (5.0, "positive", 1.0),
+    ],
+)
+def test_store_ratings_use_strict_sentiment_mapping(
+    monkeypatch: pytest.MonkeyPatch,
+    rating: float,
+    expected_label: str,
+    expected_score: float,
+) -> None:
+    service = _service(monkeypatch, llm_enabled=True)
+
+    def _unexpected_call(*args: object, **kwargs: object) -> str:
+        raise AssertionError("LLM no debe ejecutarse para items con estrellas")
+
+    monkeypatch.setattr(service, "_send_llm_request", _unexpected_call)
+    item = ReputationItem(
+        id=f"gp-{rating}",
+        source="google_play",
+        title="Reseña",
+        text="Contenido",
+        signals={"rating": rating},
+    )
+
+    result = service.analyze_item(item)
+
+    assert result.sentiment == expected_label
+    assert result.signals.get("sentiment_score") == pytest.approx(expected_score)
+    assert result.signals.get("sentiment_provider") == "stars"
+
+
+def test_star_sentiment_extracts_score_field_for_store_sources(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = _service(monkeypatch, llm_enabled=True)
+
+    def _unexpected_call(*args: object, **kwargs: object) -> str:
+        raise AssertionError("LLM no debe ejecutarse para items con estrellas")
+
+    monkeypatch.setattr(service, "_send_llm_request", _unexpected_call)
+    item = ReputationItem(
+        id="gp-score",
+        source="google_play",
+        title="Reseña",
+        text="Contenido",
+        signals={"score": "1"},
+    )
+
+    result = service.analyze_item(item)
+
+    assert result.sentiment == "negative"
+    assert result.signals.get("sentiment_score") == pytest.approx(-1.0)
+    assert result.signals.get("sentiment_provider") == "stars"
+
+
 def test_existing_star_classification_is_not_reprocessed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -205,6 +264,48 @@ def test_ingest_service_applies_manual_override_lock(
     assert items[1].sentiment is None
 
 
+def test_ingest_service_ignores_manual_override_for_market_sources(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import reputation.config as rep_config
+
+    overrides_path = tmp_path / "reputation_overrides.json"
+    overrides_path.write_text(
+        json.dumps(
+            {
+                "updated_at": "2026-01-01T00:00:00+00:00",
+                "items": {
+                    "market-1": {"sentiment": "positive"},
+                    "news-1": {"sentiment": "negative"},
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(rep_config.settings, "overrides_path", overrides_path)
+
+    service = ReputationIngestService()
+    items = [
+        ReputationItem(
+            id="market-1",
+            source="google_play",
+            title="x",
+            text="y",
+            signals={"rating": 1},
+        ),
+        ReputationItem(id="news-1", source="news", title="x", text="y", signals={}),
+    ]
+
+    service._lock_manual_sentiment_items(items)
+
+    assert items[0].sentiment is None
+    assert items[0].signals.get("sentiment_provider") is None
+    assert items[0].signals.get("sentiment_locked") is None
+    assert items[1].sentiment == "negative"
+    assert items[1].signals.get("sentiment_provider") == "manual_override"
+    assert items[1].signals.get("sentiment_locked") is True
+
+
 def test_ingest_service_forces_downdetector_as_negative(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -240,6 +341,44 @@ def test_ingest_service_forces_downdetector_as_negative(
         == "downdetector_always_negative"
     )
     assert by_id["news-1"].signals.get("source_sentiment_rule") is None
+
+
+def test_ingest_service_recomputes_store_sentiment_even_for_existing_ids(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LLM_ENABLED", "false")
+    service = ReputationIngestService()
+    existing = [
+        ReputationItem(
+            id="gp-existing",
+            source="google_play",
+            title="Antes",
+            text="",
+            sentiment="neutral",
+            signals={
+                "rating": 1,
+                "sentiment_provider": "stars",
+                "sentiment_score": 0.0,
+            },
+        )
+    ]
+    incoming = [
+        ReputationItem(
+            id="gp-existing",
+            source="google_play",
+            title="Ahora",
+            text="",
+            signals={"rating": 1},
+        )
+    ]
+
+    updated = service._apply_sentiment({}, incoming, existing=existing, notes=[])
+    merged = service._merge_items(existing, updated)
+    by_id = {item.id: item for item in merged}
+
+    assert by_id["gp-existing"].sentiment == "negative"
+    assert by_id["gp-existing"].signals.get("sentiment_provider") == "stars"
+    assert by_id["gp-existing"].signals.get("sentiment_score") == pytest.approx(-1.0)
 
 
 def test_tokens_match_keyword_reuses_compiled_cache(

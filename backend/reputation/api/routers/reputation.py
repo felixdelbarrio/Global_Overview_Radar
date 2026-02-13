@@ -55,6 +55,13 @@ def _refresh_settings() -> None:
 router = APIRouter(dependencies=[Depends(_refresh_settings), Depends(require_google_user)])
 
 _ALLOWED_SENTIMENTS = {"positive", "negative", "neutral"}
+_MANUAL_OVERRIDE_BLOCKED_SOURCES = {
+    "appstore",
+    "google_play",
+    "google_reviews",
+    "downdetector",
+}
+_STAR_SENTIMENT_SOURCES = {"appstore", "google_play", "google_reviews"}
 _COMPARE_BODY = Body(...)
 
 
@@ -72,6 +79,85 @@ class SettingsUpdateRequest(BaseModel):
 class ProfilesUpdateRequest(BaseModel):
     source: str | None = None
     profiles: list[str] | None = None
+
+
+def _is_manual_override_blocked_source(source: str | None) -> bool:
+    if not isinstance(source, str):
+        return False
+    return source.strip().lower() in _MANUAL_OVERRIDE_BLOCKED_SOURCES
+
+
+def _coerce_star_value(raw: object) -> float | None:
+    value: float | None = None
+    if isinstance(raw, (int, float)):
+        value = float(raw)
+    elif isinstance(raw, str):
+        try:
+            value = float(raw.replace(",", "."))
+        except ValueError:
+            value = None
+    if value is None:
+        return None
+    if value <= 0:
+        return None
+    return min(5.0, max(0.0, value))
+
+
+def _extract_star_rating(item: ReputationItem) -> float | None:
+    signals = item.signals if isinstance(item.signals, dict) else {}
+    candidates: list[object] = [
+        signals.get("rating"),
+        signals.get("score"),
+        signals.get("stars"),
+        signals.get("star_rating"),
+        signals.get("user_rating"),
+        signals.get("rating_value"),
+        signals.get("reviewRating"),
+    ]
+    for candidate in candidates:
+        if candidate in (None, ""):
+            continue
+        if isinstance(candidate, dict):
+            for nested_key in ("value", "rating", "score", "stars"):
+                nested = _coerce_star_value(candidate.get(nested_key))
+                if nested is not None:
+                    return nested
+            continue
+        value = _coerce_star_value(candidate)
+        if value is not None:
+            return value
+    return None
+
+
+def _sentiment_from_stars(stars: float) -> tuple[str, float]:
+    if stars < 2.5:
+        label = "negative"
+    elif stars > 2.5:
+        label = "positive"
+    else:
+        label = "neutral"
+
+    if stars <= 2.5:
+        score = (stars - 2.5) / 1.5
+    else:
+        score = (stars - 2.5) / 2.5
+    score = max(-1.0, min(1.0, score))
+    return label, score
+
+
+def _enforce_star_sentiment(item: ReputationItem) -> None:
+    source = (item.source or "").strip().lower()
+    if source not in _STAR_SENTIMENT_SOURCES:
+        return
+    stars = _extract_star_rating(item)
+    if stars is None:
+        return
+    label, score = _sentiment_from_stars(stars)
+    item.sentiment = label
+    item.signals["sentiment_score"] = score
+    item.signals["sentiment_provider"] = "stars"
+    item.signals["sentiment_scale"] = "1-5"
+    item.signals["client_sentiment"] = True
 
 
 def _load_cache() -> ReputationCacheDocument:
@@ -126,6 +212,11 @@ def _apply_overrides(
                     item_copy.id,
                     exc_info=True,
                 )
+                _enforce_star_sentiment(item_copy)
+                result.append(item_copy)
+                continue
+            if _is_manual_override_blocked_source(item_copy.source):
+                _enforce_star_sentiment(item_copy)
                 result.append(item_copy)
                 continue
             item_copy.manual_override = override
@@ -133,6 +224,7 @@ def _apply_overrides(
                 item_copy.geo = override.geo
             if override.sentiment:
                 item_copy.sentiment = override.sentiment
+        _enforce_star_sentiment(item_copy)
         result.append(item_copy)
     return result
 
@@ -1079,6 +1171,29 @@ def reputation_items_override(
     if not geo and not sentiment:
         raise HTTPException(status_code=400, detail="geo or sentiment is required")
 
+    doc = _load_cache_optional()
+    source_by_id: dict[str, str] = {}
+    if doc is not None:
+        source_by_id = {
+            item.id: item.source
+            for item in doc.items
+            if isinstance(item.id, str) and isinstance(item.source, str)
+        }
+    blocked_ids = [
+        item_id
+        for item_id in payload.ids
+        if _is_manual_override_blocked_source(source_by_id.get(item_id))
+    ]
+    if blocked_ids:
+        sources = sorted({source_by_id.get(item_id, "") for item_id in blocked_ids})
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "manual overrides are not allowed for market/store sources "
+                f"({', '.join(source for source in sources if source)}): {blocked_ids}"
+            ),
+        )
+
     repo = ReputationOverridesRepo(settings.overrides_path)
     overrides = repo.load()
     updated_at = datetime.now(timezone.utc).isoformat()
@@ -1385,6 +1500,7 @@ def reputation_markets_insights(
                     opinions.append(
                         {
                             "id": item.id,
+                            "author": _safe_author(raw_author),
                             "source": source,
                             "geo": item_geo,
                             "sentiment": sentiment,

@@ -83,6 +83,7 @@ describe("MarketsPage", () => {
               opinions: [
                 {
                   id: "a1",
+                  author: "ana_1989",
                   source: "appstore",
                   geo: "ES",
                   sentiment: "negative",
@@ -191,6 +192,8 @@ describe("MarketsPage", () => {
     expect(await screen.findByText("Newsletter por geografía")).toBeInTheDocument();
     expect(await screen.findByText("Respuestas oficiales")).toBeInTheDocument();
     expect(await screen.findByText("Ana")).toBeInTheDocument();
+    expect(await screen.findByText("Autor: ana_1989")).toBeInTheDocument();
+    expect(await screen.findByText("ID: a1")).toBeInTheDocument();
 
     fireEvent.click(screen.getByText("Copiar"));
     expect((await screen.findAllByText("Markets WoW")).length).toBeGreaterThan(0);

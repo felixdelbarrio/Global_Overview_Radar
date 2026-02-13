@@ -38,11 +38,7 @@ _STAR_SENTIMENT_SOURCES = {"appstore", "google_play", "google_reviews"}
 _ACTOR_TEXT_REQUIRED_SOURCES = {"news", "blogs", "gdelt", "newsapi", "guardian"}
 
 
-def _extract_star_rating(item: ReputationItem) -> float | None:
-    signals = item.signals or {}
-    raw = signals.get("rating")
-    if raw is None:
-        return None
+def _coerce_star_value(raw: object) -> float | None:
     value: float | None = None
     if isinstance(raw, (int, float)):
         value = float(raw)
@@ -58,14 +54,46 @@ def _extract_star_rating(item: ReputationItem) -> float | None:
     return min(5.0, max(0.0, value))
 
 
+def _extract_star_rating(item: ReputationItem) -> float | None:
+    signals = item.signals or {}
+    candidates: list[object] = [
+        signals.get("rating"),
+        signals.get("score"),
+        signals.get("stars"),
+        signals.get("star_rating"),
+        signals.get("user_rating"),
+        signals.get("rating_value"),
+        signals.get("reviewRating"),
+    ]
+    for candidate in candidates:
+        if candidate in (None, ""):
+            continue
+        if isinstance(candidate, dict):
+            for nested_key in ("value", "rating", "score", "stars"):
+                nested = _coerce_star_value(candidate.get(nested_key))
+                if nested is not None:
+                    return nested
+            continue
+        value = _coerce_star_value(candidate)
+        if value is not None:
+            return value
+    return None
+
+
 def _sentiment_from_stars(stars: float) -> tuple[str, float]:
-    if stars >= 4.0:
-        label = "positive"
-    elif stars <= 2.0:
+    if stars < 2.5:
         label = "negative"
+    elif stars > 2.5:
+        label = "positive"
     else:
         label = "neutral"
-    score = max(-1.0, min(1.0, (stars - 3.0) / 2.0))
+
+    # Piecewise scaling keeps 1/5 as the worst point, 2.5/5 as neutral, and 5/5 as best.
+    if stars <= 2.5:
+        score = (stars - 2.5) / 1.5
+    else:
+        score = (stars - 2.5) / 2.5
+    score = max(-1.0, min(1.0, score))
     return label, score
 
 
