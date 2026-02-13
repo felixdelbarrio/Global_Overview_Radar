@@ -146,7 +146,6 @@ _MANUAL_OVERRIDE_BLOCKED_SOURCES = {
     "appstore",
     "google_play",
     "google_reviews",
-    "downdetector",
 }
 _STAR_SENTIMENT_SOURCES = {"appstore", "google_play", "google_reviews"}
 _REPLY_SIGNAL_KEYS = {
@@ -997,11 +996,17 @@ class ReputationIngestService:
             source = (item.source or "").strip().lower()
             if source != "downdetector":
                 continue
-            item.sentiment = "negative"
-            item.signals["sentiment_score"] = -1.0
+            if item.signals.get("sentiment_locked"):
+                continue
+            sentiment_model = item.signals.get("sentiment_model")
+            if isinstance(sentiment_model, str) and sentiment_model.strip():
+                item.signals.pop("source_sentiment_rule", None)
+                continue
+            item.sentiment = "neutral"
+            item.signals["sentiment_score"] = 0.0
             item.signals["sentiment_provider"] = "source_rule"
             item.signals["sentiment_scale"] = "-1-1"
-            item.signals["source_sentiment_rule"] = "downdetector_always_negative"
+            item.signals["source_sentiment_rule"] = "downdetector_default_neutral"
 
     @staticmethod
     def _is_invalid_segment(item: ReputationItem) -> bool:

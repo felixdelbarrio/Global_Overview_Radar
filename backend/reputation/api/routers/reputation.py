@@ -59,7 +59,6 @@ _MANUAL_OVERRIDE_BLOCKED_SOURCES = {
     "appstore",
     "google_play",
     "google_reviews",
-    "downdetector",
 }
 _STAR_SENTIMENT_SOURCES = {"appstore", "google_play", "google_reviews"}
 _COMPARE_BODY = Body(...)
@@ -375,9 +374,8 @@ _MARKET_RECURRING_AUTHOR_LIMIT = 10
 _MARKET_AUTHOR_OPINION_LIMIT = 12
 _MARKET_FEATURE_LIMIT = 10
 _MARKET_FEATURE_EVIDENCE_LIMIT = 3
-_MARKET_NEWSLETTER_GEO_LIMIT = 6
 _MARKET_ALERT_LIMIT = 8
-_MARKET_SOURCES = {"appstore", "google_play", "downdetector"}
+_MARKET_SOURCES = {"appstore", "google_play"}
 _RESPONSE_TRACKED_SOURCES = {"appstore", "google_play"}
 _MARKET_GENERIC_FEATURE_KEYS = {
     "bbva",
@@ -535,133 +533,6 @@ def _feature_candidates(
 
     result.sort(key=lambda item: (-len(item[2]), item[0]))
     return result[:80]
-
-
-def _market_actions(
-    top_features: list[dict[str, Any]],
-    recurring_authors: list[dict[str, Any]],
-    negative_ratio: float,
-    top_source: str | None,
-) -> list[str]:
-    actions: list[str] = []
-    feature_keys = {normalize_text(str(entry.get("feature") or "")) for entry in top_features}
-
-    if any("login" in key or "acceso" in key or "token" in key for key in feature_keys):
-        actions.append(
-            "Activar un plan de choque en autenticación (login, OTP y recuperación) con seguimiento diario."
-        )
-    if any(
-        "caida" in key or "rendimiento" in key or "errores" in key or "transferencia" in key
-        for key in feature_keys
-    ):
-        actions.append(
-            "Priorizar estabilidad transaccional y rendimiento móvil con guardias técnicas 24/7."
-        )
-    if any("comision" in key or "tarjeta" in key for key in feature_keys):
-        actions.append(
-            "Publicar una nota proactiva de producto aclarando comisiones, límites y cambios recientes."
-        )
-    if recurring_authors:
-        actions.append(
-            "Contactar a los autores más recurrentes para cerrar el loop de feedback y validar mejoras."
-        )
-    if negative_ratio >= 0.4:
-        actions.append(
-            "Lanzar un war-room reputacional de 48h con revisión por fuente, severidad y geografía."
-        )
-    if top_source:
-        actions.append(
-            f"Reforzar moderación y respuesta en {top_source} para frenar la tracción de opiniones negativas."
-        )
-
-    unique_actions: list[str] = []
-    seen: set[str] = set()
-    for action in actions:
-        if action in seen:
-            continue
-        seen.add(action)
-        unique_actions.append(action)
-    if not unique_actions:
-        unique_actions.append(
-            "Mantener vigilancia activa: no hay una señal dominante, pero conviene monitorizar tendencias diarias."
-        )
-    return unique_actions[:4]
-
-
-def _compose_newsletter_markdown(
-    *,
-    geo: str,
-    from_date: str | None,
-    to_date: str | None,
-    principal_actor: str,
-    total_mentions: int,
-    negative_mentions: int,
-    recurring_authors: list[dict[str, Any]],
-    top_features: list[dict[str, Any]],
-    top_sources: list[dict[str, Any]],
-    alerts: list[dict[str, Any]],
-    actions: list[str],
-) -> str:
-    range_label = f"{from_date or 'inicio'} → {to_date or 'hoy'}"
-    lines = [
-        f"# Newsletter reputacional · {geo}",
-        "",
-        f"**Actor principal:** {principal_actor}",
-        f"**Periodo:** {range_label}",
-        "",
-        "## Señales clave",
-        f"- Menciones totales: **{total_mentions}**",
-        f"- Menciones negativas: **{negative_mentions}**",
-        f"- Autores recurrentes (2+ opiniones): **{len(recurring_authors)}**",
-        "",
-    ]
-
-    lines.append("## Top funcionalidades penalizadas")
-    if top_features:
-        for idx, entry in enumerate(top_features[:_MARKET_FEATURE_LIMIT], start=1):
-            lines.append(
-                f"{idx}. {entry.get('feature', 'Sin etiqueta')} · {entry.get('count', 0)} menciones"
-            )
-    else:
-        lines.append("- No hay señales negativas suficientes para ranking de funcionalidades.")
-    lines.append("")
-
-    lines.append("## Voces más insistentes")
-    if recurring_authors:
-        for idx, entry in enumerate(recurring_authors[:5], start=1):
-            lines.append(
-                f"{idx}. {entry.get('author', 'Autor')} · {entry.get('opinions_count', 0)} opiniones"
-            )
-    else:
-        lines.append("- No se detectan autores con múltiples opiniones en el periodo.")
-    lines.append("")
-
-    lines.append("## Fuentes bajo presión")
-    if top_sources:
-        for entry in top_sources[:5]:
-            ratio = float(entry.get("negative_ratio") or 0.0) * 100
-            lines.append(
-                f"- {entry.get('source', 'desconocida')}: {entry.get('negative', 0)}/{entry.get('total', 0)} negativas ({ratio:.1f}%)"
-            )
-    else:
-        lines.append("- No hay fuentes con presión destacable.")
-    lines.append("")
-
-    lines.append("## Alertas calientes")
-    if alerts:
-        for alert in alerts[:5]:
-            lines.append(
-                f"- [{alert.get('severity', 'medium').upper()}] {alert.get('title', 'Alerta')} · {alert.get('summary', '')}"
-            )
-    else:
-        lines.append("- Sin alertas críticas en este corte.")
-    lines.append("")
-
-    lines.append("## Acciones recomendadas (48h)")
-    for idx, action in enumerate(actions, start=1):
-        lines.append(f"{idx}. {action}")
-
-    return "\n".join(lines).strip()
 
 
 _REPLY_TEXT_KEYS = (
@@ -1653,13 +1524,11 @@ def reputation_markets_insights(
     geo_stats: dict[str, dict[str, int]] = {}
     author_stats: dict[str, dict[str, Any]] = {}
     id_to_item: dict[str, ReputationItem] = {}
-    items_by_geo: dict[str, list[ReputationItem]] = defaultdict(list)
 
     feature_counts: Counter[str] = Counter()
     feature_display: dict[str, str] = {}
     feature_evidence: dict[str, list[str]] = defaultdict(list)
     source_feature_counts: dict[str, Counter[str]] = defaultdict(Counter)
-    geo_feature_counts: dict[str, Counter[str]] = defaultdict(Counter)
     candidates = _feature_candidates(cfg, principal_terms)
 
     for item in scoped_items:
@@ -1668,7 +1537,6 @@ def reputation_markets_insights(
         item_geo = _safe_geo(item.geo)
         sentiment = _safe_sentiment(item.sentiment)
         item_dt = _item_datetime(item)
-        items_by_geo[item_geo].append(item)
 
         source_bucket = source_stats.setdefault(
             source,
@@ -1757,7 +1625,6 @@ def reputation_markets_insights(
         for feature_key in matched_features:
             feature_counts[feature_key] += 1
             source_feature_counts[source][feature_key] += 1
-            geo_feature_counts[item_geo][feature_key] += 1
             evidence = feature_evidence[feature_key]
             if len(evidence) < _MARKET_FEATURE_EVIDENCE_LIMIT:
                 evidence.append(item.id)
@@ -1880,10 +1747,6 @@ def reputation_markets_insights(
             entry["source"],
         )
     )
-    downdetector_incidents = sum(
-        1 for item in scoped_items if (item.source or "") == "downdetector"
-    )
-
     geo_summary: list[dict[str, Any]] = []
     for item_geo, stats in geo_stats.items():
         total = int(stats.get("total") or 0)
@@ -2019,95 +1882,7 @@ def reputation_markets_insights(
     )
     alerts = alerts[:_MARKET_ALERT_LIMIT]
 
-    available_geos = [entry["geo"] for entry in geo_summary]
-    if geo_filter:
-        newsletter_geos = [_safe_geo(geo_filter)]
-    else:
-        newsletter_geos = available_geos[:_MARKET_NEWSLETTER_GEO_LIMIT]
-
-    newsletter_by_geo: list[dict[str, Any]] = []
     principal_label = principal_canonical or "Actor principal"
-    top_source_name: str | None = None
-    if source_friction:
-        top_source_name = str(source_friction[0].get("source") or "") or None
-
-    for newsletter_geo in newsletter_geos:
-        geo_items = items_by_geo.get(newsletter_geo, [])
-        geo_total = len(geo_items)
-        geo_negative = sum(1 for item in geo_items if _safe_sentiment(item.sentiment) == "negative")
-        geo_feature_counts_current = geo_feature_counts.get(newsletter_geo, Counter())
-        geo_top_features = [
-            {
-                "feature": feature_display.get(feature_key, feature_key),
-                "count": count,
-            }
-            for feature_key, count in geo_feature_counts_current.most_common(_MARKET_FEATURE_LIMIT)
-        ]
-        geo_sources_counter: Counter[str] = Counter()
-        geo_sources_negative: Counter[str] = Counter()
-        geo_authors_counter: Counter[str] = Counter()
-        for item in geo_items:
-            source = item.source or "desconocida"
-            geo_sources_counter[source] += 1
-            if _safe_sentiment(item.sentiment) == "negative":
-                geo_sources_negative[source] += 1
-            resolved_author = _resolve_item_author(item)
-            if resolved_author:
-                geo_authors_counter[_safe_author(resolved_author)] += 1
-        geo_top_sources = [
-            {
-                "source": source,
-                "total": total,
-                "negative": int(geo_sources_negative.get(source, 0)),
-                "negative_ratio": _ratio(int(geo_sources_negative.get(source, 0)), total),
-            }
-            for source, total in geo_sources_counter.most_common(5)
-        ]
-        geo_recurring_authors = [
-            {"author": author, "opinions_count": count}
-            for author, count in geo_authors_counter.most_common(5)
-            if count >= 2
-        ]
-        geo_alerts = [entry for entry in alerts if entry.get("geo") in {"all", newsletter_geo}]
-        selected_geo_top_source = (
-            str(geo_top_sources[0].get("source") or "") if geo_top_sources else top_source_name
-        )
-        geo_actions = _market_actions(
-            top_features=geo_top_features,
-            recurring_authors=geo_recurring_authors,
-            negative_ratio=_ratio(geo_negative, geo_total),
-            top_source=selected_geo_top_source or None,
-        )
-        markdown = _compose_newsletter_markdown(
-            geo=newsletter_geo,
-            from_date=from_date,
-            to_date=to_date,
-            principal_actor=principal_label,
-            total_mentions=geo_total,
-            negative_mentions=geo_negative,
-            recurring_authors=geo_recurring_authors,
-            top_features=geo_top_features,
-            top_sources=geo_top_sources,
-            alerts=geo_alerts,
-            actions=geo_actions,
-        )
-        subject = (
-            f"[GOR] Radar reputacional {newsletter_geo} · "
-            f"{datetime.now(timezone.utc).date().isoformat()}"
-        )
-        preview = (
-            f"{geo_negative}/{geo_total} menciones negativas · "
-            f"{len(geo_recurring_authors)} autores recurrentes"
-        )
-        newsletter_by_geo.append(
-            {
-                "geo": newsletter_geo,
-                "subject": subject,
-                "preview": preview,
-                "markdown": markdown,
-                "actions": geo_actions,
-            }
-        )
 
     return {
         "generated_at": doc.generated_at.isoformat(),
@@ -2129,10 +1904,8 @@ def reputation_markets_insights(
         "top_penalized_features": top_penalized_features,
         "source_friction": source_friction,
         "response_source_friction": response_source_friction,
-        "downdetector_incidents": downdetector_incidents,
         "alerts": alerts,
         "responses": response_summary,
-        "newsletter_by_geo": newsletter_by_geo,
     }
 
 

@@ -133,14 +133,6 @@ export type MarketAlert = {
   evidence_ids?: string[];
 };
 
-export type MarketNewsletterEdition = {
-  geo: string;
-  subject: string;
-  preview: string;
-  markdown: string;
-  actions: string[];
-};
-
 export type ResponseSummaryTotals = {
   opinions_total: number;
   answered_total: number;
@@ -240,10 +232,8 @@ export type MarketInsightsResponse = {
   top_penalized_features: MarketPenalizedFeature[];
   source_friction: MarketSourceFriction[];
   response_source_friction?: MarketSourceFriction[];
-  downdetector_incidents?: number;
   alerts: MarketAlert[];
   responses?: ReputationResponsesSummary;
-  newsletter_by_geo: MarketNewsletterEdition[];
 };
 
 export type IngestJobKind = "reputation";

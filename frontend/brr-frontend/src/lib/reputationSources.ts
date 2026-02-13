@@ -1,10 +1,10 @@
 export const MARKET_REPUTATION_SOURCES = [
   "appstore",
   "google_play",
-  "downdetector",
 ] as const;
 
 export const PRESS_REPUTATION_SOURCES = [
+  "downdetector",
   "news",
   "newsapi",
   "gdelt",

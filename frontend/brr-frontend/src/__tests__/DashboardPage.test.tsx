@@ -137,7 +137,6 @@ it("renders dashboard header and combined mentions", async () => {
           },
         ],
         responses: undefined,
-        newsletter_by_geo: [],
       });
     }
     return Promise.resolve({});
@@ -260,7 +259,6 @@ it("renders dashboard market blocks without waiting for chart dataset", async ()
           },
         ],
         responses: undefined,
-        newsletter_by_geo: [],
       });
     }
     return Promise.resolve({});
