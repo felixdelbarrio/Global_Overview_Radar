@@ -96,6 +96,49 @@ describe("SentimentView dashboard", () => {
           answered_items: [],
         });
       }
+      if (path.startsWith("/reputation/markets/insights")) {
+        return Promise.resolve({
+          generated_at: "2025-01-12T00:00:00Z",
+          principal_actor: "Acme Bank",
+          comparisons_enabled: false,
+          filters: { geo: "España", from_date: "2025-01-01", to_date: "2025-01-31", sources: [] },
+          kpis: {
+            total_mentions: 1,
+            negative_mentions: 0,
+            negative_ratio: 0,
+            positive_mentions: 1,
+            neutral_mentions: 0,
+            unique_authors: 1,
+            recurring_authors: 0,
+            average_sentiment_score: 0.6,
+          },
+          daily_volume: [{ date: "2025-01-01", count: 1 }],
+          geo_summary: [],
+          recurring_authors: [],
+          top_penalized_features: [{ feature: "login", key: "login", count: 1, evidence: [] }],
+          source_friction: [
+            {
+              source: "news",
+              total: 1,
+              negative: 0,
+              positive: 1,
+              neutral: 0,
+              negative_ratio: 0,
+              top_features: [{ feature: "login", count: 1 }],
+            },
+          ],
+          alerts: [
+            {
+              id: "alert-1",
+              severity: "low",
+              title: "Seguimiento",
+              summary: "Mantener vigilancia.",
+            },
+          ],
+          responses: undefined,
+          newsletter_by_geo: [],
+        });
+      }
       if (path.startsWith("/reputation/settings")) {
         return Promise.resolve({ groups: [], advanced_options: [] });
       }
@@ -109,6 +152,10 @@ describe("SentimentView dashboard", () => {
   it("renders dashboard header", async () => {
     render(<SentimentView mode="dashboard" />);
     expect(await screen.findByText("Dashboard reputacional")).toBeInTheDocument();
+    expect(await screen.findByText("TOP 10 FUNCIONALIDADES PENALIZADAS")).toBeInTheDocument();
+    expect(await screen.findByText("ALERTAS CALIENTES")).toBeInTheDocument();
+    expect(await screen.findByText("MAPA DE CALOR DE LOS MARKETS")).toBeInTheDocument();
+    expect(screen.queryByText("ÚLTIMAS MENCIONES")).not.toBeInTheDocument();
   });
 
   it("uses natural month range and supports month navigation", async () => {
