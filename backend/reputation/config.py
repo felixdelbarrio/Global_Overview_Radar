@@ -637,15 +637,20 @@ def _apply_profile_cache_paths(cfg_settings: ReputationSettings) -> None:
 
 
 def _resolve_llm_config_files(cfg_files: list[Path], llm_path: Path) -> list[Path]:
-    if not llm_path.exists():
-        return []
-    if llm_path.is_file():
+    if llm_path.exists() and llm_path.is_file():
         return [llm_path]
-    if not llm_path.is_dir():
+    if llm_path.suffix:
+        if state_store_enabled():
+            sync_from_state(llm_path, repo_root=REPO_ROOT)
+        if llm_path.exists() and llm_path.is_file():
+            return [llm_path]
         return []
+
     llm_files: list[Path] = []
     for cfg_file in cfg_files:
         candidate = llm_path / f"{cfg_file.stem}_llm.json"
+        if not candidate.exists() and state_store_enabled():
+            sync_from_state(candidate, repo_root=REPO_ROOT)
         if candidate.exists() and candidate.is_file():
             llm_files.append(candidate)
     return llm_files

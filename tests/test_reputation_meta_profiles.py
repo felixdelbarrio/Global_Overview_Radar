@@ -117,6 +117,59 @@ def test_profiles_lists_default_options(
     assert "banking_bbva_retail" in body["options"]["default"]
 
 
+def test_profiles_update_samples_applies_templates_to_default(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    import reputation.config as rep_config
+    from reputation.api.routers import reputation as reputation_router
+
+    cache_path = _write_cache(tmp_path / "cache.json", [])
+    monkeypatch.setattr(rep_config.settings, "cache_path", cache_path)
+    monkeypatch.setattr(rep_config.settings, "config_path", tmp_path / "profile.json")
+    monkeypatch.setattr(rep_config.settings, "profiles", "")
+
+    called: dict[str, object] = {}
+
+    def _fake_apply_sample_profiles_to_default(profiles: list[str] | None) -> dict[str, object]:
+        called["profiles"] = profiles
+        return {
+            "active": {
+                "source": "default",
+                "profiles": ["banking_bbva_retail"],
+                "profile_key": "banking_bbva_retail",
+            },
+            "copied": {"config": ["banking_bbva_retail.json"], "llm": []},
+            "removed": {"config": [], "llm": []},
+            "missing": {"llm": []},
+        }
+
+    monkeypatch.setattr(
+        reputation_router,
+        "apply_sample_profiles_to_default",
+        _fake_apply_sample_profiles_to_default,
+    )
+
+    app = create_app()
+    app.dependency_overrides[reputation_router._refresh_settings] = lambda: None
+    app.dependency_overrides[reputation_router.require_google_user] = lambda: None
+    app.dependency_overrides[reputation_router.require_mutation_access] = lambda: None
+    client = TestClient(app)
+
+    res = client.post(
+        "/reputation/profiles",
+        json={"source": "samples", "profiles": ["banking_bbva_retail"]},
+    )
+
+    assert res.status_code == 200
+    body = res.json()
+    assert called["profiles"] == ["banking_bbva_retail"]
+    assert body["active"]["source"] == "default"
+    assert body["active"]["profiles"] == ["banking_bbva_retail"]
+    assert body["copied"]["config"] == ["banking_bbva_retail.json"]
+    assert body["auto_ingest"]["started"] is False
+
+
 def test_items_filters_by_geo_sentiment_and_date(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

@@ -66,6 +66,35 @@ def test_resolve_config_files_seeds_default_from_samples(
     assert (base_llm_dir / "banking_bbva_empresas_llm.json").exists()
 
 
+def test_resolve_llm_config_files_recovers_missing_llm_from_state(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import reputation.config as rep_config
+
+    llm_dir = tmp_path / "data" / "reputation_llm"
+    cfg_file = tmp_path / "data" / "reputation" / "banking_bbva_empresas.json"
+    cfg_file.parent.mkdir(parents=True, exist_ok=True)
+    cfg_file.write_text("{}", encoding="utf-8")
+
+    def _fake_sync_from_state(
+        local_path: Path, *, key: str | None = None, repo_root: Path | None = None
+    ) -> bool:
+        del key, repo_root
+        if local_path.name != "banking_bbva_empresas_llm.json":
+            return False
+        local_path.parent.mkdir(parents=True, exist_ok=True)
+        local_path.write_text("{}", encoding="utf-8")
+        return True
+
+    monkeypatch.setattr(rep_config, "state_store_enabled", lambda: True)
+    monkeypatch.setattr(rep_config, "sync_from_state", _fake_sync_from_state)
+
+    files = rep_config._resolve_llm_config_files([cfg_file], llm_dir)
+
+    assert [file.name for file in files] == ["banking_bbva_empresas_llm.json"]
+    assert (llm_dir / "banking_bbva_empresas_llm.json").exists()
+
+
 def test_set_profile_state_rejects_path_like_profile_name() -> None:
     import reputation.config as rep_config
 
