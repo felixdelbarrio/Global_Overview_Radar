@@ -982,6 +982,20 @@ class ReputationIngestService:
             item.signals.pop(key, None)
 
     @staticmethod
+    def _apply_source_sentiment_rules(items: list[ReputationItem]) -> None:
+        for item in items:
+            source = (item.source or "").strip().lower()
+            if source != "downdetector":
+                continue
+            if not isinstance(item.signals, dict):
+                item.signals = {}
+            item.sentiment = "negative"
+            item.signals["sentiment_score"] = -1.0
+            item.signals["sentiment_provider"] = "source_rule"
+            item.signals["sentiment_scale"] = "-1-1"
+            item.signals["source_sentiment_rule"] = "downdetector_always_negative"
+
+    @staticmethod
     def _is_invalid_segment(item: ReputationItem) -> bool:
         return bool((item.signals or {}).get("invalid_segment"))
 
@@ -1506,6 +1520,7 @@ class ReputationIngestService:
         if service.llm_warning and notes is not None:
             notes.append(service.llm_warning)
         if not result_map:
+            self._apply_source_sentiment_rules(items)
             return items
         result: list[ReputationItem] = []
         for item in items:
@@ -1513,6 +1528,7 @@ class ReputationIngestService:
                 result.append(item)
             else:
                 result.append(result_map.get((item.source, item.id), item))
+        self._apply_source_sentiment_rules(result)
         return result
 
     @classmethod

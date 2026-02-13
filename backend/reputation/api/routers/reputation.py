@@ -212,7 +212,7 @@ _MARKET_FEATURE_LIMIT = 10
 _MARKET_FEATURE_EVIDENCE_LIMIT = 3
 _MARKET_NEWSLETTER_GEO_LIMIT = 6
 _MARKET_ALERT_LIMIT = 8
-_MARKET_SOURCES = {"appstore", "google_play", "downdetector", "trustpilot"}
+_MARKET_SOURCES = {"appstore", "google_play", "downdetector"}
 _RESPONSE_TRACKED_SOURCES = {"appstore", "google_play"}
 _MARKET_GENERIC_FEATURE_KEYS = {
     "bbva",

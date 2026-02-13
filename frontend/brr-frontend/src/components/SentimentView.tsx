@@ -2019,7 +2019,7 @@ function MentionCard({
   const [saving, setSaving] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const ratingValue = typeof item.rating === "number" ? item.rating : null;
-  const ratingLabel = ratingValue ? ratingValue.toFixed(1) : null;
+  const ratingLabel = ratingValue !== null ? ratingValue.toFixed(1) : null;
   const blockedSources = item.sources.filter((src) => isManualOverrideBlockedSource(src));
   const ratingSourceKey = normalizeSourceKey(item.rating_source ?? "");
   const manualOverrideBlocked =
@@ -2647,12 +2647,28 @@ function groupMentions(items: ReputationItem[]) {
 
 function extractRating(item: ReputationItem) {
   const signals = (item.signals || {}) as Record<string, unknown>;
-  const raw = signals.rating;
-  if (raw === null || raw === undefined) return null;
-  if (typeof raw === "number" && Number.isFinite(raw)) return raw;
-  if (typeof raw === "string") {
-    const parsed = Number(raw.replace(",", "."));
-    return Number.isFinite(parsed) ? parsed : null;
+  const candidates = [
+    signals.rating,
+    signals.score,
+    signals.stars,
+    signals.star_rating,
+    signals.user_rating,
+    signals.rating_value,
+  ];
+  for (const raw of candidates) {
+    if (raw === null || raw === undefined) continue;
+    if (typeof raw === "number" && Number.isFinite(raw)) {
+      return Math.max(0, Math.min(5, raw));
+    }
+    if (typeof raw === "string") {
+      const compact = raw.replace(/\s+/g, "").replace(",", ".");
+      const direct = Number(compact);
+      if (Number.isFinite(direct)) return Math.max(0, Math.min(5, direct));
+      const firstNumber = compact.match(/-?\d+(?:\.\d+)?/);
+      if (!firstNumber) continue;
+      const parsed = Number(firstNumber[0]);
+      if (Number.isFinite(parsed)) return Math.max(0, Math.min(5, parsed));
+    }
   }
   return null;
 }

@@ -185,7 +185,7 @@ def test_markets_insights_builds_recurring_authors_features_and_newsletter(
     assert body["comparisons_enabled"] is False
     assert body["principal_actor"] == "Acme Bank"
     assert body["filters"]["geo"] == "ES"
-    assert body["kpis"]["total_mentions"] == 3
+    assert body["kpis"]["total_mentions"] == 2
     assert body["kpis"]["negative_mentions"] == 2
     assert body["kpis"]["recurring_authors"] == 1
 

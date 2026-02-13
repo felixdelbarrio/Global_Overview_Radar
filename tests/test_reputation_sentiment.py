@@ -205,6 +205,43 @@ def test_ingest_service_applies_manual_override_lock(
     assert items[1].sentiment is None
 
 
+def test_ingest_service_forces_downdetector_as_negative(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LLM_ENABLED", "false")
+    service = ReputationIngestService()
+    items = [
+        ReputationItem(
+            id="dd-1",
+            source="downdetector",
+            title="Incidencia",
+            text="Servicio fuera de línea",
+            sentiment="neutral",
+            signals={"sentiment_score": 0.0},
+        ),
+        ReputationItem(
+            id="news-1",
+            source="news",
+            title="Nota",
+            text="Contenido general",
+            sentiment="neutral",
+            signals={},
+        ),
+    ]
+
+    result = service._apply_sentiment({}, items, existing=None, notes=[])
+    by_id = {item.id: item for item in result}
+
+    assert by_id["dd-1"].sentiment == "negative"
+    assert by_id["dd-1"].signals.get("sentiment_score") == -1.0
+    assert by_id["dd-1"].signals.get("sentiment_provider") == "source_rule"
+    assert (
+        by_id["dd-1"].signals.get("source_sentiment_rule")
+        == "downdetector_always_negative"
+    )
+    assert by_id["news-1"].signals.get("source_sentiment_rule") is None
+
+
 def test_tokens_match_keyword_reuses_compiled_cache(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -2,7 +2,6 @@ export const MARKET_REPUTATION_SOURCES = [
   "appstore",
   "google_play",
   "downdetector",
-  "trustpilot",
 ] as const;
 
 export const PRESS_REPUTATION_SOURCES = [
@@ -12,6 +11,7 @@ export const PRESS_REPUTATION_SOURCES = [
   "guardian",
   "forums",
   "blogs",
+  "trustpilot",
   "google_reviews",
   "youtube",
   "reddit",

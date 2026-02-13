@@ -47,13 +47,13 @@ GROUPS: list[dict[str, str]] = [
     },
     {
         "id": "sources_press",
-        "label": "Fuentes Prensa",
-        "description": ("Activa o desactiva el resto de orígenes (prensa, social, foros y blogs)."),
+        "label": "Fuentes Prensa OPEN",
+        "description": ("Activa o desactiva fuentes abiertas (prensa, social, foros y blogs)."),
     },
     {
         "id": "sources_credentials",
-        "label": "Credenciales API",
-        "description": "Configura las API Keys de las fuentes que las necesitan.",
+        "label": "Fuentes Prensa API KEY REQUESTED",
+        "description": "Configura API Keys y estado ACTIVO/INACTIVO de las fuentes que las requieren.",
     },
     {
         "id": "news",
@@ -134,7 +134,7 @@ FIELDS: list[UserSettingField] = [
     UserSettingField(
         key="sources.newsapi",
         env="REPUTATION_SOURCE_NEWSAPI",
-        group="sources_press",
+        group="sources_credentials",
         label="NewsAPI",
         description="Proveedor NewsAPI.",
         kind="boolean",
@@ -152,7 +152,7 @@ FIELDS: list[UserSettingField] = [
     UserSettingField(
         key="sources.guardian",
         env="REPUTATION_SOURCE_GUARDIAN",
-        group="sources_press",
+        group="sources_credentials",
         label="The Guardian",
         description="Open Platform.",
         kind="boolean",
@@ -188,7 +188,7 @@ FIELDS: list[UserSettingField] = [
     UserSettingField(
         key="sources.trustpilot",
         env="REPUTATION_SOURCE_TRUSTPILOT",
-        group="sources_markets",
+        group="sources_press",
         label="Trustpilot",
         description="Reseñas Trustpilot.",
         kind="boolean",
@@ -197,7 +197,7 @@ FIELDS: list[UserSettingField] = [
     UserSettingField(
         key="sources.google_reviews",
         env="REPUTATION_SOURCE_GOOGLE_REVIEWS",
-        group="sources_press",
+        group="sources_credentials",
         label="Google Reviews",
         description="Reseñas de Google.",
         kind="boolean",
@@ -215,7 +215,7 @@ FIELDS: list[UserSettingField] = [
     UserSettingField(
         key="sources.youtube",
         env="REPUTATION_SOURCE_YOUTUBE",
-        group="sources_press",
+        group="sources_credentials",
         label="YouTube",
         description="Comentarios y menciones en YouTube.",
         kind="boolean",
@@ -224,7 +224,7 @@ FIELDS: list[UserSettingField] = [
     UserSettingField(
         key="sources.reddit",
         env="REPUTATION_SOURCE_REDDIT",
-        group="sources_press",
+        group="sources_credentials",
         label="Reddit",
         description="Conversaciones en Reddit.",
         kind="boolean",
@@ -233,7 +233,7 @@ FIELDS: list[UserSettingField] = [
     UserSettingField(
         key="sources.twitter",
         env="REPUTATION_SOURCE_TWITTER",
-        group="sources_press",
+        group="sources_credentials",
         label="X / Twitter",
         description="Conversaciones en X (Twitter).",
         kind="boolean",
@@ -674,6 +674,15 @@ def _resolve_language_preference(env_values: dict[str, str], default: str) -> st
     return default
 
 
+def _llm_provider(env_values: dict[str, str]) -> str:
+    raw_provider = (env_values.get("LLM_PROVIDER") or "openai").strip().lower()
+    return "gemini" if raw_provider == "gemini" else "openai"
+
+
+def _active_llm_api_key_env(env_values: dict[str, str]) -> str:
+    return "GEMINI_API_KEY" if _llm_provider(env_values) == "gemini" else "OPENAI_API_KEY"
+
+
 def _render_main_env_file(values: dict[str, str]) -> str:
     lines: list[str] = []
     lines.append("# === Configuracion reputacional (cliente final) ===")
@@ -815,6 +824,11 @@ def get_user_settings_snapshot() -> dict[str, Any]:
         values_by_key[language_field.key] = _resolve_language_preference(
             main_env_values, language_field.default
         )
+    llm_enabled_field = FIELDS_BY_KEY.get("llm.enabled")
+    if llm_enabled_field:
+        llm_key_env = _active_llm_api_key_env(main_env_values)
+        if not main_env_values.get(llm_key_env, "").strip():
+            values_by_key[llm_enabled_field.key] = False
 
     groups_payload: list[dict[str, Any]] = []
     for group in GROUPS:
@@ -981,6 +995,10 @@ def update_user_settings(values: dict[str, Any]) -> dict[str, Any]:
             main_env_values[field.env] = _format_env_value(coerced, field)
         if field.key == "language.preference":
             main_env_values["NEWSAPI_LANGUAGE"] = main_env_values[field.env]
+
+    llm_key_env = _active_llm_api_key_env(main_env_values)
+    if not main_env_values.get(llm_key_env, "").strip():
+        main_env_values["LLM_ENABLED"] = "false"
 
     log_enabled = _env_truthy(advanced_env_values.get("REPUTATION_LOG_ENABLED"))
     if not log_enabled:

@@ -73,6 +73,13 @@ type ReputationSettingsResponse = {
   advanced_env_exists?: boolean;
 };
 
+type CredentialSourceRow = {
+  id: string;
+  toggleKey: string;
+  keyKeys: string[];
+  keyRequired?: boolean;
+};
+
 const EMPTY_PROFILES: string[] = [];
 const LANGUAGE_LABELS: Record<string, string> = {
   es: "Español",
@@ -449,8 +456,14 @@ export function Shell({ children }: { children: React.ReactNode }) {
     return false;
   }, [settingsBase, settingsDraft]);
 
-  const credentialSourceRows = useMemo(
+  const credentialSourceRows = useMemo<CredentialSourceRow[]>(
     () => [
+      {
+        id: "news",
+        toggleKey: "sources.news",
+        keyKeys: ["keys.news"],
+        keyRequired: false,
+      },
       {
         id: "newsapi",
         toggleKey: "sources.newsapi",
@@ -485,12 +498,28 @@ export function Shell({ children }: { children: React.ReactNode }) {
     []
   );
 
+  useEffect(() => {
+    const provider = String(settingsDraft["llm.provider"] ?? "openai").toLowerCase();
+    const providerKey = provider === "gemini" ? "llm.gemini_key" : "llm.openai_key";
+    const hasProviderKey = String(settingsDraft[providerKey] ?? "").trim().length > 0;
+    if (!hasProviderKey && Boolean(settingsDraft["llm.enabled"])) {
+      setSettingsDraft((prev) => ({ ...prev, "llm.enabled": false }));
+    }
+  }, [
+    settingsDraft,
+    settingsDraft["llm.enabled"],
+    settingsDraft["llm.gemini_key"],
+    settingsDraft["llm.openai_key"],
+    settingsDraft["llm.provider"],
+  ]);
+
   const credentialIssues = useMemo(() => {
     const issues: { id: string; label: string; missing: string[] }[] = [];
     const isBlank = (value: unknown) => !String(value ?? "").trim();
     credentialSourceRows.forEach((row) => {
       const toggleValue = Boolean(settingsDraft[row.toggleKey]);
       if (!toggleValue) return;
+      if (row.keyRequired === false) return;
       const missing = row.keyKeys.filter((key) => isBlank(settingsDraft[key]));
       if (missing.length) {
         const labelField = settingsFieldMap.get(row.toggleKey);
@@ -1532,9 +1561,15 @@ export function Shell({ children }: { children: React.ReactNode }) {
                   <div className="max-h-none overflow-visible px-4 pb-24 space-y-3 sm:max-h-[60vh] sm:overflow-auto sm:pb-4">
                     {settingsGroups ? (
                       settingsGroups.map((group) => {
+                        if (group.id === "news") return null;
+                        const fieldsForGroup =
+                          group.id === "sources_press"
+                            ? group.fields.filter((field) => field.key !== "sources.news")
+                            : group.fields;
                         const isAdvanced = group.id === "advanced";
+                        const isLlm = group.id === "llm";
                         const advancedLogFields = isAdvanced
-                          ? group.fields.filter((field) => ADVANCED_LOG_KEYS.has(field.key))
+                          ? fieldsForGroup.filter((field) => ADVANCED_LOG_KEYS.has(field.key))
                           : [];
                         const advancedLogField = advancedLogFields.find(
                           (field) => field.key === "advanced.log_enabled",
@@ -1543,8 +1578,41 @@ export function Shell({ children }: { children: React.ReactNode }) {
                           (field) => field.key !== "advanced.log_enabled",
                         );
                         const advancedExtraFields = isAdvanced
-                          ? group.fields.filter((field) => !ADVANCED_LOG_KEYS.has(field.key))
-                          : group.fields;
+                          ? fieldsForGroup.filter((field) => !ADVANCED_LOG_KEYS.has(field.key))
+                          : fieldsForGroup;
+                        const llmManagedKeys = new Set([
+                          "llm.enabled",
+                          "llm.provider",
+                          "llm.openai_key",
+                          "llm.gemini_key",
+                        ]);
+                        const llmEnabledField = isLlm
+                          ? fieldsForGroup.find((field) => field.key === "llm.enabled")
+                          : undefined;
+                        const llmProviderField = isLlm
+                          ? fieldsForGroup.find((field) => field.key === "llm.provider")
+                          : undefined;
+                        const llmOpenAiField = isLlm
+                          ? fieldsForGroup.find((field) => field.key === "llm.openai_key")
+                          : undefined;
+                        const llmGeminiField = isLlm
+                          ? fieldsForGroup.find((field) => field.key === "llm.gemini_key")
+                          : undefined;
+                        const llmProviderRaw = String(
+                          settingsDraft["llm.provider"] ??
+                            llmProviderField?.value ??
+                            "openai"
+                        ).toLowerCase();
+                        const llmProvider = llmProviderRaw === "gemini" ? "gemini" : "openai";
+                        const llmProviderLabel = llmProvider === "gemini" ? "Gemini" : "OpenAI";
+                        const llmProviderKey =
+                          llmProvider === "gemini" ? "llm.gemini_key" : "llm.openai_key";
+                        const llmKeyField =
+                          llmProvider === "gemini" ? llmGeminiField : llmOpenAiField;
+                        const llmHasProviderKey =
+                          String(settingsDraft[llmProviderKey] ?? "").trim().length > 0;
+                        const llmEnabledValue =
+                          Boolean(settingsDraft["llm.enabled"]) && llmHasProviderKey;
                         const fieldsToRender =
                           group.id === "sources_credentials"
                             ? []
@@ -1552,7 +1620,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
                               ? advancedOpen
                                 ? advancedExtraFields
                                 : []
-                              : group.fields;
+                              : isLlm
+                                ? fieldsForGroup.filter((field) => !llmManagedKeys.has(field.key))
+                                : fieldsForGroup;
                         return (
                           <div
                             key={group.id}
@@ -1564,6 +1634,129 @@ export function Shell({ children }: { children: React.ReactNode }) {
                             {group.description && (
                               <div className="settings-group-desc mt-1 text-[11px] text-[color:var(--text-60)]">
                                 {group.description}
+                              </div>
+                            )}
+                            {isLlm && llmEnabledField && llmProviderField && llmKeyField && (
+                              <div className="mt-3 space-y-3">
+                                <div className="flex items-center justify-between gap-3 rounded-xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-2">
+                                  <div className="min-w-0">
+                                    <div className="settings-field-label text-xs font-semibold text-[color:var(--ink)]">
+                                      {llmEnabledField.label}
+                                    </div>
+                                    {llmEnabledField.description && (
+                                      <div className="settings-field-desc text-[10px] text-[color:var(--text-55)]">
+                                        {llmEnabledField.description}
+                                      </div>
+                                    )}
+                                  </div>
+                                  <button
+                                    type="button"
+                                    aria-label="Activar IA (LLM)"
+                                    onClick={() => {
+                                      if (!llmHasProviderKey) {
+                                        updateSettingValue("llm.enabled", false);
+                                        return;
+                                      }
+                                      updateSettingValue("llm.enabled", !llmEnabledValue);
+                                    }}
+                                    disabled={!llmHasProviderKey}
+                                    className={`settings-toggle ${
+                                      llmEnabledValue ? "is-on" : "is-off"
+                                    } relative inline-flex shrink-0 h-6 w-11 items-center rounded-full border transition ${
+                                      llmEnabledValue
+                                        ? "border-[color:var(--aqua)] bg-[color:var(--gradient-chip)]"
+                                        : "border-[color:var(--border-60)] bg-[color:var(--surface-60)]"
+                                    } disabled:opacity-50`}
+                                  >
+                                    <span
+                                      className={`settings-toggle-knob inline-block h-4 w-4 transform rounded-full bg-white shadow transition ${
+                                        llmEnabledValue ? "translate-x-5" : "translate-x-1"
+                                      }`}
+                                    />
+                                  </button>
+                                </div>
+                                <div className="flex items-center justify-between gap-3 rounded-xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-2">
+                                  <div className="min-w-0">
+                                    <div className="settings-field-label text-xs font-semibold text-[color:var(--ink)]">
+                                      {llmProviderField.label}
+                                    </div>
+                                    {llmProviderField.description && (
+                                      <div className="settings-field-desc text-[10px] text-[color:var(--text-55)]">
+                                        {llmProviderField.description}
+                                      </div>
+                                    )}
+                                  </div>
+                                  <select
+                                    aria-label="Proveedor IA"
+                                    value={llmProvider}
+                                    onChange={(event) => {
+                                      const nextProviderRaw = event.target.value.toLowerCase();
+                                      const nextProvider =
+                                        nextProviderRaw === "gemini" ? "gemini" : "openai";
+                                      const nextProviderKey =
+                                        nextProvider === "gemini"
+                                          ? "llm.gemini_key"
+                                          : "llm.openai_key";
+                                      const nextHasKey =
+                                        String(settingsDraft[nextProviderKey] ?? "").trim().length >
+                                        0;
+                                      updateSettingValue("llm.provider", nextProvider);
+                                      if (!nextHasKey) {
+                                        updateSettingValue("llm.enabled", false);
+                                      }
+                                    }}
+                                    className="rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-60)] px-3 py-1 text-xs text-[color:var(--ink)]"
+                                  >
+                                    {(llmProviderField.options ?? ["openai", "gemini"]).map(
+                                      (option) => (
+                                        <option key={option} value={option}>
+                                          {option}
+                                        </option>
+                                      )
+                                    )}
+                                  </select>
+                                </div>
+                                <div className="flex items-center justify-between gap-3 rounded-xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-2">
+                                  <div className="min-w-0">
+                                    <div className="settings-field-label text-xs font-semibold text-[color:var(--ink)]">
+                                      {`${llmProviderLabel} API Key`}
+                                    </div>
+                                    <div className="settings-field-desc text-[10px] text-[color:var(--text-55)]">
+                                      Clave del proveedor seleccionado.
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <input
+                                      aria-label="API Key IA"
+                                      type="password"
+                                      value={String(settingsDraft[llmProviderKey] ?? "")}
+                                      onChange={(event) => {
+                                        const nextValue = event.target.value;
+                                        updateSettingValue(llmProviderKey, nextValue);
+                                        if (!nextValue.trim()) {
+                                          updateSettingValue("llm.enabled", false);
+                                        }
+                                      }}
+                                      placeholder={llmKeyField.placeholder ?? ""}
+                                      className="w-40 rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-60)] px-3 py-1 text-xs text-[color:var(--ink)]"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        updateSettingValue(llmProviderKey, "");
+                                        updateSettingValue("llm.enabled", false);
+                                      }}
+                                      className="rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-solid)] px-2 py-1 text-[10px] uppercase tracking-[0.2em] text-[color:var(--text-60)] hover:text-rose-500"
+                                    >
+                                      RESET
+                                    </button>
+                                  </div>
+                                </div>
+                                {!llmHasProviderKey && (
+                                  <div className="text-[10px] text-[color:var(--text-55)]">
+                                    Añade una API Key para habilitar IA activa.
+                                  </div>
+                                )}
                               </div>
                             )}
                             {isAdvanced && advancedLogField && (
@@ -1729,15 +1922,31 @@ export function Shell({ children }: { children: React.ReactNode }) {
                                             </div>
                                           )}
                                         </div>
-                                        <span
-                                          className={`rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] ${
-                                            enabled
-                                              ? "border-[color:var(--aqua)] text-[color:var(--aqua)]"
-                                              : "border-[color:var(--border-60)] text-[color:var(--text-55)]"
-                                          }`}
-                                        >
-                                          {enabled ? "Activa" : "Inactiva"}
-                                        </span>
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-[10px] uppercase tracking-[0.18em] text-[color:var(--text-55)]">
+                                            {enabled ? "ACTIVO" : "INACTIVO"}
+                                          </span>
+                                          <button
+                                            type="button"
+                                            aria-label={`Activar ${toggleField.label}`}
+                                            onClick={() =>
+                                              updateSettingValue(row.toggleKey, !enabled)
+                                            }
+                                            className={`settings-toggle ${
+                                              enabled ? "is-on" : "is-off"
+                                            } relative inline-flex shrink-0 h-6 w-11 items-center rounded-full border transition ${
+                                              enabled
+                                                ? "border-[color:var(--aqua)] bg-[color:var(--gradient-chip)]"
+                                                : "border-[color:var(--border-60)] bg-[color:var(--surface-60)]"
+                                            }`}
+                                          >
+                                            <span
+                                              className={`settings-toggle-knob inline-block h-4 w-4 transform rounded-full bg-white shadow transition ${
+                                                enabled ? "translate-x-5" : "translate-x-1"
+                                              }`}
+                                            />
+                                          </button>
+                                        </div>
                                       </div>
                                       <div className="mt-3 grid gap-2 sm:grid-cols-2">
                                         {row.keyKeys.map((key) => {
@@ -1794,7 +2003,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
                                           );
                                         })}
                                       </div>
-                                      {enabled && missing.length > 0 && (
+                                      {enabled && row.keyRequired !== false && missing.length > 0 && (
                                         <div className="mt-2 text-[10px] text-rose-500">
                                           Añade la API Key o desactiva la fuente para continuar.
                                         </div>
