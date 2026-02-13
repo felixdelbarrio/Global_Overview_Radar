@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from reputation.collectors.base import ReputationCollector
 from reputation.models import ReputationItem
 from reputation.services.ingest_service import ReputationIngestService
 from reputation.services.sentiment_service import ReputationSentimentService
@@ -202,3 +203,44 @@ def test_ingest_service_applies_manual_override_lock(
     assert items[0].signals.get("sentiment_provider") == "manual_override"
     assert items[0].signals.get("sentiment_locked") is True
     assert items[1].sentiment is None
+
+
+def test_tokens_match_keyword_reuses_compiled_cache(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import reputation.services.ingest_service as ingest_service
+
+    ingest_service._compile_single_keyword.cache_clear()
+    original_compile = ingest_service.compile_keywords
+    calls = {"count": 0}
+
+    def _spy_compile(keywords: list[str]) -> object:
+        calls["count"] += 1
+        return original_compile(keywords)
+
+    monkeypatch.setattr(ingest_service, "compile_keywords", _spy_compile)
+
+    tokens = {"bbva"}
+    assert ReputationIngestService._tokens_match_keyword(tokens, "bbva") is True
+    assert ReputationIngestService._tokens_match_keyword(tokens, "bbva") is True
+    assert calls["count"] == 1
+    ingest_service._compile_single_keyword.cache_clear()
+
+
+def test_collector_batch_returns_list_without_copying() -> None:
+    class _ListCollector(ReputationCollector):
+        def __init__(self, source_name: str, payload: list[ReputationItem]) -> None:
+            self.source_name = source_name
+            self._payload = payload
+
+        def collect(self) -> list[ReputationItem]:
+            return self._payload
+
+    payload = [
+        ReputationItem(id="batch-1", source="news", title="x", text="y", signals={})
+    ]
+    collector = _ListCollector("news", payload)
+
+    batch = ReputationIngestService._collector_batch(collector)
+
+    assert batch is payload
