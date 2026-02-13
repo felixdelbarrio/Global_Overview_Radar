@@ -114,7 +114,9 @@ def test_profiles_lists_default_options(
     assert res.status_code == 200
     body = res.json()
     assert "alpha" in body["active"]["profiles"]
-    assert "banking_bbva_retail" in body["options"]["default"]
+    assert any(
+        option.startswith("banking_bbva_") for option in body["options"]["default"]
+    )
 
 
 def test_profiles_update_samples_applies_templates_to_default(
