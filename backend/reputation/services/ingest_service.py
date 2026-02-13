@@ -987,8 +987,6 @@ class ReputationIngestService:
             source = (item.source or "").strip().lower()
             if source != "downdetector":
                 continue
-            if not isinstance(item.signals, dict):
-                item.signals = {}
             item.sentiment = "negative"
             item.signals["sentiment_score"] = -1.0
             item.signals["sentiment_provider"] = "source_rule"
