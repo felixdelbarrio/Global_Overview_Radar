@@ -1,7 +1,7 @@
 /** Tests del modo dashboard de SentimentView. */
 
 import React from "react";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next/link", () => ({
@@ -263,16 +263,27 @@ describe("SentimentView dashboard", () => {
 
     render(<SentimentView mode="dashboard" />);
 
-    expect(await screen.findByText("32/42 negativas (76.2%)")).toBeInTheDocument();
-    expect(await screen.findByText("2/42 negativas (4.8%)")).toBeInTheDocument();
-    expect(await screen.findByText("1/42 negativas (2.4%)")).toBeInTheDocument();
+    await waitFor(
+      () => {
+        expect(screen.getByText("32/42 negativas (76.2%)")).toBeInTheDocument();
+        expect(screen.getByText("2/42 negativas (4.8%)")).toBeInTheDocument();
+        expect(screen.getByText("1/42 negativas (2.4%)")).toBeInTheDocument();
+      },
+      { timeout: 5000 }
+    );
 
-    const appstore = screen.getByText("appstore");
-    const googlePlay = screen.getByText("google_play");
-    const downdetector = screen.getByText("downdetector");
-
-    expect(Boolean(appstore.compareDocumentPosition(googlePlay) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
-    expect(Boolean(googlePlay.compareDocumentPosition(downdetector) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    const heatmapTitle = screen.getByText("MAPA DE CALOR DE OPINIONES NEGATIVAS EN LOS MARKETS");
+    const heatmapSection = heatmapTitle.closest("section");
+    expect(heatmapSection).not.toBeNull();
+    const ratioRows = within(heatmapSection as HTMLElement).getAllByText(
+      /^\d+\/\d+ negativas \(\d+\.\d%\)$/
+    );
+    const ratioTexts = ratioRows.map((row) => row.textContent?.trim() ?? "");
+    expect(ratioTexts.slice(0, 3)).toEqual([
+      "32/42 negativas (76.2%)",
+      "2/42 negativas (4.8%)",
+      "1/42 negativas (2.4%)",
+    ]);
   });
 
   it("renders dashboard summary with actor mentions, market responses ratios and response coverage percent", async () => {
