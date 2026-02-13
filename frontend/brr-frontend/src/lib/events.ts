@@ -1,4 +1,5 @@
 import type { IngestJob, IngestJobKind } from "@/lib/types";
+import { clearApiCache } from "@/lib/api";
 
 export const INGEST_SUCCESS_EVENT = "gor:ingest:success";
 export const INGEST_STARTED_EVENT = "gor:ingest:started";
@@ -24,6 +25,7 @@ export type SettingsChangedDetail = {
 
 export const dispatchIngestSuccess = (detail: IngestSuccessDetail) => {
   if (typeof window === "undefined") return;
+  clearApiCache();
   window.dispatchEvent(new CustomEvent(INGEST_SUCCESS_EVENT, { detail }));
 };
 

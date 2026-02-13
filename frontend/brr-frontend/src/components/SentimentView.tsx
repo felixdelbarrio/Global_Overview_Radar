@@ -150,6 +150,7 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
   const lastGeoRef = useRef<string | null>(null);
   const sentimentRef = useRef<SentimentFilter>(sentiment);
   const sourcesRef = useRef<string[]>([]);
+  const ingestRefreshTimersRef = useRef<number[]>([]);
   const chartSectionRef = useRef<HTMLDivElement | null>(null);
   const [sources, setSources] = useState<string[]>([]);
   const [overrideRefresh, setOverrideRefresh] = useState(0);
@@ -259,18 +260,30 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
 
   useEffect(() => {
     if (typeof window === "undefined") return undefined;
+    const scheduleRefresh = (delayMs: number) => {
+      const timer = window.setTimeout(() => {
+        setReputationRefresh((value) => value + 1);
+        ingestRefreshTimersRef.current = ingestRefreshTimersRef.current.filter(
+          (value) => value !== timer,
+        );
+      }, delayMs);
+      ingestRefreshTimersRef.current.push(timer);
+    };
     const handler = (event: Event) => {
       const detail = (event as CustomEvent<IngestSuccessDetail>).detail;
-      if (!detail) return;
-      if (detail.kind === "reputation") {
-        setReputationRefresh((value) => value + 1);
-      }
+      if (!detail || detail.kind !== "reputation") return;
+      setReputationRefresh((value) => value + 1);
+      // Cloud Run/GCS can expose the finished job a little before all reads converge.
+      scheduleRefresh(1500);
+      scheduleRefresh(4500);
     };
     window.addEventListener(INGEST_SUCCESS_EVENT, handler as EventListener);
     return () => {
       window.removeEventListener(INGEST_SUCCESS_EVENT, handler as EventListener);
+      ingestRefreshTimersRef.current.forEach((timer) => window.clearTimeout(timer));
+      ingestRefreshTimersRef.current = [];
     };
-  }, [reputationRefresh]);
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return undefined;
@@ -333,7 +346,7 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
 
   useEffect(() => {
     setCacheNoticeDismissed(false);
-  }, [profileRefresh]);
+  }, [profileRefresh, reputationRefresh]);
 
   const actorPrincipalName = useMemo(
     () => actorPrincipal?.canonical || "Actor principal",
@@ -380,7 +393,7 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
     let alive = true;
     apiGetCached<ReputationMeta>("/reputation/meta", {
       ttlMs: 60000,
-      force: profileRefresh > 0,
+      force: profileRefresh > 0 || reputationRefresh > 0,
     })
       .then((meta) => {
         if (!alive) return;
@@ -399,7 +412,7 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
     return () => {
       alive = false;
     };
-  }, [profileRefresh]);
+  }, [profileRefresh, reputationRefresh]);
 
   useEffect(() => {
     let alive = true;

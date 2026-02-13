@@ -188,6 +188,23 @@ def _parse_datetime(value: str | None) -> datetime | None:
     return parsed_dt.astimezone(timezone.utc)
 
 
+def _parse_datetime_bound(value: str | None, *, end_of_day: bool) -> datetime | None:
+    if not value:
+        return None
+    raw = value.strip()
+    if not raw:
+        return None
+    parsed = _parse_datetime(raw)
+    if parsed is None:
+        return None
+    # Date-only filters are interpreted as full-day windows.
+    if "T" not in raw and " " not in raw:
+        if end_of_day:
+            return parsed.replace(hour=23, minute=59, second=59, microsecond=999999)
+        return parsed.replace(hour=0, minute=0, second=0, microsecond=0)
+    return parsed
+
+
 def _item_datetime(item: ReputationItem) -> datetime | None:
     dt = item.published_at or item.collected_at
     if dt is None:
@@ -195,6 +212,65 @@ def _item_datetime(item: ReputationItem) -> datetime | None:
     if dt.tzinfo is None:
         return dt.replace(tzinfo=timezone.utc)
     return dt.astimezone(timezone.utc)
+
+
+def _is_truthy_signal(value: object) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+    return False
+
+
+def _reply_datetime(item: ReputationItem) -> datetime | None:
+    reply = _extract_reply_payload(item)
+    if not reply:
+        return None
+    return _parse_datetime_any(reply.get("replied_at"))
+
+
+def _item_matches_date_range(
+    item: ReputationItem,
+    *,
+    from_dt: datetime | None,
+    to_dt: datetime | None,
+    include_reply_datetime: bool = False,
+) -> bool:
+    if from_dt is None and to_dt is None:
+        return True
+
+    candidates: list[datetime] = []
+    item_dt = _item_datetime(item)
+    if item_dt is not None:
+        candidates.append(item_dt)
+    if include_reply_datetime:
+        reply_dt = _reply_datetime(item)
+        if reply_dt is not None:
+            candidates.append(reply_dt)
+
+    if not candidates:
+        return False
+    for candidate in candidates:
+        if from_dt and candidate < from_dt:
+            continue
+        if to_dt and candidate > to_dt:
+            continue
+        return True
+    return False
+
+
+def _resolve_item_author(item: ReputationItem) -> str | None:
+    raw_author = (item.author or "").strip()
+    if raw_author:
+        return raw_author
+    signals = item.signals if isinstance(item.signals, dict) else {}
+    for key in _ITEM_AUTHOR_SIGNAL_KEYS:
+        candidate = _safe_text(signals.get(key))
+        if candidate:
+            return candidate
+    return None
 
 
 def _normalize_scalar(value: str | None) -> str:
@@ -248,6 +324,18 @@ _MARKET_FALLBACK_FEATURES = [
     "soporte",
     "atencion al cliente",
 ]
+_ITEM_AUTHOR_SIGNAL_KEYS = (
+    "author",
+    "author_name",
+    "authorName",
+    "user_name",
+    "userName",
+    "username",
+    "reviewer_name",
+    "reviewerName",
+    "nickname",
+    "nickName",
+)
 
 
 def _ratio(part: int, whole: int) -> float:
@@ -579,6 +667,7 @@ def _extract_reply_payload(item: ReputationItem) -> dict[str, Any] | None:
     reply_text: str | None = None
     reply_author: str | None = None
     reply_at: datetime | None = None
+    has_reply_flag = _is_truthy_signal(signals.get("has_reply"))
 
     for key in _REPLY_TEXT_KEYS:
         reply_text = _extract_reply_text(signals.get(key))
@@ -608,11 +697,11 @@ def _extract_reply_payload(item: ReputationItem) -> dict[str, Any] | None:
             if reply_at:
                 break
 
-    if not reply_text:
+    if not reply_text and not has_reply_flag and reply_author is None and reply_at is None:
         return None
 
     return {
-        "text": reply_text,
+        "text": reply_text or "",
         "author": reply_author,
         "replied_at": reply_at.isoformat() if reply_at else None,
     }
@@ -800,6 +889,41 @@ def _filter_response_tracked_sources(items: Iterable[ReputationItem]) -> list[Re
     return [item for item in items if item.source in _RESPONSE_TRACKED_SOURCES]
 
 
+def _filter_response_items(
+    items: Iterable[ReputationItem],
+    group: dict[str, Any],
+    alias_map: dict[str, str],
+    aliases_by_canonical: dict[str, list[str]],
+    principal_canonical: str | None,
+    principal_terms: list[str],
+) -> list[ReputationItem]:
+    base_group = dict(group)
+    base_group["from_date"] = None
+    base_group["to_date"] = None
+    filtered = _filter_items(
+        items,
+        base_group,
+        alias_map,
+        aliases_by_canonical,
+        principal_canonical,
+        principal_terms,
+    )
+    from_dt = _parse_datetime_bound(group.get("from_date"), end_of_day=False)
+    to_dt = _parse_datetime_bound(group.get("to_date"), end_of_day=True)
+    if from_dt is None and to_dt is None:
+        return filtered
+    return [
+        item
+        for item in filtered
+        if _item_matches_date_range(
+            item,
+            from_dt=from_dt,
+            to_dt=to_dt,
+            include_reply_datetime=True,
+        )
+    ]
+
+
 def _actor_terms_for_group(
     group: dict[str, Any],
     alias_map: dict[str, str],
@@ -855,8 +979,8 @@ def _filter_items(
     geo_filter = _normalize_scalar(group.get("geo"))
     sentiment_filter = _normalize_scalar(group.get("sentiment"))
     sources_filter = _parse_sources(group.get("sources") or group.get("source"))
-    from_dt = _parse_datetime(group.get("from_date"))
-    to_dt = _parse_datetime(group.get("to_date"))
+    from_dt = _parse_datetime_bound(group.get("from_date"), end_of_day=False)
+    to_dt = _parse_datetime_bound(group.get("to_date"), end_of_day=True)
 
     filtered: list[ReputationItem] = []
     for item in items:
@@ -870,14 +994,8 @@ def _filter_items(
             item_sentiment = _normalize_scalar(item.sentiment)
             if not item_sentiment or item_sentiment != sentiment_filter:
                 continue
-        if from_dt or to_dt:
-            item_dt = _item_datetime(item)
-            if item_dt is None:
-                continue
-            if from_dt and item_dt < from_dt:
-                continue
-            if to_dt and item_dt > to_dt:
-                continue
+        if not _item_matches_date_range(item, from_dt=from_dt, to_dt=to_dt):
+            continue
         if not _actor_matches(item, canonical, terms, alias_map):
             continue
         filtered.append(item)
@@ -1081,17 +1199,18 @@ def reputation_responses_summary(
     principal_terms = actor_principal_terms(cfg)
     secondary_canonicals = _secondary_actor_canonicals(cfg, alias_map, principal_canonical)
 
-    filtered_items = _filter_items(
-        items,
-        {
-            "entity": entity,
-            "actor": actor,
-            "geo": geo,
-            "sentiment": sentiment,
-            "sources": sources,
-            "from_date": from_date,
-            "to_date": to_date,
-        },
+    response_group = {
+        "entity": entity,
+        "actor": actor,
+        "geo": geo,
+        "sentiment": sentiment,
+        "sources": sources,
+        "from_date": from_date,
+        "to_date": to_date,
+    }
+    filtered_items = _filter_response_items(
+        _filter_response_tracked_sources(items),
+        response_group,
         alias_map,
         aliases_by_canonical,
         principal_canonical,
@@ -1099,7 +1218,7 @@ def reputation_responses_summary(
     )
 
     summary = _build_response_summary(
-        items=_filter_response_tracked_sources(filtered_items),
+        items=filtered_items,
         alias_map=alias_map,
         principal_canonical=principal_canonical,
         secondary_canonicals=secondary_canonicals,
@@ -1169,8 +1288,22 @@ def reputation_markets_insights(
         principal_canonical,
         principal_terms,
     )
+    response_items = _filter_response_items(
+        _filter_response_tracked_sources(items),
+        {
+            "entity": "actor_principal",
+            "geo": geo_filter,
+            "from_date": from_date,
+            "to_date": to_date,
+            "sources": sources,
+        },
+        alias_map,
+        aliases_by_canonical,
+        principal_canonical,
+        principal_terms,
+    )
     response_summary = _build_response_summary(
-        items=_filter_response_tracked_sources(scoped_items),
+        items=response_items,
         alias_map=alias_map,
         principal_canonical=principal_canonical,
         secondary_canonicals=secondary_canonicals,
@@ -1225,7 +1358,7 @@ def reputation_markets_insights(
         if item_dt:
             daily_volume[item_dt.date().isoformat()] += 1
 
-        raw_author = (item.author or "").strip()
+        raw_author = (_resolve_item_author(item) or "").strip()
         if raw_author:
             author_key = normalize_text(raw_author)
             if author_key:
@@ -1540,8 +1673,9 @@ def reputation_markets_insights(
             geo_sources_counter[source] += 1
             if _safe_sentiment(item.sentiment) == "negative":
                 geo_sources_negative[source] += 1
-            if item.author and item.author.strip():
-                geo_authors_counter[_safe_author(item.author)] += 1
+            resolved_author = _resolve_item_author(item)
+            if resolved_author:
+                geo_authors_counter[_safe_author(resolved_author)] += 1
         geo_top_sources = [
             {
                 "source": source,

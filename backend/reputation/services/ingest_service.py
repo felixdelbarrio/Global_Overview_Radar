@@ -1415,6 +1415,8 @@ class ReputationIngestService:
             current = merged[key]
             if not current.actor and item.actor:
                 current.actor = item.actor
+            if not current.author and item.author:
+                current.author = item.author
             if item.geo and (
                 not current.geo
                 or (
@@ -1426,6 +1428,14 @@ class ReputationIngestService:
                 current.geo = item.geo
             if not current.language and item.language:
                 current.language = item.language
+            if current.published_at is None and item.published_at is not None:
+                current.published_at = item.published_at
+            if item.collected_at is not None and (
+                current.collected_at is None or item.collected_at > current.collected_at
+            ):
+                current.collected_at = item.collected_at
+            if not current.url and item.url:
+                current.url = item.url
             if not current.title and item.title:
                 current.title = item.title
             if item.text and (not current.text or len(item.text) > len(current.text)):
@@ -1434,7 +1444,10 @@ class ReputationIngestService:
                 current.sentiment = item.sentiment
             if item.signals:
                 merged_signals = dict(current.signals)
-                merged_signals.update(item.signals)
+                for signal_key, signal_value in item.signals.items():
+                    if signal_value is None and signal_key in merged_signals:
+                        continue
+                    merged_signals[signal_key] = signal_value
                 actors = set()
                 for value in (current.signals.get("actors"), item.signals.get("actors")):
                     if isinstance(value, list):

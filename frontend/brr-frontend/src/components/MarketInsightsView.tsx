@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import {
   AlertTriangle,
@@ -76,16 +76,32 @@ export function MarketInsightsView() {
   const [reputationRefresh, setReputationRefresh] = useState(0);
   const [editionGeo, setEditionGeo] = useState<string>("");
   const [copied, setCopied] = useState(false);
+  const ingestRefreshTimersRef = useRef<number[]>([]);
 
   useEffect(() => {
     if (typeof window === "undefined") return undefined;
+    const scheduleRefresh = (delayMs: number) => {
+      const timer = window.setTimeout(() => {
+        setReputationRefresh((value) => value + 1);
+        ingestRefreshTimersRef.current = ingestRefreshTimersRef.current.filter(
+          (value) => value !== timer,
+        );
+      }, delayMs);
+      ingestRefreshTimersRef.current.push(timer);
+    };
     const handler = (event: Event) => {
       const detail = (event as CustomEvent<IngestSuccessDetail>).detail;
       if (!detail || detail.kind !== "reputation") return;
       setReputationRefresh((value) => value + 1);
+      scheduleRefresh(1500);
+      scheduleRefresh(4500);
     };
     window.addEventListener(INGEST_SUCCESS_EVENT, handler as EventListener);
-    return () => window.removeEventListener(INGEST_SUCCESS_EVENT, handler as EventListener);
+    return () => {
+      window.removeEventListener(INGEST_SUCCESS_EVENT, handler as EventListener);
+      ingestRefreshTimersRef.current.forEach((timer) => window.clearTimeout(timer));
+      ingestRefreshTimersRef.current = [];
+    };
   }, []);
 
   useEffect(() => {
@@ -106,7 +122,7 @@ export function MarketInsightsView() {
     let alive = true;
     apiGetCached<ReputationMeta>("/reputation/meta", {
       ttlMs: 60000,
-      force: profileRefresh > 0,
+      force: profileRefresh > 0 || reputationRefresh > 0,
     })
       .then((meta) => {
         if (!alive) return;
@@ -120,7 +136,7 @@ export function MarketInsightsView() {
     return () => {
       alive = false;
     };
-  }, [profileRefresh]);
+  }, [profileRefresh, reputationRefresh]);
 
   const loadInsights = useCallback(async () => {
     setLoading(true);

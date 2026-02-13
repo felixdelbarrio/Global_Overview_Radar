@@ -184,3 +184,35 @@ def test_google_play_scraper_extracts_developer_reply_block() -> None:
     assert item is not None
     assert item.signals.get("has_reply") is True
     assert item.signals.get("reply_text") == "Hola. Disculpa las molestias."
+
+
+def test_google_play_api_map_extracts_nested_developer_reply() -> None:
+    review = {
+        "id": "gp-api-1",
+        "author_name": "Usuario Uno",
+        "title": "No funciona",
+        "content": "La app falla",
+        "date": "2026-02-10T10:00:00Z",
+        "reviewRating": {"value": "1"},
+        "developerResponse": {
+            "comment": "Gracias por avisar, estamos revisándolo.",
+            "developer_name": "Acme Support",
+            "lastModified": "2026-02-13T11:00:00Z",
+        },
+    }
+
+    item = _map_play_review(
+        review,
+        source="google_play",
+        package_id="com.acme.app",
+        country="ES",
+        language="es",
+        geo="España",
+    )
+
+    assert item is not None
+    assert item.author == "Usuario Uno"
+    assert item.signals.get("rating") == "1"
+    assert item.signals.get("has_reply") is True
+    assert "Gracias por avisar" in str(item.signals.get("reply_text"))
+    assert item.signals.get("reply_author") == "Acme Support"
