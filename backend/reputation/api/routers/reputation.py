@@ -1841,7 +1841,9 @@ def reputation_markets_insights(
     source_friction.sort(
         key=lambda entry: (-float(entry["negative_ratio"]), -int(entry["total"]), entry["source"])
     )
-    response_totals_raw = response_summary.get("totals") if isinstance(response_summary, dict) else {}
+    response_totals_raw = (
+        response_summary.get("totals") if isinstance(response_summary, dict) else {}
+    )
     response_totals = response_totals_raw if isinstance(response_totals_raw, dict) else {}
     response_opinions_total = int(response_totals.get("opinions_total") or 0)
     response_friction_denominator = response_opinions_total
