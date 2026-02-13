@@ -329,14 +329,12 @@ describe("Sentimiento page", () => {
     const geoSelect = screen.getByLabelText("País");
     fireEvent.change(geoSelect, { target: { value: "España" } });
 
-    const responsesHeading = await screen.findByText("Opiniones contestadas");
+    const responsesHeading = await screen.findByTestId("responses-summary-title");
     const responsesCard = responsesHeading.parentElement;
     expect(responsesCard).toBeTruthy();
+    expect(responsesHeading).toHaveTextContent(/1\s*vs\s*1/i);
     expect(within(responsesCard as HTMLElement).getByText("Positivas")).toBeInTheDocument();
-    const totalCard = within(responsesCard as HTMLElement).getByText("Total").parentElement;
-    expect(totalCard).toBeTruthy();
-    expect(totalCard as HTMLElement).toHaveTextContent(/1/);
-    expect(totalCard as HTMLElement).toHaveTextContent(/vs/i);
+    expect(within(responsesCard as HTMLElement).queryByText(/^Total$/i)).not.toBeInTheDocument();
     expect(within(responsesCard as HTMLElement).queryByText("Comentarios contestados")).not.toBeInTheDocument();
 
     const mentionList = screen.getByText("LISTADO").closest("section");
@@ -352,7 +350,7 @@ describe("Sentimiento page", () => {
     expect(listedFilters).toBeInTheDocument();
     expect(listedFilters).toHaveTextContent(/PAÍS: España/i);
     expect(listedFilters).toHaveTextContent(/SENTIMIENTO: Todos/i);
-    expect(totalCard as HTMLElement).toHaveTextContent(/vs/i);
+    expect(responsesHeading).toHaveTextContent(/vs/i);
 
     fireEvent.click(screen.getByText("Descargar gráfico"));
 
