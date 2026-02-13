@@ -49,6 +49,7 @@ import type {
   ReputationCacheDocument,
   ReputationItem,
   ReputationMeta,
+  ResponseSummaryTotals,
 } from "@/lib/types";
 
 const SENTIMENTS = ["all", "positive", "neutral", "negative"] as const;
@@ -1034,6 +1035,25 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
         return a.source.localeCompare(b.source);
       });
   }, [dashboardResponseSourceFriction, dashboardSourceFriction, dashboardResponseOpinionsTotal]);
+  const dashboardHeatDenominator = useMemo(() => {
+    const fromRows = dashboardHeatSources[0]?.total ?? 0;
+    if (Number.isFinite(fromRows) && fromRows > 0) return fromRows;
+    if (dashboardResponseOpinionsTotal > 0) return dashboardResponseOpinionsTotal;
+    return 0;
+  }, [dashboardHeatSources, dashboardResponseOpinionsTotal]);
+  const principalReplyTrackedMentions = useMemo(
+    () =>
+      principalMentions.filter((item) =>
+        item.sources.some((source) =>
+          MARKET_REPLY_TRACKED_SOURCE_KEYS.has(normalizeSourceKey(source.name)),
+        ),
+      ),
+    [principalMentions],
+  );
+  const dashboardResponseTotals = useMemo(
+    () => toAnsweredMentionTotals(dashboardMarketInsights?.responses?.totals),
+    [dashboardMarketInsights],
+  );
   const dashboardMaxFeatureCount = useMemo(
     () =>
       Math.max(
@@ -1052,7 +1072,17 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
   // "Ultimas menciones" depende solo del dataset de items, no del fetch del grafico.
   const mentionsLoading = itemsLoading;
   const splitResponsesByActor = !isDashboard && comparisonsEnabled;
-  const responseTotalsPrincipal = summarizeAnsweredMentions(principalMentions);
+  const responseTotalsPrincipal = useMemo(() => {
+    if (isDashboard) {
+      return dashboardResponseTotals ?? summarizeAnsweredMentions(principalReplyTrackedMentions);
+    }
+    return summarizeAnsweredMentions(principalMentions);
+  }, [
+    isDashboard,
+    dashboardResponseTotals,
+    principalReplyTrackedMentions,
+    principalMentions,
+  ]);
   const responseTotalsComparison = splitResponsesByActor
     ? summarizeAnsweredMentions(actorMentions)
     : null;
@@ -1317,7 +1347,8 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
                 {sourcesOptions.map((src) => {
                   const active = sources.includes(src);
                   const count = sourceCounts[src];
-                  const countPrincipalLabel = count?.principal.toLocaleString("es-ES");
+                  const sourceCount = isDashboard ? count?.total : count?.principal;
+                  const countPrincipalLabel = sourceCount?.toLocaleString("es-ES");
                   const countComparisonLabel =
                     count && !isDashboard && comparisonsEnabled
                       ? count.others.toLocaleString("es-ES")
@@ -1436,6 +1467,17 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
                         {dashboardMonthShortLabel}
                       </span>
                       .
+                    </div>
+                  )}
+                {!dashboardMarketInsightsLoading &&
+                  !dashboardMarketInsightsError &&
+                  dashboardHeatDenominator > 0 && (
+                    <div className="rounded-xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-3 py-2 text-xs text-[color:var(--text-55)]">
+                      Base:{" "}
+                      <span className="font-semibold text-[color:var(--ink)]">
+                        {dashboardHeatDenominator.toLocaleString("es-ES")}
+                      </span>{" "}
+                      opiniones contestables (App Store + Google Play).
                     </div>
                   )}
               </div>
@@ -3511,6 +3553,31 @@ type AnsweredMentionTotals = {
   answeredNegative: number;
   answeredRatio: number;
 };
+
+function toAnsweredMentionTotals(
+  totals: ResponseSummaryTotals | null | undefined,
+): AnsweredMentionTotals | null {
+  if (!totals) return null;
+  const opinionsPositive =
+    Number(totals.answered_positive || 0) + Number(totals.unanswered_positive || 0);
+  const opinionsNeutral =
+    Number(totals.answered_neutral || 0) + Number(totals.unanswered_neutral || 0);
+  const opinionsNegative =
+    Number(totals.answered_negative || 0) + Number(totals.unanswered_negative || 0);
+  const opinionsTotal = Number(totals.opinions_total || 0);
+  const answeredTotal = Number(totals.answered_total || 0);
+  return {
+    opinionsTotal,
+    opinionsPositive,
+    opinionsNeutral,
+    opinionsNegative,
+    answeredTotal,
+    answeredPositive: Number(totals.answered_positive || 0),
+    answeredNeutral: Number(totals.answered_neutral || 0),
+    answeredNegative: Number(totals.answered_negative || 0),
+    answeredRatio: opinionsTotal > 0 ? answeredTotal / opinionsTotal : 0,
+  };
+}
 
 function summarizeAnsweredMentions(items: MentionGroup[]): AnsweredMentionTotals {
   const totals: AnsweredMentionTotals = {
