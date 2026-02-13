@@ -4,10 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import {
   Calendar,
-  CheckCircle2,
   Clipboard,
-  Copy,
-  Download,
   Globe2,
   Loader2,
   Newspaper,
@@ -80,8 +77,6 @@ export function MarketInsightsView() {
   const [insights, setInsights] = useState<MarketInsightsResponse | null>(null);
   const [profileRefresh, setProfileRefresh] = useState(0);
   const [reputationRefresh, setReputationRefresh] = useState(0);
-  const [editionGeo, setEditionGeo] = useState<string>("");
-  const [copied, setCopied] = useState(false);
   const ingestRefreshTimersRef = useRef<number[]>([]);
 
   useEffect(() => {
@@ -157,7 +152,6 @@ export function MarketInsightsView() {
         `/reputation/markets/insights?${params.toString()}`,
       );
       setInsights(doc);
-      setEditionGeo((current) => current || doc.newsletter_by_geo[0]?.geo || "");
     } catch (err) {
       setInsights(null);
       setError(err instanceof Error ? err.message : "No se pudo cargar la vista de markets");
@@ -170,46 +164,8 @@ export function MarketInsightsView() {
     void loadInsights();
   }, [loadInsights, reputationRefresh]);
 
-  const selectedEdition = useMemo(() => {
-    if (!insights?.newsletter_by_geo?.length) return null;
-    return (
-      insights.newsletter_by_geo.find((entry) => entry.geo === editionGeo) ??
-      insights.newsletter_by_geo[0]
-    );
-  }, [insights, editionGeo]);
-
-  useEffect(() => {
-    if (!copied) return;
-    const timer = window.setTimeout(() => setCopied(false), 2200);
-    return () => window.clearTimeout(timer);
-  }, [copied]);
-
-  const handleCopyEdition = async () => {
-    if (!selectedEdition || typeof navigator === "undefined" || !navigator.clipboard) return;
-    try {
-      await navigator.clipboard.writeText(selectedEdition.markdown);
-      setCopied(true);
-    } catch {
-      setCopied(false);
-    }
-  };
-
-  const handleDownloadEdition = () => {
-    if (!selectedEdition || typeof window === "undefined") return;
-    const safeGeo = selectedEdition.geo.toLowerCase().replace(/\s+/g, "-");
-    const blob = new Blob([selectedEdition.markdown], { type: "text/markdown;charset=utf-8" });
-    const url = window.URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `newsletter-${safeGeo}-${toDate || "latest"}.md`;
-    document.body.appendChild(anchor);
-    anchor.click();
-    document.body.removeChild(anchor);
-    window.URL.revokeObjectURL(url);
-  };
-
   const headerSubtitle =
-    "Inteligencia de mercado lista para acción: voces insistentes, respuestas oficiales y edición de newsletter por geografía. Solo actor principal.";
+    "Inteligencia de mercado lista para acción: voces insistentes y respuestas oficiales. Solo actor principal.";
   const responseTotals = insights?.responses?.totals;
   const repeatedReplies = insights?.responses?.repeated_replies ?? [];
   const actorReplies = insights?.responses?.actor_breakdown ?? [];
@@ -511,70 +467,6 @@ export function MarketInsightsView() {
             </article>
           </section>
 
-          <section className="mt-4 rounded-[24px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-5 shadow-[var(--shadow-md)]">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h2 className="text-sm font-semibold tracking-[0.2em] uppercase text-[color:var(--blue)]">
-                  Newsletter por geografía
-                </h2>
-                <p className="mt-1 text-xs text-[color:var(--text-55)]">
-                  Edición lista para enviar al equipo local.
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <select
-                  value={selectedEdition?.geo ?? ""}
-                  onChange={(event) => setEditionGeo(event.target.value)}
-                  className="rounded-xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-2 text-xs text-[color:var(--ink)] outline-none focus:border-[color:var(--aqua)]"
-                >
-                  {(insights.newsletter_by_geo || []).map((edition) => (
-                    <option key={edition.geo} value={edition.geo}>
-                      {edition.geo}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  onClick={handleCopyEdition}
-                  disabled={!selectedEdition}
-                  className="inline-flex items-center gap-1 rounded-xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-3 py-2 text-xs text-[color:var(--ink)] transition hover:shadow-[var(--shadow-soft)] disabled:opacity-60"
-                >
-                  {copied ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-                  {copied ? "Copiado" : "Copiar"}
-                </button>
-                <button
-                  type="button"
-                  onClick={handleDownloadEdition}
-                  disabled={!selectedEdition}
-                  className="inline-flex items-center gap-1 rounded-xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-3 py-2 text-xs text-[color:var(--ink)] transition hover:shadow-[var(--shadow-soft)] disabled:opacity-60"
-                >
-                  <Download className="h-3.5 w-3.5" />
-                  Descargar .md
-                </button>
-              </div>
-            </div>
-
-            {selectedEdition ? (
-              <>
-                <div className="mt-4 rounded-xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-3 py-2">
-                  <div className="text-xs uppercase tracking-[0.18em] text-[color:var(--text-55)]">
-                    Asunto
-                  </div>
-                  <div className="mt-1 text-sm text-[color:var(--ink)]">{selectedEdition.subject}</div>
-                  <div className="mt-1 text-xs text-[color:var(--text-60)]">{selectedEdition.preview}</div>
-                </div>
-                <textarea
-                  readOnly
-                  value={selectedEdition.markdown}
-                  className="mt-3 h-[360px] w-full rounded-xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-3 py-3 text-xs leading-relaxed text-[color:var(--ink)] outline-none"
-                />
-              </>
-            ) : (
-              <div className="mt-4 rounded-xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-2 text-sm text-[color:var(--text-55)]">
-                Todavía no hay una edición de newsletter disponible.
-              </div>
-            )}
-          </section>
         </>
       )}
     </Shell>

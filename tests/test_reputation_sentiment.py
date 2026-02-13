@@ -306,7 +306,7 @@ def test_ingest_service_ignores_manual_override_for_market_sources(
     assert items[1].signals.get("sentiment_locked") is True
 
 
-def test_ingest_service_forces_downdetector_as_negative(
+def test_ingest_service_defaults_downdetector_to_neutral_without_llm(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("LLM_ENABLED", "false")
@@ -333,14 +333,42 @@ def test_ingest_service_forces_downdetector_as_negative(
     result = service._apply_sentiment({}, items, existing=None, notes=[])
     by_id = {item.id: item for item in result}
 
-    assert by_id["dd-1"].sentiment == "negative"
-    assert by_id["dd-1"].signals.get("sentiment_score") == -1.0
+    assert by_id["dd-1"].sentiment == "neutral"
+    assert by_id["dd-1"].signals.get("sentiment_score") == 0.0
     assert by_id["dd-1"].signals.get("sentiment_provider") == "source_rule"
     assert (
         by_id["dd-1"].signals.get("source_sentiment_rule")
-        == "downdetector_always_negative"
+        == "downdetector_default_neutral"
     )
     assert by_id["news-1"].signals.get("source_sentiment_rule") is None
+
+
+def test_ingest_service_keeps_llm_sentiment_for_downdetector(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LLM_ENABLED", "true")
+    service = ReputationIngestService()
+    items = [
+        ReputationItem(
+            id="dd-llm",
+            source="downdetector",
+            title="Incidencia",
+            text="Servicio fuera de línea",
+            sentiment="negative",
+            signals={
+                "sentiment_score": -0.72,
+                "sentiment_provider": "openai",
+                "sentiment_model": "gpt-5.2",
+            },
+        )
+    ]
+
+    service._apply_source_sentiment_rules(items)
+
+    assert items[0].sentiment == "negative"
+    assert items[0].signals.get("sentiment_score") == -0.72
+    assert items[0].signals.get("sentiment_provider") == "openai"
+    assert items[0].signals.get("source_sentiment_rule") is None
 
 
 def test_ingest_service_recomputes_store_sentiment_even_for_existing_ids(

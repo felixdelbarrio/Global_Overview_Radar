@@ -91,7 +91,7 @@ def _client(
     monkeypatch.setattr(rep_config.settings, "source_trustpilot", True)
     monkeypatch.setattr(rep_config.settings, "source_google_reviews", False)
     monkeypatch.setattr(rep_config.settings, "source_youtube", False)
-    monkeypatch.setattr(rep_config.settings, "source_downdetector", False)
+    monkeypatch.setattr(rep_config.settings, "source_downdetector", True)
 
     app = create_app()
     app.dependency_overrides[reputation_router._refresh_settings] = lambda: None
@@ -150,6 +150,17 @@ def test_markets_insights_builds_recurring_authors_features_and_newsletter(
                 text="La app va mejor y las notificaciones llegan",
             ),
             _item(
+                "a3-down",
+                actor="Acme Bank",
+                source="downdetector",
+                geo="ES",
+                author="Luis",
+                sentiment="negative",
+                published_at="2025-01-16T10:00:00Z",
+                title="Incidencia de red",
+                text="Reporte de caída temporal",
+            ),
+            _item(
                 "a4",
                 actor="Acme Bank",
                 source="appstore",
@@ -200,11 +211,7 @@ def test_markets_insights_builds_recurring_authors_features_and_newsletter(
     feature_names = {entry["feature"].lower() for entry in top_features}
     assert "login" in feature_names or "transferencias" in feature_names
 
-    newsletters = body["newsletter_by_geo"]
-    assert newsletters
-    assert newsletters[0]["geo"] == "ES"
-    assert "Newsletter reputacional · ES" in newsletters[0]["markdown"]
-    assert newsletters[0]["subject"].startswith("[GOR] Radar reputacional ES")
+    assert "newsletter_by_geo" not in body
     assert body["responses"]["totals"]["answered_total"] == 2
     assert body["responses"]["repeated_replies"][0]["count"] == 2
 
@@ -247,10 +254,7 @@ def test_markets_insights_without_geo_returns_multiple_editions(
     assert res.status_code == 200
     body = res.json()
 
-    editions = body["newsletter_by_geo"]
-    assert editions
-    edition_geos = {entry["geo"] for entry in editions}
-    assert {"ES", "MX"}.issubset(edition_geos)
+    assert "newsletter_by_geo" not in body
 
 
 def test_markets_insights_responses_include_replies_to_old_reviews(

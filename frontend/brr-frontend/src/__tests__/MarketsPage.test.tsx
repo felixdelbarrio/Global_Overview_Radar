@@ -1,7 +1,7 @@
 /** Tests de la navegación Markets Intelligence. */
 
 import React from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next/link", () => ({
@@ -166,15 +166,6 @@ describe("MarketsPage", () => {
             ],
             answered_items: [],
           },
-          newsletter_by_geo: [
-            {
-              geo: "ES",
-              subject: "[GOR] Radar reputacional ES · 2026-02-13",
-              preview: "4/9 negativas",
-              markdown: "# Newsletter reputacional · ES\n\n## Señales clave",
-              actions: ["Activar plan de choque en login."],
-            },
-          ],
         });
       }
       return Promise.resolve({});
@@ -183,12 +174,11 @@ describe("MarketsPage", () => {
     apiGetCachedMock.mockImplementation(handleGet);
   });
 
-  it("renders wow markets page with insights and newsletter", async () => {
+  it("renders wow markets page with insights", async () => {
     render(<MarketsPage />);
 
     expect(await screen.findByText("Wow Radar de mercado")).toBeInTheDocument();
     expect(await screen.findByText("Voces insistentes")).toBeInTheDocument();
-    expect(await screen.findByText("Newsletter por geografía")).toBeInTheDocument();
     expect(await screen.findByText("Respuestas oficiales")).toBeInTheDocument();
     expect(screen.queryByText("Top 10 funcionalidades penalizadas")).not.toBeInTheDocument();
     expect(screen.queryByText("Fricción por canal")).not.toBeInTheDocument();
@@ -196,8 +186,6 @@ describe("MarketsPage", () => {
     expect(await screen.findByText("Ana")).toBeInTheDocument();
     expect(await screen.findByText("Autor: ana_1989")).toBeInTheDocument();
     expect(await screen.findByText("ID: a1")).toBeInTheDocument();
-
-    fireEvent.click(screen.getByText("Copiar"));
     expect((await screen.findAllByText("Markets WoW")).length).toBeGreaterThan(0);
   });
 });

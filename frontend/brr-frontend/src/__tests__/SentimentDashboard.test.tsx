@@ -143,7 +143,6 @@ describe("SentimentView dashboard", () => {
             },
           ],
           responses: undefined,
-          newsletter_by_geo: [],
         });
       }
       if (path.startsWith("/reputation/settings")) {
@@ -292,7 +291,6 @@ describe("SentimentView dashboard", () => {
             repeated_replies: [],
             answered_items: [],
           },
-          newsletter_by_geo: [],
         });
       }
       if (path.startsWith("/reputation/settings")) {
@@ -337,7 +335,7 @@ describe("SentimentView dashboard", () => {
     expect(topRatio.total).toBe(secondRatio.total);
     expect(topRatio.percent).toBeGreaterThan(secondRatio.percent);
     expect(sectionQueries.queryByText(/1\/\d+ negativas \(\d+\.\d%\)/)).not.toBeInTheDocument();
-    expect(sectionQueries.getByText(/Downdetector ha identificado/i)).toBeInTheDocument();
+    expect(sectionQueries.queryByText(/Downdetector ha identificado/i)).not.toBeInTheDocument();
   });
 
   it("renders dashboard summary with actor mentions, market responses ratios and response coverage percent", async () => {
@@ -460,7 +458,6 @@ describe("SentimentView dashboard", () => {
           source_friction: [],
           alerts: [],
           responses: undefined,
-          newsletter_by_geo: [],
         });
       }
       if (path.startsWith("/reputation/settings")) {

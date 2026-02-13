@@ -242,7 +242,7 @@ FIELDS: list[UserSettingField] = [
     UserSettingField(
         key="sources.downdetector",
         env="REPUTATION_SOURCE_DOWNDETECTOR",
-        group="sources_markets",
+        group="sources_press",
         label="Downdetector",
         description="Incidencias y caídas.",
         kind="boolean",

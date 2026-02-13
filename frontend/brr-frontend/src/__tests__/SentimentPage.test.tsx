@@ -583,12 +583,10 @@ describe("Sentimiento page", () => {
       expect(actorsBlock).toBeTruthy();
       expect(within(actorsBlock as HTMLElement).getByText("App Store (4)")).toBeInTheDocument();
       expect(within(actorsBlock as HTMLElement).getByText("Google Play (4)")).toBeInTheDocument();
-      expect(within(actorsBlock as HTMLElement).getByText("Downdetector (3)")).toBeInTheDocument();
       expect(within(actorsBlock as HTMLElement).getByText("Acme Bank")).toBeInTheDocument();
       expect(within(actorsBlock as HTMLElement).getByText("Revolut")).toBeInTheDocument();
       expect(within(actorsBlock as HTMLElement).getByText("CaixaBank")).toBeInTheDocument();
       expect(within(actorsBlock as HTMLElement).getByText("Openbank")).toBeInTheDocument();
-      expect(within(actorsBlock as HTMLElement).getByText("Wise")).toBeInTheDocument();
       expect(within(actorsBlock as HTMLElement).getByText("Sabadell")).toBeInTheDocument();
       expect(within(actorsBlock as HTMLElement).getByText("N26")).toBeInTheDocument();
     });
@@ -767,7 +765,6 @@ describe("Sentimiento page", () => {
       expect(within(actorsBlock as HTMLElement).queryByText("CaixaBank")).not.toBeInTheDocument();
       expect(within(actorsBlock as HTMLElement).getByText("App Store (2)")).toBeInTheDocument();
       expect(within(actorsBlock as HTMLElement).getByText("Google Play (0)")).toBeInTheDocument();
-      expect(within(actorsBlock as HTMLElement).getByText("Downdetector (1)")).toBeInTheDocument();
     });
   });
 
@@ -829,7 +826,6 @@ describe("Sentimiento page", () => {
       expect(actorsBlock).toBeTruthy();
       expect(within(actorsBlock as HTMLElement).getByText("App Store (1)")).toBeInTheDocument();
       expect(within(actorsBlock as HTMLElement).getByText("Google Play (1)")).toBeInTheDocument();
-      expect(within(actorsBlock as HTMLElement).getByText("Downdetector (0)")).toBeInTheDocument();
       expect(within(actorsBlock as HTMLElement).getByText("Acme Bank")).toBeInTheDocument();
       expect(within(actorsBlock as HTMLElement).getByText("Beta Bank")).toBeInTheDocument();
     });

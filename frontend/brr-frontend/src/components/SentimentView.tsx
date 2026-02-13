@@ -58,31 +58,26 @@ const MANUAL_OVERRIDE_BLOCKED_SOURCES = new Set([
   "appstore",
   "googleplay",
   "googlereviews",
-  "downdetector",
 ]);
 const MANUAL_OVERRIDE_BLOCKED_LABELS: Record<string, string> = {
   appstore: "App Store",
   googleplay: "Google Play",
   googlereviews: "Google Reviews",
-  downdetector: "Downdetector",
 };
 const MARKET_OPINION_SOURCE_KEYS = new Set([
   "appstore",
   "googleplay",
   "googlereviews",
-  "downdetector",
 ]);
 const MARKET_REPLY_TRACKED_SOURCE_KEYS = new Set(["appstore", "googleplay"]);
-const MARKET_ACTOR_SOURCE_ORDER = ["appstore", "google_play", "downdetector"] as const;
+const MARKET_ACTOR_SOURCE_ORDER = ["appstore", "google_play"] as const;
 const MARKET_ACTOR_SOURCE_LABELS: Record<MarketActorSourceKey, string> = {
   appstore: "App Store",
   google_play: "Google Play",
-  downdetector: "Downdetector",
 };
 const MARKET_ACTOR_SOURCE_COLOR_CLASS: Record<MarketActorSourceKey, string> = {
   appstore: "bg-[#2EA0FF]",
   google_play: "bg-[#46D694]",
-  downdetector: "bg-[#F4B04D]",
 };
 
 type SentimentFilter = (typeof SENTIMENTS)[number];
@@ -240,10 +235,6 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
   const dashboardMonthLabel = useMemo(
     () => formatMonthLabel(dashboardMonthCursor),
     [dashboardMonthCursor],
-  );
-  const dashboardMonthShortLabel = useMemo(
-    () => dashboardMonthLabel.split(" de ")[0] || dashboardMonthLabel,
-    [dashboardMonthLabel],
   );
   const handleDashboardPrevMonth = () => {
     touchCommonFilters();
@@ -1003,17 +994,6 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
     if (!Number.isFinite(total) || total <= 0) return 0;
     return total;
   }, [dashboardMarketInsights]);
-  const dashboardDowndetectorIncidents = useMemo(() => {
-    const explicit = Number(dashboardMarketInsights?.downdetector_incidents ?? 0);
-    if (Number.isFinite(explicit) && explicit > 0) return Math.trunc(explicit);
-    const fallback = dashboardSourceFriction.find(
-      (entry) => normalizeSourceKey(entry.source) === "downdetector",
-    );
-    if (!fallback) return 0;
-    const count = Number(fallback.total ?? fallback.negative ?? 0);
-    if (!Number.isFinite(count) || count <= 0) return 0;
-    return Math.trunc(count);
-  }, [dashboardMarketInsights, dashboardSourceFriction]);
   const dashboardHeatSources = useMemo<DashboardHeatSource[]>(() => {
     const sourceRows = (dashboardResponseSourceFriction.length
       ? dashboardResponseSourceFriction
@@ -1519,21 +1499,6 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
                       </div>
                     </div>
                   ))}
-                {!dashboardMarketInsightsLoading &&
-                  !dashboardMarketInsightsError &&
-                  dashboardDowndetectorIncidents > 0 && (
-                    <div className="rounded-xl border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-3 py-2 text-xs text-[color:var(--text-55)]">
-                      Downdetector ha identificado{" "}
-                      <span className="font-semibold text-[color:var(--ink)]">
-                        {dashboardDowndetectorIncidents.toLocaleString("es-ES")}
-                      </span>{" "}
-                      {dashboardDowndetectorIncidents === 1 ? "caída" : "caídas"} en{" "}
-                      <span className="font-semibold text-[color:var(--ink)]">
-                        {dashboardMonthShortLabel}
-                      </span>
-                      .
-                    </div>
-                  )}
                 {!dashboardMarketInsightsLoading &&
                   !dashboardMarketInsightsError &&
                   dashboardHeatDenominator > 0 && (
@@ -3864,7 +3829,6 @@ function createMarketActorSourceCounts(): MarketActorSourceCounts {
   return {
     appstore: 0,
     google_play: 0,
-    downdetector: 0,
   };
 }
 
@@ -3872,7 +3836,6 @@ function normalizeMarketActorSourceKey(source?: string | null): MarketActorSourc
   const normalizedSource = normalizeSourceKey(source ?? "");
   if (normalizedSource === "appstore") return "appstore";
   if (normalizedSource === "googleplay") return "google_play";
-  if (normalizedSource === "downdetector") return "downdetector";
   return null;
 }
 
