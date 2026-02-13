@@ -706,6 +706,39 @@ _REPLY_CONTAINER_KEYS = (
 _RESPONSE_DETAIL_LIMIT_DEFAULT = 80
 _RESPONSE_DETAIL_LIMIT_MAX = 250
 _RESPONSE_REPEAT_LIMIT = 10
+_REPLY_SIMILARITY_THRESHOLD_DEFAULT = 0.70
+_REPLY_SIMILARITY_THRESHOLD_MIN = 0.50
+_REPLY_SIMILARITY_THRESHOLD_MAX = 0.95
+_REPLY_SIMILARITY_MIN_OVERLAP_TOKENS = 6
+_REPLY_SIMILARITY_STOPWORDS = {
+    "a",
+    "al",
+    "and",
+    "con",
+    "de",
+    "del",
+    "el",
+    "en",
+    "for",
+    "hola",
+    "in",
+    "la",
+    "las",
+    "los",
+    "o",
+    "of",
+    "on",
+    "or",
+    "para",
+    "por",
+    "the",
+    "to",
+    "tu",
+    "un",
+    "una",
+    "with",
+    "y",
+}
 
 
 def _safe_text(value: object) -> str | None:
@@ -825,6 +858,168 @@ def _secondary_actor_canonicals(
     return canonicals
 
 
+def _reply_similarity_tokens(reply_text: str) -> set[str]:
+    raw_tokens = [token for token in tokenize(reply_text) if token and len(token) > 1]
+    if not raw_tokens:
+        return set()
+    informative = {
+        token
+        for token in raw_tokens
+        if len(token) > 2 and token not in _REPLY_SIMILARITY_STOPWORDS
+    }
+    return informative or set(raw_tokens)
+
+
+def _reply_similarity_score(
+    left_key: str,
+    left_tokens: set[str],
+    right_key: str,
+    right_tokens: set[str],
+) -> float:
+    if not left_key or not right_key:
+        return 0.0
+    if left_key == right_key:
+        return 1.0
+    if not left_tokens or not right_tokens:
+        return 0.0
+
+    overlap = len(left_tokens & right_tokens)
+    if overlap < _REPLY_SIMILARITY_MIN_OVERLAP_TOKENS:
+        return 0.0
+
+    min_size = min(len(left_tokens), len(right_tokens))
+    union_size = len(left_tokens | right_tokens)
+    if min_size <= 0 or union_size <= 0:
+        return 0.0
+
+    containment = overlap / float(min_size)
+    jaccard = overlap / float(union_size)
+    return (0.7 * containment) + (0.3 * jaccard)
+
+
+def _normalize_similarity_threshold(value: float) -> float:
+    if value != value:
+        return _REPLY_SIMILARITY_THRESHOLD_DEFAULT
+    return max(
+        _REPLY_SIMILARITY_THRESHOLD_MIN,
+        min(value, _REPLY_SIMILARITY_THRESHOLD_MAX),
+    )
+
+
+def _select_cluster_representative(
+    variants: dict[str, dict[str, Any]],
+) -> tuple[str, str, set[str]]:
+    best_entry: dict[str, Any] | None = None
+    best_key = ""
+    for key, entry in variants.items():
+        if best_entry is None:
+            best_entry = entry
+            best_key = key
+            continue
+        current_key = (
+            int(entry.get("count", 0)),
+            len(entry.get("tokens", set())),
+            len(str(entry.get("reply_text", ""))),
+            str(entry.get("reply_text", "")),
+        )
+        best_tuple = (
+            int(best_entry.get("count", 0)),
+            len(best_entry.get("tokens", set())),
+            len(str(best_entry.get("reply_text", ""))),
+            str(best_entry.get("reply_text", "")),
+        )
+        if current_key > best_tuple:
+            best_entry = entry
+            best_key = key
+    if best_entry is None:
+        return "", "", set()
+    return (
+        str(best_entry.get("reply_text", "")),
+        best_key,
+        set(best_entry.get("tokens", set())),
+    )
+
+
+def _cluster_repeated_replies(
+    occurrences: list[dict[str, Any]],
+    *,
+    similarity_threshold: float,
+) -> list[dict[str, Any]]:
+    if not occurrences:
+        return []
+
+    threshold = _normalize_similarity_threshold(similarity_threshold)
+    clusters: list[dict[str, Any]] = []
+
+    for occurrence in occurrences:
+        reply_text = str(occurrence.get("reply_text") or "")
+        reply_key = normalize_text(reply_text)
+        if not reply_key:
+            continue
+
+        reply_tokens = _reply_similarity_tokens(reply_text)
+        responder = str(occurrence.get("responder") or "Actor desconocido")
+        sentiment = _safe_sentiment(str(occurrence.get("sentiment") or "unknown"))
+        item_id = str(occurrence.get("item_id") or "").strip()
+
+        best_idx = -1
+        best_score = 0.0
+        for idx, cluster in enumerate(clusters):
+            score = _reply_similarity_score(
+                reply_key,
+                reply_tokens,
+                str(cluster.get("reply_key") or ""),
+                set(cluster.get("tokens") or set()),
+            )
+            if score > best_score:
+                best_score = score
+                best_idx = idx
+
+        if best_idx >= 0 and best_score >= threshold:
+            cluster = clusters[best_idx]
+        else:
+            cluster = {
+                "reply_text": reply_text,
+                "reply_key": reply_key,
+                "tokens": set(reply_tokens),
+                "count": 0,
+                "actors": Counter(),
+                "sentiments": Counter(),
+                "sample_item_ids": [],
+                "variants": {},
+            }
+            clusters.append(cluster)
+
+        variants: dict[str, dict[str, Any]] = cluster["variants"]
+        variant = variants.get(reply_key)
+        if variant is None:
+            variants[reply_key] = {
+                "reply_text": reply_text,
+                "tokens": set(reply_tokens),
+                "count": 1,
+            }
+        else:
+            variant["count"] = int(variant.get("count", 0)) + 1
+            if len(reply_text) > len(str(variant.get("reply_text", ""))):
+                variant["reply_text"] = reply_text
+                variant["tokens"] = set(reply_tokens)
+
+        cluster["count"] = int(cluster.get("count", 0)) + 1
+        cluster["actors"][responder] += 1
+        cluster["sentiments"][sentiment] += 1
+        if item_id and len(cluster["sample_item_ids"]) < 5:
+            cluster["sample_item_ids"].append(item_id)
+
+        representative_text, representative_key, representative_tokens = (
+            _select_cluster_representative(variants)
+        )
+        cluster["reply_text"] = representative_text
+        cluster["reply_key"] = representative_key
+        cluster["tokens"] = representative_tokens
+
+    return clusters
+
+
 def _build_response_summary(
     *,
     items: list[ReputationItem],
@@ -832,6 +1027,7 @@ def _build_response_summary(
     principal_canonical: str | None,
     secondary_canonicals: set[str],
     detail_limit: int = _RESPONSE_DETAIL_LIMIT_DEFAULT,
+    reply_similarity_threshold: float = _REPLY_SIMILARITY_THRESHOLD_DEFAULT,
 ) -> dict[str, Any]:
     bounded_limit = max(1, min(detail_limit, _RESPONSE_DETAIL_LIMIT_MAX))
     total = len(items)
@@ -840,9 +1036,9 @@ def _build_response_summary(
     answered_by_sentiment: Counter[str] = Counter()
     unanswered_by_sentiment: Counter[str] = Counter()
     answered_items: list[dict[str, Any]] = []
+    reply_occurrences: list[dict[str, Any]] = []
 
     actor_breakdown: dict[tuple[str, str], dict[str, Any]] = {}
-    repeated_map: dict[str, dict[str, Any]] = {}
 
     for item in items:
         sentiment = _safe_sentiment(item.sentiment)
@@ -900,21 +1096,14 @@ def _build_response_summary(
         reply_text = str(reply.get("text") or "")
         reply_key = normalize_text(reply_text)
         if reply_key:
-            repeated_entry = repeated_map.setdefault(
-                reply_key,
+            reply_occurrences.append(
                 {
                     "reply_text": reply_text,
-                    "count": 0,
-                    "actors": Counter(),
-                    "sentiments": Counter(),
-                    "sample_item_ids": [],
-                },
+                    "responder": responder_canonical,
+                    "sentiment": sentiment,
+                    "item_id": item.id,
+                }
             )
-            repeated_entry["count"] += 1
-            repeated_entry["actors"][responder_canonical] += 1
-            repeated_entry["sentiments"][sentiment] += 1
-            if len(repeated_entry["sample_item_ids"]) < 5:
-                repeated_entry["sample_item_ids"].append(item.id)
 
         if len(answered_items) < bounded_limit:
             answered_items.append(
@@ -937,8 +1126,12 @@ def _build_response_summary(
                 }
             )
 
+    clustered_replies = _cluster_repeated_replies(
+        reply_occurrences,
+        similarity_threshold=reply_similarity_threshold,
+    )
     repeated_replies = sorted(
-        repeated_map.values(),
+        clustered_replies,
         key=lambda entry: (-int(entry["count"]), str(entry["reply_text"])),
     )[:_RESPONSE_REPEAT_LIMIT]
 

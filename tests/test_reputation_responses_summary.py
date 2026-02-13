@@ -165,6 +165,116 @@ def test_responses_summary_counts_and_repeated_templates(
     assert len(body["answered_items"]) == 2
 
 
+def test_responses_summary_groups_similar_reply_templates(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    config_path = _write_config(tmp_path / "profile.json")
+    cache_path = _write_cache(
+        tmp_path / "cache.json",
+        [
+            {
+                "id": "s1",
+                "source": "appstore",
+                "geo": "ES",
+                "actor": "Acme Bank",
+                "title": "Caso 1",
+                "text": "Texto",
+                "published_at": "2026-02-10T10:00:00Z",
+                "sentiment": "negative",
+                "signals": {
+                    "reply_text": (
+                        "Buenos días. Lamentamos tu comentario y valoración. "
+                        "Para Acme tu opinión es importante. Si tienes problemas "
+                        "con la app, llámanos de lunes a viernes."
+                    ),
+                    "reply_author": "Acme Bank",
+                },
+            },
+            {
+                "id": "s2",
+                "source": "google_play",
+                "geo": "ES",
+                "actor": "Acme Bank",
+                "title": "Caso 2",
+                "text": "Texto",
+                "published_at": "2026-02-10T10:05:00Z",
+                "sentiment": "negative",
+                "signals": {
+                    "reply_text": (
+                        "Buenas tardes. Lamentamos tu comentario y valoración. "
+                        "Para Acme tu opinión es importante. Si tienes problemas "
+                        "con la app, llámanos de lunes a viernes."
+                    ),
+                    "reply_author": "Acme Bank",
+                },
+            },
+            {
+                "id": "s3",
+                "source": "appstore",
+                "geo": "ES",
+                "actor": "Acme Bank",
+                "title": "Caso 3",
+                "text": "Texto",
+                "published_at": "2026-02-10T10:10:00Z",
+                "sentiment": "neutral",
+                "signals": {
+                    "reply_text": (
+                        "Lamentamos tu comentario y valoración. Para Acme tu opinión "
+                        "es importante. Si sigues con problemas en la aplicación, "
+                        "llámanos de lunes a viernes."
+                    ),
+                    "reply_author": "Acme Bank",
+                },
+            },
+            {
+                "id": "s4",
+                "source": "google_play",
+                "geo": "ES",
+                "actor": "Acme Bank",
+                "title": "Caso 4",
+                "text": "Texto",
+                "published_at": "2026-02-10T10:15:00Z",
+                "sentiment": "negative",
+                "signals": {
+                    "reply_text": (
+                        "Buenos días Javi. Lamentamos tu comentario y valoración. "
+                        "Para Acme tu opinión es importante. Si tienes problemas "
+                        "con la app móvil, llámanos de lunes a viernes."
+                    ),
+                    "reply_author": "Acme Bank",
+                },
+            },
+            {
+                "id": "s5",
+                "source": "appstore",
+                "geo": "ES",
+                "actor": "Acme Bank",
+                "title": "Caso 5",
+                "text": "Texto",
+                "published_at": "2026-02-10T10:20:00Z",
+                "sentiment": "positive",
+                "signals": {
+                    "reply_text": "Gracias por escribirnos.",
+                    "reply_author": "Acme Bank",
+                },
+            },
+        ],
+    )
+    client = _client(monkeypatch, cache_path, config_path)
+
+    res = client.get("/reputation/responses/summary")
+    assert res.status_code == 200
+    body = res.json()
+
+    repeated = body["repeated_replies"]
+    assert repeated
+    assert repeated[0]["count"] == 4
+    assert repeated[0]["actors"][0]["actor"] == "Acme Bank"
+    assert set(repeated[0]["sample_item_ids"]) >= {"s1", "s2", "s3", "s4"}
+    assert "Lamentamos tu comentario y valoración" in repeated[0]["reply_text"]
+
+
 def test_responses_summary_can_filter_actor_principal_only(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
