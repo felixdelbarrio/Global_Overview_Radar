@@ -332,10 +332,15 @@ describe("Sentimiento page", () => {
     const responsesHeading = await screen.findByTestId("responses-summary-title");
     const responsesCard = responsesHeading.parentElement;
     expect(responsesCard).toBeTruthy();
-    expect(responsesHeading).toHaveTextContent(/1\s*vs\s*1/i);
+    expect(responsesHeading).toHaveTextContent(/Acme/i);
+    expect(responsesHeading).toHaveTextContent(/1\/1/i);
+    expect(responsesHeading).toHaveTextContent(/opiniones del market contestadas/i);
     expect(within(responsesCard as HTMLElement).getByText("Positivas")).toBeInTheDocument();
     expect(within(responsesCard as HTMLElement).queryByText(/^Total$/i)).not.toBeInTheDocument();
     expect(within(responsesCard as HTMLElement).queryByText("Comentarios contestados")).not.toBeInTheDocument();
+    const summarySection = screen.getByText("RESUMEN").closest("section");
+    expect(summarySection).toBeTruthy();
+    expect(within(summarySection as HTMLElement).queryByText("Score medio")).not.toBeInTheDocument();
 
     const mentionList = screen.getByText("LISTADO").closest("section");
     expect(mentionList).toBeTruthy();
@@ -350,7 +355,7 @@ describe("Sentimiento page", () => {
     expect(listedFilters).toBeInTheDocument();
     expect(listedFilters).toHaveTextContent(/PAÍS: España/i);
     expect(listedFilters).toHaveTextContent(/SENTIMIENTO: Todos/i);
-    expect(responsesHeading).toHaveTextContent(/vs/i);
+    expect(responsesHeading).not.toHaveTextContent(/vs/i);
 
     fireEvent.click(screen.getByText("Descargar gráfico"));
 
@@ -397,6 +402,12 @@ describe("Sentimiento page", () => {
         expect.anything()
       );
     });
+
+    const responsesCard = await screen.findByTestId("responses-summary-title");
+    const container = responsesCard.parentElement?.parentElement;
+    expect(container).toBeTruthy();
+    expect(within(container as HTMLElement).queryByText("Actor secundario")).not.toBeInTheDocument();
+    expect(within(container as HTMLElement).getAllByText("Beta Bank").length).toBeGreaterThan(0);
   });
 
   it("hides market ratings in press scope", async () => {
