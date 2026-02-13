@@ -1597,7 +1597,7 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
                       <div className="flex items-center justify-between gap-3">
                         <div className="text-sm text-[color:var(--ink)]">{source.source}</div>
                         <div className="text-xs text-[color:var(--text-55)]">
-                          {source.negative}/{source.total} negativas ({formatRatioPercent(source.negative_ratio)})
+                          {source.negative} negativas ({formatRatioPercent(source.negative_ratio)})
                         </div>
                       </div>
                       <div className="mt-2 h-2 rounded-full bg-[color:var(--surface-60)] overflow-hidden">
@@ -1654,7 +1654,7 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
                   />
                 </div>
               </>
-            ) : isSentimentMarkets ? (
+            ) : isSentimentMarkets || isSentimentPress ? (
               <>
                 <PrincipalMentionsCard
                   title={actorPrincipalName}
@@ -1680,7 +1680,7 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
                     loading={itemsLoading}
                   />
                 )}
-                {showStoreRatingsForGeo && (
+                {isSentimentMarkets && showStoreRatingsForGeo && (
                   <StoreRatingCard
                     label={actorPrincipalName}
                     ratings={principalStoreRatings}
@@ -1689,7 +1689,7 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
                     history={marketRatingsHistory}
                   />
                 )}
-                {showStoreRatingsForGeo && comparisonsEnabled && (
+                {isSentimentMarkets && showStoreRatingsForGeo && comparisonsEnabled && (
                   <StoreRatingCard
                     label={selectedMarketActorLabel}
                     ratings={actorStoreRatings}

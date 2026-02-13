@@ -783,6 +783,12 @@ describe("Sentimiento page", () => {
       expect(screen.queryByText("ACTORES DEL MERCADO")).not.toBeInTheDocument();
       expect(screen.getByText("MEDIOS EN PRENSA")).toBeInTheDocument();
     });
+
+    const summarySection = screen.getByText("RESUMEN").closest("section");
+    expect(summarySection).toBeTruthy();
+    expect(within(summarySection as HTMLElement).queryByText("Score medio")).not.toBeInTheDocument();
+    expect(within(summarySection as HTMLElement).queryByText("Total menciones")).not.toBeInTheDocument();
+    expect(within(summarySection as HTMLElement).getByText(/menciones del/i)).toBeInTheDocument();
   });
 
   it("shows press publishers including downdetector and inferred news media", async () => {
