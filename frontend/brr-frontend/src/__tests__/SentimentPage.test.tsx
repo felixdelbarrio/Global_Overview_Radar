@@ -332,10 +332,15 @@ describe("Sentimiento page", () => {
     const responsesHeading = await screen.findByTestId("responses-summary-title");
     const responsesCard = responsesHeading.parentElement;
     expect(responsesCard).toBeTruthy();
-    expect(responsesHeading).toHaveTextContent(/1\s*vs\s*1/i);
+    expect(responsesHeading).toHaveTextContent(/Acme/i);
+    expect(responsesHeading).toHaveTextContent(/1\/1/i);
+    expect(responsesHeading).toHaveTextContent(/opiniones del market contestadas/i);
     expect(within(responsesCard as HTMLElement).getByText("Positivas")).toBeInTheDocument();
     expect(within(responsesCard as HTMLElement).queryByText(/^Total$/i)).not.toBeInTheDocument();
     expect(within(responsesCard as HTMLElement).queryByText("Comentarios contestados")).not.toBeInTheDocument();
+    const summarySection = screen.getByText("RESUMEN").closest("section");
+    expect(summarySection).toBeTruthy();
+    expect(within(summarySection as HTMLElement).queryByText("Score medio")).not.toBeInTheDocument();
 
     const mentionList = screen.getByText("LISTADO").closest("section");
     expect(mentionList).toBeTruthy();
@@ -350,7 +355,7 @@ describe("Sentimiento page", () => {
     expect(listedFilters).toBeInTheDocument();
     expect(listedFilters).toHaveTextContent(/PAÍS: España/i);
     expect(listedFilters).toHaveTextContent(/SENTIMIENTO: Todos/i);
-    expect(responsesHeading).toHaveTextContent(/vs/i);
+    expect(responsesHeading).not.toHaveTextContent(/vs/i);
 
     fireEvent.click(screen.getByText("Descargar gráfico"));
 
@@ -396,6 +401,373 @@ describe("Sentimiento page", () => {
         "/reputation/items/compare",
         expect.anything()
       );
+    });
+
+    const responsesCard = await screen.findByTestId("responses-summary-title");
+    const container = responsesCard.parentElement?.parentElement;
+    expect(container).toBeTruthy();
+    expect(within(container as HTMLElement).queryByText("Actor secundario")).not.toBeInTheDocument();
+    expect(within(container as HTMLElement).getAllByText("Beta Bank").length).toBeGreaterThan(0);
+  });
+
+  it("shows all market actors with source legend in the actors table", async () => {
+    const marketMetaResponse = {
+      ...metaResponse,
+      sources_enabled: ["appstore", "google_play", "downdetector"],
+      sources_available: ["appstore", "google_play", "downdetector"],
+      ui_show_comparisons: true,
+    };
+    const marketItemsResponse = {
+      ...itemsResponse,
+      sources_enabled: ["appstore", "google_play", "downdetector"],
+      items: [
+        {
+          id: "principal-1",
+          source: "appstore",
+          geo: "España",
+          actor: "Acme Bank",
+          title: "Principal",
+          text: "Principal",
+          sentiment: "neutral",
+          published_at: "2025-01-01T10:00:00Z",
+        },
+        {
+          id: "rev-1",
+          source: "appstore",
+          geo: "España",
+          actor: "Revolut",
+          title: "Revolut 1",
+          text: "Revolut 1",
+          sentiment: "negative",
+          published_at: "2025-01-02T10:00:00Z",
+        },
+        {
+          id: "rev-2",
+          source: "google_play",
+          geo: "España",
+          actor: "Revolut",
+          title: "Revolut 2",
+          text: "Revolut 2",
+          sentiment: "negative",
+          published_at: "2025-01-03T10:00:00Z",
+        },
+        {
+          id: "rev-3",
+          source: "downdetector",
+          geo: "España",
+          actor: "Revolut",
+          title: "Revolut 3",
+          text: "Revolut 3",
+          sentiment: "negative",
+          published_at: "2025-01-04T10:00:00Z",
+        },
+        {
+          id: "caixa-1",
+          source: "google_play",
+          geo: "España",
+          actor: "CaixaBank",
+          title: "Caixa 1",
+          text: "Caixa 1",
+          sentiment: "negative",
+          published_at: "2025-01-05T10:00:00Z",
+        },
+        {
+          id: "caixa-2",
+          source: "google_play",
+          geo: "España",
+          actor: "CaixaBank",
+          title: "Caixa 2",
+          text: "Caixa 2",
+          sentiment: "negative",
+          published_at: "2025-01-06T10:00:00Z",
+        },
+        {
+          id: "open-1",
+          source: "appstore",
+          geo: "España",
+          actor: "Openbank",
+          title: "Openbank 1",
+          text: "Openbank 1",
+          sentiment: "negative",
+          published_at: "2025-01-07T10:00:00Z",
+        },
+        {
+          id: "wise-1",
+          source: "downdetector",
+          geo: "España",
+          actor: "Wise",
+          title: "Wise 1",
+          text: "Wise 1",
+          sentiment: "negative",
+          published_at: "2025-01-08T10:00:00Z",
+        },
+        {
+          id: "sabadell-1",
+          source: "appstore",
+          geo: "España",
+          actor: "Sabadell",
+          title: "Sabadell 1",
+          text: "Sabadell 1",
+          sentiment: "negative",
+          published_at: "2025-01-09T10:00:00Z",
+        },
+        {
+          id: "sabadell-2",
+          source: "downdetector",
+          geo: "España",
+          actor: "Sabadell",
+          title: "Sabadell 2",
+          text: "Sabadell 2",
+          sentiment: "negative",
+          published_at: "2025-01-10T10:00:00Z",
+        },
+        {
+          id: "n26-1",
+          source: "google_play",
+          geo: "España",
+          actor: "N26",
+          title: "N26 1",
+          text: "N26 1",
+          sentiment: "negative",
+          published_at: "2025-01-11T10:00:00Z",
+        },
+      ],
+      stats: { count: 11 },
+    };
+
+    const handleGetMarketActors = (path: string) => {
+      if (path.startsWith("/reputation/meta")) {
+        return Promise.resolve(marketMetaResponse);
+      }
+      if (path.startsWith("/reputation/profiles")) {
+        return Promise.resolve(profilesResponse);
+      }
+      if (path.startsWith("/reputation/items")) {
+        return Promise.resolve(marketItemsResponse);
+      }
+      if (path.startsWith("/reputation/responses/summary")) {
+        return Promise.resolve({
+          totals: {
+            opinions_total: 0,
+            answered_total: 0,
+            answered_ratio: 0,
+            answered_positive: 0,
+            answered_neutral: 0,
+            answered_negative: 0,
+            unanswered_positive: 0,
+            unanswered_neutral: 0,
+            unanswered_negative: 0,
+          },
+          actor_breakdown: [],
+          repeated_replies: [],
+          answered_items: [],
+        });
+      }
+      if (path.startsWith("/reputation/settings")) {
+        return Promise.resolve({ groups: [], advanced_options: [] });
+      }
+      return Promise.resolve({ items: [] });
+    };
+
+    apiGetMock.mockImplementation(handleGetMarketActors);
+    apiGetCachedMock.mockImplementation(handleGetMarketActors);
+
+    render(<SentimentView mode="sentiment" scope="all" />);
+
+    await screen.findByLabelText("País");
+
+    await waitFor(() => {
+      expect(screen.queryByText("TOP OTROS ACTORES DEL MERCADO")).not.toBeInTheDocument();
+      const actorsTitle = screen.getByText("ACTORES DEL MERCADO");
+      const actorsBlock = actorsTitle.parentElement;
+      expect(actorsBlock).toBeTruthy();
+      expect(within(actorsBlock as HTMLElement).getByText("App Store (4)")).toBeInTheDocument();
+      expect(within(actorsBlock as HTMLElement).getByText("Google Play (4)")).toBeInTheDocument();
+      expect(within(actorsBlock as HTMLElement).getByText("Downdetector (3)")).toBeInTheDocument();
+      expect(within(actorsBlock as HTMLElement).getByText("Acme Bank")).toBeInTheDocument();
+      expect(within(actorsBlock as HTMLElement).getByText("Revolut")).toBeInTheDocument();
+      expect(within(actorsBlock as HTMLElement).getByText("CaixaBank")).toBeInTheDocument();
+      expect(within(actorsBlock as HTMLElement).getByText("Openbank")).toBeInTheDocument();
+      expect(within(actorsBlock as HTMLElement).getByText("Wise")).toBeInTheDocument();
+      expect(within(actorsBlock as HTMLElement).getByText("Sabadell")).toBeInTheDocument();
+      expect(within(actorsBlock as HTMLElement).getByText("N26")).toBeInTheDocument();
+    });
+  });
+
+  it("filters actors table and legend to the selected secondary actor", async () => {
+    const actorScopedMetaResponse = {
+      ...metaResponse,
+      ui_show_comparisons: true,
+      sources_enabled: ["appstore", "google_play", "downdetector"],
+      sources_available: ["appstore", "google_play", "downdetector"],
+      otros_actores_por_geografia: {
+        España: ["Santander", "CaixaBank"],
+      },
+      otros_actores_globales: ["Santander", "CaixaBank"],
+    };
+
+    const actorScopedItemsResponse = {
+      ...itemsResponse,
+      sources_enabled: ["appstore", "google_play", "downdetector"],
+      items: [
+        {
+          id: "principal-1",
+          source: "appstore",
+          geo: "España",
+          actor: "Acme Bank",
+          title: "Principal",
+          text: "Principal",
+          sentiment: "neutral",
+          published_at: "2025-01-01T10:00:00Z",
+        },
+        {
+          id: "santander-1",
+          source: "appstore",
+          geo: "España",
+          actor: "Santander",
+          title: "Santander appstore",
+          text: "Santander appstore",
+          sentiment: "negative",
+          published_at: "2025-01-02T10:00:00Z",
+        },
+        {
+          id: "santander-2",
+          source: "downdetector",
+          geo: "España",
+          actor: "Santander",
+          title: "Santander down",
+          text: "Santander down",
+          sentiment: "negative",
+          published_at: "2025-01-03T10:00:00Z",
+        },
+        {
+          id: "caixa-1",
+          source: "google_play",
+          geo: "España",
+          actor: "CaixaBank",
+          title: "Caixa play",
+          text: "Caixa play",
+          sentiment: "negative",
+          published_at: "2025-01-04T10:00:00Z",
+        },
+      ],
+      stats: { count: 4 },
+    };
+
+    const compareItemsResponse = {
+      groups: [],
+      combined: {
+        items: [
+          {
+            id: "principal-compare",
+            source: "appstore",
+            geo: "España",
+            actor: "Acme Bank",
+            title: "Principal compare",
+            text: "Principal compare",
+            sentiment: "neutral",
+            published_at: "2025-01-05T10:00:00Z",
+          },
+          {
+            id: "santander-compare-1",
+            source: "appstore",
+            geo: "España",
+            actor: "Santander",
+            title: "Santander compare 1",
+            text: "Santander compare 1",
+            sentiment: "negative",
+            published_at: "2025-01-06T10:00:00Z",
+          },
+          {
+            id: "santander-compare-2",
+            source: "downdetector",
+            geo: "España",
+            actor: "Santander",
+            title: "Santander compare 2",
+            text: "Santander compare 2",
+            sentiment: "negative",
+            published_at: "2025-01-07T10:00:00Z",
+          },
+          {
+            id: "caixa-compare-1",
+            source: "google_play",
+            geo: "España",
+            actor: "CaixaBank",
+            title: "Caixa compare 1",
+            text: "Caixa compare 1",
+            sentiment: "negative",
+            published_at: "2025-01-08T10:00:00Z",
+          },
+        ],
+        stats: { count: 4 },
+      },
+    };
+
+    const handleGetActorScoped = (path: string) => {
+      if (path.startsWith("/reputation/meta")) {
+        return Promise.resolve(actorScopedMetaResponse);
+      }
+      if (path.startsWith("/reputation/profiles")) {
+        return Promise.resolve(profilesResponse);
+      }
+      if (path.startsWith("/reputation/items")) {
+        return Promise.resolve(actorScopedItemsResponse);
+      }
+      if (path.startsWith("/reputation/responses/summary")) {
+        return Promise.resolve({
+          totals: {
+            opinions_total: 0,
+            answered_total: 0,
+            answered_ratio: 0,
+            answered_positive: 0,
+            answered_neutral: 0,
+            answered_negative: 0,
+            unanswered_positive: 0,
+            unanswered_neutral: 0,
+            unanswered_negative: 0,
+          },
+          actor_breakdown: [],
+          repeated_replies: [],
+          answered_items: [],
+        });
+      }
+      if (path.startsWith("/reputation/settings")) {
+        return Promise.resolve({ groups: [], advanced_options: [] });
+      }
+      return Promise.resolve({ items: [] });
+    };
+
+    apiGetMock.mockImplementation(handleGetActorScoped);
+    apiGetCachedMock.mockImplementation(handleGetActorScoped);
+    apiPostMock.mockImplementation((path: string) => {
+      if (path === "/reputation/items/compare") {
+        return Promise.resolve(compareItemsResponse);
+      }
+      if (path === "/reputation/items/override") {
+        return Promise.resolve({ updated: 1 });
+      }
+      if (path === "/ingest/reputation") {
+        return Promise.resolve({ id: "job-1", kind: "reputation", status: "queued", progress: 0 });
+      }
+      return Promise.resolve({});
+    });
+
+    render(<SentimentView mode="sentiment" scope="all" />);
+
+    const actorSelect = (await screen.findByLabelText(
+      "Otros actores del mercado",
+    )) as HTMLSelectElement;
+    fireEvent.change(actorSelect, { target: { value: "Santander" } });
+
+    await waitFor(() => {
+      const actorsBlock = screen.getByText("ACTORES DEL MERCADO").parentElement;
+      expect(actorsBlock).toBeTruthy();
+      expect(within(actorsBlock as HTMLElement).getByText("Acme Bank")).toBeInTheDocument();
+      expect(within(actorsBlock as HTMLElement).getByText("Santander")).toBeInTheDocument();
+      expect(within(actorsBlock as HTMLElement).queryByText("CaixaBank")).not.toBeInTheDocument();
+      expect(within(actorsBlock as HTMLElement).getByText("App Store (2)")).toBeInTheDocument();
+      expect(within(actorsBlock as HTMLElement).getByText("Google Play (0)")).toBeInTheDocument();
+      expect(within(actorsBlock as HTMLElement).getByText("Downdetector (1)")).toBeInTheDocument();
     });
   });
 
@@ -451,27 +823,15 @@ describe("Sentimiento page", () => {
     await waitFor(() => {
       const newsChip = screen.getByRole("button", { name: /news/i });
       expect(newsChip).toHaveTextContent(/1\s*vs\s*1/);
-      const comparisonCells = screen
-        .getAllByRole("cell")
-        .filter((cell) => /2\s*vs\s*2/.test(cell.textContent || ""));
-      expect(comparisonCells.length).toBeGreaterThanOrEqual(1);
-      const geoTitle = Array.from(document.querySelectorAll("div")).find((element) =>
-        (element.textContent || "").trim().startsWith("SENTIMIENTO POR PAÍS:"),
-      );
-      expect(geoTitle).toBeTruthy();
-      expect(geoTitle?.textContent || "").toMatch(/vs/i);
-      const geoCell = screen.getByText("España", { selector: "td" });
-      const geoRow = geoCell.closest("tr");
-      expect(geoRow).toBeTruthy();
-      const mentionsCell = within(geoRow as HTMLElement).getAllByRole("cell")[1];
-      expect(mentionsCell).toHaveTextContent(/2\s*vs\s*2/);
+      expect(screen.queryByText("TOP FUENTES")).not.toBeInTheDocument();
 
-      const topSourcesBlock = screen.getByText("TOP FUENTES").parentElement;
-      expect(topSourcesBlock).toBeTruthy();
-      const newsRowLabel = within(topSourcesBlock as HTMLElement).getByText("news");
-      const newsRow = newsRowLabel.parentElement;
-      expect(newsRow).toBeTruthy();
-      expect(within(newsRow as HTMLElement).getByText("2")).toBeInTheDocument();
+      const actorsBlock = screen.getByText("ACTORES DEL MERCADO").parentElement;
+      expect(actorsBlock).toBeTruthy();
+      expect(within(actorsBlock as HTMLElement).getByText("App Store (1)")).toBeInTheDocument();
+      expect(within(actorsBlock as HTMLElement).getByText("Google Play (1)")).toBeInTheDocument();
+      expect(within(actorsBlock as HTMLElement).getByText("Downdetector (0)")).toBeInTheDocument();
+      expect(within(actorsBlock as HTMLElement).getByText("Acme Bank")).toBeInTheDocument();
+      expect(within(actorsBlock as HTMLElement).getByText("Beta Bank")).toBeInTheDocument();
     });
   });
 
@@ -503,24 +863,14 @@ describe("Sentimiento page", () => {
       const newsChip = screen.getByRole("button", { name: /news/i });
       expect(within(newsChip).getByText("1")).toBeInTheDocument();
       expect(within(newsChip).queryByText(/vs/i)).not.toBeInTheDocument();
-      const geoTitle = Array.from(document.querySelectorAll("div")).find((element) =>
-        (element.textContent || "").trim().startsWith("SENTIMIENTO POR PAÍS:"),
-      );
-      expect(geoTitle).toBeTruthy();
-      expect(geoTitle?.textContent || "").not.toMatch(/vs/i);
       const totalCard = screen.getByText("Total menciones").parentElement;
       expect(totalCard).toBeTruthy();
       expect(
         within(totalCard as HTMLElement).getByText((value) => value.trim() === "2"),
       ).toBeInTheDocument();
       expect(within(totalCard as HTMLElement).queryByText(/vs/i)).not.toBeInTheDocument();
-
-      const topSourcesBlock = screen.getByText("TOP FUENTES").parentElement;
-      expect(topSourcesBlock).toBeTruthy();
-      const newsRowLabel = within(topSourcesBlock as HTMLElement).getByText("news");
-      const newsRow = newsRowLabel.parentElement;
-      expect(newsRow).toBeTruthy();
-      expect(within(newsRow as HTMLElement).getByText("1")).toBeInTheDocument();
+      expect(screen.queryByText("TOP FUENTES")).not.toBeInTheDocument();
+      expect(screen.queryByText("ACTORES DEL MERCADO")).not.toBeInTheDocument();
     });
   });
 

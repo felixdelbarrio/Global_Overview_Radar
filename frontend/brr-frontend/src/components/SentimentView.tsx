@@ -73,9 +73,28 @@ const MARKET_OPINION_SOURCE_KEYS = new Set([
   "downdetector",
 ]);
 const MARKET_REPLY_TRACKED_SOURCE_KEYS = new Set(["appstore", "googleplay"]);
+const MARKET_ACTOR_SOURCE_ORDER = ["appstore", "google_play", "downdetector"] as const;
+const MARKET_ACTOR_SOURCE_LABELS: Record<MarketActorSourceKey, string> = {
+  appstore: "App Store",
+  google_play: "Google Play",
+  downdetector: "Downdetector",
+};
+const MARKET_ACTOR_SOURCE_COLOR_CLASS: Record<MarketActorSourceKey, string> = {
+  appstore: "bg-[#2EA0FF]",
+  google_play: "bg-[#46D694]",
+  downdetector: "bg-[#F4B04D]",
+};
 
 type SentimentFilter = (typeof SENTIMENTS)[number];
 type SentimentValue = Exclude<SentimentFilter, "all">;
+type MarketActorSourceKey = (typeof MARKET_ACTOR_SOURCE_ORDER)[number];
+type MarketActorSourceCounts = Record<MarketActorSourceKey, number>;
+type MarketActorRow = {
+  key: string;
+  label: string;
+  count: number;
+  sourceCounts: MarketActorSourceCounts;
+};
 type OverridePayload = {
   ids: string[];
   geo?: string;
@@ -777,17 +796,6 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
     () => items.filter((item) => !isPrincipalItem(item, principalAliasKeys)),
     [items, principalAliasKeys],
   );
-  const comparisonItems = useMemo(() => {
-    if (isDashboard || !comparisonsEnabled) return [];
-    if (effectiveActor === "all" || isPrincipalName(effectiveActor, principalAliasKeys)) {
-      return otherItems;
-    }
-    const actorKey = normalizeKey(effectiveActor);
-    return items.filter((item) => {
-      if (isPrincipalItem(item, principalAliasKeys)) return false;
-      return normalizeKey(item.actor || "") === actorKey;
-    });
-  }, [isDashboard, comparisonsEnabled, effectiveActor, principalAliasKeys, otherItems, items]);
   const principalSentimentSummary = useMemo(() => summarize(principalItems), [principalItems]);
   const otherSentimentSummary = useMemo(() => summarize(otherItems), [otherItems]);
   const splitSummaryByActor = !isDashboard && comparisonsEnabled;
@@ -838,46 +846,6 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
     () => (splitSummaryByActor ? otherSentimentSummary.negative.toLocaleString("es-ES") : null),
     [splitSummaryByActor, otherSentimentSummary.negative],
   );
-  const geoSummaryPrincipal = useMemo(
-    () => summarizeByGeo(principalItems),
-    [principalItems],
-  );
-  const geoSummaryComparison = useMemo(
-    () => summarizeByGeo(comparisonItems),
-    [comparisonItems],
-  );
-  const geoTableRows = useMemo(() => {
-    if (isDashboard || !comparisonsEnabled) {
-      return geoSummaryPrincipal.map((row) => ({ geo: row.geo, principal: row, comparison: null }));
-    }
-    return buildGeoComparisonRows(geoSummaryPrincipal, geoSummaryComparison);
-  }, [isDashboard, comparisonsEnabled, geoSummaryPrincipal, geoSummaryComparison]);
-  const geoTableComparisonLabel = useMemo(() => {
-    if (isDashboard || !comparisonsEnabled) return "";
-    if (effectiveActor !== "all" && !isPrincipalName(effectiveActor, principalAliasKeys)) {
-      return effectiveActor;
-    }
-    return "Todos los otros actores";
-  }, [isDashboard, comparisonsEnabled, effectiveActor, principalAliasKeys]);
-  const geoTableTitlePrincipal = useMemo(
-    () => `SENTIMIENTO POR PAÍS: ${actorPrincipalName}`,
-    [actorPrincipalName],
-  );
-  const topSourcesItems = useMemo(
-    () => (!isDashboard && !comparisonsEnabled ? principalItems : items),
-    [isDashboard, comparisonsEnabled, principalItems, items],
-  );
-  const topSources = useMemo(() => topCounts(topSourcesItems, (i) => i.source), [topSourcesItems]);
-  const topActores = useMemo(
-    () =>
-      topCounts(
-        items.filter(
-          (item) => !isPrincipalName(item.actor || "", principalAliasKeys),
-        ),
-        (i) => i.actor || "Sin actor",
-      ),
-    [items, principalAliasKeys],
-  );
   const sentimentSeries = useMemo(
     () =>
       buildComparativeSeries(
@@ -900,6 +868,10 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
   const groupedMentions = useMemo(() => groupMentions(items), [items]);
   const rangeLabel = useMemo(
     () => buildRangeLabel(effectiveFromDate, effectiveToDate),
+    [effectiveFromDate, effectiveToDate],
+  );
+  const mentionsPeriodLabel = useMemo(
+    () => buildMentionsPeriodLabel(effectiveFromDate, effectiveToDate),
     [effectiveFromDate, effectiveToDate],
   );
   const latestTimestamp = useMemo(
@@ -939,6 +911,26 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
     () => (selectedActor ? normalizeKey(selectedActor) : null),
     [selectedActor],
   );
+  const filteredMarketItems = useMemo(
+    () =>
+      selectedActorKey
+        ? items.filter(
+            (item) =>
+              isPrincipalItem(item, principalAliasKeys) ||
+              normalizeKey(item.actor || "") === selectedActorKey,
+          )
+        : items,
+    [items, principalAliasKeys, selectedActorKey],
+  );
+  const marketActorRows = useMemo(
+    () => buildMarketActorRows(filteredMarketItems),
+    [filteredMarketItems],
+  );
+  const marketSourceTotals = useMemo(
+    () => countMarketSourceTotals(filteredMarketItems),
+    [filteredMarketItems],
+  );
+  const selectedMarketActorLabel = selectedActor || "Otro actor del mercado";
   const storeSourcesEnabled = useMemo(
     () => new Set((meta?.sources_enabled ?? []).map((src) => src.toLowerCase())),
     [meta?.sources_enabled],
@@ -976,6 +968,19 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
         return normalizeKey(item.actor || "") === selectedActorKey;
       }),
     [groupedMentions, principalAliasKeys, selectedActorKey],
+  );
+  const selectedActorMentionsSummary = useMemo(() => {
+    const counts = { total: actorMentions.length, positive: 0, neutral: 0, negative: 0 };
+    for (const item of actorMentions) {
+      if (item.sentiment === "positive") counts.positive += 1;
+      if (item.sentiment === "neutral") counts.neutral += 1;
+      if (item.sentiment === "negative") counts.negative += 1;
+    }
+    return counts;
+  }, [actorMentions]);
+  const selectedActorMentionsTotalLabel = useMemo(
+    () => selectedActorMentionsSummary.total.toLocaleString("es-ES"),
+    [selectedActorMentionsSummary.total],
   );
   const dashboardTopPenalizedFeatures = useMemo(
     () => (dashboardMarketInsights?.top_penalized_features ?? []).slice(0, 10),
@@ -1050,6 +1055,15 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
       ),
     [principalMentions],
   );
+  const actorReplyTrackedMentions = useMemo(
+    () =>
+      actorMentions.filter((item) =>
+        item.sources.some((source) =>
+          MARKET_REPLY_TRACKED_SOURCE_KEYS.has(normalizeSourceKey(source.name)),
+        ),
+      ),
+    [actorMentions],
+  );
   const dashboardResponseTotals = useMemo(
     () => toAnsweredMentionTotals(dashboardMarketInsights?.responses?.totals),
     [dashboardMarketInsights],
@@ -1072,32 +1086,45 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
   // "Ultimas menciones" depende solo del dataset de items, no del fetch del grafico.
   const mentionsLoading = itemsLoading;
   const splitResponsesByActor = !isDashboard && comparisonsEnabled;
+  const responseSummaryUsesRatios = isDashboard || isSentimentMarkets;
+  const responseCoverageIncludeTotals = !isDashboard && !isSentimentMarkets;
   const responseTotalsPrincipal = useMemo(() => {
     if (isDashboard) {
       return dashboardResponseTotals ?? summarizeAnsweredMentions(principalReplyTrackedMentions);
     }
+    if (isSentimentMarkets) {
+      return summarizeAnsweredMentions(principalReplyTrackedMentions);
+    }
     return summarizeAnsweredMentions(principalMentions);
   }, [
     isDashboard,
+    isSentimentMarkets,
     dashboardResponseTotals,
     principalReplyTrackedMentions,
     principalMentions,
   ]);
   const responseTotalsComparison = splitResponsesByActor
-    ? summarizeAnsweredMentions(actorMentions)
+    ? summarizeAnsweredMentions(isSentimentMarkets ? actorReplyTrackedMentions : actorMentions)
     : null;
+  const showSecondaryMarketResponses = Boolean(
+    isSentimentMarkets && selectedActor && responseTotalsComparison,
+  );
   const answeredTotalPrincipalLabel = responseTotalsPrincipal.answeredTotal.toLocaleString("es-ES");
   const opinionsTotalPrincipalLabel = responseTotalsPrincipal.opinionsTotal.toLocaleString("es-ES");
   const answeredTotalComparisonLabel =
     splitResponsesByActor && responseTotalsComparison
       ? responseTotalsComparison.answeredTotal.toLocaleString("es-ES")
       : null;
+  const opinionsTotalComparisonLabel =
+    splitResponsesByActor && responseTotalsComparison
+      ? responseTotalsComparison.opinionsTotal.toLocaleString("es-ES")
+      : null;
   const responseCoveragePrincipal = formatResponseCoverageFromMentions(responseTotalsPrincipal, {
-    includeTotals: !isDashboard,
+    includeTotals: responseCoverageIncludeTotals,
   });
   const responseCoverageComparison = responseTotalsComparison
     ? formatResponseCoverageFromMentions(responseTotalsComparison, {
-        includeTotals: !isDashboard,
+        includeTotals: responseCoverageIncludeTotals,
       })
     : null;
   const headerEyebrow = isDashboard
@@ -1118,7 +1145,7 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
     isDashboard
       ? "Señales de percepción y salud operativa en un mismo vistazo."
       : isSentimentMarkets
-        ? "Analiza conversación en app stores y marketplaces. Incluye bloque de opiniones contestadas."
+        ? "Analiza conversación en app stores y marketplaces. Incluye bloque de opiniones del market contestadas."
         : isSentimentPress
           ? "Analiza conversación en prensa, social, foros y blogs (sin bloque de opiniones contestadas)."
       : comparisonsEnabled
@@ -1403,6 +1430,44 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
             </div>
           </section>
 
+          {!isDashboard && comparisonsEnabled && (
+            <section
+              className="rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-5 shadow-[var(--shadow-md)] backdrop-blur-xl animate-rise"
+              style={{ animationDelay: "180ms" }}
+            >
+              <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
+                ACTORES DEL MERCADO
+              </div>
+              <div className="mt-2 space-y-2">
+                {itemsLoading ? (
+                  <SkeletonRows count={4} />
+                ) : !marketActorRows.length ? (
+                  <div className="rounded-xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-2 text-sm text-[color:var(--text-55)]">
+                    Sin datos disponibles
+                  </div>
+                ) : (
+                  (() => {
+                    const maxValue = Math.max(1, ...marketActorRows.map((row) => row.count));
+                    return marketActorRows.map((row) => (
+                      <MarketActorRowMeter
+                        key={row.key}
+                        label={row.label}
+                        value={row.count}
+                        maxValue={maxValue}
+                        sourceCounts={row.sourceCounts}
+                      />
+                    ));
+                  })()
+                )}
+              </div>
+              {!itemsLoading && (
+                <div className="mt-3">
+                  <MarketActorSourcesLegend sourceTotals={marketSourceTotals} />
+                </div>
+              )}
+            </section>
+          )}
+
           {isDashboard && (
             <section
               className="flex-1 rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-5 shadow-[var(--shadow-md)] backdrop-blur-xl animate-rise"
@@ -1501,7 +1566,7 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
                   neutralMentions={neutralsSummaryPrincipal}
                   negativeMentions={negativesSummaryPrincipal}
                   actorName={actorPrincipalName}
-                  monthLabel={dashboardMonthShortLabel}
+                  periodLabel={mentionsPeriodLabel}
                   loading={itemsLoading}
                 />
                 <div className="col-span-2">
@@ -1514,6 +1579,52 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
                     layout="columns"
                   />
                 </div>
+              </>
+            ) : isSentimentMarkets ? (
+              <>
+                <PrincipalMentionsCard
+                  title={actorPrincipalName}
+                  showActorLine={false}
+                  totalMentions={mentionsSummaryPrincipal}
+                  positiveMentions={positivesSummaryPrincipal}
+                  neutralMentions={neutralsSummaryPrincipal}
+                  negativeMentions={negativesSummaryPrincipal}
+                  actorName={actorPrincipalName}
+                  periodLabel={mentionsPeriodLabel}
+                  loading={itemsLoading}
+                />
+                {selectedActor && (
+                  <PrincipalMentionsCard
+                    title={selectedMarketActorLabel}
+                    showActorLine={false}
+                    totalMentions={selectedActorMentionsTotalLabel}
+                    positiveMentions={selectedActorMentionsSummary.positive}
+                    neutralMentions={selectedActorMentionsSummary.neutral}
+                    negativeMentions={selectedActorMentionsSummary.negative}
+                    actorName={selectedMarketActorLabel}
+                    periodLabel={mentionsPeriodLabel}
+                    loading={itemsLoading}
+                  />
+                )}
+                {showStoreRatingsForGeo && (
+                  <StoreRatingCard
+                    label={actorPrincipalName}
+                    ratings={principalStoreRatings}
+                    loading={itemsLoading}
+                    visibility={storeRatingVisibility}
+                    history={marketRatingsHistory}
+                  />
+                )}
+                {showStoreRatingsForGeo && comparisonsEnabled && (
+                  <StoreRatingCard
+                    label={selectedMarketActorLabel}
+                    ratings={actorStoreRatings}
+                    loading={itemsLoading}
+                    visibility={storeRatingVisibility}
+                    history={marketRatingsHistory}
+                    emptyLabel="Selecciona actor"
+                  />
+                )}
               </>
             ) : (
               <>
@@ -1559,226 +1670,179 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
               </>
             )}
             {showResponsesSummary && (
-              <div className="col-span-2 relative overflow-hidden rounded-2xl border border-[color:var(--border-70)] bg-[color:var(--surface-80)] px-4 py-3 shadow-[var(--shadow-soft)]">
-                <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-[color:var(--aqua)] via-[color:var(--blue)] to-transparent" />
-                <div
-                  data-testid="responses-summary-title"
-                  className="text-[11px] uppercase tracking-[0.16em] text-[color:var(--text-45)]"
-                >
-                  {isDashboard ? (
-                    <span className="inline-flex items-end gap-1">
-                      <span className="text-2xl font-display font-semibold leading-none text-[color:var(--ink)]">
-                        {answeredTotalPrincipalLabel}
+              <>
+                <div className="col-span-2 relative overflow-hidden rounded-2xl border border-[color:var(--border-70)] bg-[color:var(--surface-80)] px-4 py-3 shadow-[var(--shadow-soft)]">
+                  <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-[color:var(--aqua)] via-[color:var(--blue)] to-transparent" />
+                  <div
+                    data-testid="responses-summary-title"
+                    className="text-[11px] uppercase tracking-[0.16em] text-[color:var(--text-45)]"
+                  >
+                    {responseSummaryUsesRatios ? (
+                      isSentimentMarkets ? (
+                        <>
+                          <div className="text-[10px] uppercase tracking-[0.16em] text-[color:var(--text-45)]">
+                            {actorPrincipalName}
+                          </div>
+                          <div className="mt-1">
+                            <span className="inline-flex items-end gap-1">
+                              <span className="text-2xl font-display font-semibold leading-none text-[color:var(--ink)]">
+                                {answeredTotalPrincipalLabel}
+                              </span>
+                              <span className="pb-0.5 text-base font-semibold leading-none text-[color:var(--text-45)]">
+                                /{opinionsTotalPrincipalLabel}
+                              </span>
+                              <span className="pb-0.5">opiniones del market contestadas</span>
+                            </span>
+                          </div>
+                        </>
+                      ) : (
+                        <span className="inline-flex items-end gap-1">
+                          <span className="text-2xl font-display font-semibold leading-none text-[color:var(--ink)]">
+                            {answeredTotalPrincipalLabel}
+                          </span>
+                          <span className="pb-0.5 text-base font-semibold leading-none text-[color:var(--text-45)]">
+                            /{opinionsTotalPrincipalLabel}
+                          </span>
+                          <span className="pb-0.5">opiniones del market contestadas</span>
+                        </span>
+                      )
+                    ) : (
+                      <span className="inline-flex items-center gap-1">
+                        {formatVsValue(answeredTotalPrincipalLabel, answeredTotalComparisonLabel, {
+                          containerClassName: "inline-flex items-center whitespace-nowrap",
+                          vsClassName:
+                            "mx-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-[color:var(--text-45)]",
+                        })}
+                        <span>opiniones contestadas</span>
                       </span>
-                      <span className="pb-0.5 text-base font-semibold leading-none text-[color:var(--text-45)]">
-                        /{opinionsTotalPrincipalLabel}
-                      </span>
-                      <span className="pb-0.5">opiniones del market contestadas</span>
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1">
-                      {formatVsValue(answeredTotalPrincipalLabel, answeredTotalComparisonLabel, {
+                    )}
+                  </div>
+                  {!isSentimentMarkets && (
+                    <div className="mt-1 text-[10px] text-[color:var(--text-55)]">
+                      {formatVsValue(actorPrincipalName, splitResponsesByActor ? actorLabel : null, {
                         containerClassName: "inline-flex items-center whitespace-nowrap",
                         vsClassName:
                           "mx-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-[color:var(--text-45)]",
                       })}
-                      <span>opiniones contestadas</span>
-                    </span>
+                    </div>
+                  )}
+                  {mentionsLoading ? (
+                    <div className="mt-3 space-y-2">
+                      <LoadingPill className="h-4 w-28" label="Cargando respuestas" />
+                      <LoadingPill className="h-3 w-full" label="Cargando respuestas" />
+                    </div>
+                  ) : (
+                    <>
+                      <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                        <ResponseStat
+                          label="Positivas"
+                          value={responseTotalsPrincipal.answeredPositive}
+                          denominator={
+                            responseSummaryUsesRatios ? responseTotalsPrincipal.opinionsPositive : null
+                          }
+                          comparisonValue={
+                            isSentimentMarkets ? null : responseTotalsComparison?.answeredPositive ?? null
+                          }
+                          comparisonDenominator={
+                            responseSummaryUsesRatios
+                              ? responseTotalsComparison?.opinionsPositive ?? null
+                              : null
+                          }
+                          prominentRatio={responseSummaryUsesRatios}
+                        />
+                        <ResponseStat
+                          label="Neutras"
+                          value={responseTotalsPrincipal.answeredNeutral}
+                          denominator={
+                            responseSummaryUsesRatios ? responseTotalsPrincipal.opinionsNeutral : null
+                          }
+                          comparisonValue={
+                            isSentimentMarkets ? null : responseTotalsComparison?.answeredNeutral ?? null
+                          }
+                          comparisonDenominator={
+                            responseSummaryUsesRatios
+                              ? responseTotalsComparison?.opinionsNeutral ?? null
+                              : null
+                          }
+                          prominentRatio={responseSummaryUsesRatios}
+                        />
+                        <ResponseStat
+                          label="Negativas"
+                          value={responseTotalsPrincipal.answeredNegative}
+                          denominator={
+                            responseSummaryUsesRatios ? responseTotalsPrincipal.opinionsNegative : null
+                          }
+                          comparisonValue={
+                            isSentimentMarkets ? null : responseTotalsComparison?.answeredNegative ?? null
+                          }
+                          comparisonDenominator={
+                            responseSummaryUsesRatios
+                              ? responseTotalsComparison?.opinionsNegative ?? null
+                              : null
+                          }
+                          prominentRatio={responseSummaryUsesRatios}
+                        />
+                      </div>
+                      <div className="mt-2 text-[11px] text-[color:var(--text-55)]">
+                        Cobertura de respuesta:{" "}
+                        {isSentimentMarkets
+                          ? responseCoveragePrincipal
+                          : formatVsValue(responseCoveragePrincipal, responseCoverageComparison, {
+                              containerClassName: "inline-flex items-center whitespace-nowrap",
+                              vsClassName:
+                                "mx-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-[color:var(--text-45)]",
+                            })}
+                      </div>
+                    </>
                   )}
                 </div>
-                <div className="mt-1 text-[10px] text-[color:var(--text-55)]">
-                  {formatVsValue(actorPrincipalName, splitResponsesByActor ? actorLabel : null, {
-                    containerClassName: "inline-flex items-center whitespace-nowrap",
-                    vsClassName:
-                      "mx-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-[color:var(--text-45)]",
-                  })}
-                </div>
-                {mentionsLoading ? (
-                  <div className="mt-3 space-y-2">
-                    <LoadingPill className="h-4 w-28" label="Cargando respuestas" />
-                    <LoadingPill className="h-3 w-full" label="Cargando respuestas" />
-                  </div>
-                ) : (
-                  <>
+                {showSecondaryMarketResponses && responseTotalsComparison && (
+                  <div className="col-span-2 relative overflow-hidden rounded-2xl border border-[color:var(--border-70)] bg-[color:var(--surface-80)] px-4 py-3 shadow-[var(--shadow-soft)]">
+                    <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-[color:var(--aqua)] via-[color:var(--blue)] to-transparent" />
+                    <div className="text-[10px] uppercase tracking-[0.16em] text-[color:var(--text-45)]">
+                      {selectedMarketActorLabel}
+                    </div>
+                    <div className="mt-1 text-[11px] uppercase tracking-[0.16em] text-[color:var(--text-45)]">
+                      <span className="inline-flex items-end gap-1">
+                        <span className="text-2xl font-display font-semibold leading-none text-[color:var(--ink)]">
+                          {answeredTotalComparisonLabel}
+                        </span>
+                        <span className="pb-0.5 text-base font-semibold leading-none text-[color:var(--text-45)]">
+                          /{opinionsTotalComparisonLabel}
+                        </span>
+                        <span className="pb-0.5">opiniones del market contestadas</span>
+                      </span>
+                    </div>
                     <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
                       <ResponseStat
                         label="Positivas"
-                        value={responseTotalsPrincipal.answeredPositive}
-                        denominator={
-                          isDashboard ? responseTotalsPrincipal.opinionsPositive : null
-                        }
-                        comparisonValue={responseTotalsComparison?.answeredPositive ?? null}
-                        comparisonDenominator={
-                          isDashboard ? responseTotalsComparison?.opinionsPositive ?? null : null
-                        }
-                        prominentRatio={isDashboard}
+                        value={responseTotalsComparison.answeredPositive}
+                        denominator={responseTotalsComparison.opinionsPositive}
+                        prominentRatio
                       />
                       <ResponseStat
                         label="Neutras"
-                        value={responseTotalsPrincipal.answeredNeutral}
-                        denominator={isDashboard ? responseTotalsPrincipal.opinionsNeutral : null}
-                        comparisonValue={responseTotalsComparison?.answeredNeutral ?? null}
-                        comparisonDenominator={
-                          isDashboard ? responseTotalsComparison?.opinionsNeutral ?? null : null
-                        }
-                        prominentRatio={isDashboard}
+                        value={responseTotalsComparison.answeredNeutral}
+                        denominator={responseTotalsComparison.opinionsNeutral}
+                        prominentRatio
                       />
                       <ResponseStat
                         label="Negativas"
-                        value={responseTotalsPrincipal.answeredNegative}
-                        denominator={
-                          isDashboard ? responseTotalsPrincipal.opinionsNegative : null
-                        }
-                        comparisonValue={responseTotalsComparison?.answeredNegative ?? null}
-                        comparisonDenominator={
-                          isDashboard ? responseTotalsComparison?.opinionsNegative ?? null : null
-                        }
-                        prominentRatio={isDashboard}
+                        value={responseTotalsComparison.answeredNegative}
+                        denominator={responseTotalsComparison.opinionsNegative}
+                        prominentRatio
                       />
                     </div>
                     <div className="mt-2 text-[11px] text-[color:var(--text-55)]">
-                      Cobertura de respuesta:{" "}
-                      {formatVsValue(responseCoveragePrincipal, responseCoverageComparison, {
-                        containerClassName: "inline-flex items-center whitespace-nowrap",
-                        vsClassName:
-                          "mx-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-[color:var(--text-45)]",
-                      })}
+                      Cobertura de respuesta: {responseCoverageComparison}
                     </div>
-                  </>
+                  </div>
                 )}
-              </div>
+              </>
             )}
           </div>
-          {!isDashboard && (
-            <div className="mt-5">
-              <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
-                TOP FUENTES
-              </div>
-              <div className="mt-2 space-y-2">
-                {itemsLoading ? (
-                  <SkeletonRows count={4} />
-                ) : (
-                  (() => {
-                    const maxValue = Math.max(1, ...topSources.map((row) => row.count));
-                    return topSources.map((row) => (
-                      <RowMeter
-                        key={row.key}
-                        label={row.key}
-                        value={row.count}
-                        maxValue={maxValue}
-                      />
-                    ));
-                  })()
-                )}
-              </div>
-            </div>
-          )}
-          {!isDashboard && comparisonsEnabled && (
-            <div className="mt-4">
-              <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
-                TOP OTROS ACTORES DEL MERCADO
-              </div>
-              <div className="mt-2 space-y-2">
-                {itemsLoading ? (
-                  <SkeletonRows count={4} />
-                ) : (
-                  (() => {
-                    const maxValue = Math.max(1, ...topActores.map((row) => row.count));
-                    return topActores.map((row) => (
-                      <RowMeter
-                        key={row.key}
-                        label={row.key}
-                        value={row.count}
-                        maxValue={maxValue}
-                      />
-                    ));
-                  })()
-                )}
-              </div>
-            </div>
-          )}
         </section>
       </div>
-
-      {!isDashboard && (
-        <section className="mt-6 rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-5 shadow-[var(--shadow-md)] backdrop-blur-xl animate-rise" style={{ animationDelay: "240ms" }}>
-          <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
-            {formatVsValue(
-              geoTableTitlePrincipal,
-              isDashboard || !comparisonsEnabled ? undefined : geoTableComparisonLabel,
-              {
-                containerClassName: "inline-flex items-center whitespace-nowrap",
-                vsClassName:
-                  "mx-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-[color:var(--text-45)]",
-              },
-            )}
-          </div>
-          <div className="mt-3 overflow-auto">
-            <table className="min-w-full text-sm">
-              <thead>
-                <tr className="text-[11px] uppercase tracking-[0.2em] text-[color:var(--text-45)]">
-                  <th className="py-2 pr-4 text-left">País</th>
-                  <th className="py-2 px-2 text-center">Menciones</th>
-                  <th className="py-2 px-2 text-center">Score medio</th>
-                  <th className="py-2 px-2 text-center">Positivas</th>
-                  <th className="py-2 px-2 text-center">Neutrales</th>
-                  <th className="py-2 px-2 text-center">Negativas</th>
-                </tr>
-              </thead>
-              <tbody>
-                {itemsLoading ? (
-                  <SkeletonTableRows columns={6} rows={3} />
-                ) : (
-                  geoTableRows.map((row) => (
-                    <tr key={row.geo} className="border-t border-[color:var(--border-60)]">
-                      <td className="py-2 pr-4 font-semibold text-[color:var(--ink)]">
-                        {row.geo}
-                      </td>
-                      <td className="py-2 px-2 text-center">
-                        {formatVsValue(
-                          row.principal.count.toLocaleString("es-ES"),
-                          row.comparison?.count.toLocaleString("es-ES"),
-                        )}
-                      </td>
-                      <td className="py-2 px-2 text-center">
-                        {formatVsValue(
-                          row.principal.avgScore.toFixed(2),
-                          row.comparison?.avgScore.toFixed(2),
-                        )}
-                      </td>
-                      <td className="py-2 px-2 text-center">
-                        {formatVsValue(
-                          row.principal.positive.toLocaleString("es-ES"),
-                          row.comparison?.positive.toLocaleString("es-ES"),
-                        )}
-                      </td>
-                      <td className="py-2 px-2 text-center">
-                        {formatVsValue(
-                          row.principal.neutral.toLocaleString("es-ES"),
-                          row.comparison?.neutral.toLocaleString("es-ES"),
-                        )}
-                      </td>
-                      <td className="py-2 px-2 text-center">
-                        {formatVsValue(
-                          row.principal.negative.toLocaleString("es-ES"),
-                          row.comparison?.negative.toLocaleString("es-ES"),
-                        )}
-                      </td>
-                    </tr>
-                  ))
-                )}
-                {!itemsLoading && !geoTableRows.length && (
-                  <tr>
-                    <td className="py-3 text-sm text-[color:var(--text-45)]" colSpan={6}>
-                      No hay datos para los filtros seleccionados.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      )}
 
       <section className="mt-6 rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-5 shadow-[var(--shadow-md)] backdrop-blur-xl animate-rise" style={{ animationDelay: "300ms" }}>
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -2124,39 +2188,48 @@ function SummaryCard({
 }
 
 function PrincipalMentionsCard({
+  title = "Menciones actor principal",
+  showActorLine = true,
   totalMentions,
   positiveMentions,
   neutralMentions,
   negativeMentions,
   actorName,
-  monthLabel,
+  periodLabel,
   loading = false,
 }: {
+  title?: string;
+  showActorLine?: boolean;
   totalMentions: ReactNode;
   positiveMentions: ReactNode;
   neutralMentions: ReactNode;
   negativeMentions: ReactNode;
   actorName: string;
-  monthLabel: string;
+  periodLabel: string;
   loading?: boolean;
 }) {
   return (
     <div className="col-span-2 relative overflow-hidden rounded-2xl border border-[color:var(--border-70)] bg-[color:var(--surface-80)] px-4 py-3 shadow-[var(--shadow-soft)]">
       <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-[color:var(--aqua)] via-[color:var(--blue)] to-transparent" />
       <div className="text-[11px] uppercase tracking-[0.16em] text-[color:var(--text-45)]">
-        Menciones actor principal
+        {title}
       </div>
       {loading ? (
         <div className="mt-3 space-y-2">
-          <LoadingPill className="h-6 w-28" label="Cargando menciones actor principal" />
-          <LoadingPill className="h-3 w-full" label="Cargando menciones actor principal" />
+          <LoadingPill className="h-6 w-28" label={`Cargando ${title}`} />
+          <LoadingPill className="h-3 w-full" label={`Cargando ${title}`} />
         </div>
       ) : (
         <>
-          <div className="mt-2 text-2xl font-display font-semibold text-[color:var(--ink)]">
+          {showActorLine && (
+            <div className="mt-1 text-[10px] uppercase tracking-[0.16em] text-[color:var(--text-45)]">
+              {actorName}
+            </div>
+          )}
+          <div className="mt-1 text-2xl font-display font-semibold text-[color:var(--ink)]">
             {totalMentions}
             <span className="ml-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-[color:var(--text-45)]">
-              {`menciones ${actorName} en ${monthLabel}`.toUpperCase()}
+              {`menciones del ${periodLabel}`.toUpperCase()}
             </span>
           </div>
           <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3 text-xs">
@@ -2244,6 +2317,7 @@ function ResponseStat({
 
 function StoreRatingCard({
   label,
+  subtitle,
   ratings,
   loading = false,
   visibility,
@@ -2252,6 +2326,7 @@ function StoreRatingCard({
   layout = "stack",
 }: {
   label: string;
+  subtitle?: string;
   ratings: ActorStoreRatings | null;
   loading?: boolean;
   visibility: { showApple: boolean; showGoogle: boolean };
@@ -2296,6 +2371,11 @@ function StoreRatingCard({
       <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-[color:var(--aqua)] via-[color:var(--blue)] to-transparent" />
       <div className="text-[11px] uppercase tracking-[0.16em] text-[color:var(--text-45)]">
         {label}
+        {subtitle && (
+          <div className="mt-1 text-[10px] font-semibold tracking-[0.12em] text-[color:var(--text-55)]">
+            {subtitle}
+          </div>
+        )}
       </div>
       {loading ? (
         <div className="mt-3 space-y-2">
@@ -2392,27 +2472,73 @@ function StoreRatingRow({
   );
 }
 
-function RowMeter({
+function MarketActorRowMeter({
   label,
   value,
   maxValue,
+  sourceCounts,
 }: {
   label: string;
   value: number;
   maxValue: number;
+  sourceCounts: MarketActorSourceCounts;
 }) {
   const safeMax = Math.max(1, maxValue);
-  const ratio = Math.min(1, value / safeMax);
+  const ratio = Math.min(1, Math.max(0, value / safeMax));
+  const fillWidthPercent = Math.round(ratio * 100);
+  const sourceTotal = MARKET_ACTOR_SOURCE_ORDER.reduce(
+    (sum, sourceKey) => sum + sourceCounts[sourceKey],
+    0,
+  );
+  const segments = MARKET_ACTOR_SOURCE_ORDER.filter((sourceKey) => sourceCounts[sourceKey] > 0);
+  if (sourceTotal <= 0 || !segments.length) return null;
+
   return (
     <div className="flex items-center gap-3">
       <div className="w-28 text-xs text-[color:var(--text-55)] truncate">{label}</div>
       <div className="flex-1 h-2 rounded-full bg-[color:var(--surface-70)] overflow-hidden border border-[color:var(--border-70)]">
         <div
-          className="h-full rounded-full bg-gradient-to-r from-[color:var(--blue)] to-[color:var(--aqua)]"
-          style={{ width: `${Math.round(ratio * 100)}%` }}
-        />
+          className="flex h-full overflow-hidden rounded-full"
+          style={{ width: `${fillWidthPercent}%` }}
+        >
+          {segments.map((sourceKey) => (
+            <div
+              key={sourceKey}
+              className={`${MARKET_ACTOR_SOURCE_COLOR_CLASS[sourceKey]} h-full`}
+              style={{ width: `${(sourceCounts[sourceKey] / sourceTotal) * 100}%` }}
+              title={`${MARKET_ACTOR_SOURCE_LABELS[sourceKey]}: ${sourceCounts[sourceKey].toLocaleString("es-ES")}`}
+            />
+          ))}
+        </div>
       </div>
-      <div className="w-8 text-right text-xs text-[color:var(--text-55)]">{value}</div>
+      <div className="w-12 text-right text-xs text-[color:var(--text-55)]">
+        {value.toLocaleString("es-ES")}
+      </div>
+    </div>
+  );
+}
+
+function MarketActorSourcesLegend({
+  sourceTotals,
+}: {
+  sourceTotals: MarketActorSourceCounts;
+}) {
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-3 text-[10px] text-[color:var(--text-55)]">
+      <span className="uppercase tracking-[0.14em] text-[color:var(--text-45)]">
+        Leyenda:
+      </span>
+      {MARKET_ACTOR_SOURCE_ORDER.map((sourceKey) => (
+        <span key={sourceKey} className="inline-flex items-center gap-1.5">
+          <span
+            className={`h-2.5 w-2.5 rounded-full ${MARKET_ACTOR_SOURCE_COLOR_CLASS[sourceKey]}`}
+          />
+          <span>
+            {MARKET_ACTOR_SOURCE_LABELS[sourceKey]} (
+            {sourceTotals[sourceKey].toLocaleString("es-ES")})
+          </span>
+        </span>
+      ))}
     </div>
   );
 }
@@ -2426,22 +2552,6 @@ function SkeletonRows({ count }: { count: number }) {
           <div className="flex-1 h-2 rounded-full bg-[color:var(--surface-70)] border border-[color:var(--border-60)]" />
           <div className="h-3 w-8 rounded-full bg-[color:var(--surface-70)] border border-[color:var(--border-60)]" />
         </div>
-      ))}
-    </>
-  );
-}
-
-function SkeletonTableRows({ columns, rows }: { columns: number; rows: number }) {
-  return (
-    <>
-      {Array.from({ length: rows }).map((_, rowIdx) => (
-        <tr key={rowIdx} className="border-t border-[color:var(--border-60)] animate-pulse">
-          {Array.from({ length: columns }).map((_, colIdx) => (
-            <td key={colIdx} className="py-2 pr-4">
-              <div className="h-3 w-full max-w-[120px] rounded-full bg-[color:var(--surface-70)] border border-[color:var(--border-60)]" />
-            </td>
-          ))}
-        </tr>
       ))}
     </>
   );
@@ -3635,6 +3745,15 @@ function buildRangeLabel(fromDate?: string, toDate?: string) {
   return `${fromLabel} → ${toLabel}`;
 }
 
+function buildMentionsPeriodLabel(fromDate?: string, toDate?: string) {
+  const fromLabel = formatDateInputLabel(fromDate || null);
+  const toLabel = formatDateInputLabel(toDate || null);
+  if (fromLabel === "Todos" && toLabel === "Todos") return "periodo seleccionado";
+  if (fromLabel === "Todos") return `hasta ${toLabel}`;
+  if (toLabel === "Todos") return `desde ${fromLabel}`;
+  return `${fromLabel} al ${toLabel}`;
+}
+
 function formatDateInputLabel(value?: string | null) {
   if (!value) return "Todos";
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
@@ -3721,42 +3840,6 @@ function summarize(items: ReputationItem[]) {
   };
 }
 
-function summarizeByGeo(items: ReputationItem[]) {
-  const map = new Map<
-    string,
-    { count: number; positive: number; neutral: number; negative: number; score: number; scored: number }
-  >();
-
-  for (const item of items) {
-    const geo = item.geo || "Sin país";
-    if (!map.has(geo)) {
-      map.set(geo, { count: 0, positive: 0, neutral: 0, negative: 0, score: 0, scored: 0 });
-    }
-    const entry = map.get(geo);
-    if (!entry) continue;
-    entry.count += 1;
-    if (item.sentiment === "positive") entry.positive += 1;
-    if (item.sentiment === "neutral") entry.neutral += 1;
-    if (item.sentiment === "negative") entry.negative += 1;
-    const score = Number((item.signals as Record<string, unknown>)?.sentiment_score);
-    if (!Number.isNaN(score)) {
-      entry.score += score;
-      entry.scored += 1;
-    }
-  }
-
-  return Array.from(map.entries())
-    .map(([geo, entry]) => ({
-      geo,
-      count: entry.count,
-      positive: entry.positive,
-      neutral: entry.neutral,
-      negative: entry.negative,
-      avgScore: entry.scored ? entry.score / entry.scored : 0,
-    }))
-    .sort((a, b) => b.count - a.count);
-}
-
 function formatVsValue(
   principal: ReactNode,
   comparison?: ReactNode | null,
@@ -3777,43 +3860,56 @@ function formatVsValue(
   );
 }
 
-function buildGeoComparisonRows(
-  principalRows: ReturnType<typeof summarizeByGeo>,
-  comparisonRows: ReturnType<typeof summarizeByGeo>,
-) {
-  const principalMap = new Map(principalRows.map((row) => [row.geo, row] as const));
-  const comparisonMap = new Map(comparisonRows.map((row) => [row.geo, row] as const));
-  const orderedGeos = [
-    ...principalRows.map((row) => row.geo),
-    ...comparisonRows
-      .map((row) => row.geo)
-      .filter((geo) => !principalMap.has(geo)),
-  ];
-  const empty = {
-    geo: "",
-    count: 0,
-    positive: 0,
-    neutral: 0,
-    negative: 0,
-    avgScore: 0,
+function createMarketActorSourceCounts(): MarketActorSourceCounts {
+  return {
+    appstore: 0,
+    google_play: 0,
+    downdetector: 0,
   };
-  return orderedGeos.map((geo) => ({
-    geo,
-    principal: principalMap.get(geo) ?? { ...empty, geo },
-    comparison: comparisonMap.get(geo) ?? { ...empty, geo },
-  }));
 }
 
-function topCounts(items: ReputationItem[], getKey: (item: ReputationItem) => string) {
-  const map = new Map<string, number>();
+function normalizeMarketActorSourceKey(source?: string | null): MarketActorSourceKey | null {
+  const normalizedSource = normalizeSourceKey(source ?? "");
+  if (normalizedSource === "appstore") return "appstore";
+  if (normalizedSource === "googleplay") return "google_play";
+  if (normalizedSource === "downdetector") return "downdetector";
+  return null;
+}
+
+function countMarketSourceTotals(items: ReputationItem[]): MarketActorSourceCounts {
+  const totals = createMarketActorSourceCounts();
   for (const item of items) {
-    const key = getKey(item);
-    map.set(key, (map.get(key) || 0) + 1);
+    const sourceKey = normalizeMarketActorSourceKey(item.source);
+    if (!sourceKey) continue;
+    totals[sourceKey] += 1;
   }
-  return Array.from(map.entries())
-    .map(([key, count]) => ({ key, count }))
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 5);
+  return totals;
+}
+
+function buildMarketActorRows(items: ReputationItem[]): MarketActorRow[] {
+  const map = new Map<string, MarketActorRow>();
+  for (const item of items) {
+    const actorLabel = item.actor?.trim() || "Sin actor";
+    const sourceKey = normalizeMarketActorSourceKey(item.source);
+    if (!sourceKey) continue;
+    const actorKey = normalizeKey(actorLabel) || actorLabel.toLowerCase();
+    if (!map.has(actorKey)) {
+      map.set(actorKey, {
+        key: actorKey,
+        label: actorLabel,
+        count: 0,
+        sourceCounts: createMarketActorSourceCounts(),
+      });
+    }
+    const row = map.get(actorKey);
+    if (!row) continue;
+    row.count += 1;
+    row.sourceCounts[sourceKey] += 1;
+  }
+  return Array.from(map.values()).sort((a, b) => {
+    if (b.count !== a.count) return b.count - a.count;
+    return a.label.localeCompare(b.label);
+  });
 }
 
 function buildComparativeSeries(
