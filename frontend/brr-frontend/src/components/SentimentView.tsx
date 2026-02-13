@@ -993,6 +993,11 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
   const responseTotalsComparison = splitResponsesByActor
     ? summarizeAnsweredMentions(actorMentions)
     : null;
+  const answeredTotalPrincipalLabel = responseTotalsPrincipal.answeredTotal.toLocaleString("es-ES");
+  const answeredTotalComparisonLabel =
+    splitResponsesByActor && responseTotalsComparison
+      ? responseTotalsComparison.answeredTotal.toLocaleString("es-ES")
+      : null;
   const responseCoveragePrincipal = formatResponseCoverageFromMentions(responseTotalsPrincipal);
   const responseCoverageComparison = responseTotalsComparison
     ? formatResponseCoverageFromMentions(responseTotalsComparison)
@@ -1365,8 +1370,18 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
             {showResponsesSummary && (
               <div className="col-span-2 relative overflow-hidden rounded-2xl border border-[color:var(--border-70)] bg-[color:var(--surface-80)] px-4 py-3 shadow-[var(--shadow-soft)]">
                 <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-[color:var(--aqua)] via-[color:var(--blue)] to-transparent" />
-                <div className="text-[11px] uppercase tracking-[0.16em] text-[color:var(--text-45)]">
-                  Opiniones contestadas
+                <div
+                  data-testid="responses-summary-title"
+                  className="text-[11px] uppercase tracking-[0.16em] text-[color:var(--text-45)]"
+                >
+                  <span className="inline-flex items-center gap-1">
+                    {formatVsValue(answeredTotalPrincipalLabel, answeredTotalComparisonLabel, {
+                      containerClassName: "inline-flex items-center whitespace-nowrap",
+                      vsClassName:
+                        "mx-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-[color:var(--text-45)]",
+                    })}
+                    <span>opiniones contestadas</span>
+                  </span>
                 </div>
                 <div className="mt-1 text-[10px] text-[color:var(--text-55)]">
                   {formatVsValue(actorPrincipalName, splitResponsesByActor ? actorLabel : null, {
@@ -1382,12 +1397,7 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
                   </div>
                 ) : (
                   <>
-                    <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-                      <ResponseStat
-                        label="Total"
-                        value={responseTotalsPrincipal.answeredTotal}
-                        comparisonValue={responseTotalsComparison?.answeredTotal ?? null}
-                      />
+                    <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
                       <ResponseStat
                         label="Positivas"
                         value={responseTotalsPrincipal.answeredPositive}
@@ -1953,13 +1963,13 @@ function ResponseStat({
   const comparison =
     typeof comparisonValue === "number" ? comparisonValue.toLocaleString("es-ES") : null;
   return (
-    <div className="rounded-xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-2 py-1.5">
+    <div className="rounded-xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-2 py-1.5 text-center">
       <div className="text-[10px] uppercase tracking-[0.16em] text-[color:var(--text-45)]">
         {label}
       </div>
       <div className="mt-1 text-sm font-semibold text-[color:var(--ink)]">
         {formatVsValue(principal, comparison, {
-          containerClassName: "inline-flex items-center whitespace-nowrap",
+          containerClassName: "inline-flex items-center justify-center whitespace-nowrap",
           vsClassName:
             "mx-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-[color:var(--text-45)]",
         })}
