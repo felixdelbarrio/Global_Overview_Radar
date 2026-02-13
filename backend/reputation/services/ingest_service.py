@@ -3120,7 +3120,9 @@ class ReputationIngestService:
         raw = cls._signal_text(html_text)
         if not raw:
             return ""
-        for candidate in re.findall(r"<font[^>]*>(.*?)</font>", raw, flags=re.IGNORECASE | re.DOTALL):
+        for candidate in re.findall(
+            r"<font[^>]*>(.*?)</font>", raw, flags=re.IGNORECASE | re.DOTALL
+        ):
             cleaned = cls._clean_publisher_name(candidate)
             if cleaned:
                 return cleaned

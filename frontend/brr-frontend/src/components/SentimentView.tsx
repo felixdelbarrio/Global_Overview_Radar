@@ -4131,7 +4131,7 @@ function extractPublisherFromTitle(title?: string | null): string {
 
 function extractPublisherFromHtmlSnippet(text?: string | null): string {
   if (!text) return "";
-  const fontMatch = /<font[^>]*>(.*?)<\/font>/is.exec(text);
+  const fontMatch = /<font[^>]*>([\s\S]*?)<\/font>/i.exec(text);
   if (fontMatch?.[1]) {
     return cleanPublisherLabel(fontMatch[1]);
   }
