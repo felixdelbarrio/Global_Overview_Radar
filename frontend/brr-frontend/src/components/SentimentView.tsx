@@ -46,9 +46,6 @@ import type {
   ReputationCacheDocument,
   ReputationItem,
   ReputationMeta,
-  ResponseSummaryAnsweredItem,
-  ResponseSummaryTotals,
-  ReputationResponsesSummary,
 } from "@/lib/types";
 
 const SENTIMENTS = ["all", "positive", "neutral", "negative"] as const;
@@ -137,11 +134,6 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
   const [chartLoading, setChartLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [chartError, setChartError] = useState<string | null>(null);
-  const [responsesSummaryPrincipal, setResponsesSummaryPrincipal] =
-    useState<ReputationResponsesSummary | null>(null);
-  const [responsesSummaryComparison, setResponsesSummaryComparison] =
-    useState<ReputationResponsesSummary | null>(null);
-  const [responsesLoading, setResponsesLoading] = useState(true);
   const [actorPrincipal, setActorPrincipal] = useState<ActorPrincipalMeta | null>(null);
   const [meta, setMeta] = useState<ReputationMeta | null>(null);
   const [marketRatings, setMarketRatings] = useState<MarketRating[]>([]);
@@ -549,85 +541,6 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
     reputationRefresh,
   ]);
 
-  useEffect(() => {
-    let alive = true;
-    if (!showResponsesSummary) {
-      setResponsesSummaryPrincipal(null);
-      setResponsesSummaryComparison(null);
-      setResponsesLoading(false);
-      return () => {
-        alive = false;
-      };
-    }
-    setResponsesLoading(true);
-    const splitResponsesByActor = !isDashboard && comparisonsEnabled;
-    const comparisonUsesSpecificActor =
-      splitResponsesByActor &&
-      effectiveActor !== "all" &&
-      !isPrincipalName(effectiveActor, principalAliasKeys);
-
-    const buildSummaryParams = (target: "principal" | "comparison") => {
-      const params = new URLSearchParams();
-      if (effectiveFromDate) params.set("from_date", effectiveFromDate);
-      if (effectiveToDate) params.set("to_date", effectiveToDate);
-      if (effectiveSentiment !== "all") params.set("sentiment", effectiveSentiment);
-      if (geo !== "all") params.set("geo", geo);
-      if (effectiveSourcesForQuery.length) {
-        params.set("sources", effectiveSourcesForQuery.join(","));
-      }
-      if (target === "principal") {
-        params.set("entity", "actor_principal");
-      } else if (comparisonUsesSpecificActor) {
-        params.set("actor", effectiveActor);
-      } else {
-        params.set("entity", "other_actors");
-      }
-      params.set("detail_limit", "5000");
-      return params;
-    };
-
-    const principalRequest = apiGet<ReputationResponsesSummary>(
-      `/reputation/responses/summary?${buildSummaryParams("principal").toString()}`,
-    );
-    const comparisonRequest = splitResponsesByActor
-      ? apiGet<ReputationResponsesSummary>(
-          `/reputation/responses/summary?${buildSummaryParams("comparison").toString()}`,
-        )
-      : Promise.resolve<ReputationResponsesSummary | null>(null);
-
-    Promise.all([principalRequest, comparisonRequest])
-      .then(([principalSummary, comparisonSummary]) => {
-        if (!alive) return;
-        setResponsesSummaryPrincipal(principalSummary);
-        setResponsesSummaryComparison(comparisonSummary);
-      })
-      .catch(() => {
-        if (!alive) return;
-        setResponsesSummaryPrincipal(null);
-        setResponsesSummaryComparison(null);
-      })
-      .finally(() => {
-        if (alive) setResponsesLoading(false);
-      });
-
-    return () => {
-      alive = false;
-    };
-  }, [
-    effectiveFromDate,
-    effectiveToDate,
-    effectiveSentiment,
-    geo,
-    effectiveSourcesForQuery,
-    showResponsesSummary,
-    isDashboard,
-    comparisonsEnabled,
-    effectiveActor,
-    principalAliasKeys,
-    overrideRefresh,
-    reputationRefresh,
-  ]);
-
   const sourceCounts = useMemo(() => {
     const counts: Record<string, { principal: number; others: number; total: number }> = {};
     for (const item of items) {
@@ -1024,18 +937,13 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
   // "Ultimas menciones" depende solo del dataset de items, no del fetch del grafico.
   const mentionsLoading = itemsLoading;
   const splitResponsesByActor = !isDashboard && comparisonsEnabled;
-  const responseTotalsPrincipal = responsesSummaryPrincipal?.totals;
+  const responseTotalsPrincipal = summarizeAnsweredMentions(principalMentions);
   const responseTotalsComparison = splitResponsesByActor
-    ? responsesSummaryComparison?.totals ?? null
+    ? summarizeAnsweredMentions(actorMentions)
     : null;
-  const repeatedRepliesPrincipal = responsesSummaryPrincipal?.repeated_replies ?? [];
-  const answeredItemsPrincipal = sortAnsweredItems(responsesSummaryPrincipal?.answered_items ?? []);
-  const answeredItemsComparison = sortAnsweredItems(
-    responsesSummaryComparison?.answered_items ?? [],
-  );
-  const responseCoveragePrincipal = formatResponseCoverage(responseTotalsPrincipal);
+  const responseCoveragePrincipal = formatResponseCoverageFromMentions(responseTotalsPrincipal);
   const responseCoverageComparison = responseTotalsComparison
-    ? formatResponseCoverage(responseTotalsComparison)
+    ? formatResponseCoverageFromMentions(responseTotalsComparison)
     : null;
   const headerEyebrow = isDashboard
     ? "Dashboard"
@@ -1415,7 +1323,7 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
                       "mx-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-[color:var(--text-45)]",
                   })}
                 </div>
-                {responsesLoading ? (
+                {mentionsLoading ? (
                   <div className="mt-3 space-y-2">
                     <LoadingPill className="h-4 w-28" label="Cargando respuestas" />
                     <LoadingPill className="h-3 w-full" label="Cargando respuestas" />
@@ -1425,23 +1333,23 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
                     <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
                       <ResponseStat
                         label="Total"
-                        value={responseTotalsPrincipal?.answered_total ?? 0}
-                        comparisonValue={responseTotalsComparison?.answered_total ?? null}
+                        value={responseTotalsPrincipal.answeredTotal}
+                        comparisonValue={responseTotalsComparison?.answeredTotal ?? null}
                       />
                       <ResponseStat
                         label="Positivas"
-                        value={responseTotalsPrincipal?.answered_positive ?? 0}
-                        comparisonValue={responseTotalsComparison?.answered_positive ?? null}
+                        value={responseTotalsPrincipal.answeredPositive}
+                        comparisonValue={responseTotalsComparison?.answeredPositive ?? null}
                       />
                       <ResponseStat
                         label="Neutras"
-                        value={responseTotalsPrincipal?.answered_neutral ?? 0}
-                        comparisonValue={responseTotalsComparison?.answered_neutral ?? null}
+                        value={responseTotalsPrincipal.answeredNeutral}
+                        comparisonValue={responseTotalsComparison?.answeredNeutral ?? null}
                       />
                       <ResponseStat
                         label="Negativas"
-                        value={responseTotalsPrincipal?.answered_negative ?? 0}
-                        comparisonValue={responseTotalsComparison?.answered_negative ?? null}
+                        value={responseTotalsPrincipal.answeredNegative}
+                        comparisonValue={responseTotalsComparison?.answeredNegative ?? null}
                       />
                     </div>
                     <div className="mt-2 text-[11px] text-[color:var(--text-55)]">
@@ -1451,41 +1359,6 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
                         vsClassName:
                           "mx-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-[color:var(--text-45)]",
                       })}
-                    </div>
-                    {!!repeatedRepliesPrincipal.length && (
-                      <div className="mt-2 space-y-1">
-                        {repeatedRepliesPrincipal.slice(0, 3).map((reply) => (
-                          <div
-                            key={`${reply.reply_text}-${reply.count}`}
-                            className="rounded-lg border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-2 py-1.5"
-                          >
-                            <div className="text-[10px] uppercase tracking-[0.16em] text-[color:var(--text-45)]">
-                              Respuesta repetida {reply.count} veces
-                            </div>
-                            <div className="mt-1 text-xs text-[color:var(--ink)]">
-                              {cleanText(reply.reply_text) || "Sin texto"}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    <div
-                      className={
-                        splitResponsesByActor
-                          ? "mt-3 grid grid-cols-1 xl:grid-cols-2 gap-2"
-                          : "mt-3"
-                      }
-                    >
-                      <AnsweredResponsesList
-                        title={actorPrincipalName}
-                        items={answeredItemsPrincipal}
-                      />
-                      {splitResponsesByActor && (
-                        <AnsweredResponsesList
-                          title={actorLabel}
-                          items={answeredItemsComparison}
-                        />
-                      )}
                     </div>
                   </>
                 )}
@@ -1926,52 +1799,6 @@ function ResponseStat({
   );
 }
 
-function AnsweredResponsesList({
-  title,
-  items,
-}: {
-  title: string;
-  items: ResponseSummaryAnsweredItem[];
-}) {
-  return (
-    <div className="rounded-xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-2">
-      <div className="flex items-center justify-between gap-2">
-        <div className="text-[10px] uppercase tracking-[0.16em] text-[color:var(--text-45)]">
-          Comentarios contestados
-        </div>
-        <div className="text-[10px] text-[color:var(--text-55)]">{title}</div>
-      </div>
-      {items.length === 0 ? (
-        <div className="mt-2 text-xs text-[color:var(--text-55)]">
-          Sin comentarios contestados para estos filtros.
-        </div>
-      ) : (
-        <div className="mt-2 max-h-56 space-y-2 overflow-auto pr-1">
-          {items.map((entry) => (
-            <article
-              key={`${entry.id}-${entry.replied_at ?? entry.published_at ?? "n/a"}`}
-              className="rounded-lg border border-[color:var(--border-60)] bg-[color:var(--surface-80)] px-2.5 py-2"
-            >
-              <div className="flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-[0.16em] text-[color:var(--text-45)]">
-                <span>{entry.source}</span>
-                <span>{entry.geo}</span>
-                <span>{entry.sentiment}</span>
-                <span>{formatDate(entry.replied_at || entry.published_at)}</span>
-              </div>
-              <div className="mt-1 text-[11px] text-[color:var(--text-55)]">
-                Responde: {entry.reply_author || entry.responder_actor || "Actor desconocido"}
-              </div>
-              <div className="mt-1 rounded-md border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-2 py-1.5 text-xs text-[color:var(--ink)]">
-                {cleanText(entry.reply_excerpt || entry.reply_text) || "Sin texto"}
-              </div>
-            </article>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 function StoreRatingCard({
   label,
   ratings,
@@ -2160,6 +1987,10 @@ type MentionGroup = {
   sources: MentionSource[];
   count: number;
   manual_override?: ManualOverride | null;
+  reply_text?: string;
+  reply_author?: string;
+  replied_at?: string | null;
+  reply_item_date?: string | null;
 };
 
 function MentionCard({
@@ -2305,6 +2136,21 @@ function MentionCard({
           }}
         >
           {sanitizedText}
+        </div>
+      )}
+      {(item.reply_text || item.reply_author || item.replied_at) && (
+        <div className="mt-3 rounded-2xl border border-[color:var(--aqua)]/35 bg-[color:var(--surface-80)] px-3 py-2">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[color:var(--blue)]">
+            Respuesta del mercado
+          </div>
+          {item.reply_author && (
+            <div className="mt-1 text-[11px] text-[color:var(--text-55)]">
+              {item.reply_author}
+            </div>
+          )}
+          <div className="mt-1 text-xs text-[color:var(--ink)]">
+            {cleanText(item.reply_text) || "Sin texto de respuesta"}
+          </div>
         </div>
       )}
       {!manualOverrideBlocked && (
@@ -2732,6 +2578,8 @@ function groupMentions(items: ReputationItem[]) {
     const extractedActor = extractActor(item);
     const title = cleanText(item.title || "");
     const text = cleanText(item.text || "");
+    const reply = extractReply(item);
+    const itemDate = item.published_at || item.collected_at || null;
     const base =
       title || text || item.url || String(item.id ?? "sin-titulo");
     const key = [
@@ -2756,6 +2604,10 @@ function groupMentions(items: ReputationItem[]) {
         sources: [],
         count: 0,
         manual_override: item.manual_override ?? undefined,
+        reply_text: reply?.text,
+        reply_author: reply?.author,
+        replied_at: reply?.replied_at ?? null,
+        reply_item_date: reply ? itemDate : null,
       });
     }
 
@@ -2765,6 +2617,21 @@ function groupMentions(items: ReputationItem[]) {
     group.count += 1;
     if (item.id && !group.ids.includes(item.id)) {
       group.ids.push(item.id);
+    }
+
+    if (reply) {
+      const currentReplyItemDate = group.reply_item_date || "";
+      const candidateReplyItemDate = itemDate || "";
+      const shouldReplaceReply =
+        !group.reply_text && !group.reply_author && !group.replied_at
+          ? true
+          : candidateReplyItemDate > currentReplyItemDate;
+      if (shouldReplaceReply) {
+        group.reply_text = reply.text;
+        group.reply_author = reply.author;
+        group.replied_at = reply.replied_at;
+        group.reply_item_date = itemDate;
+      }
     }
 
     const candidateDate = item.published_at || item.collected_at || "";
@@ -2855,6 +2722,146 @@ function extractActor(item: ReputationItem) {
   return null;
 }
 
+function extractReply(item: ReputationItem): {
+  text: string;
+  author?: string;
+  replied_at?: string | null;
+} | null {
+  const signals = (item.signals || {}) as Record<string, unknown>;
+  const textKeys = [
+    "reply_text",
+    "response_text",
+    "developer_reply",
+    "developer_response",
+    "owner_response",
+    "business_response",
+    "response",
+    "reply",
+  ];
+  const authorKeys = [
+    "reply_author",
+    "response_author",
+    "developer_name",
+    "owner_name",
+    "author",
+  ];
+  const dateKeys = [
+    "reply_at",
+    "response_at",
+    "replied_at",
+    "developer_response_at",
+    "owner_response_at",
+    "date",
+    "time",
+    "published_at",
+    "updated_at",
+  ];
+  const containerKeys = [
+    "reply",
+    "response",
+    "developer_reply",
+    "developer_response",
+    "owner_response",
+    "business_response",
+  ];
+
+  const normalizeText = (value: unknown): string => {
+    if (typeof value !== "string") return "";
+    return value.replace(/\s+/g, " ").trim();
+  };
+
+  const extractText = (value: unknown): string => {
+    const direct = normalizeText(value);
+    if (direct) return direct;
+    if (!value || typeof value !== "object") return "";
+    const record = value as Record<string, unknown>;
+    for (const key of ["text", "content", "body", "message", "reply", "response", "value"]) {
+      const candidate = normalizeText(record[key]);
+      if (candidate) return candidate;
+    }
+    return "";
+  };
+
+  const extractAuthor = (value: unknown): string => {
+    const direct = normalizeText(value);
+    if (direct) return direct;
+    if (!value || typeof value !== "object") return "";
+    const record = value as Record<string, unknown>;
+    for (const key of ["author", "name", "display_name", "developer", "owner"]) {
+      const candidate = normalizeText(record[key]);
+      if (candidate) return candidate;
+    }
+    return "";
+  };
+
+  const extractDate = (value: unknown): string | null => {
+    if (typeof value === "string") {
+      const raw = value.trim();
+      if (raw) return raw;
+      return null;
+    }
+    if (typeof value === "number" && Number.isFinite(value)) {
+      const date = new Date(value);
+      return Number.isNaN(date.getTime()) ? null : date.toISOString();
+    }
+    if (!value || typeof value !== "object") return null;
+    const record = value as Record<string, unknown>;
+    for (const key of dateKeys) {
+      const candidate = extractDate(record[key]);
+      if (candidate) return candidate;
+    }
+    return null;
+  };
+
+  let replyText = "";
+  let replyAuthor = "";
+  let repliedAt: string | null = null;
+
+  for (const key of textKeys) {
+    replyText = extractText(signals[key]);
+    if (replyText) break;
+  }
+
+  for (const key of containerKeys) {
+    const container = signals[key];
+    if (!container || typeof container !== "object") continue;
+    if (!replyText) {
+      replyText = extractText(container);
+    }
+    if (!replyAuthor) {
+      replyAuthor = extractAuthor(container);
+    }
+    if (!repliedAt) {
+      repliedAt = extractDate(container);
+    }
+  }
+
+  if (!replyAuthor) {
+    for (const key of authorKeys) {
+      replyAuthor = extractAuthor(signals[key]);
+      if (replyAuthor) break;
+    }
+  }
+
+  if (!repliedAt) {
+    for (const key of dateKeys) {
+      repliedAt = extractDate(signals[key]);
+      if (repliedAt) break;
+    }
+  }
+
+  const hasReplyFlag = Boolean(signals.has_reply);
+  if (!replyText && !replyAuthor && !repliedAt && !hasReplyFlag) {
+    return null;
+  }
+
+  return {
+    text: replyText,
+    author: replyAuthor || undefined,
+    replied_at: repliedAt,
+  };
+}
+
 function extractRatingSource(item: ReputationItem) {
   if (!item.source) return null;
   return item.source;
@@ -2921,17 +2928,40 @@ function cleanText(value?: string | null) {
   return (doc.body.textContent || "").replace(/\s+/g, " ").trim();
 }
 
-function formatResponseCoverage(totals: ResponseSummaryTotals | null | undefined): string {
-  if (!totals) return "0.0% (0/0)";
-  return `${(totals.answered_ratio * 100).toFixed(1)}% (${totals.answered_total}/${totals.opinions_total})`;
+type AnsweredMentionTotals = {
+  opinionsTotal: number;
+  answeredTotal: number;
+  answeredPositive: number;
+  answeredNeutral: number;
+  answeredNegative: number;
+  answeredRatio: number;
+};
+
+function summarizeAnsweredMentions(items: MentionGroup[]): AnsweredMentionTotals {
+  const totals: AnsweredMentionTotals = {
+    opinionsTotal: items.length,
+    answeredTotal: 0,
+    answeredPositive: 0,
+    answeredNeutral: 0,
+    answeredNegative: 0,
+    answeredRatio: 0,
+  };
+  for (const item of items) {
+    const isAnswered = Boolean(item.reply_text || item.reply_author || item.replied_at);
+    if (!isAnswered) continue;
+    totals.answeredTotal += 1;
+    if (item.sentiment === "positive") totals.answeredPositive += 1;
+    if (item.sentiment === "neutral") totals.answeredNeutral += 1;
+    if (item.sentiment === "negative") totals.answeredNegative += 1;
+  }
+  totals.answeredRatio = totals.opinionsTotal
+    ? totals.answeredTotal / totals.opinionsTotal
+    : 0;
+  return totals;
 }
 
-function sortAnsweredItems(items: ResponseSummaryAnsweredItem[]): ResponseSummaryAnsweredItem[] {
-  return [...items].sort((a, b) => {
-    const left = a.replied_at || a.published_at || "";
-    const right = b.replied_at || b.published_at || "";
-    return right.localeCompare(left);
-  });
+function formatResponseCoverageFromMentions(totals: AnsweredMentionTotals): string {
+  return `${(totals.answeredRatio * 100).toFixed(1)}% (${totals.answeredTotal}/${totals.opinionsTotal})`;
 }
 
 function formatDate(value?: string | null, withTime = true) {

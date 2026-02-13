@@ -1018,7 +1018,7 @@ def _filter_response_items(
             item,
             from_dt=from_dt,
             to_dt=to_dt,
-            include_reply_datetime=True,
+            include_reply_datetime=False,
         )
     ]
 

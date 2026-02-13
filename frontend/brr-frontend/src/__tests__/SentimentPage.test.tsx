@@ -95,7 +95,12 @@ const itemsResponse = {
       text: "Muy bien",
       sentiment: "positive",
       published_at: "2025-01-02T10:00:00Z",
-      signals: { rating: 4.5, sentiment_score: 0.4 },
+      signals: {
+        rating: 4.5,
+        sentiment_score: 0.4,
+        reply_text: "Gracias por tu comentario",
+        reply_author: "Soporte BBVA",
+      },
     },
     {
       id: "b1",
@@ -116,7 +121,11 @@ const itemsResponse = {
       text: "Baja puntuación",
       sentiment: "negative",
       published_at: "2025-01-04T10:00:00Z",
-      signals: { sentiment_score: -0.5 },
+      signals: {
+        sentiment_score: -0.5,
+        reply_text: "Lamentamos la incidencia",
+        reply_author: "Beta Support",
+      },
     },
   ],
   stats: { count: 4 },
@@ -321,31 +330,26 @@ describe("Sentimiento page", () => {
     const responsesHeading = await screen.findByText("Opiniones contestadas");
     const responsesCard = responsesHeading.parentElement;
     expect(responsesCard).toBeTruthy();
-    expect(within(responsesCard as HTMLElement).getByText("Neutras")).toBeInTheDocument();
+    expect(within(responsesCard as HTMLElement).getByText("Positivas")).toBeInTheDocument();
     const totalCard = within(responsesCard as HTMLElement).getByText("Total").parentElement;
     expect(totalCard).toBeTruthy();
-    expect(totalCard as HTMLElement).toHaveTextContent(/2/);
-    expect(totalCard as HTMLElement).toHaveTextContent(/3/);
+    expect(totalCard as HTMLElement).toHaveTextContent(/1/);
     expect(totalCard as HTMLElement).toHaveTextContent(/vs/i);
-    expect(within(responsesCard as HTMLElement).getByText("Neutra principal")).toBeInTheDocument();
-    expect(within(responsesCard as HTMLElement).getByText("Neutra beta 1")).toBeInTheDocument();
-    expect(within(responsesCard as HTMLElement).getByText("Neutra beta 2")).toBeInTheDocument();
+    expect(within(responsesCard as HTMLElement).queryByText("Comentarios contestados")).not.toBeInTheDocument();
 
-    await waitFor(() => {
-      const summaryCalls = apiGetMock.mock.calls.filter(
-        ([path]) =>
-          typeof path === "string" && path.startsWith("/reputation/responses/summary?"),
-      );
-      expect(summaryCalls.length).toBeGreaterThan(0);
-      const allCallsHaveRange = summaryCalls.every(
-        ([path]) => typeof path === "string" && path.includes("from_date=") && path.includes("to_date="),
-      );
-      const hasGeoFilter = summaryCalls.some(
-        ([path]) => typeof path === "string" && path.includes("geo=Espa%C3%B1a"),
-      );
-      expect(allCallsHaveRange).toBe(true);
-      expect(hasGeoFilter).toBe(true);
-    });
+    const mentionList = screen.getByText("LISTADO").closest("section");
+    expect(mentionList).toBeTruthy();
+    expect(within(mentionList as HTMLElement).getByText("Respuesta del mercado")).toBeInTheDocument();
+    expect(within(mentionList as HTMLElement).getByText("Gracias por tu comentario")).toBeInTheDocument();
+    expect(within(mentionList as HTMLElement).getByText("Soporte BBVA")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Otros actores del mercado/i }));
+    expect(within(mentionList as HTMLElement).getByText("Lamentamos la incidencia")).toBeInTheDocument();
+
+    const listedFilters = within(mentionList as HTMLElement).getByText(/SENTIMIENTO:/i);
+    expect(listedFilters).toBeInTheDocument();
+    expect(listedFilters).toHaveTextContent(/PAÍS: España/i);
+    expect(listedFilters).toHaveTextContent(/SENTIMIENTO: Todos/i);
+    expect(totalCard as HTMLElement).toHaveTextContent(/vs/i);
 
     fireEvent.click(screen.getByText("Descargar gráfico"));
 

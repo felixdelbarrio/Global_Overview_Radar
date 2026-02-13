@@ -251,7 +251,7 @@ def test_responses_summary_can_filter_other_actors_only(
     assert body["answered_items"][0]["id"] == "s1"
 
 
-def test_responses_summary_uses_reply_datetime_for_old_reviews(
+def test_responses_summary_uses_opinion_datetime_for_range_filters(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -285,6 +285,6 @@ def test_responses_summary_uses_reply_datetime_for_old_reviews(
     )
     assert res.status_code == 200
     body = res.json()
-    assert body["totals"]["opinions_total"] == 1
-    assert body["totals"]["answered_total"] == 1
-    assert body["answered_items"][0]["reply_author"] == "Acme Bank"
+    assert body["totals"]["opinions_total"] == 0
+    assert body["totals"]["answered_total"] == 0
+    assert body["answered_items"] == []
