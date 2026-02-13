@@ -19,6 +19,7 @@ from reputation.config import (
     active_profile_key,
     active_profile_source,
     active_profiles,
+    apply_sample_profiles_to_default,
     compute_config_hash,
     list_available_profiles,
     load_business_config,
@@ -515,6 +516,13 @@ def reputation_profiles_update(
     source = normalize_profile_source(payload.source)
     profiles = payload.profiles or []
     try:
+        if source == "samples":
+            result = apply_sample_profiles_to_default(profiles)
+            active = result.get("active")
+            response: dict[str, Any] = dict(result)
+            response["active"] = active
+            response["auto_ingest"] = {"started": False}
+            return response
         active = set_profile_state(source, profiles)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
