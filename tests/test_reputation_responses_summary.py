@@ -25,7 +25,7 @@ def _write_cache(path: Path, items: list[dict]) -> Path:
     doc = {
         "generated_at": datetime(2026, 2, 13, tzinfo=timezone.utc).isoformat(),
         "config_hash": "x",
-        "sources_enabled": ["news"],
+        "sources_enabled": ["news", "appstore", "google_play"],
         "items": items,
         "stats": {"count": len(items)},
     }
@@ -43,8 +43,8 @@ def _client(
     monkeypatch.setattr(rep_config.settings, "config_path", config_path)
     monkeypatch.setattr(rep_config.settings, "profiles", "")
     monkeypatch.setattr(rep_config.settings, "source_news", True)
-    monkeypatch.setattr(rep_config.settings, "source_appstore", False)
-    monkeypatch.setattr(rep_config.settings, "source_google_play", False)
+    monkeypatch.setattr(rep_config.settings, "source_appstore", True)
+    monkeypatch.setattr(rep_config.settings, "source_google_play", True)
     monkeypatch.setattr(rep_config.settings, "source_reddit", False)
     monkeypatch.setattr(rep_config.settings, "source_twitter", False)
     monkeypatch.setattr(rep_config.settings, "source_newsapi", False)
@@ -72,7 +72,7 @@ def test_responses_summary_counts_and_repeated_templates(
         [
             {
                 "id": "i1",
-                "source": "news",
+                "source": "appstore",
                 "geo": "ES",
                 "actor": "Acme Bank",
                 "author": "User 1",
@@ -88,7 +88,7 @@ def test_responses_summary_counts_and_repeated_templates(
             },
             {
                 "id": "i2",
-                "source": "news",
+                "source": "google_play",
                 "geo": "ES",
                 "actor": "Acme Bank",
                 "author": "User 2",
@@ -103,7 +103,7 @@ def test_responses_summary_counts_and_repeated_templates(
             },
             {
                 "id": "i3",
-                "source": "news",
+                "source": "appstore",
                 "geo": "ES",
                 "actor": "Beta Bank",
                 "author": "User 3",
@@ -118,7 +118,7 @@ def test_responses_summary_counts_and_repeated_templates(
             },
             {
                 "id": "i4",
-                "source": "news",
+                "source": "google_play",
                 "geo": "ES",
                 "actor": "Acme Bank",
                 "author": "User 4",
@@ -126,6 +126,18 @@ def test_responses_summary_counts_and_repeated_templates(
                 "text": "Sigue igual",
                 "published_at": "2026-02-12T10:00:00Z",
                 "sentiment": "negative",
+            },
+            {
+                "id": "i5",
+                "source": "news",
+                "geo": "ES",
+                "actor": "Acme Bank",
+                "author": "User 5",
+                "title": "No entra en resumen de respuestas",
+                "text": "Fuente no market",
+                "published_at": "2026-02-12T11:00:00Z",
+                "sentiment": "positive",
+                "signals": {"reply_text": "Esto no debe contar"},
             },
         ],
     )
@@ -163,7 +175,7 @@ def test_responses_summary_can_filter_actor_principal_only(
         [
             {
                 "id": "p1",
-                "source": "news",
+                "source": "appstore",
                 "geo": "ES",
                 "actor": "Acme Bank",
                 "title": "Principal",
@@ -174,7 +186,7 @@ def test_responses_summary_can_filter_actor_principal_only(
             },
             {
                 "id": "s1",
-                "source": "news",
+                "source": "google_play",
                 "geo": "ES",
                 "actor": "Beta Bank",
                 "title": "Secundario",

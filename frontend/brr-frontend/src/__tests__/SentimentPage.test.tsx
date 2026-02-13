@@ -1,7 +1,7 @@
 /** Tests del flujo de Sentimiento (modo vista completa). */
 
 import React from "react";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next/link", () => ({
@@ -309,6 +309,87 @@ describe("Sentimiento page", () => {
           options.force === true
       );
       expect(hasForcedMetaRefresh).toBe(true);
+    });
+  });
+
+  it("shows source counters as principal vs others when comparisons are enabled", async () => {
+    render(<SentimentView mode="sentiment" scope="all" />);
+
+    await screen.findByLabelText("País");
+
+    await waitFor(() => {
+      const newsChip = screen.getByRole("button", { name: /news/i });
+      expect(newsChip).toHaveTextContent(/1\s*vs\s*1/);
+      const comparisonCells = screen
+        .getAllByRole("cell")
+        .filter((cell) => /2\s*vs\s*2/.test(cell.textContent || ""));
+      expect(comparisonCells.length).toBeGreaterThanOrEqual(1);
+      const geoTitle = Array.from(document.querySelectorAll("div")).find((element) =>
+        (element.textContent || "").trim().startsWith("SENTIMIENTO POR PAÍS:"),
+      );
+      expect(geoTitle).toBeTruthy();
+      expect(geoTitle?.textContent || "").toMatch(/vs/i);
+      const geoCell = screen.getByText("España", { selector: "td" });
+      const geoRow = geoCell.closest("tr");
+      expect(geoRow).toBeTruthy();
+      const mentionsCell = within(geoRow as HTMLElement).getAllByRole("cell")[1];
+      expect(mentionsCell).toHaveTextContent(/2\s*vs\s*2/);
+
+      const topSourcesBlock = screen.getByText("TOP FUENTES").parentElement;
+      expect(topSourcesBlock).toBeTruthy();
+      const newsRowLabel = within(topSourcesBlock as HTMLElement).getByText("news");
+      const newsRow = newsRowLabel.parentElement;
+      expect(newsRow).toBeTruthy();
+      expect(within(newsRow as HTMLElement).getByText("2")).toBeInTheDocument();
+    });
+  });
+
+  it("shows source counters as principal-only when comparisons are disabled", async () => {
+    const metaNoComparisons = { ...metaResponse, ui_show_comparisons: false };
+    const handleGetNoComparisons = (path: string) => {
+      if (path.startsWith("/reputation/meta")) {
+        return Promise.resolve(metaNoComparisons);
+      }
+      if (path.startsWith("/reputation/profiles")) {
+        return Promise.resolve(profilesResponse);
+      }
+      if (path.startsWith("/reputation/items")) {
+        return Promise.resolve(itemsResponse);
+      }
+      if (path.startsWith("/reputation/settings")) {
+        return Promise.resolve({ groups: [], advanced_options: [] });
+      }
+      return Promise.resolve({ items: [] });
+    };
+    apiGetMock.mockImplementation(handleGetNoComparisons);
+    apiGetCachedMock.mockImplementation(handleGetNoComparisons);
+
+    render(<SentimentView mode="sentiment" scope="all" />);
+
+    await screen.findByLabelText("País");
+
+    await waitFor(() => {
+      const newsChip = screen.getByRole("button", { name: /news/i });
+      expect(within(newsChip).getByText("1")).toBeInTheDocument();
+      expect(within(newsChip).queryByText(/vs/i)).not.toBeInTheDocument();
+      const geoTitle = Array.from(document.querySelectorAll("div")).find((element) =>
+        (element.textContent || "").trim().startsWith("SENTIMIENTO POR PAÍS:"),
+      );
+      expect(geoTitle).toBeTruthy();
+      expect(geoTitle?.textContent || "").not.toMatch(/vs/i);
+      const totalCard = screen.getByText("Total menciones").parentElement;
+      expect(totalCard).toBeTruthy();
+      expect(
+        within(totalCard as HTMLElement).getByText((value) => value.trim() === "2"),
+      ).toBeInTheDocument();
+      expect(within(totalCard as HTMLElement).queryByText(/vs/i)).not.toBeInTheDocument();
+
+      const topSourcesBlock = screen.getByText("TOP FUENTES").parentElement;
+      expect(topSourcesBlock).toBeTruthy();
+      const newsRowLabel = within(topSourcesBlock as HTMLElement).getByText("news");
+      const newsRow = newsRowLabel.parentElement;
+      expect(newsRow).toBeTruthy();
+      expect(within(newsRow as HTMLElement).getByText("1")).toBeInTheDocument();
     });
   });
 });

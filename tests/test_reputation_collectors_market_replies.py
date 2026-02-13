@@ -4,7 +4,12 @@ import json
 
 import pytest
 
-from reputation.collectors.appstore import AppStoreCollector, AppStoreScraperCollector
+from reputation.collectors.appstore import (
+    _REPLY_SIGNATURE_PREFIX,
+    _review_signature,
+    AppStoreCollector,
+    AppStoreScraperCollector,
+)
 from reputation.collectors.google_play import (
     _extract_reviews_from_html,
     _map_play_review,
@@ -79,6 +84,54 @@ def test_appstore_rss_enriches_replies_from_scraped_map(
         "_fetch_scraped_reply_map",
         lambda: {
             "r1": {
+                "text": "Gracias por escribirnos",
+                "author": "Bankinter",
+                "replied_at": "2026-02-01T12:00:00+00:00",
+            }
+        },
+    )
+
+    items = list(collector.collect())
+
+    assert len(items) == 1
+    signals = items[0].signals
+    assert signals.get("has_reply") is True
+    assert signals.get("reply_text") == "Gracias por escribirnos"
+    assert signals.get("reply_author") == "Bankinter"
+
+
+def test_appstore_rss_enriches_replies_with_signature_when_ids_do_not_match(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("APPSTORE_REPLY_ENRICH_ENABLED", "true")
+    collector = AppStoreCollector(country="es", app_id="1209986220", max_reviews=5)
+
+    rss_entry = {
+        "id": {"attributes": {"im:id": "rss-r1"}},
+        "im:rating": {"label": "1"},
+        "updated": {"label": "2026-01-31T12:00:00Z"},
+        "author": {"name": {"label": "Ana"}},
+        "title": {"label": "Muy mala"},
+        "content": {"label": "Se cae continuamente"},
+    }
+    signature = _review_signature(
+        author="Ana",
+        title="Muy mala",
+        text="Se cae continuamente",
+        published_at="2026-01-31T12:00:00Z",
+    )
+    assert signature is not None
+
+    monkeypatch.setattr(
+        collector,
+        "_fetch_page",
+        lambda page: [rss_entry] if page == 1 else [],
+    )
+    monkeypatch.setattr(
+        collector,
+        "_fetch_scraped_reply_map",
+        lambda: {
+            f"{_REPLY_SIGNATURE_PREFIX}{signature}": {
                 "text": "Gracias por escribirnos",
                 "author": "Bankinter",
                 "replied_at": "2026-02-01T12:00:00+00:00",

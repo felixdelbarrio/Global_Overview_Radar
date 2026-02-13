@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from threading import Lock, Thread
@@ -36,6 +37,11 @@ _INGEST_LOCK = Lock()
 _INGEST_JOBS_STATE_PATH = REPO_ROOT / "data" / "cache" / "reputation_ingest_jobs.json"
 _INGEST_JOBS_STATE_KEY = "data/cache/reputation_ingest_jobs.json"
 _MAX_INGEST_JOBS = 240
+_INGEST_PROGRESS_PERSIST_EVERY_SEC = 4.0
+_INGEST_PROGRESS_PERSIST_DELTA = 10
+_INGEST_LAST_PERSIST_AT_MONO: dict[str, float] = {}
+_INGEST_LAST_PERSIST_PROGRESS: dict[str, int] = {}
+_INGEST_LAST_PERSIST_STAGE: dict[str, str] = {}
 
 logger = logging.getLogger(__name__)
 
@@ -117,6 +123,48 @@ def _prune_jobs_locked() -> None:
     for job_id in list(_INGEST_JOBS):
         if job_id not in keep_ids:
             _INGEST_JOBS.pop(job_id, None)
+            _INGEST_LAST_PERSIST_AT_MONO.pop(job_id, None)
+            _INGEST_LAST_PERSIST_PROGRESS.pop(job_id, None)
+            _INGEST_LAST_PERSIST_STAGE.pop(job_id, None)
+
+
+def _mark_persisted_locked(job: dict[str, Any]) -> None:
+    job_id = str(job.get("id") or "")
+    if not job_id:
+        return
+    _INGEST_LAST_PERSIST_AT_MONO[job_id] = time.monotonic()
+    _INGEST_LAST_PERSIST_PROGRESS[job_id] = int(job.get("progress") or 0)
+    _INGEST_LAST_PERSIST_STAGE[job_id] = str(job.get("stage") or "")
+
+
+def _should_persist_job_update_locked(
+    job: dict[str, Any],
+    *,
+    previous_status: str,
+) -> bool:
+    status = str(job.get("status") or "")
+    if status in {"queued", "success", "error"}:
+        return True
+    if status != previous_status:
+        return True
+
+    job_id = str(job.get("id") or "")
+    if not job_id:
+        return False
+
+    last_persist = _INGEST_LAST_PERSIST_AT_MONO.get(job_id)
+    if last_persist is None:
+        return True
+
+    progress = int(job.get("progress") or 0)
+    stage = str(job.get("stage") or "")
+    if stage != _INGEST_LAST_PERSIST_STAGE.get(job_id, ""):
+        return True
+    if abs(progress - _INGEST_LAST_PERSIST_PROGRESS.get(job_id, progress)) >= (
+        _INGEST_PROGRESS_PERSIST_DELTA
+    ):
+        return True
+    return (time.monotonic() - last_persist) >= _INGEST_PROGRESS_PERSIST_EVERY_SEC
 
 
 def _sync_jobs_from_state_locked() -> None:
@@ -140,22 +188,28 @@ def _persist_jobs_locked(*, merge_remote: bool = False) -> None:
 
 def _record_job(job: dict[str, Any]) -> dict[str, Any]:
     with _INGEST_LOCK:
-        _sync_jobs_from_state_locked()
         job_copy = {**job, "updated_at": _now_iso()}
         _INGEST_JOBS[job_copy["id"]] = job_copy
         _persist_jobs_locked(merge_remote=True)
+        _mark_persisted_locked(job_copy)
     return job_copy
 
 
 def _update_job(job_id: str, **fields: Any) -> None:
     with _INGEST_LOCK:
-        _sync_jobs_from_state_locked()
         job = _INGEST_JOBS.get(job_id)
+        if job is None:
+            # Fallback para procesos reciclados: intenta recuperar el estado remoto una vez.
+            _sync_jobs_from_state_locked()
+            job = _INGEST_JOBS.get(job_id)
         if not job:
             return
+        previous_status = str(job.get("status") or "")
         job.update(fields)
         job["updated_at"] = _now_iso()
-        _persist_jobs_locked()
+        if _should_persist_job_update_locked(job, previous_status=previous_status):
+            _persist_jobs_locked()
+            _mark_persisted_locked(job)
 
 
 def _find_active_job(kind: str) -> dict[str, Any] | None:

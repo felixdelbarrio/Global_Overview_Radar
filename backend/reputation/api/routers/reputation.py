@@ -213,6 +213,7 @@ _MARKET_FEATURE_EVIDENCE_LIMIT = 3
 _MARKET_NEWSLETTER_GEO_LIMIT = 6
 _MARKET_ALERT_LIMIT = 8
 _MARKET_SOURCES = {"appstore", "google_play", "downdetector", "trustpilot"}
+_RESPONSE_TRACKED_SOURCES = {"appstore", "google_play"}
 _MARKET_GENERIC_FEATURE_KEYS = {
     "bbva",
     "banco",
@@ -795,6 +796,10 @@ def _build_response_summary(
     }
 
 
+def _filter_response_tracked_sources(items: Iterable[ReputationItem]) -> list[ReputationItem]:
+    return [item for item in items if item.source in _RESPONSE_TRACKED_SOURCES]
+
+
 def _actor_terms_for_group(
     group: dict[str, Any],
     alias_map: dict[str, str],
@@ -1094,7 +1099,7 @@ def reputation_responses_summary(
     )
 
     summary = _build_response_summary(
-        items=filtered_items,
+        items=_filter_response_tracked_sources(filtered_items),
         alias_map=alias_map,
         principal_canonical=principal_canonical,
         secondary_canonicals=secondary_canonicals,
@@ -1165,7 +1170,7 @@ def reputation_markets_insights(
         principal_terms,
     )
     response_summary = _build_response_summary(
-        items=scoped_items,
+        items=_filter_response_tracked_sources(scoped_items),
         alias_map=alias_map,
         principal_canonical=principal_canonical,
         secondary_canonicals=secondary_canonicals,

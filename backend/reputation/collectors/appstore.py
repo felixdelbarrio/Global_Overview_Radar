@@ -24,6 +24,7 @@ _REPLY_AUTHOR_KEYS = ("reply_author", "response_author", "developer_name", "owne
 _REPLY_DATE_KEYS = ("reply_at", "response_at", "replied_at", "updated_at", "date")
 _REPLY_CONTAINER_KEYS = ("response", "reply", "developerResponse", "developer_response")
 _APPSTORE_JSON_SCRIPT_TYPES = {"application/json", "fastboot/shoebox"}
+_REPLY_SIGNATURE_PREFIX = "sig:"
 
 
 def _as_text(value: object) -> str | None:
@@ -62,6 +63,54 @@ def _extract_reply_date(value: object) -> datetime | None:
             if parsed:
                 return parsed
     return None
+
+
+def _normalize_signature_token(value: object, *, max_len: int) -> str:
+    text = _as_text(value)
+    if not text:
+        return ""
+    normalized = re.sub(r"[^0-9a-z]+", " ", text.lower())
+    normalized = " ".join(normalized.split())
+    if max_len <= 0:
+        return normalized
+    return normalized[:max_len]
+
+
+def _date_signature_token(value: object) -> str:
+    parsed: datetime | None
+    if isinstance(value, datetime):
+        parsed = value
+    elif isinstance(value, str):
+        parsed = parse_datetime(value)
+    else:
+        parsed = None
+    if parsed is None:
+        return ""
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    else:
+        parsed = parsed.astimezone(timezone.utc)
+    return parsed.date().isoformat()
+
+
+def _review_signature(
+    *,
+    author: object,
+    title: object,
+    text: object,
+    published_at: object,
+) -> str | None:
+    author_token = _normalize_signature_token(author, max_len=48)
+    title_token = _normalize_signature_token(title, max_len=80)
+    text_token = _normalize_signature_token(text, max_len=120)
+    anchor = title_token or text_token
+    if not anchor:
+        return None
+    date_token = _date_signature_token(published_at)
+    parts = [part for part in (author_token, anchor, date_token) if part]
+    if not parts:
+        return None
+    return "|".join(parts)
 
 
 def _extract_review_reply(review: dict[str, Any]) -> dict[str, str | None] | None:
@@ -258,12 +307,21 @@ class AppStoreCollector(ReputationCollector):
         )
 
     def _enrich_with_scraped_replies(self, items: list[ReputationItem]) -> None:
-        replies_by_id = self._fetch_scraped_reply_map()
-        if not replies_by_id:
+        replies = self._fetch_scraped_reply_map()
+        if not replies:
             return
 
         for item in items:
-            reply = replies_by_id.get(str(item.id))
+            reply = replies.get(str(item.id))
+            if reply is None:
+                signature = _review_signature(
+                    author=item.author,
+                    title=item.title,
+                    text=item.text,
+                    published_at=item.published_at,
+                )
+                if signature:
+                    reply = replies.get(f"{_REPLY_SIGNATURE_PREFIX}{signature}")
             if not reply:
                 continue
             signals = dict(item.signals or {})
@@ -289,12 +347,19 @@ class AppStoreCollector(ReputationCollector):
         reply_map: dict[str, dict[str, str | None]] = {}
         for review in reviews:
             review_id = str(review.get("id") or "").strip()
-            if not review_id:
-                continue
             reply = _extract_review_reply(review)
             if reply is None:
                 continue
-            reply_map[review_id] = reply
+            if review_id:
+                reply_map[review_id] = reply
+            signature = _review_signature(
+                author=review.get("reviewerName"),
+                title=review.get("title"),
+                text=review.get("contents"),
+                published_at=review.get("date"),
+            )
+            if signature:
+                reply_map.setdefault(f"{_REPLY_SIGNATURE_PREFIX}{signature}", reply)
         return reply_map
 
     @staticmethod

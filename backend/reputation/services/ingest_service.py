@@ -138,6 +138,24 @@ def _guess_google_play_locale(geo: str | None) -> tuple[str, str]:
 
 
 DEFAULT_LOOKBACK_DAYS = 730
+_REPLY_TRACKED_SOURCES = {"appstore", "google_play"}
+_REPLY_SIGNAL_KEYS = {
+    "has_reply",
+    "reply_text",
+    "reply_author",
+    "reply_at",
+    "response_text",
+    "response_author",
+    "response_at",
+    "developer_reply",
+    "developer_response",
+    "developer_response_at",
+    "owner_response",
+    "owner_response_at",
+    "business_response",
+    "reply",
+    "response",
+}
 
 
 class ReputationIngestService:
@@ -372,6 +390,7 @@ class ReputationIngestService:
         merged_items = filter_enabled(merged_items)
         report("Fusionando items", 94)
         merged_items = self._filter_noise_items(cfg, merged_items, notes)
+        merged_items = self._strip_non_market_reply_signals(merged_items)
         report("Último ajuste", 96)
         market_ratings = self._collect_market_ratings(cfg, notes, sources_enabled)
         market_ratings_history = self._merge_market_ratings_history(
@@ -498,6 +517,23 @@ class ReputationIngestService:
         if dropped:
             notes.append(f"sanity: dropped {dropped} items missing id/source")
         return filtered
+
+    @staticmethod
+    def _strip_non_market_reply_signals(items: list[ReputationItem]) -> list[ReputationItem]:
+        if not items:
+            return items
+        for item in items:
+            if item.source in _REPLY_TRACKED_SOURCES:
+                continue
+            cleaned = dict(item.signals or {})
+            removed = False
+            for key in _REPLY_SIGNAL_KEYS:
+                if key in cleaned:
+                    cleaned.pop(key, None)
+                    removed = True
+            if removed:
+                item.signals = cleaned
+        return items
 
     @classmethod
     def _apply_appstore_actor_map(
