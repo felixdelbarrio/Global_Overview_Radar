@@ -2,7 +2,7 @@
 
 import React from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next/link", () => ({
   default: ({ href, children, ...props }: { href: string; children: React.ReactNode }) => (
@@ -28,6 +28,30 @@ import { Shell } from "@/components/Shell";
 const apiGetMock = vi.mocked(apiGet);
 const apiGetCachedMock = vi.mocked(apiGetCached);
 const apiPostMock = vi.mocked(apiPost);
+const INGEST_STORAGE_KEY = "gor-ingest-jobs";
+const originalLocalStorage = window.localStorage;
+
+function setStoredIngest(value: string | null) {
+  try {
+    const storage = window.localStorage;
+    if (!storage) return;
+    if (value === null) {
+      if (typeof storage.removeItem === "function") {
+        storage.removeItem(INGEST_STORAGE_KEY);
+        return;
+      }
+      if (typeof storage.setItem === "function") {
+        storage.setItem(INGEST_STORAGE_KEY, "");
+      }
+      return;
+    }
+    if (typeof storage.setItem === "function") {
+      storage.setItem(INGEST_STORAGE_KEY, value);
+    }
+  } catch {
+    // ignore storage availability in tests
+  }
+}
 
 const settingsResponse = {
   groups: [
@@ -172,6 +196,16 @@ const settingsWithCredentialNewsAndLlm = {
 
 describe("Shell settings and ingest", () => {
   beforeEach(() => {
+    const storage = new Map<string, string>();
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      value: {
+        getItem: (key: string) => storage.get(key) ?? null,
+        setItem: (key: string, value: string) => storage.set(key, String(value)),
+        removeItem: (key: string) => storage.delete(key),
+      },
+    });
+    setStoredIngest(null);
     const handleGet = (path: string) => {
       if (path.startsWith("/reputation/profiles")) {
         return Promise.resolve({
@@ -206,6 +240,13 @@ describe("Shell settings and ingest", () => {
         });
       }
       return Promise.resolve({});
+    });
+  });
+
+  afterAll(() => {
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      value: originalLocalStorage,
     });
   });
 
@@ -260,6 +301,48 @@ describe("Shell settings and ingest", () => {
     });
 
     fireEvent.click(screen.getByLabelText(/Cambiar a modo (oscuro|claro)/));
+  });
+
+  it("restores ingest progress after remounting the shell", async () => {
+    setStoredIngest(
+      JSON.stringify({
+        reputation: {
+          id: "job-restore",
+          kind: "reputation",
+          status: "running",
+          progress: 42,
+          stage: "Recolectando fuentes",
+        },
+      }),
+    );
+
+    apiGetMock.mockImplementation((path: string) => {
+      if (path === "/ingest/jobs/job-restore") {
+        return Promise.resolve({
+          id: "job-restore",
+          kind: "reputation",
+          status: "running",
+          progress: 42,
+          stage: "Recolectando fuentes",
+        });
+      }
+      if (path.startsWith("/reputation/profiles")) {
+        return Promise.resolve({
+          active: { source: "default", profiles: ["banking"], profile_key: "banking" },
+          options: { default: ["banking"], samples: ["banking"] },
+        });
+      }
+      return Promise.resolve({});
+    });
+
+    render(
+      <Shell>
+        <div>Contenido</div>
+      </Shell>
+    );
+
+    fireEvent.click(screen.getByLabelText("Centro de ingestas"));
+    expect(await screen.findByText("42% listo")).toBeInTheDocument();
   });
 
   it("allows enabling RSS news without API key in credential section", async () => {

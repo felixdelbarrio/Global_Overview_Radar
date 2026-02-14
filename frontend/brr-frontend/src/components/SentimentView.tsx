@@ -597,6 +597,7 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
 
   useEffect(() => {
     let alive = true;
+    setChartLoading(true);
     const params = new URLSearchParams();
     if (effectiveFromDate) params.set("from_date", effectiveFromDate);
     if (effectiveToDate) params.set("to_date", effectiveToDate);
@@ -635,7 +636,8 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
 
   useEffect(() => {
     let alive = true;
-    if (!isDashboard) {
+    const shouldLoadMarketsInsights = isDashboard || isSentimentMarkets;
+    if (!shouldLoadMarketsInsights) {
       setDashboardMarketInsights(null);
       setDashboardMarketInsightsLoading(false);
       setDashboardMarketInsightsError(null);
@@ -679,6 +681,7 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
     };
   }, [
     isDashboard,
+    isSentimentMarkets,
     effectiveFromDate,
     effectiveToDate,
     geo,
@@ -748,12 +751,16 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
     }
   }, [geoOptions, preferredGeo, geo]);
 
+  const chartItemsForSeries = useMemo(
+    () => (chartItems.length ? chartItems : items),
+    [chartItems, items],
+  );
   const availableActorSet = useMemo(() => {
-    const values = chartItems
+    const values = chartItemsForSeries
       .map((i) => i.actor)
       .filter(Boolean) as string[];
     return new Set(values.map((value) => normalizeKey(value)));
-  }, [chartItems]);
+  }, [chartItemsForSeries]);
 
   const allowedActorSet = useMemo(() => {
     if (geo === "all") return null;
@@ -767,7 +774,7 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
   const actorOptions = useMemo(() => {
     const fromMetaGeo = (meta?.otros_actores_por_geografia ?? {})[geo] ?? [];
     const fromMetaGlobal = meta?.otros_actores_globales ?? [];
-    const fromItems = chartItems.map((i) => i.actor).filter(Boolean) as string[];
+    const fromItems = chartItemsForSeries.map((i) => i.actor).filter(Boolean) as string[];
     const base =
       geo !== "all"
         ? [...fromMetaGeo, ...fromMetaGlobal]
@@ -778,7 +785,7 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
       .filter((v) => (allowedActorSet ? allowedActorSet.has(normalizeKey(v)) : true))
       .filter((v) => availableActorSet.has(normalizeKey(v)))
       .sort((a, b) => a.localeCompare(b));
-  }, [chartItems, principalAliasKeys, geo, meta, availableActorSet, allowedActorSet]);
+  }, [chartItemsForSeries, principalAliasKeys, geo, meta, availableActorSet, allowedActorSet]);
 
   useEffect(() => {
     if (isDashboard || actor === "all") return;
@@ -908,13 +915,13 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
   const sentimentSeries = useMemo(
     () =>
       buildComparativeSeries(
-        chartItems,
+        chartItemsForSeries,
         actorForSeries,
         principalAliasKeys,
         effectiveFromDate,
         effectiveToDate,
       ),
-    [chartItems, actorForSeries, principalAliasKeys, effectiveFromDate, effectiveToDate],
+    [chartItemsForSeries, actorForSeries, principalAliasKeys, effectiveFromDate, effectiveToDate],
   );
   const dashboardSeries = useMemo(
     () =>
@@ -1183,11 +1190,8 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
   const responseSummaryUsesRatios = isDashboard || isSentimentMarkets;
   const responseCoverageIncludeTotals = !isDashboard && !isSentimentMarkets;
   const responseTotalsPrincipal = useMemo(() => {
-    if (isDashboard) {
+    if (isDashboard || isSentimentMarkets) {
       return dashboardResponseTotals ?? summarizeAnsweredMentions(principalReplyTrackedMentions);
-    }
-    if (isSentimentMarkets) {
-      return summarizeAnsweredMentions(principalReplyTrackedMentions);
     }
     return summarizeAnsweredMentions(principalMentions);
   }, [
@@ -4055,6 +4059,15 @@ function getSentimentTone(sentiment?: string | null) {
   };
 }
 
+function resolveSentimentScore(item: ReputationItem): number | null {
+  const score = Number((item.signals as Record<string, unknown>)?.sentiment_score);
+  if (Number.isFinite(score)) return score;
+  if (item.sentiment === "positive") return 1;
+  if (item.sentiment === "negative") return -1;
+  if (item.sentiment === "neutral") return 0;
+  return null;
+}
+
 function summarize(items: ReputationItem[]) {
   let positive = 0;
   let neutral = 0;
@@ -4066,8 +4079,8 @@ function summarize(items: ReputationItem[]) {
     if (item.sentiment === "positive") positive += 1;
     if (item.sentiment === "neutral") neutral += 1;
     if (item.sentiment === "negative") negative += 1;
-    const score = Number((item.signals as Record<string, unknown>)?.sentiment_score);
-    if (!Number.isNaN(score)) {
+    const score = resolveSentimentScore(item);
+    if (typeof score === "number") {
       totalScore += score;
       scored += 1;
     }
@@ -4308,10 +4321,8 @@ function buildComparativeSeries(
     const rawDate = item.published_at || item.collected_at;
     if (!rawDate) continue;
     const date = rawDate.slice(0, 10);
-    const score = Number(
-      (item.signals as Record<string, unknown>)?.sentiment_score,
-    );
-    if (Number.isNaN(score)) continue;
+    const score = resolveSentimentScore(item);
+    if (typeof score !== "number") continue;
 
     if (!map.has(date)) {
       map.set(date, {

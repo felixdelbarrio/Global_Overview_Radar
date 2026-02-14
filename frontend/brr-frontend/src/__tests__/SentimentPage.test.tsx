@@ -410,6 +410,238 @@ describe("Sentimiento page", () => {
     expect(within(container as HTMLElement).getAllByText("Beta Bank").length).toBeGreaterThan(0);
   });
 
+  it("renders the accumulated chart when items have sentiment but no sentiment_score", async () => {
+    const noScoreMetaResponse = {
+      ...metaResponse,
+      ui_show_comparisons: false,
+      sources_enabled: ["appstore", "google_play"],
+      sources_available: ["appstore", "google_play"],
+      cache_available: true,
+    };
+    const noScoreItemsResponse = {
+      ...itemsResponse,
+      sources_enabled: ["appstore", "google_play"],
+      items: [
+        {
+          id: "m1",
+          source: "appstore",
+          geo: "España",
+          actor: "Acme Bank",
+          title: "Reseña 1",
+          text: "Buen servicio",
+          sentiment: "positive",
+          published_at: "2025-01-01T10:00:00Z",
+        },
+        {
+          id: "m2",
+          source: "google_play",
+          geo: "España",
+          actor: "Acme Bank",
+          title: "Reseña 2",
+          text: "Servicio regular",
+          sentiment: "neutral",
+          published_at: "2025-01-02T10:00:00Z",
+        },
+        {
+          id: "m3",
+          source: "google_play",
+          geo: "España",
+          actor: "Acme Bank",
+          title: "Reseña 3",
+          text: "Mal servicio",
+          sentiment: "negative",
+          published_at: "2025-01-03T10:00:00Z",
+        },
+      ],
+      stats: { count: 3 },
+    };
+
+    const handleGetNoScore = (path: string) => {
+      if (path.startsWith("/reputation/meta")) {
+        return Promise.resolve(noScoreMetaResponse);
+      }
+      if (path.startsWith("/reputation/profiles")) {
+        return Promise.resolve(profilesResponse);
+      }
+      if (path.startsWith("/reputation/items")) {
+        return Promise.resolve(noScoreItemsResponse);
+      }
+      if (path.startsWith("/reputation/responses/summary")) {
+        return Promise.resolve({
+          totals: {
+            opinions_total: 3,
+            answered_total: 0,
+            answered_ratio: 0,
+            answered_positive: 0,
+            answered_neutral: 0,
+            answered_negative: 0,
+            unanswered_positive: 1,
+            unanswered_neutral: 1,
+            unanswered_negative: 1,
+          },
+          actor_breakdown: [],
+          repeated_replies: [],
+          answered_items: [],
+        });
+      }
+      if (path.startsWith("/reputation/settings")) {
+        return Promise.resolve({ groups: [], advanced_options: [] });
+      }
+      return Promise.resolve({ items: [] });
+    };
+
+    apiGetMock.mockImplementation(handleGetNoScore);
+    apiGetCachedMock.mockImplementation(handleGetNoScore);
+
+    render(<SentimentView mode="sentiment" scope="markets" />);
+
+    await screen.findByText("Sentimiento en Markets");
+    await screen.findByText("ACTORES DEL MERCADO");
+
+    const chartSection = screen.getByText("ÍNDICE REPUTACIONAL ACUMULADO").closest("section");
+    expect(chartSection).toBeTruthy();
+
+    await waitFor(() => {
+      expect((chartSection as HTMLElement).querySelector("svg")).toBeTruthy();
+    });
+
+    expect(
+      within(chartSection as HTMLElement).queryByText("No hay datos para el periodo seleccionado."),
+    ).not.toBeInTheDocument();
+  });
+
+  it("keeps market answered-opinions totals aligned with markets insights", async () => {
+    const alignedMetaResponse = {
+      ...metaResponse,
+      ui_show_comparisons: false,
+      sources_enabled: ["appstore", "google_play"],
+      sources_available: ["appstore", "google_play"],
+      cache_available: true,
+    };
+    const alignedItemsResponse = {
+      ...itemsResponse,
+      sources_enabled: ["appstore", "google_play"],
+      items: [
+        {
+          id: "a1",
+          source: "appstore",
+          geo: "España",
+          actor: "Acme Bank",
+          title: "Acme 1",
+          text: "Acme 1",
+          sentiment: "positive",
+          published_at: "2025-02-01T10:00:00Z",
+          signals: { reply_text: "Gracias por tu comentario" },
+        },
+        {
+          id: "a2",
+          source: "google_play",
+          geo: "España",
+          actor: "Acme Bank",
+          title: "Acme 2",
+          text: "Acme 2",
+          sentiment: "neutral",
+          published_at: "2025-02-02T10:00:00Z",
+        },
+        {
+          id: "a3",
+          source: "google_play",
+          geo: "España",
+          actor: "Acme Bank",
+          title: "Acme 3",
+          text: "Acme 3",
+          sentiment: "negative",
+          published_at: "2025-02-03T10:00:00Z",
+        },
+      ],
+      stats: { count: 3 },
+    };
+
+    const handleGetAlignedTotals = (path: string) => {
+      if (path.startsWith("/reputation/meta")) {
+        return Promise.resolve(alignedMetaResponse);
+      }
+      if (path.startsWith("/reputation/profiles")) {
+        return Promise.resolve(profilesResponse);
+      }
+      if (path.startsWith("/reputation/items")) {
+        return Promise.resolve(alignedItemsResponse);
+      }
+      if (path.startsWith("/reputation/markets/insights")) {
+        return Promise.resolve({
+          generated_at: "2025-02-14T10:27:00Z",
+          principal_actor: "Acme Bank",
+          comparisons_enabled: false,
+          filters: { geo: "España", from_date: "2025-02-01", to_date: "2025-02-14", sources: ["appstore", "google_play"] },
+          kpis: {
+            total_mentions: 3,
+            negative_mentions: 1,
+            negative_ratio: 1 / 3,
+            positive_mentions: 1,
+            neutral_mentions: 1,
+            unique_authors: 3,
+            recurring_authors: 0,
+          },
+          daily_volume: [],
+          geo_summary: [],
+          recurring_authors: [],
+          top_penalized_features: [],
+          source_friction: [],
+          response_source_friction: [],
+          alerts: [],
+          responses: {
+            totals: {
+              opinions_total: 4,
+              answered_total: 2,
+              answered_ratio: 0.5,
+              answered_positive: 1,
+              answered_neutral: 0,
+              answered_negative: 1,
+              unanswered_positive: 0,
+              unanswered_neutral: 2,
+              unanswered_negative: 0,
+            },
+            actor_breakdown: [],
+            repeated_replies: [],
+            answered_items: [],
+          },
+        });
+      }
+      if (path.startsWith("/reputation/responses/summary")) {
+        return Promise.resolve({
+          totals: {
+            opinions_total: 0,
+            answered_total: 0,
+            answered_ratio: 0,
+            answered_positive: 0,
+            answered_neutral: 0,
+            answered_negative: 0,
+            unanswered_positive: 0,
+            unanswered_neutral: 0,
+            unanswered_negative: 0,
+          },
+          actor_breakdown: [],
+          repeated_replies: [],
+          answered_items: [],
+        });
+      }
+      if (path.startsWith("/reputation/settings")) {
+        return Promise.resolve({ groups: [], advanced_options: [] });
+      }
+      return Promise.resolve({ items: [] });
+    };
+
+    apiGetMock.mockImplementation(handleGetAlignedTotals);
+    apiGetCachedMock.mockImplementation(handleGetAlignedTotals);
+
+    render(<SentimentView mode="sentiment" scope="markets" />);
+
+    await screen.findByText("Sentimiento en Markets");
+    const responsesTitle = await screen.findByTestId("responses-summary-title");
+    expect(responsesTitle).toHaveTextContent(/2\/4/i);
+    expect(responsesTitle).toHaveTextContent(/opiniones del market contestadas/i);
+  });
+
   it("shows all market actors with source legend in the actors table", async () => {
     const marketMetaResponse = {
       ...metaResponse,
