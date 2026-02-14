@@ -864,6 +864,17 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
   );
   const principalSentimentSummary = useMemo(() => summarize(principalItems), [principalItems]);
   const otherSentimentSummary = useMemo(() => summarize(otherItems), [otherItems]);
+  const comparisonSummaryItems = useMemo(
+    () =>
+      !isDashboard && comparisonsEnabled
+        ? chartItemsForSeries.filter((item) => !isPrincipalItem(item, principalAliasKeys))
+        : [],
+    [isDashboard, comparisonsEnabled, chartItemsForSeries, principalAliasKeys],
+  );
+  const comparisonSentimentSummary = useMemo(
+    () => summarize(comparisonSummaryItems),
+    [comparisonSummaryItems],
+  );
   const splitSummaryByActor = !isDashboard && comparisonsEnabled;
   const mentionsSummaryPrincipal = useMemo(
     () =>
@@ -952,14 +963,27 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
 
     return total > 0 && nonNeutral === 0;
   }, [chartItemsForSeries, comparisonsEnabled, actorForSeries, principalAliasKeys]);
-  const dashboardSeries = useMemo(
-    () =>
-      sentimentSeries.map((row) => ({
-        date: row.date,
-        sentiment: typeof row.principal === "number" ? row.principal : null,
-      })),
-    [sentimentSeries],
-  );
+  const dashboardSeries = useMemo(() => {
+    const primary = sentimentSeries.map((row) => ({
+      date: row.date,
+      sentiment: typeof row.principal === "number" ? row.principal : null,
+    }));
+    if (primary.length > 0) return primary;
+
+    return buildDashboardFallbackSeries({
+      items: chartItemsForSeries,
+      fromDate: effectiveFromDate,
+      toDate: effectiveToDate,
+      averageSentiment: dashboardMarketInsights?.kpis?.average_sentiment_score ?? null,
+      volumeDates: (dashboardMarketInsights?.daily_volume ?? []).map((entry) => entry.date),
+    });
+  }, [
+    sentimentSeries,
+    chartItemsForSeries,
+    effectiveFromDate,
+    effectiveToDate,
+    dashboardMarketInsights,
+  ]);
   const groupedMentions = useMemo(() => groupMentions(items), [items]);
   const rangeLabel = useMemo(
     () => buildRangeLabel(effectiveFromDate, effectiveToDate),
@@ -1110,18 +1134,19 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
       }),
     [groupedMentions, principalAliasKeys, selectedActorKey],
   );
-  const selectedActorMentionsSummary = useMemo(() => {
-    const counts = { total: actorMentions.length, positive: 0, neutral: 0, negative: 0 };
-    for (const item of actorMentions) {
-      if (item.sentiment === "positive") counts.positive += 1;
-      if (item.sentiment === "neutral") counts.neutral += 1;
-      if (item.sentiment === "negative") counts.negative += 1;
-    }
-    return counts;
-  }, [actorMentions]);
-  const selectedActorMentionsTotalLabel = useMemo(
-    () => selectedActorMentionsSummary.total.toLocaleString("es-ES"),
-    [selectedActorMentionsSummary.total],
+  const comparisonMentionsTitle = "RESTO DE ACTORES";
+  const comparisonMentionsTotalLabel = useMemo(
+    () => comparisonSummaryItems.length.toLocaleString("es-ES"),
+    [comparisonSummaryItems.length],
+  );
+  const comparisonReplyTrackedMentions = useMemo(
+    () =>
+      groupMentions(comparisonSummaryItems).filter((item) =>
+        item.sources.some((source) =>
+          MARKET_REPLY_TRACKED_SOURCE_KEYS.has(normalizeSourceKey(source.name)),
+        ),
+      ),
+    [comparisonSummaryItems],
   );
   const dashboardTopPenalizedFeatures = useMemo(
     () => (dashboardMarketInsights?.top_penalized_features ?? []).slice(0, 10),
@@ -1185,15 +1210,6 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
       ),
     [principalMentions],
   );
-  const actorReplyTrackedMentions = useMemo(
-    () =>
-      actorMentions.filter((item) =>
-        item.sources.some((source) =>
-          MARKET_REPLY_TRACKED_SOURCE_KEYS.has(normalizeSourceKey(source.name)),
-        ),
-      ),
-    [actorMentions],
-  );
   const dashboardResponseTotals = useMemo(
     () => toAnsweredMentionTotals(dashboardMarketInsights?.responses?.totals),
     [dashboardMarketInsights],
@@ -1231,11 +1247,14 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
     principalMentions,
   ]);
   const responseTotalsComparison = splitResponsesByActor
-    ? summarizeAnsweredMentions(isSentimentMarkets ? actorReplyTrackedMentions : actorMentions)
+    ? summarizeAnsweredMentions(
+        isSentimentMarkets ? comparisonReplyTrackedMentions : actorMentions,
+      )
     : null;
   const showSecondaryMarketResponses = Boolean(
-    isSentimentMarkets && selectedActor && responseTotalsComparison,
+    isSentimentMarkets && comparisonsEnabled && responseTotalsComparison,
   );
+  const comparisonResponsesTitle = "RESTO DE ACTORES";
   const answeredTotalPrincipalLabel = responseTotalsPrincipal.answeredTotal.toLocaleString("es-ES");
   const opinionsTotalPrincipalLabel = responseTotalsPrincipal.opinionsTotal.toLocaleString("es-ES");
   const answeredTotalComparisonLabel =
@@ -1743,15 +1762,15 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
                   periodLabel={mentionsPeriodLabel}
                   loading={itemsLoading}
                 />
-                {selectedActor && (
+                {comparisonsEnabled && (
                   <PrincipalMentionsCard
-                    title={selectedMarketActorLabel}
+                    title={comparisonMentionsTitle}
                     showActorLine={false}
-                    totalMentions={selectedActorMentionsTotalLabel}
-                    positiveMentions={selectedActorMentionsSummary.positive}
-                    neutralMentions={selectedActorMentionsSummary.neutral}
-                    negativeMentions={selectedActorMentionsSummary.negative}
-                    actorName={selectedMarketActorLabel}
+                    totalMentions={comparisonMentionsTotalLabel}
+                    positiveMentions={comparisonSentimentSummary.positive}
+                    neutralMentions={comparisonSentimentSummary.neutral}
+                    negativeMentions={comparisonSentimentSummary.negative}
+                    actorName={comparisonMentionsTitle}
                     periodLabel={mentionsPeriodLabel}
                     loading={itemsLoading}
                   />
@@ -1950,7 +1969,7 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
                   <div className="col-span-2 relative overflow-hidden rounded-2xl border border-[color:var(--border-70)] bg-[color:var(--surface-80)] px-4 py-3 shadow-[var(--shadow-soft)]">
                     <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-[color:var(--aqua)] via-[color:var(--blue)] to-transparent" />
                     <div className="text-[10px] uppercase tracking-[0.16em] text-[color:var(--text-45)]">
-                      {selectedMarketActorLabel}
+                      {comparisonResponsesTitle}
                     </div>
                     <div className="mt-1 text-[11px] uppercase tracking-[0.16em] text-[color:var(--text-45)]">
                       <span className="inline-flex items-end gap-1">
@@ -4424,6 +4443,88 @@ function buildComparativeSeries(
   }
 
   return result;
+}
+
+function buildDateRange(
+  fromDate?: string,
+  toDate?: string,
+  fallbackDates: string[] = [],
+): string[] {
+  const validFallbackDates = Array.from(
+    new Set(fallbackDates.filter((value) => /^\d{4}-\d{2}-\d{2}$/.test(value))),
+  ).sort((a, b) => a.localeCompare(b));
+
+  const start = fromDate && /^\d{4}-\d{2}-\d{2}$/.test(fromDate) ? fromDate : validFallbackDates[0];
+  const end =
+    toDate && /^\d{4}-\d{2}-\d{2}$/.test(toDate)
+      ? toDate
+      : validFallbackDates[validFallbackDates.length - 1];
+
+  if (!start || !end) return validFallbackDates;
+
+  const cursor = new Date(`${start}T00:00:00`);
+  const endDate = new Date(`${end}T00:00:00`);
+  if (Number.isNaN(cursor.getTime()) || Number.isNaN(endDate.getTime()) || cursor > endDate) {
+    return validFallbackDates;
+  }
+
+  const range: string[] = [];
+  while (cursor <= endDate) {
+    range.push(toDateInput(cursor));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return range;
+}
+
+function buildDashboardFallbackSeries({
+  items,
+  fromDate,
+  toDate,
+  averageSentiment,
+  volumeDates,
+}: {
+  items: ReputationItem[];
+  fromDate?: string;
+  toDate?: string;
+  averageSentiment?: number | null;
+  volumeDates?: string[];
+}): Array<{ date: string; sentiment: number | null }> {
+  const scoreByDate = new Map<string, { total: number; count: number }>();
+  for (const item of items) {
+    const rawDate = item.published_at || item.collected_at;
+    if (!rawDate) continue;
+    const date = rawDate.slice(0, 10);
+    // Fallback defensivo: si falta score/sentiment, tratamos como neutral para evitar series vacías falsas.
+    const score = resolveSentimentScore(item) ?? 0;
+    if (!scoreByDate.has(date)) {
+      scoreByDate.set(date, { total: 0, count: 0 });
+    }
+    const bucket = scoreByDate.get(date);
+    if (!bucket) continue;
+    bucket.total += score;
+    bucket.count += 1;
+  }
+
+  if (scoreByDate.size > 0) {
+    const dateRange = buildDateRange(fromDate, toDate, Array.from(scoreByDate.keys()));
+    if (!dateRange.length) return [];
+    let cumulative = 0;
+    return dateRange.map((date) => {
+      const bucket = scoreByDate.get(date);
+      if (bucket && bucket.count > 0) {
+        cumulative += bucket.total / bucket.count;
+      }
+      return { date, sentiment: cumulative };
+    });
+  }
+
+  if (typeof averageSentiment !== "number" || !Number.isFinite(averageSentiment)) {
+    return [];
+  }
+
+  const dateRange = buildDateRange(fromDate, toDate, volumeDates ?? []);
+  if (!dateRange.length) return [];
+  return dateRange.map((date) => ({ date, sentiment: averageSentiment }));
 }
 
 function downloadChartCsv(
