@@ -660,7 +660,8 @@ def test_build_collectors_google_play_uses_scraper_when_api_endpoint_missing(
     assert len(collectors) == 1
     assert getattr(collectors[0], "_package_id", "") == "pkg.bbva"
     assert any(
-        "missing GOOGLE_PLAY_API_ENDPOINT (using scraper fallback)" in note for note in notes
+        "missing GOOGLE_PLAY_API_ENDPOINT (using scraper fallback)" in note
+        for note in notes
     )
 
 
@@ -724,7 +725,9 @@ def test_collect_items_google_play_failover_uses_secondary_collector(
     )
     monkeypatch.setattr(
         "reputation.collectors.google_play.GooglePlayApiCollector.collect",
-        lambda self: [ReputationItem(id="gp-fallback-1", source="google_play", text="ok")],
+        lambda self: [
+            ReputationItem(id="gp-fallback-1", source="google_play", text="ok")
+        ],
     )
 
     collector = ReputationIngestService._build_google_play_collector(
