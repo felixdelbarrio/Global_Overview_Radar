@@ -570,6 +570,18 @@ class ReputationIngestService:
         merged_items = self._strip_non_market_reply_signals(merged_items)
         report("Último ajuste", 96)
         market_ratings = self._collect_market_ratings(cfg, notes, sources_enabled)
+        existing_market_ratings = [
+            entry
+            for entry in (existing.market_ratings if existing else [])
+            if entry.source.strip().lower() in enabled_sources
+        ]
+        market_ratings, reused_market_ratings = self._merge_market_ratings_with_fallback(
+            existing_market_ratings,
+            market_ratings,
+        )
+        if reused_market_ratings > 0:
+            notes.append(f"market ratings fallback: reused={reused_market_ratings}")
+        market_ratings = self._enforce_market_rating_assignment(cfg, market_ratings, notes)
         market_ratings_history = self._merge_market_ratings_history(
             [
                 entry
@@ -916,6 +928,174 @@ class ReputationIngestService:
             last_by_key[key] = entry
 
         return merged
+
+    @staticmethod
+    def _merge_market_ratings_with_fallback(
+        existing: Sequence[MarketRating],
+        latest: Sequence[MarketRating],
+    ) -> tuple[list[MarketRating], int]:
+        """
+        Keep the latest ratings when available, and reuse previous values for
+        missing source/actor/geo/app keys to avoid transient blank cards.
+        """
+        merged = list(latest)
+        seen_keys = {_market_rating_key(entry) for entry in latest}
+        reused = 0
+        for entry in existing:
+            key = _market_rating_key(entry)
+            if key in seen_keys:
+                continue
+            merged.append(entry)
+            seen_keys.add(key)
+            reused += 1
+        return merged, reused
+
+    @classmethod
+    def _enforce_market_rating_assignment(
+        cls,
+        cfg: dict[str, Any],
+        ratings: Sequence[MarketRating],
+        notes: list[str],
+    ) -> list[MarketRating]:
+        if not ratings:
+            return []
+
+        alias_map = build_actor_alias_map(cfg)
+
+        def canonical_actor(value: object | None) -> str:
+            if not isinstance(value, str):
+                return ""
+            cleaned = value.strip()
+            if not cleaned:
+                return ""
+            return canonicalize_actor(cleaned, alias_map) if alias_map else cleaned
+
+        appstore_cfg = _as_dict(cfg.get("appstore"))
+        google_play_cfg = _as_dict(cfg.get("google_play"))
+        app_id_to_actor_raw = appstore_cfg.get("app_id_to_actor")
+        package_id_to_actor_raw = google_play_cfg.get("package_id_to_actor")
+        app_id_to_actor: dict[str, str] = {}
+        package_id_to_actor: dict[str, str] = {}
+
+        if isinstance(app_id_to_actor_raw, dict):
+            for raw_id, raw_actor in app_id_to_actor_raw.items():
+                if not isinstance(raw_id, str):
+                    continue
+                app_id = raw_id.strip().lower()
+                actor = canonical_actor(raw_actor)
+                if app_id and actor:
+                    app_id_to_actor[app_id] = actor
+        if isinstance(package_id_to_actor_raw, dict):
+            for raw_id, raw_actor in package_id_to_actor_raw.items():
+                if not isinstance(raw_id, str):
+                    continue
+                package_id = raw_id.strip().lower()
+                actor = canonical_actor(raw_actor)
+                if package_id and actor:
+                    package_id_to_actor[package_id] = actor
+
+        geo_lookup = cls._build_market_rating_geo_lookup(cfg)
+        dedup: dict[tuple[str, str, str, str, str], MarketRating] = {}
+        reassigned = 0
+        geo_normalized = 0
+        dropped_missing_actor = 0
+
+        for entry in ratings:
+            source_raw = (entry.source or "").strip().lower()
+            source_key = source_raw.replace("-", "_")
+            if source_key in {"appstore", "app_store"}:
+                source = "appstore"
+            elif source_key in {"googleplay", "google_play"}:
+                source = "google_play"
+            else:
+                source = source_raw
+
+            app_id = (entry.app_id or "").strip().lower()
+            package_id = (entry.package_id or "").strip().lower()
+            actor_from_mapping = ""
+            if source == "appstore" and app_id:
+                actor_from_mapping = app_id_to_actor.get(app_id, "")
+            elif source == "google_play" and package_id:
+                actor_from_mapping = package_id_to_actor.get(package_id, "")
+
+            actor_from_entry = canonical_actor(entry.actor)
+            if actor_from_mapping and actor_from_entry and actor_from_mapping != actor_from_entry:
+                reassigned += 1
+            actor = actor_from_mapping or actor_from_entry
+            if not actor:
+                dropped_missing_actor += 1
+                continue
+
+            raw_geo = (entry.geo or "").strip()
+            normalized_geo = geo_lookup.get(cls._normalize_geo_key(raw_geo), raw_geo)
+            if raw_geo and normalized_geo and raw_geo != normalized_geo:
+                geo_normalized += 1
+
+            normalized_entry = entry.model_copy(
+                update={
+                    "source": source,
+                    "actor": actor,
+                    "geo": normalized_geo or None,
+                }
+            )
+            key = _market_rating_key(normalized_entry)
+            current = dedup.get(key)
+            if current is None or cls._prefer_market_rating_candidate(normalized_entry, current):
+                dedup[key] = normalized_entry
+
+        if reassigned > 0:
+            notes.append(f"market ratings actor_reassigned={reassigned}")
+        if geo_normalized > 0:
+            notes.append(f"market ratings geo_normalized={geo_normalized}")
+        if dropped_missing_actor > 0:
+            notes.append(f"market ratings dropped missing_actor={dropped_missing_actor}")
+
+        result = list(dedup.values())
+        result.sort(key=_market_rating_key)
+        return result
+
+    @classmethod
+    def _build_market_rating_geo_lookup(cls, cfg: dict[str, Any]) -> dict[str, str]:
+        lookup: dict[str, str] = {"global": "Global"}
+        raw_geos = cfg.get("geografias") or []
+        if isinstance(raw_geos, list):
+            for geo in raw_geos:
+                if not isinstance(geo, str):
+                    continue
+                cleaned = geo.strip()
+                if not cleaned:
+                    continue
+                lookup[cls._normalize_geo_key(cleaned)] = cleaned
+
+        raw_aliases = cfg.get("geografias_aliases") or {}
+        if isinstance(raw_aliases, dict):
+            for geo, aliases in raw_aliases.items():
+                if not isinstance(geo, str):
+                    continue
+                canonical_geo = geo.strip()
+                if not canonical_geo:
+                    continue
+                canonical_key = cls._normalize_geo_key(canonical_geo)
+                canonical_value = lookup.get(canonical_key, canonical_geo)
+                lookup[canonical_key] = canonical_value
+                if not isinstance(aliases, list):
+                    continue
+                for alias in aliases:
+                    if not isinstance(alias, str):
+                        continue
+                    alias_cleaned = alias.strip()
+                    if not alias_cleaned:
+                        continue
+                    lookup[cls._normalize_geo_key(alias_cleaned)] = canonical_value
+        return lookup
+
+    @staticmethod
+    def _prefer_market_rating_candidate(left: MarketRating, right: MarketRating) -> bool:
+        left_count = left.rating_count if left.rating_count is not None else -1
+        right_count = right.rating_count if right.rating_count is not None else -1
+        if left_count != right_count:
+            return left_count > right_count
+        return _market_rating_is_newer(left, right)
 
     def _collect_appstore_market_ratings(
         self,

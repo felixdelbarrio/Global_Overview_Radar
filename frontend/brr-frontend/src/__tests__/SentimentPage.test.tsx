@@ -31,6 +31,21 @@ const apiGetMock = vi.mocked(apiGet);
 const apiGetCachedMock = vi.mocked(apiGetCached);
 const apiPostMock = vi.mocked(apiPost);
 
+function compactText(value?: string | null): string {
+  return (value || "").replace(/\s+/g, "").trim();
+}
+
+function exactText(expected: string) {
+  const normalizedExpected = compactText(expected);
+  return (_content: string, element: Element | null) => {
+    if (!element) return false;
+    if (compactText(element.textContent) !== normalizedExpected) return false;
+    return Array.from(element.children).every(
+      (child) => compactText(child.textContent) !== normalizedExpected,
+    );
+  };
+}
+
 const metaResponse = {
   actor_principal: { canonical: "Acme, Bank", aliases: ["Acme"] },
   geos: ["España", "USA"],
@@ -646,6 +661,104 @@ describe("Sentimiento page", () => {
     expect(responsesTitle).toHaveTextContent(/opiniones del market contestadas/i);
   });
 
+  it("falls back to market_ratings_history when current market_ratings are empty", async () => {
+    const metaWithOnlyHistory = {
+      ...metaResponse,
+      market_ratings: [],
+      market_ratings_history: [
+        {
+          source: "appstore",
+          actor: "Acme, Bank",
+          geo: "España",
+          rating: 4.55,
+          rating_count: 123,
+          collected_at: "2025-01-10T00:00:00Z",
+        },
+        {
+          source: "google_play",
+          actor: "Acme, Bank",
+          geo: "España",
+          rating: 3.33,
+          rating_count: 456,
+          collected_at: "2025-01-11T00:00:00Z",
+        },
+      ],
+    };
+
+    const handleGetWithRatingHistoryFallback = (path: string) => {
+      if (path.startsWith("/reputation/meta")) {
+        return Promise.resolve(metaWithOnlyHistory);
+      }
+      if (path.startsWith("/reputation/profiles")) {
+        return Promise.resolve(profilesResponse);
+      }
+      if (path.startsWith("/reputation/items")) {
+        return Promise.resolve(itemsResponse);
+      }
+      if (path.startsWith("/reputation/markets/insights")) {
+        return Promise.resolve({
+          generated_at: "2025-02-14T10:27:00Z",
+          principal_actor: "Acme Bank",
+          comparisons_enabled: false,
+          filters: {
+            geo: "España",
+            from_date: "2025-02-01",
+            to_date: "2025-02-14",
+            sources: ["appstore", "google_play"],
+          },
+          kpis: {
+            total_mentions: 3,
+            negative_mentions: 1,
+            negative_ratio: 1 / 3,
+            positive_mentions: 1,
+            neutral_mentions: 1,
+            unique_authors: 3,
+            recurring_authors: 0,
+          },
+          daily_volume: [],
+          geo_summary: [],
+          recurring_authors: [],
+          top_penalized_features: [],
+          source_friction: [],
+          response_source_friction: [],
+          alerts: [],
+          responses: {
+            totals: {
+              opinions_total: 2,
+              answered_total: 1,
+              answered_ratio: 0.5,
+              answered_positive: 1,
+              answered_neutral: 0,
+              answered_negative: 0,
+              unanswered_positive: 0,
+              unanswered_neutral: 1,
+              unanswered_negative: 0,
+            },
+            actor_breakdown: [],
+            repeated_replies: [],
+            answered_items: [],
+          },
+        });
+      }
+      if (path.startsWith("/reputation/settings")) {
+        return Promise.resolve({ groups: [], advanced_options: [] });
+      }
+      return Promise.resolve({});
+    };
+
+    apiGetMock.mockImplementation(handleGetWithRatingHistoryFallback);
+    apiGetCachedMock.mockImplementation(handleGetWithRatingHistoryFallback);
+
+    render(<SentimentView mode="sentiment" scope="markets" />);
+
+    await screen.findByText("Sentimiento en Markets");
+    await screen.findByRole("option", { name: "España" });
+    fireEvent.change(screen.getByLabelText("País"), { target: { value: "España" } });
+
+    expect(await screen.findByText("4.55")).toBeInTheDocument();
+    expect(await screen.findByText("3.33")).toBeInTheDocument();
+  });
+
   it("hides the accumulated chart when all filtered opinions are neutral", async () => {
     const neutralOnlyMetaResponse = {
       ...metaResponse,
@@ -899,8 +1012,12 @@ describe("Sentimiento page", () => {
       const actorsTitle = screen.getByText("ACTORES DEL MERCADO");
       const actorsBlock = actorsTitle.parentElement;
       expect(actorsBlock).toBeTruthy();
-      expect(within(actorsBlock as HTMLElement).getByText("App Store (4)")).toBeInTheDocument();
-      expect(within(actorsBlock as HTMLElement).getByText("Google Play (4)")).toBeInTheDocument();
+      expect(
+        within(actorsBlock as HTMLElement).queryAllByText(exactText("App Store (1 vs 3)")).length,
+      ).toBeGreaterThan(0);
+      expect(
+        within(actorsBlock as HTMLElement).queryAllByText(exactText("Google Play (0 vs 4)")).length,
+      ).toBeGreaterThan(0);
       expect(within(actorsBlock as HTMLElement).getByText("Acme Bank")).toBeInTheDocument();
       expect(within(actorsBlock as HTMLElement).getByText("Revolut")).toBeInTheDocument();
       expect(within(actorsBlock as HTMLElement).getByText("CaixaBank")).toBeInTheDocument();
@@ -1081,8 +1198,12 @@ describe("Sentimiento page", () => {
       expect(within(actorsBlock as HTMLElement).getByText("Acme Bank")).toBeInTheDocument();
       expect(within(actorsBlock as HTMLElement).getByText("Santander")).toBeInTheDocument();
       expect(within(actorsBlock as HTMLElement).queryByText("CaixaBank")).not.toBeInTheDocument();
-      expect(within(actorsBlock as HTMLElement).getByText("App Store (2)")).toBeInTheDocument();
-      expect(within(actorsBlock as HTMLElement).getByText("Google Play (0)")).toBeInTheDocument();
+      expect(
+        within(actorsBlock as HTMLElement).queryAllByText(exactText("App Store (1 vs 1)")).length,
+      ).toBeGreaterThan(0);
+      expect(
+        within(actorsBlock as HTMLElement).queryAllByText(exactText("Google Play (0 vs 0)")).length,
+      ).toBeGreaterThan(0);
     });
   });
 
@@ -1394,10 +1515,236 @@ describe("Sentimiento page", () => {
 
       const actorsBlock = screen.getByText("ACTORES DEL MERCADO").parentElement;
       expect(actorsBlock).toBeTruthy();
-      expect(within(actorsBlock as HTMLElement).getByText("App Store (1)")).toBeInTheDocument();
-      expect(within(actorsBlock as HTMLElement).getByText("Google Play (1)")).toBeInTheDocument();
+      expect(
+        within(actorsBlock as HTMLElement).queryAllByText(exactText("App Store (1 vs 0)")).length,
+      ).toBeGreaterThan(0);
+      expect(
+        within(actorsBlock as HTMLElement).queryAllByText(exactText("Google Play (0 vs 1)")).length,
+      ).toBeGreaterThan(0);
       expect(within(actorsBlock as HTMLElement).getByText("Acme Bank")).toBeInTheDocument();
       expect(within(actorsBlock as HTMLElement).getByText("Beta Bank")).toBeInTheDocument();
+
+      const publishersBlock = screen.getByText("MEDIOS EN PRENSA").parentElement;
+      expect(publishersBlock).toBeTruthy();
+      expect(within(publishersBlock as HTMLElement).getByText("News (1 vs 1)")).toBeInTheDocument();
+    });
+  });
+
+  it("keeps market legend totals aligned with source chips for selected actor comparisons", async () => {
+    const alignedMetaResponse = {
+      ...metaResponse,
+      ui_show_comparisons: true,
+      sources_enabled: ["appstore", "google_play"],
+      sources_available: ["appstore", "google_play"],
+      otros_actores_por_geografia: { España: ["Beta Bank", "Gamma Bank"] },
+      otros_actores_globales: ["Beta Bank", "Gamma Bank"],
+    };
+    const alignedItemsResponse = {
+      ...itemsResponse,
+      sources_enabled: ["appstore", "google_play"],
+      items: [
+        {
+          id: "principal-app-1",
+          source: "appstore",
+          geo: "España",
+          actor: "Acme Bank",
+          title: "Principal app",
+          text: "Principal app",
+          sentiment: "neutral",
+          published_at: "2025-02-01T10:00:00Z",
+        },
+        {
+          id: "principal-play-1",
+          source: "google_play",
+          geo: "España",
+          actor: "Acme Bank",
+          title: "Principal play",
+          text: "Principal play",
+          sentiment: "neutral",
+          published_at: "2025-02-02T10:00:00Z",
+        },
+        {
+          id: "beta-seed-1",
+          source: "appstore",
+          geo: "España",
+          actor: "Beta Bank",
+          title: "Beta seed",
+          text: "Beta seed",
+          sentiment: "negative",
+          published_at: "2025-02-02T11:00:00Z",
+        },
+        {
+          id: "gamma-seed-1",
+          source: "google_play",
+          geo: "España",
+          actor: "Gamma Bank",
+          title: "Gamma seed",
+          text: "Gamma seed",
+          sentiment: "negative",
+          published_at: "2025-02-02T12:00:00Z",
+        },
+      ],
+      stats: { count: 4 },
+    };
+    const alignedCompareResponse = {
+      groups: [],
+      combined: {
+        items: [
+          {
+            id: "principal-app-2",
+            source: "appstore",
+            geo: "España",
+            actor: "Acme Bank",
+            title: "Principal app 2",
+            text: "Principal app 2",
+            sentiment: "neutral",
+            published_at: "2025-02-03T10:00:00Z",
+          },
+          {
+            id: "principal-app-3",
+            source: "appstore",
+            geo: "España",
+            actor: "Acme Bank",
+            title: "Principal app 3",
+            text: "Principal app 3",
+            sentiment: "neutral",
+            published_at: "2025-02-04T10:00:00Z",
+          },
+          {
+            id: "principal-play-2",
+            source: "google_play",
+            geo: "España",
+            actor: "Acme Bank",
+            title: "Principal play 2",
+            text: "Principal play 2",
+            sentiment: "neutral",
+            published_at: "2025-02-05T10:00:00Z",
+          },
+          {
+            id: "beta-app-1",
+            source: "appstore",
+            geo: "España",
+            actor: "Beta Bank",
+            title: "Beta app 1",
+            text: "Beta app 1",
+            sentiment: "negative",
+            published_at: "2025-02-06T10:00:00Z",
+          },
+          {
+            id: "beta-play-1",
+            source: "google_play",
+            geo: "España",
+            actor: "Beta Bank",
+            title: "Beta play 1",
+            text: "Beta play 1",
+            sentiment: "negative",
+            published_at: "2025-02-07T10:00:00Z",
+          },
+          {
+            id: "beta-play-2",
+            source: "google_play",
+            geo: "España",
+            actor: "Beta Bank",
+            title: "Beta play 2",
+            text: "Beta play 2",
+            sentiment: "negative",
+            published_at: "2025-02-08T10:00:00Z",
+          },
+          {
+            id: "gamma-app-1",
+            source: "appstore",
+            geo: "España",
+            actor: "Gamma Bank",
+            title: "Gamma app 1",
+            text: "Gamma app 1",
+            sentiment: "negative",
+            published_at: "2025-02-09T10:00:00Z",
+          },
+          {
+            id: "gamma-play-1",
+            source: "google_play",
+            geo: "España",
+            actor: "Gamma Bank",
+            title: "Gamma play 1",
+            text: "Gamma play 1",
+            sentiment: "negative",
+            published_at: "2025-02-10T10:00:00Z",
+          },
+        ],
+        stats: { count: 8 },
+      },
+    };
+    const handleGetAligned = (path: string) => {
+      if (path.startsWith("/reputation/meta")) {
+        return Promise.resolve(alignedMetaResponse);
+      }
+      if (path.startsWith("/reputation/profiles")) {
+        return Promise.resolve(profilesResponse);
+      }
+      if (path.startsWith("/reputation/items")) {
+        return Promise.resolve(alignedItemsResponse);
+      }
+      if (path.startsWith("/reputation/responses/summary")) {
+        return Promise.resolve({
+          totals: {
+            opinions_total: 0,
+            answered_total: 0,
+            answered_ratio: 0,
+            answered_positive: 0,
+            answered_neutral: 0,
+            answered_negative: 0,
+            unanswered_positive: 0,
+            unanswered_neutral: 0,
+            unanswered_negative: 0,
+          },
+          actor_breakdown: [],
+          repeated_replies: [],
+          answered_items: [],
+        });
+      }
+      if (path.startsWith("/reputation/settings")) {
+        return Promise.resolve({ groups: [], advanced_options: [] });
+      }
+      return Promise.resolve({ items: [] });
+    };
+    apiGetMock.mockImplementation(handleGetAligned);
+    apiGetCachedMock.mockImplementation(handleGetAligned);
+    apiPostMock.mockImplementation((path: string) => {
+      if (path === "/reputation/items/compare") {
+        return Promise.resolve(alignedCompareResponse);
+      }
+      if (path === "/reputation/items/override") {
+        return Promise.resolve({ updated: 1 });
+      }
+      if (path === "/ingest/reputation") {
+        return Promise.resolve({ id: "job-1", kind: "reputation", status: "queued", progress: 0 });
+      }
+      return Promise.resolve({});
+    });
+
+    render(<SentimentView mode="sentiment" scope="markets" />);
+
+    const actorSelect = (await screen.findByLabelText("Otros actores del mercado")) as HTMLSelectElement;
+    fireEvent.change(actorSelect, { target: { value: "Beta Bank" } });
+
+    await waitFor(() => {
+      expect(apiPostMock).toHaveBeenCalledWith("/reputation/items/compare", expect.anything());
+      const appStoreChip = screen.getByRole("button", { name: /appstore/i });
+      const googlePlayChip = screen.getByRole("button", { name: /google_play/i });
+      expect(appStoreChip).toHaveTextContent(/2\s*vs\s*1/);
+      expect(googlePlayChip).toHaveTextContent(/1\s*vs\s*2/);
+
+      const actorsBlock = screen.getByText("ACTORES DEL MERCADO").parentElement;
+      expect(actorsBlock).toBeTruthy();
+      expect(
+        within(actorsBlock as HTMLElement).queryAllByText(exactText("App Store (2 vs 1)")).length,
+      ).toBeGreaterThan(0);
+      expect(
+        within(actorsBlock as HTMLElement).queryAllByText(exactText("Google Play (1 vs 2)")).length,
+      ).toBeGreaterThan(0);
+      expect(
+        within(actorsBlock as HTMLElement).queryAllByText(exactText("App Store (2 vs 2)")).length,
+      ).toBe(0);
     });
   });
 

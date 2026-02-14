@@ -122,11 +122,22 @@ const PRESS_SOURCE_COLOR_FALLBACK = [
   "#EC4899",
   "#06B6D4",
 ];
+const SOURCE_KEY_CANONICAL_MAP: Record<string, string> = {
+  appstore: "appstore",
+  googleplay: "google_play",
+  googlereviews: "google_reviews",
+};
 
 type SentimentFilter = (typeof SENTIMENTS)[number];
 type SentimentValue = Exclude<SentimentFilter, "all">;
 type MarketActorSourceKey = (typeof MARKET_ACTOR_SOURCE_ORDER)[number];
 type MarketActorSourceCounts = Record<MarketActorSourceKey, number>;
+type SourceVsCount = {
+  principal: number;
+  comparison: number;
+  total: number;
+};
+type MarketActorSourceTotals = Record<MarketActorSourceKey, SourceVsCount>;
 type MarketActorRow = {
   key: string;
   label: string;
@@ -137,7 +148,21 @@ type PressPublisherRow = {
   key: string;
   label: string;
   count: number;
-  sourceCounts: Record<string, number>;
+  principalCount: number;
+  comparisonCount: number;
+  sourceCounts: Record<string, SourceVsCount>;
+};
+type SourceCountOptions = {
+  principalAliases: string[];
+  comparisonsEnabled: boolean;
+  selectedActorKey: string | null;
+  includeAllOthers?: boolean;
+};
+type SourceRole = "principal" | "comparison";
+type SourceCohortStats = {
+  cohortItems: ReputationItem[];
+  sourceCounts: Record<string, SourceVsCount>;
+  marketSourceTotals: MarketActorSourceTotals;
 };
 type OverridePayload = {
   ids: string[];
@@ -690,21 +715,34 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
     reputationRefresh,
   ]);
 
-  const sourceCounts = useMemo(() => {
-    const counts: Record<string, { principal: number; others: number; total: number }> = {};
-    for (const item of items) {
-      if (!item.source) continue;
-      const bucket = counts[item.source] ?? { principal: 0, others: 0, total: 0 };
-      bucket.total += 1;
-      if (isPrincipalItem(item, principalAliasKeys)) {
-        bucket.principal += 1;
-      } else {
-        bucket.others += 1;
-      }
-      counts[item.source] = bucket;
-    }
-    return counts;
-  }, [items, principalAliasKeys]);
+  const selectedActor = useMemo(
+    () =>
+      comparisonsEnabled &&
+      effectiveActor !== "all" &&
+      !isPrincipalName(effectiveActor, principalAliasKeys)
+        ? effectiveActor
+        : null,
+    [comparisonsEnabled, effectiveActor, principalAliasKeys],
+  );
+  const selectedActorKey = useMemo(
+    () => (selectedActor ? normalizeKey(selectedActor) : null),
+    [selectedActor],
+  );
+  const sourceCountOptions = useMemo<SourceCountOptions>(
+    () => ({
+      principalAliases: principalAliasKeys,
+      comparisonsEnabled,
+      selectedActorKey,
+      includeAllOthers: isDashboard,
+    }),
+    [principalAliasKeys, comparisonsEnabled, selectedActorKey, isDashboard],
+  );
+  const sourceCohortStats = useMemo<SourceCohortStats>(
+    () =>
+      buildSourceCohortStats(items, sourceCountOptions),
+    [items, sourceCountOptions],
+  );
+  const sourceCounts = sourceCohortStats.sourceCounts;
   const sourcesOptions = useMemo(() => {
     const fromCounts = Object.keys(sourceCounts);
     if (fromCounts.length) {
@@ -853,14 +891,18 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
     return () => window.clearTimeout(timer);
   }, [filterRestoredAt]);
 
-  const sentimentSummary = useMemo(() => summarize(items), [items]);
+  const displayItems = useMemo(
+    () => (isDashboard ? items : sourceCohortStats.cohortItems),
+    [isDashboard, items, sourceCohortStats],
+  );
+  const sentimentSummary = useMemo(() => summarize(displayItems), [displayItems]);
   const principalItems = useMemo(
-    () => items.filter((item) => isPrincipalItem(item, principalAliasKeys)),
-    [items, principalAliasKeys],
+    () => displayItems.filter((item) => isPrincipalItem(item, principalAliasKeys)),
+    [displayItems, principalAliasKeys],
   );
   const otherItems = useMemo(
-    () => items.filter((item) => !isPrincipalItem(item, principalAliasKeys)),
-    [items, principalAliasKeys],
+    () => displayItems.filter((item) => !isPrincipalItem(item, principalAliasKeys)),
+    [displayItems, principalAliasKeys],
   );
   const principalSentimentSummary = useMemo(() => summarize(principalItems), [principalItems]);
   const otherSentimentSummary = useMemo(() => summarize(otherItems), [otherItems]);
@@ -877,9 +919,8 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
   );
   const splitSummaryByActor = !isDashboard && comparisonsEnabled;
   const mentionsSummaryPrincipal = useMemo(
-    () =>
-      (isDashboard ? items.length : principalItems.length).toLocaleString("es-ES"),
-    [isDashboard, items.length, principalItems.length],
+    () => (isDashboard ? displayItems.length : principalItems.length).toLocaleString("es-ES"),
+    [isDashboard, displayItems.length, principalItems.length],
   );
   const mentionsSummaryComparison = useMemo(
     () => (splitSummaryByActor ? otherItems.length.toLocaleString("es-ES") : null),
@@ -963,6 +1004,11 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
 
     return total > 0 && nonNeutral === 0;
   }, [chartItemsForSeries, comparisonsEnabled, actorForSeries, principalAliasKeys]);
+  const chartPendingState = !chartsVisible
+    ? "preparing"
+    : chartLoading
+      ? "loading"
+      : null;
   const dashboardSeries = useMemo(() => {
     const primary = sentimentSeries.map((row) => ({
       date: row.date,
@@ -984,7 +1030,7 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
     effectiveToDate,
     dashboardMarketInsights,
   ]);
-  const groupedMentions = useMemo(() => groupMentions(items), [items]);
+  const groupedMentions = useMemo(() => groupMentions(displayItems), [displayItems]);
   const rangeLabel = useMemo(
     () => buildRangeLabel(effectiveFromDate, effectiveToDate),
     [effectiveFromDate, effectiveToDate],
@@ -994,8 +1040,8 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
     [effectiveFromDate, effectiveToDate],
   );
   const latestTimestamp = useMemo(
-    () => lastUpdatedAt || getLatestDate(items),
-    [lastUpdatedAt, items],
+    () => lastUpdatedAt || getLatestDate(displayItems),
+    [lastUpdatedAt, displayItems],
   );
   const latestLabel = useMemo(
     () => formatDate(latestTimestamp),
@@ -1017,52 +1063,45 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
       ),
     [effectiveActor, geo, principalAliasKeys],
   );
-  const selectedActor = useMemo(
-    () =>
-      comparisonsEnabled &&
-      effectiveActor !== "all" &&
-      !isPrincipalName(effectiveActor, principalAliasKeys)
-        ? effectiveActor
-        : null,
-    [comparisonsEnabled, effectiveActor, principalAliasKeys],
-  );
-  const selectedActorKey = useMemo(
-    () => (selectedActor ? normalizeKey(selectedActor) : null),
-    [selectedActor],
-  );
-  const filteredMarketItems = useMemo(
-    () =>
-      selectedActorKey
-        ? items.filter(
-            (item) =>
-              isPrincipalItem(item, principalAliasKeys) ||
-              normalizeKey(item.actor || "") === selectedActorKey,
-          )
-        : items,
-    [items, principalAliasKeys, selectedActorKey],
-  );
   const marketActorItems = useMemo(
-    () =>
-      comparisonsEnabled
-        ? filteredMarketItems
-        : filteredMarketItems.filter((item) => isPrincipalItem(item, principalAliasKeys)),
-    [comparisonsEnabled, filteredMarketItems, principalAliasKeys],
+    () => (isDashboard ? ([] as ReputationItem[]) : sourceCohortStats.cohortItems),
+    [isDashboard, sourceCohortStats],
   );
   const marketActorRows = useMemo(
     () => buildMarketActorRows(marketActorItems),
     [marketActorItems],
   );
-  const marketSourceTotals = useMemo(
-    () => countMarketSourceTotals(marketActorItems),
-    [marketActorItems],
+  const marketSourceTotals = sourceCohortStats.marketSourceTotals;
+  const marketConsistencyIssues = useMemo(
+    () => detectMarketSourceConsistencyIssues(marketActorRows, marketSourceTotals),
+    [marketActorRows, marketSourceTotals],
   );
+  useEffect(() => {
+    if (process.env.NODE_ENV === "production") return;
+    if (isDashboard || itemsLoading) return;
+    if (!marketConsistencyIssues.length) return;
+    console.error("[SentimentView] Inconsistent market source totals", {
+      issues: marketConsistencyIssues,
+      fromDate: effectiveFromDate,
+      toDate: effectiveToDate,
+      geo,
+      actor: effectiveActor,
+      scope,
+    });
+  }, [
+    isDashboard,
+    itemsLoading,
+    marketConsistencyIssues,
+    effectiveFromDate,
+    effectiveToDate,
+    geo,
+    effectiveActor,
+    scope,
+  ]);
   const pressContextItems = useMemo(() => {
     if (isDashboard) return [] as ReputationItem[];
-    if (!comparisonsEnabled) {
-      return items.filter((item) => isPrincipalItem(item, principalAliasKeys));
-    }
-    return items;
-  }, [isDashboard, comparisonsEnabled, items, principalAliasKeys]);
+    return sourceCohortStats.cohortItems;
+  }, [isDashboard, sourceCohortStats]);
   const activePressSources = useMemo(() => {
     if (isDashboard) return new Set<string>();
     const selectedOrScopedSources = sources.length
@@ -1087,12 +1126,26 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
     [pressContextItems, activePressSources],
   );
   const pressPublisherRows = useMemo(
-    () => buildPressPublisherRows(pressItems),
-    [pressItems],
+    () =>
+      buildPressPublisherRows(pressItems, {
+        principalAliases: principalAliasKeys,
+        comparisonsEnabled,
+        selectedActorKey,
+      }),
+    [pressItems, principalAliasKeys, comparisonsEnabled, selectedActorKey],
   );
   const pressPublisherSourceTotals = useMemo(
-    () => countPressPublisherSourceTotals(pressItems),
-    [pressItems],
+    () =>
+      countPressPublisherSourceTotals(pressItems, {
+        principalAliases: principalAliasKeys,
+        comparisonsEnabled,
+        selectedActorKey,
+      }),
+    [pressItems, principalAliasKeys, comparisonsEnabled, selectedActorKey],
+  );
+  const pressHasComparisonData = useMemo(
+    () => pressPublisherRows.some((row) => row.comparisonCount > 0),
+    [pressPublisherRows],
   );
   const showPressPublishersBlock = !isDashboard && !isSentimentMarkets;
   const selectedMarketActorLabel = selectedActor || "Otro actor del mercado";
@@ -1105,13 +1158,20 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
   const showStoreRatings = !isSentimentPress && (appleStoreEnabled || googlePlayEnabled);
   const hasGeoSelection = geo !== "all";
   const showStoreRatingsForGeo = showStoreRatings && hasGeoSelection;
+  const effectiveMarketRatings = useMemo(
+    () => mergeCurrentAndHistoryRatings(marketRatings, marketRatingsHistory),
+    [marketRatings, marketRatingsHistory],
+  );
   const principalStoreRatings = useMemo(
-    () => buildActorStoreRatings(marketRatings, actorPrincipalName, geo),
-    [marketRatings, actorPrincipalName, geo],
+    () => buildActorStoreRatings(effectiveMarketRatings, actorPrincipalName, geo),
+    [effectiveMarketRatings, actorPrincipalName, geo],
   );
   const actorStoreRatings = useMemo(
-    () => (selectedActor ? buildActorStoreRatings(marketRatings, selectedActor, geo) : null),
-    [marketRatings, selectedActor, geo],
+    () =>
+      selectedActor
+        ? buildActorStoreRatings(effectiveMarketRatings, selectedActor, geo)
+        : null,
+    [effectiveMarketRatings, selectedActor, geo],
   );
   const storeRatingVisibility = useMemo(
     () => ({
@@ -1233,6 +1293,9 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
   const mentionsLoading = itemsLoading;
   const splitResponsesByActor = !isDashboard && comparisonsEnabled;
   const responseSummaryUsesRatios = isDashboard || isSentimentMarkets;
+  const responsesSummaryLoading =
+    mentionsLoading ||
+    (responseSummaryUsesRatios && dashboardMarketInsightsLoading);
   const responseCoverageIncludeTotals = !isDashboard && !isSentimentMarkets;
   const responseTotalsPrincipal = useMemo(() => {
     if (isDashboard || isSentimentMarkets) {
@@ -1524,7 +1587,7 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
                   const countPrincipalLabel = sourceCount?.toLocaleString("es-ES");
                   const countComparisonLabel =
                     count && !isDashboard && comparisonsEnabled
-                      ? count.others.toLocaleString("es-ES")
+                      ? count.comparison.toLocaleString("es-ES")
                       : null;
                   return (
                     <button
@@ -1608,7 +1671,10 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
               </div>
               {!itemsLoading && (
                 <div className="mt-3">
-                  <MarketActorSourcesLegend sourceTotals={marketSourceTotals} />
+                  <MarketActorSourcesLegend
+                    sourceTotals={marketSourceTotals}
+                    showComparison={comparisonsEnabled}
+                  />
                 </div>
               )}
             </section>
@@ -1639,6 +1705,7 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
                         value={row.count}
                         maxValue={maxValue}
                         sourceCounts={row.sourceCounts}
+                        showComparison={pressHasComparisonData}
                       />
                     ));
                   })()
@@ -1646,7 +1713,10 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
               </div>
               {!itemsLoading && (
                 <div className="mt-3">
-                  <PressPublisherSourcesLegend sourceTotals={pressPublisherSourceTotals} />
+                  <PressPublisherSourcesLegend
+                    sourceTotals={pressPublisherSourceTotals}
+                    showComparison={pressHasComparisonData}
+                  />
                 </div>
               )}
             </section>
@@ -1846,7 +1916,12 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
                     data-testid="responses-summary-title"
                     className="text-[11px] uppercase tracking-[0.16em] text-[color:var(--text-45)]"
                   >
-                    {responseSummaryUsesRatios ? (
+                    {responsesSummaryLoading ? (
+                      <span className="inline-flex items-center gap-2 text-[11px] text-[color:var(--text-55)] normal-case tracking-normal">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        Cargando opiniones del market contestadas
+                      </span>
+                    ) : responseSummaryUsesRatios ? (
                       isSentimentMarkets ? (
                         <>
                           <div className="text-[10px] uppercase tracking-[0.16em] text-[color:var(--text-45)]">
@@ -1895,7 +1970,7 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
                       })}
                     </div>
                   )}
-                  {mentionsLoading ? (
+                  {responsesSummaryLoading ? (
                     <div className="mt-3 space-y-2">
                       <LoadingPill className="h-4 w-28" label="Cargando respuestas" />
                       <LoadingPill className="h-3 w-full" label="Cargando respuestas" />
@@ -1971,40 +2046,49 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
                     <div className="text-[10px] uppercase tracking-[0.16em] text-[color:var(--text-45)]">
                       {comparisonResponsesTitle}
                     </div>
-                    <div className="mt-1 text-[11px] uppercase tracking-[0.16em] text-[color:var(--text-45)]">
-                      <span className="inline-flex items-end gap-1">
-                        <span className="text-2xl font-display font-semibold leading-none text-[color:var(--ink)]">
-                          {answeredTotalComparisonLabel}
-                        </span>
-                        <span className="pb-0.5 text-base font-semibold leading-none text-[color:var(--text-45)]">
-                          /{opinionsTotalComparisonLabel}
-                        </span>
-                        <span className="pb-0.5">opiniones del market contestadas</span>
-                      </span>
-                    </div>
-                    <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
-                      <ResponseStat
-                        label="Positivas"
-                        value={responseTotalsComparison.answeredPositive}
-                        denominator={responseTotalsComparison.opinionsPositive}
-                        prominentRatio
-                      />
-                      <ResponseStat
-                        label="Neutras"
-                        value={responseTotalsComparison.answeredNeutral}
-                        denominator={responseTotalsComparison.opinionsNeutral}
-                        prominentRatio
-                      />
-                      <ResponseStat
-                        label="Negativas"
-                        value={responseTotalsComparison.answeredNegative}
-                        denominator={responseTotalsComparison.opinionsNegative}
-                        prominentRatio
-                      />
-                    </div>
-                    <div className="mt-2 text-[11px] text-[color:var(--text-55)]">
-                      Cobertura de respuesta: {responseCoverageComparison}
-                    </div>
+                    {responsesSummaryLoading ? (
+                      <div className="mt-3 inline-flex items-center gap-2 text-[11px] text-[color:var(--text-55)]">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        Cargando opiniones del market contestadas
+                      </div>
+                    ) : (
+                      <>
+                        <div className="mt-1 text-[11px] uppercase tracking-[0.16em] text-[color:var(--text-45)]">
+                          <span className="inline-flex items-end gap-1">
+                            <span className="text-2xl font-display font-semibold leading-none text-[color:var(--ink)]">
+                              {answeredTotalComparisonLabel}
+                            </span>
+                            <span className="pb-0.5 text-base font-semibold leading-none text-[color:var(--text-45)]">
+                              /{opinionsTotalComparisonLabel}
+                            </span>
+                            <span className="pb-0.5">opiniones del market contestadas</span>
+                          </span>
+                        </div>
+                        <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                          <ResponseStat
+                            label="Positivas"
+                            value={responseTotalsComparison.answeredPositive}
+                            denominator={responseTotalsComparison.opinionsPositive}
+                            prominentRatio
+                          />
+                          <ResponseStat
+                            label="Neutras"
+                            value={responseTotalsComparison.answeredNeutral}
+                            denominator={responseTotalsComparison.opinionsNeutral}
+                            prominentRatio
+                          />
+                          <ResponseStat
+                            label="Negativas"
+                            value={responseTotalsComparison.answeredNegative}
+                            denominator={responseTotalsComparison.opinionsNegative}
+                            prominentRatio
+                          />
+                        </div>
+                        <div className="mt-2 text-[11px] text-[color:var(--text-55)]">
+                          Cobertura de respuesta: {responseCoverageComparison}
+                        </div>
+                      </>
+                    )}
                   </div>
                 )}
               </>
@@ -2057,12 +2141,20 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
           )}
           <div
             ref={chartSectionRef}
-            className="mt-3 h-72 min-h-[240px]"
+            className="relative mt-3 h-72 min-h-[240px]"
           >
-            {!chartsVisible ? (
-              <div className="h-full rounded-[22px] border border-[color:var(--border-60)] bg-[color:var(--surface-70)] animate-pulse" />
-            ) : chartLoading ? (
-              <div className="h-full rounded-[22px] border border-[color:var(--border-60)] bg-[color:var(--surface-70)] animate-pulse" />
+            {chartPendingState ? (
+              <>
+                <div className="h-full rounded-[22px] border border-[color:var(--border-60)] bg-[color:var(--surface-70)] animate-pulse" />
+                <ChartLoadingOverlay
+                  title={chartPendingState === "preparing" ? "Preparando gráfico" : "Actualizando gráfico"}
+                  detail={
+                    chartPendingState === "preparing"
+                      ? "Estamos montando la visualización."
+                      : "Los datos aún están cargando y pueden cambiar."
+                  }
+                />
+              </>
             ) : mode === "dashboard" ? (
               <DashboardChart
                 data={dashboardSeries}
@@ -2325,6 +2417,30 @@ function LoadingPill({
     >
       <span className="sr-only">{label}</span>
     </span>
+  );
+}
+
+function ChartLoadingOverlay({
+  title,
+  detail,
+}: {
+  title: string;
+  detail: string;
+}) {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="pointer-events-none absolute inset-0 grid place-items-center px-4"
+    >
+      <div className="max-w-sm rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-90)]/95 px-4 py-3 text-center shadow-[var(--shadow-soft)] backdrop-blur">
+        <span className="inline-flex items-center gap-2 text-sm font-semibold text-[color:var(--ink)]">
+          <Loader2 className="h-4 w-4 animate-spin text-[color:var(--blue)]" />
+          {title}
+        </span>
+        <p className="mt-1 text-xs text-[color:var(--text-55)]">{detail}</p>
+      </div>
+    </div>
   );
 }
 
@@ -2691,25 +2807,34 @@ function MarketActorRowMeter({
 
 function MarketActorSourcesLegend({
   sourceTotals,
+  showComparison,
 }: {
-  sourceTotals: MarketActorSourceCounts;
+  sourceTotals: MarketActorSourceTotals;
+  showComparison: boolean;
 }) {
   return (
     <div className="mt-3 flex flex-wrap items-center gap-3 text-[10px] text-[color:var(--text-55)]">
       <span className="uppercase tracking-[0.14em] text-[color:var(--text-45)]">
         Leyenda:
       </span>
-      {MARKET_ACTOR_SOURCE_ORDER.map((sourceKey) => (
-        <span key={sourceKey} className="inline-flex items-center gap-1.5">
-          <span
-            className={`h-2.5 w-2.5 rounded-full ${MARKET_ACTOR_SOURCE_COLOR_CLASS[sourceKey]}`}
-          />
-          <span>
-            {MARKET_ACTOR_SOURCE_LABELS[sourceKey]} (
-            {sourceTotals[sourceKey].toLocaleString("es-ES")})
+      {MARKET_ACTOR_SOURCE_ORDER.map((sourceKey) => {
+        const counts = sourceTotals[sourceKey];
+        const principalLabel = counts.principal.toLocaleString("es-ES");
+        const comparisonLabel = showComparison
+          ? counts.comparison.toLocaleString("es-ES")
+          : null;
+        return (
+          <span key={sourceKey} className="inline-flex items-center gap-1.5">
+            <span
+              className={`h-2.5 w-2.5 rounded-full ${MARKET_ACTOR_SOURCE_COLOR_CLASS[sourceKey]}`}
+            />
+            <span>
+              {MARKET_ACTOR_SOURCE_LABELS[sourceKey]} (
+              {formatVsValue(principalLabel, comparisonLabel)})
+            </span>
           </span>
-        </span>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -2719,26 +2844,33 @@ function PressPublisherRowMeter({
   value,
   maxValue,
   sourceCounts,
+  showComparison,
 }: {
   label: string;
   value: number;
   maxValue: number;
-  sourceCounts: Record<string, number>;
+  sourceCounts: Record<string, SourceVsCount>;
+  showComparison: boolean;
 }) {
   const safeMax = Math.max(1, maxValue);
   const ratio = Math.min(1, Math.max(0, value / safeMax));
   const fillWidthPercent = Math.round(ratio * 100);
   const sourceEntries = Object.entries(sourceCounts)
-    .filter(([, count]) => count > 0)
+    .filter(([, counts]) => counts.total > 0)
     .sort((left, right) => {
-      if (right[1] !== left[1]) return right[1] - left[1];
+      if (right[1].total !== left[1].total) return right[1].total - left[1].total;
       return left[0].localeCompare(right[0]);
     });
-  const sourceTotal = sourceEntries.reduce((sum, [, count]) => sum + count, 0);
+  const sourceTotal = sourceEntries.reduce((sum, [, counts]) => sum + counts.total, 0);
   if (!sourceEntries.length || sourceTotal <= 0) return null;
   const subtitle = sourceEntries
     .slice(0, 3)
-    .map(([source, count]) => `${source}: ${count.toLocaleString("es-ES")}`)
+    .map(([source, counts]) => {
+      const principalLabel = counts.principal.toLocaleString("es-ES");
+      if (!showComparison) return `${source}: ${principalLabel}`;
+      const comparisonLabel = counts.comparison.toLocaleString("es-ES");
+      return `${source}: ${principalLabel} vs ${comparisonLabel}`;
+    })
     .join(" · ");
 
   return (
@@ -2750,15 +2882,19 @@ function PressPublisherRowMeter({
             className="flex h-full overflow-hidden rounded-full"
             style={{ width: `${fillWidthPercent}%` }}
           >
-            {sourceEntries.map(([source, count]) => (
+            {sourceEntries.map(([source, counts]) => (
               <div
                 key={`${label}-${source}`}
                 className="h-full"
                 style={{
-                  width: `${(count / sourceTotal) * 100}%`,
+                  width: `${(counts.total / sourceTotal) * 100}%`,
                   backgroundColor: pressSourceColorHex(source),
                 }}
-                title={`${source}: ${count.toLocaleString("es-ES")}`}
+                title={
+                  showComparison
+                    ? `${source}: ${counts.principal.toLocaleString("es-ES")} vs ${counts.comparison.toLocaleString("es-ES")}`
+                    : `${source}: ${counts.principal.toLocaleString("es-ES")}`
+                }
               />
             ))}
           </div>
@@ -2774,13 +2910,15 @@ function PressPublisherRowMeter({
 
 function PressPublisherSourcesLegend({
   sourceTotals,
+  showComparison,
 }: {
-  sourceTotals: Record<string, number>;
+  sourceTotals: Record<string, SourceVsCount>;
+  showComparison: boolean;
 }) {
   const entries = Object.entries(sourceTotals)
-    .filter(([, count]) => count > 0)
+    .filter(([, counts]) => counts.total > 0)
     .sort((left, right) => {
-      if (right[1] !== left[1]) return right[1] - left[1];
+      if (right[1].total !== left[1].total) return right[1].total - left[1].total;
       return left[0].localeCompare(right[0]);
     })
     .slice(0, 8);
@@ -2795,7 +2933,9 @@ function PressPublisherSourcesLegend({
             style={{ backgroundColor: pressSourceColorHex(source) }}
           />
           <span>
-            {source} ({count.toLocaleString("es-ES")})
+            {showComparison
+              ? `${source} (${count.principal.toLocaleString("es-ES")} vs ${count.comparison.toLocaleString("es-ES")})`
+              : `${source} (${count.principal.toLocaleString("es-ES")})`}
           </span>
         </span>
       ))}
@@ -3275,6 +3415,33 @@ type ActorStoreRatings = {
   google_play: MarketRating | null;
 };
 
+function marketRatingKey(rating: MarketRating) {
+  return [
+    normalizeSourceKey(rating.source || ""),
+    normalizeKey(rating.actor ?? ""),
+    normalizeKey(rating.geo ?? ""),
+    (rating.app_id ?? "").toLowerCase(),
+    (rating.package_id ?? "").toLowerCase(),
+  ].join("|");
+}
+
+function mergeCurrentAndHistoryRatings(
+  current: MarketRating[],
+  history: MarketRating[],
+): MarketRating[] {
+  if (!history.length) return current;
+  if (!current.length) return history;
+  const merged = [...current];
+  const seen = new Set(current.map((entry) => marketRatingKey(entry)));
+  for (const entry of history) {
+    const key = marketRatingKey(entry);
+    if (seen.has(key)) continue;
+    merged.push(entry);
+    seen.add(key);
+  }
+  return merged;
+}
+
 function buildActorStoreRatings(
   ratings: MarketRating[],
   actor: string,
@@ -3374,16 +3541,6 @@ function findPreviousMarketRating(
     return entry;
   }
   return null;
-}
-
-function marketRatingKey(rating: MarketRating) {
-  return [
-    normalizeSourceKey(rating.source || ""),
-    normalizeKey(rating.actor ?? ""),
-    normalizeKey(rating.geo ?? ""),
-    (rating.app_id ?? "").toLowerCase(),
-    (rating.package_id ?? "").toLowerCase(),
-  ].join("|");
 }
 
 function marketRatingTimestamp(value?: string | null) {
@@ -4171,21 +4328,91 @@ function createMarketActorSourceCounts(): MarketActorSourceCounts {
   };
 }
 
+function createSourceVsCount(): SourceVsCount {
+  return { principal: 0, comparison: 0, total: 0 };
+}
+
+function canonicalSourceKey(source?: string | null): string | null {
+  if (!source) return null;
+  const trimmed = source.trim();
+  if (!trimmed) return null;
+  const normalized = normalizeSourceKey(trimmed);
+  if (!normalized) return null;
+  return SOURCE_KEY_CANONICAL_MAP[normalized] ?? trimmed;
+}
+
 function normalizeMarketActorSourceKey(source?: string | null): MarketActorSourceKey | null {
-  const normalizedSource = normalizeSourceKey(source ?? "");
+  const normalizedSource = normalizeSourceKey(canonicalSourceKey(source) ?? "");
   if (normalizedSource === "appstore") return "appstore";
   if (normalizedSource === "googleplay") return "google_play";
   return null;
 }
 
-function countMarketSourceTotals(items: ReputationItem[]): MarketActorSourceCounts {
-  const totals = createMarketActorSourceCounts();
+function isComparisonSourceItem(
+  item: ReputationItem,
+  options: SourceCountOptions,
+): boolean {
+  if (!(options.comparisonsEnabled || options.includeAllOthers)) return false;
+  if (isPrincipalItem(item, options.principalAliases)) return false;
+  if (!options.selectedActorKey) return true;
+  return normalizeKey(item.actor || "") === options.selectedActorKey;
+}
+
+function resolveSourceRole(
+  item: ReputationItem,
+  options: SourceCountOptions,
+): SourceRole | null {
+  if (isPrincipalItem(item, options.principalAliases)) return "principal";
+  if (isComparisonSourceItem(item, options)) return "comparison";
+  return null;
+}
+
+function buildSourceCohortStats(
+  items: ReputationItem[],
+  options: SourceCountOptions,
+): SourceCohortStats {
+  const sourceCounts: Record<string, SourceVsCount> = {};
+  const marketSourceTotals = createMarketActorSourceTotals();
+  const cohortItems: ReputationItem[] = [];
+
   for (const item of items) {
-    const sourceKey = normalizeMarketActorSourceKey(item.source);
+    const role = resolveSourceRole(item, options);
+    if (!role) continue;
+    cohortItems.push(item);
+
+    const sourceKey = canonicalSourceKey(item.source);
     if (!sourceKey) continue;
-    totals[sourceKey] += 1;
+    const bucket = sourceCounts[sourceKey] ?? createSourceVsCount();
+    if (role === "principal") {
+      bucket.principal += 1;
+    } else {
+      bucket.comparison += 1;
+    }
+    bucket.total += 1;
+    sourceCounts[sourceKey] = bucket;
+
+    const marketSourceKey = normalizeMarketActorSourceKey(sourceKey);
+    if (!marketSourceKey) continue;
+    if (role === "principal") {
+      marketSourceTotals[marketSourceKey].principal += 1;
+    } else {
+      marketSourceTotals[marketSourceKey].comparison += 1;
+    }
+    marketSourceTotals[marketSourceKey].total += 1;
   }
-  return totals;
+
+  return {
+    cohortItems,
+    sourceCounts,
+    marketSourceTotals,
+  };
+}
+
+function createMarketActorSourceTotals(): MarketActorSourceTotals {
+  return {
+    appstore: createSourceVsCount(),
+    google_play: createSourceVsCount(),
+  };
 }
 
 function buildMarketActorRows(items: ReputationItem[]): MarketActorRow[] {
@@ -4212,6 +4439,27 @@ function buildMarketActorRows(items: ReputationItem[]): MarketActorRow[] {
     if (b.count !== a.count) return b.count - a.count;
     return a.label.localeCompare(b.label);
   });
+}
+
+function detectMarketSourceConsistencyIssues(
+  rows: MarketActorRow[],
+  totals: MarketActorSourceTotals,
+): string[] {
+  const aggregated = createMarketActorSourceCounts();
+  for (const row of rows) {
+    for (const sourceKey of MARKET_ACTOR_SOURCE_ORDER) {
+      aggregated[sourceKey] += row.sourceCounts[sourceKey];
+    }
+  }
+  const issues: string[] = [];
+  for (const sourceKey of MARKET_ACTOR_SOURCE_ORDER) {
+    const expected = totals[sourceKey].total;
+    const current = aggregated[sourceKey];
+    if (expected !== current) {
+      issues.push(`${sourceKey}: legend=${expected}, rows=${current}`);
+    }
+  }
+  return issues;
 }
 
 function formatPressSourceLabel(source?: string | null): string {
@@ -4313,18 +4561,47 @@ function extractPublisherLabel(item: ReputationItem): string | null {
   return null;
 }
 
-function countPressPublisherSourceTotals(items: ReputationItem[]): Record<string, number> {
-  const totals: Record<string, number> = {};
+type PressPublisherBuildOptions = SourceCountOptions;
+
+function isComparisonPressItem(
+  item: ReputationItem,
+  options: PressPublisherBuildOptions,
+): boolean {
+  return isComparisonSourceItem(item, options);
+}
+
+function countPressPublisherSourceTotals(
+  items: ReputationItem[],
+  options: PressPublisherBuildOptions,
+): Record<string, SourceVsCount> {
+  const totals: Record<string, SourceVsCount> = {};
   for (const item of items) {
+    const isPrincipal = isPrincipalItem(item, options.principalAliases);
+    const isComparison = isComparisonPressItem(item, options);
+    if (!isPrincipal && !isComparison) continue;
     const sourceLabel = formatPressSourceLabel(item.source);
-    totals[sourceLabel] = (totals[sourceLabel] || 0) + 1;
+    if (!totals[sourceLabel]) {
+      totals[sourceLabel] = createSourceVsCount();
+    }
+    if (isPrincipal) {
+      totals[sourceLabel].principal += 1;
+    } else {
+      totals[sourceLabel].comparison += 1;
+    }
+    totals[sourceLabel].total += 1;
   }
   return totals;
 }
 
-function buildPressPublisherRows(items: ReputationItem[]): PressPublisherRow[] {
+function buildPressPublisherRows(
+  items: ReputationItem[],
+  options: PressPublisherBuildOptions,
+): PressPublisherRow[] {
   const map = new Map<string, PressPublisherRow>();
   for (const item of items) {
+    const isPrincipal = isPrincipalItem(item, options.principalAliases);
+    const isComparison = isComparisonPressItem(item, options);
+    if (!isPrincipal && !isComparison) continue;
     const sourceLabel = formatPressSourceLabel(item.source);
     const publisherLabel = extractPublisherLabel(item) || "Medio no identificado";
     const key = normalizeKey(publisherLabel) || publisherLabel.toLowerCase();
@@ -4333,13 +4610,24 @@ function buildPressPublisherRows(items: ReputationItem[]): PressPublisherRow[] {
         key,
         label: publisherLabel,
         count: 0,
+        principalCount: 0,
+        comparisonCount: 0,
         sourceCounts: {},
       });
     }
     const row = map.get(key);
     if (!row) continue;
-    row.count += 1;
-    row.sourceCounts[sourceLabel] = (row.sourceCounts[sourceLabel] || 0) + 1;
+    const sourceBucket = row.sourceCounts[sourceLabel] || createSourceVsCount();
+    if (isPrincipal) {
+      row.principalCount += 1;
+      sourceBucket.principal += 1;
+    } else {
+      row.comparisonCount += 1;
+      sourceBucket.comparison += 1;
+    }
+    sourceBucket.total += 1;
+    row.sourceCounts[sourceLabel] = sourceBucket;
+    row.count = row.principalCount + row.comparisonCount;
   }
   return Array.from(map.values()).sort((left, right) => {
     if (right.count !== left.count) return right.count - left.count;
