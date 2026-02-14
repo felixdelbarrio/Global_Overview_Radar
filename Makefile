@@ -45,13 +45,15 @@ BENCH_WARMUP ?= 5
 BENCH_MAX_REGRESSION ?= 0.15
 BENCH_OUT_BACK ?= $(BENCH_DIR)/backend.latest.json
 BENCH_BASELINE_BACK ?= $(BENCH_DIR)/backend.baseline.json
+BENCH_OUT_INGEST ?= $(BENCH_DIR)/ingest.latest.json
+BENCH_BASELINE_INGEST ?= $(BENCH_DIR)/ingest.baseline.json
 
 VISUAL_QA_URL ?= http://localhost:$(FRONT_PORT)
 VISUAL_QA_OUT ?= docs/visual-qa
 
 .DEFAULT_GOAL := help
 
-.PHONY: help venv install install-backend install-front env ensure-backend ensure-front ensure-cloudrun-env ingest ingest-filtered reputation-ingest reputation-ingest-filtered serve serve-back dev-back dev-front build-front start-front lint lint-back lint-front typecheck typecheck-back typecheck-front format format-back format-front check codeql codeql-install codeql-python codeql-js codeql-clean test test-back test-front test-coverage test-coverage-back test-coverage-front bench bench-baseline visual-qa clean reset cloudrun-config cloudrun-env deploy-cloudrun-back deploy-cloudrun-front deploy-cloudrun ingest-cloudrun
+.PHONY: help venv install install-backend install-front env ensure-backend ensure-front ensure-cloudrun-env ingest ingest-filtered reputation-ingest reputation-ingest-filtered serve serve-back dev-back dev-front build-front start-front lint lint-back lint-front typecheck typecheck-back typecheck-front format format-back format-front check codeql codeql-install codeql-python codeql-js codeql-clean test test-back test-front test-coverage test-coverage-back test-coverage-front bench bench-baseline bench-ingest bench-ingest-baseline visual-qa clean reset cloudrun-config cloudrun-env deploy-cloudrun-back deploy-cloudrun-front deploy-cloudrun ingest-cloudrun
 
 help:
 	@echo "Make targets disponibles:"
@@ -83,6 +85,8 @@ help:
 	@echo "  make test-coverage   - Ejecutar cobertura backend + frontend (>=70%)"
 	@echo "  make bench           - Benchmark backend (comparacion baseline)"
 	@echo "  make bench-baseline  - Generar baseline backend"
+	@echo "  make bench-ingest    - Benchmark hotspots de ingesta (comparacion baseline)"
+	@echo "  make bench-ingest-baseline - Generar baseline de benchmark de ingesta"
 	@echo "  make visual-qa       - Capturas headless mobile (frontend)"
 	@echo "  make clean           - Eliminar venv, caches, node_modules (frontend)"
 	@echo "  make cloudrun-config - Configurar backend/reputation/cloudrun.env (preguntas interactivas)"
@@ -650,6 +654,16 @@ bench-baseline:
 	@echo "==> Generando baseline de benchmark..."
 	@mkdir -p $(BENCH_DIR)
 	$(PY) scripts/bench_backend.py --iterations $(BENCH_ITERATIONS) --warmup $(BENCH_WARMUP) --json $(BENCH_BASELINE_BACK)
+
+bench-ingest:
+	@echo "==> Benchmark de ingesta..."
+	@mkdir -p $(BENCH_DIR)
+	$(PY) scripts/bench_ingest.py --iterations $(BENCH_ITERATIONS) --warmup $(BENCH_WARMUP) --json $(BENCH_OUT_INGEST) --baseline $(BENCH_BASELINE_INGEST) --max-regression $(BENCH_MAX_REGRESSION)
+
+bench-ingest-baseline:
+	@echo "==> Generando baseline de benchmark de ingesta..."
+	@mkdir -p $(BENCH_DIR)
+	$(PY) scripts/bench_ingest.py --iterations $(BENCH_ITERATIONS) --warmup $(BENCH_WARMUP) --json $(BENCH_BASELINE_INGEST)
 
 visual-qa:
 	@echo "==> Visual QA mobile..."

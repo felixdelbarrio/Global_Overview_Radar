@@ -15,7 +15,7 @@ class RedditCollector(ReputationCollector):
     def __init__(
         self,
         client_id: str,
-        client_secret: str,
+        client_secret: str | None,
         user_agent: str,
         subreddits: list[str],
         queries: list[str],
@@ -33,7 +33,7 @@ class RedditCollector(ReputationCollector):
     def collect(self) -> Iterable[ReputationItem]:
         reddit = praw.Reddit(
             client_id=self._client_id,
-            client_secret=self._client_secret,
+            client_secret=self._client_secret or "",
             user_agent=self._user_agent,
         )
         items: list[ReputationItem] = []

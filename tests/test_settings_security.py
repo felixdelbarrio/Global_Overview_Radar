@@ -125,6 +125,54 @@ def test_update_settings_encrypts_secret_values_at_rest(
     assert parsed["OPENAI_API_KEY"] == "super-secret-openai"
 
 
+def test_settings_snapshot_forces_llm_disabled_without_selected_provider_key(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    env_path, _, _, _ = _set_env_paths(monkeypatch, tmp_path)
+    env_path.write_text(
+        "LLM_ENABLED=true\nLLM_PROVIDER=openai\nOPENAI_API_KEY=\nGEMINI_API_KEY=gemini-secret\n",
+        encoding="utf-8",
+    )
+
+    snapshot = user_settings.get_user_settings_snapshot()
+    fields = _collect_fields(snapshot)
+
+    assert fields["llm.enabled"]["value"] is False
+
+
+def test_update_settings_forces_llm_disabled_when_selected_provider_key_is_missing(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    env_path, _, _, _ = _set_env_paths(monkeypatch, tmp_path)
+    env_path.write_text(
+        "LLM_ENABLED=true\nLLM_PROVIDER=gemini\nOPENAI_API_KEY=openai-secret\nGEMINI_API_KEY=\n",
+        encoding="utf-8",
+    )
+
+    user_settings.update_user_settings({"llm.enabled": True})
+    updated = user_settings._parse_env_file(env_path)
+
+    assert updated["LLM_ENABLED"] == "false"
+
+
+def test_update_settings_keeps_llm_choice_when_selected_provider_key_exists(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    env_path, _, _, _ = _set_env_paths(monkeypatch, tmp_path)
+    env_path.write_text(
+        "LLM_ENABLED=false\nLLM_PROVIDER=gemini\nGEMINI_API_KEY=gemini-secret\n",
+        encoding="utf-8",
+    )
+
+    user_settings.update_user_settings({"llm.enabled": True})
+    updated = user_settings._parse_env_file(env_path)
+
+    assert updated["LLM_ENABLED"] == "true"
+
+
 def test_update_settings_rejects_cloudrun_only_keys(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -220,7 +268,8 @@ def test_update_settings_persists_advanced_values_in_advanced_file_only(
 
     assert "REPUTATION_LOG_ENABLED" not in base_values
     assert "REPUTATION_HTTP_CACHE_TTL_SEC" not in base_values
-    assert base_values["NEWS_LANG"] == "en"
+    assert "NEWS_LANG" not in base_values
+    assert advanced_values["NEWS_LANG"] == "en"
     assert advanced_values["REPUTATION_LOG_ENABLED"] == "true"
     assert advanced_values["REPUTATION_HTTP_CACHE_TTL_SEC"] == "90"
 

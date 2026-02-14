@@ -25,16 +25,24 @@ def _write_cache(tmp_path: Path, items: list[dict]) -> Path:
     return cache_file
 
 
-def _make_item(item_id: str, geo: str, sentiment: str) -> dict:
+def _make_item(
+    item_id: str,
+    geo: str,
+    sentiment: str,
+    *,
+    source: str = "news",
+    signals: dict | None = None,
+) -> dict:
     return {
         "id": item_id,
-        "source": "news",
+        "source": source,
         "geo": geo,
         "actor": "Acme",
         "title": f"Title {item_id}",
         "text": f"Text {item_id}",
         "published_at": "2025-01-01T00:00:00Z",
         "sentiment": sentiment,
+        "signals": signals or {},
     }
 
 
@@ -121,6 +129,105 @@ def test_override_endpoint_validation(
     )
     assert res.status_code == 400
     assert res.json()["detail"] == detail
+
+
+def test_override_endpoint_rejects_market_sources(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import reputation.config as rep_config
+
+    items = [_make_item("m1", "ES", "neutral", source="appstore")]
+    cache_path = _write_cache(tmp_path, items)
+    overrides_path = tmp_path / "rep_overrides.json"
+    monkeypatch.setattr(rep_config.settings, "source_appstore", True)
+    client = _client(monkeypatch, cache_path, overrides_path)
+
+    res = client.post(
+        "/reputation/items/override",
+        json={"ids": ["m1"], "sentiment": "negative"},
+        headers={"x-gor-admin-key": _ADMIN_KEY},
+    )
+    assert res.status_code == 400
+    detail = res.json()["detail"]
+    assert "manual overrides are not allowed" in detail
+    assert "appstore" in detail
+    assert "m1" in detail
+
+
+def test_items_ignore_overrides_for_market_sources(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import reputation.config as rep_config
+
+    items = [_make_item("m1", "ES", "negative", source="appstore")]
+    cache_path = _write_cache(tmp_path, items)
+    overrides_path = tmp_path / "rep_overrides.json"
+    overrides_path.write_text(
+        json.dumps(
+            {
+                "updated_at": "2025-01-02T10:00:00+00:00",
+                "items": {
+                    "m1": {
+                        "geo": "US",
+                        "sentiment": "positive",
+                        "updated_at": "2025-01-02T10:00:00+00:00",
+                    }
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(rep_config.settings, "source_appstore", True)
+    client = _client(monkeypatch, cache_path, overrides_path)
+
+    res = client.get("/reputation/items")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["stats"]["count"] == 1
+    assert body["items"][0]["id"] == "m1"
+    assert body["items"][0]["geo"] == "ES"
+    assert body["items"][0]["sentiment"] == "negative"
+    assert not body["items"][0].get("manual_override")
+
+
+def test_items_enforce_store_sentiment_from_rating(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import reputation.config as rep_config
+
+    items = [
+        _make_item(
+            "s1",
+            "ES",
+            "neutral",
+            source="appstore",
+            signals={"rating": 1},
+        ),
+        _make_item(
+            "s2",
+            "ES",
+            "neutral",
+            source="appstore",
+            signals={"rating": 5},
+        ),
+    ]
+    cache_path = _write_cache(tmp_path, items)
+    overrides_path = tmp_path / "rep_overrides.json"
+    monkeypatch.setattr(rep_config.settings, "source_appstore", True)
+    client = _client(monkeypatch, cache_path, overrides_path)
+
+    res = client.get("/reputation/items")
+    assert res.status_code == 200
+    body = res.json()
+    items_by_id = {entry["id"]: entry for entry in body["items"]}
+
+    assert items_by_id["s1"]["sentiment"] == "negative"
+    assert items_by_id["s1"]["signals"]["sentiment_provider"] == "stars"
+    assert items_by_id["s1"]["signals"]["sentiment_score"] == pytest.approx(-1.0)
+    assert items_by_id["s2"]["sentiment"] == "positive"
+    assert items_by_id["s2"]["signals"]["sentiment_provider"] == "stars"
+    assert items_by_id["s2"]["signals"]["sentiment_score"] == pytest.approx(1.0)
 
 
 def test_compare_uses_overrides(

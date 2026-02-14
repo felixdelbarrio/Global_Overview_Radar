@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from collections import Counter, defaultdict
 from datetime import date, datetime, timezone
 from typing import Any, Iterable
 
@@ -15,7 +16,7 @@ from reputation.actors import (
     primary_actor_info,
 )
 from reputation.auth import require_google_user, require_mutation_access
-from reputation.collectors.utils import match_keywords
+from reputation.collectors.utils import match_keywords, normalize_text, tokenize
 from reputation.config import (
     active_profile_key,
     active_profile_source,
@@ -54,6 +55,12 @@ def _refresh_settings() -> None:
 router = APIRouter(dependencies=[Depends(_refresh_settings), Depends(require_google_user)])
 
 _ALLOWED_SENTIMENTS = {"positive", "negative", "neutral"}
+_MANUAL_OVERRIDE_BLOCKED_SOURCES = {
+    "appstore",
+    "google_play",
+    "google_reviews",
+}
+_STAR_SENTIMENT_SOURCES = {"appstore", "google_play", "google_reviews"}
 _COMPARE_BODY = Body(...)
 
 
@@ -71,6 +78,82 @@ class SettingsUpdateRequest(BaseModel):
 class ProfilesUpdateRequest(BaseModel):
     source: str | None = None
     profiles: list[str] | None = None
+
+
+def _is_manual_override_blocked_source(source: str | None) -> bool:
+    if not isinstance(source, str):
+        return False
+    return source.strip().lower() in _MANUAL_OVERRIDE_BLOCKED_SOURCES
+
+
+def _coerce_star_value(raw: object) -> float | None:
+    value: float | None = None
+    if isinstance(raw, (int, float)):
+        value = float(raw)
+    elif isinstance(raw, str):
+        try:
+            value = float(raw.replace(",", "."))
+        except ValueError:
+            value = None
+    if value is None:
+        return None
+    if value <= 0:
+        return None
+    return min(5.0, max(0.0, value))
+
+
+def _extract_star_rating(item: ReputationItem) -> float | None:
+    signals = item.signals if isinstance(item.signals, dict) else {}
+    candidates: list[object] = [
+        signals.get("rating"),
+        signals.get("score"),
+        signals.get("stars"),
+        signals.get("star_rating"),
+        signals.get("user_rating"),
+        signals.get("rating_value"),
+        signals.get("reviewRating"),
+    ]
+    for candidate in candidates:
+        if candidate in (None, ""):
+            continue
+        if isinstance(candidate, dict):
+            for nested_key in ("value", "rating", "score", "stars"):
+                nested = _coerce_star_value(candidate.get(nested_key))
+                if nested is not None:
+                    return nested
+            continue
+        value = _coerce_star_value(candidate)
+        if value is not None:
+            return value
+    return None
+
+
+def _sentiment_from_stars(stars: float) -> tuple[str, float]:
+    if stars < 2.5:
+        label = "negative"
+    elif stars > 2.5:
+        label = "positive"
+    else:
+        label = "neutral"
+
+    score = (stars - 2.5) / 1.5 if stars <= 2.5 else (stars - 2.5) / 2.5
+    score = max(-1.0, min(1.0, score))
+    return label, score
+
+
+def _enforce_star_sentiment(item: ReputationItem) -> None:
+    source = (item.source or "").strip().lower()
+    if source not in _STAR_SENTIMENT_SOURCES:
+        return
+    stars = _extract_star_rating(item)
+    if stars is None:
+        return
+    label, score = _sentiment_from_stars(stars)
+    item.sentiment = label
+    item.signals["sentiment_score"] = score
+    item.signals["sentiment_provider"] = "stars"
+    item.signals["sentiment_scale"] = "1-5"
+    item.signals["client_sentiment"] = True
 
 
 def _load_cache() -> ReputationCacheDocument:
@@ -125,6 +208,11 @@ def _apply_overrides(
                     item_copy.id,
                     exc_info=True,
                 )
+                _enforce_star_sentiment(item_copy)
+                result.append(item_copy)
+                continue
+            if _is_manual_override_blocked_source(item_copy.source):
+                _enforce_star_sentiment(item_copy)
                 result.append(item_copy)
                 continue
             item_copy.manual_override = override
@@ -132,6 +220,7 @@ def _apply_overrides(
                 item_copy.geo = override.geo
             if override.sentiment:
                 item_copy.sentiment = override.sentiment
+        _enforce_star_sentiment(item_copy)
         result.append(item_copy)
     return result
 
@@ -187,6 +276,23 @@ def _parse_datetime(value: str | None) -> datetime | None:
     return parsed_dt.astimezone(timezone.utc)
 
 
+def _parse_datetime_bound(value: str | None, *, end_of_day: bool) -> datetime | None:
+    if not value:
+        return None
+    raw = value.strip()
+    if not raw:
+        return None
+    parsed = _parse_datetime(raw)
+    if parsed is None:
+        return None
+    # Date-only filters are interpreted as full-day windows.
+    if "T" not in raw and " " not in raw:
+        if end_of_day:
+            return parsed.replace(hour=23, minute=59, second=59, microsecond=999999)
+        return parsed.replace(hour=0, minute=0, second=0, microsecond=0)
+    return parsed
+
+
 def _item_datetime(item: ReputationItem) -> datetime | None:
     dt = item.published_at or item.collected_at
     if dt is None:
@@ -196,6 +302,65 @@ def _item_datetime(item: ReputationItem) -> datetime | None:
     return dt.astimezone(timezone.utc)
 
 
+def _is_truthy_signal(value: object) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+    return False
+
+
+def _reply_datetime(item: ReputationItem) -> datetime | None:
+    reply = _extract_reply_payload(item)
+    if not reply:
+        return None
+    return _parse_datetime_any(reply.get("replied_at"))
+
+
+def _item_matches_date_range(
+    item: ReputationItem,
+    *,
+    from_dt: datetime | None,
+    to_dt: datetime | None,
+    include_reply_datetime: bool = False,
+) -> bool:
+    if from_dt is None and to_dt is None:
+        return True
+
+    candidates: list[datetime] = []
+    item_dt = _item_datetime(item)
+    if item_dt is not None:
+        candidates.append(item_dt)
+    if include_reply_datetime:
+        reply_dt = _reply_datetime(item)
+        if reply_dt is not None:
+            candidates.append(reply_dt)
+
+    if not candidates:
+        return False
+    for candidate in candidates:
+        if from_dt and candidate < from_dt:
+            continue
+        if to_dt and candidate > to_dt:
+            continue
+        return True
+    return False
+
+
+def _resolve_item_author(item: ReputationItem) -> str | None:
+    raw_author = (item.author or "").strip()
+    if raw_author:
+        return raw_author
+    signals = item.signals if isinstance(item.signals, dict) else {}
+    for key in _ITEM_AUTHOR_SIGNAL_KEYS:
+        candidate = _safe_text(signals.get(key))
+        if candidate:
+            return candidate
+    return None
+
+
 def _normalize_scalar(value: str | None) -> str:
     return value.strip().lower() if value else ""
 
@@ -203,6 +368,720 @@ def _normalize_scalar(value: str | None) -> str:
 def _item_text(item: ReputationItem) -> str:
     parts = [item.title or "", item.text or ""]
     return " ".join(part for part in parts if part).strip()
+
+
+_MARKET_RECURRING_AUTHOR_LIMIT = 10
+_MARKET_AUTHOR_OPINION_LIMIT = 12
+_MARKET_FEATURE_LIMIT = 10
+_MARKET_FEATURE_EVIDENCE_LIMIT = 3
+_MARKET_ALERT_LIMIT = 8
+_MARKET_SOURCES = {"appstore", "google_play"}
+_RESPONSE_TRACKED_SOURCES = {"appstore", "google_play"}
+_MARKET_GENERIC_FEATURE_KEYS = {
+    "bbva",
+    "banco",
+    "bank",
+    "cliente",
+    "clientes",
+    "usuario",
+    "usuarios",
+    "servicio",
+    "servicios",
+    "app",
+}
+_MARKET_FALLBACK_FEATURES = [
+    "login",
+    "acceso",
+    "transferencias",
+    "bizum",
+    "tarjeta",
+    "seguridad",
+    "fraude",
+    "phishing",
+    "biometria",
+    "face id",
+    "huella",
+    "token",
+    "otp",
+    "notificaciones",
+    "rendimiento",
+    "caidas",
+    "errores",
+    "comisiones",
+    "soporte",
+    "atencion al cliente",
+]
+_ITEM_AUTHOR_SIGNAL_KEYS = (
+    "author",
+    "author_name",
+    "authorName",
+    "user_name",
+    "userName",
+    "username",
+    "reviewer_name",
+    "reviewerName",
+    "nickname",
+    "nickName",
+)
+_OTHER_ACTORS_ENTITY_KEYS = {
+    "other_actors",
+    "otheractors",
+    "otros_actores",
+    "otrosactores",
+    "others",
+}
+
+
+def _ratio(part: int, whole: int) -> float:
+    if whole <= 0:
+        return 0.0
+    return round(float(part) / float(whole), 4)
+
+
+def _safe_sentiment(value: str | None) -> str:
+    normalized = _normalize_scalar(value)
+    if normalized in _ALLOWED_SENTIMENTS:
+        return normalized
+    return "unknown"
+
+
+def _safe_score(item: ReputationItem) -> float | None:
+    signals = item.signals or {}
+    raw = signals.get("sentiment_score")
+    if isinstance(raw, bool):
+        return None
+    if isinstance(raw, (int, float)):
+        return float(raw)
+    if isinstance(raw, str):
+        stripped = raw.strip()
+        if not stripped:
+            return None
+        try:
+            return float(stripped.replace(",", "."))
+        except ValueError:
+            return None
+    return None
+
+
+def _safe_geo(value: str | None) -> str:
+    cleaned = (value or "").strip()
+    return cleaned or "Global"
+
+
+def _safe_author(value: str | None) -> str:
+    cleaned = (value or "").strip()
+    if not cleaned:
+        return "Autor sin nombre"
+    return cleaned
+
+
+def _safe_excerpt(value: str | None, max_len: int = 180) -> str:
+    text = " ".join((value or "").split())
+    if len(text) <= max_len:
+        return text
+    return f"{text[: max_len - 3].rstrip()}..."
+
+
+def _feature_key(raw: str) -> tuple[str, str] | None:
+    cleaned = " ".join(raw.split())
+    if not cleaned:
+        return None
+    normalized = normalize_text(cleaned)
+    tokens = [token for token in normalized.split() if len(token) >= 3]
+    if not tokens:
+        return None
+    key = " ".join(tokens[:4])
+    if key in _MARKET_GENERIC_FEATURE_KEYS:
+        return None
+    return key, cleaned
+
+
+def _feature_candidates(
+    cfg: dict[str, Any],
+    principal_terms: list[str],
+) -> list[tuple[str, str, list[str]]]:
+    principal_tokens = {
+        token for term in principal_terms for token in tokenize(term) if token and len(token) >= 3
+    }
+    raw_terms: list[str] = []
+    raw_terms.extend(
+        term.strip()
+        for term in cfg.get("segment_terms", [])
+        if isinstance(term, str) and term.strip()
+    )
+    raw_terms.extend(
+        term.strip() for term in cfg.get("keywords", []) if isinstance(term, str) and term.strip()
+    )
+    raw_terms.extend(_MARKET_FALLBACK_FEATURES)
+
+    seen: set[str] = set()
+    result: list[tuple[str, str, list[str]]] = []
+    for raw_term in raw_terms:
+        maybe = _feature_key(raw_term)
+        if not maybe:
+            continue
+        key, display = maybe
+        tokens = key.split()
+        if len(tokens) > 4:
+            continue
+        if all(token in principal_tokens for token in tokens):
+            continue
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append((key, display, tokens))
+
+    result.sort(key=lambda item: (-len(item[2]), item[0]))
+    return result[:80]
+
+
+_REPLY_TEXT_KEYS = (
+    "reply_text",
+    "response_text",
+    "developer_reply",
+    "developer_response",
+    "owner_response",
+    "business_response",
+    "response",
+    "reply",
+)
+_REPLY_AUTHOR_KEYS = (
+    "reply_author",
+    "response_author",
+    "developer_name",
+    "owner_name",
+    "author",
+)
+_REPLY_DATE_KEYS = (
+    "reply_at",
+    "response_at",
+    "replied_at",
+    "developer_response_at",
+    "owner_response_at",
+    "date",
+    "time",
+    "published_at",
+    "updated_at",
+)
+_REPLY_CONTAINER_KEYS = (
+    "reply",
+    "response",
+    "developer_reply",
+    "developer_response",
+    "owner_response",
+    "business_response",
+)
+_RESPONSE_DETAIL_LIMIT_DEFAULT = 80
+_RESPONSE_DETAIL_LIMIT_MAX = 250
+_RESPONSE_REPEAT_LIMIT = 10
+_REPLY_SIMILARITY_THRESHOLD_DEFAULT = 0.70
+_REPLY_SIMILARITY_THRESHOLD_MIN = 0.50
+_REPLY_SIMILARITY_THRESHOLD_MAX = 0.95
+_REPLY_SIMILARITY_MIN_OVERLAP_TOKENS = 6
+_REPLY_SIMILARITY_STOPWORDS = {
+    "a",
+    "al",
+    "and",
+    "con",
+    "de",
+    "del",
+    "el",
+    "en",
+    "for",
+    "hola",
+    "in",
+    "la",
+    "las",
+    "los",
+    "o",
+    "of",
+    "on",
+    "or",
+    "para",
+    "por",
+    "the",
+    "to",
+    "tu",
+    "un",
+    "una",
+    "with",
+    "y",
+}
+
+
+def _safe_text(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    cleaned = " ".join(value.split())
+    return cleaned or None
+
+
+def _parse_datetime_any(value: object) -> datetime | None:
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
+    if isinstance(value, (int, float)):
+        try:
+            return datetime.fromtimestamp(float(value), tz=timezone.utc)
+        except (OverflowError, OSError, ValueError):
+            return None
+    if isinstance(value, str):
+        return _parse_datetime(value)
+    if isinstance(value, dict):
+        for key in _REPLY_DATE_KEYS:
+            candidate = _parse_datetime_any(value.get(key))
+            if candidate is not None:
+                return candidate
+    return None
+
+
+def _extract_reply_text(value: object) -> str | None:
+    direct = _safe_text(value)
+    if direct:
+        return direct
+    if not isinstance(value, dict):
+        return None
+    for key in ("text", "content", "body", "message", "reply", "response", "value"):
+        candidate = _safe_text(value.get(key))
+        if candidate:
+            return candidate
+    return None
+
+
+def _extract_reply_author(value: object) -> str | None:
+    direct = _safe_text(value)
+    if direct:
+        return direct
+    if not isinstance(value, dict):
+        return None
+    for key in ("author", "name", "display_name", "developer", "owner"):
+        candidate = _safe_text(value.get(key))
+        if candidate:
+            return candidate
+    return None
+
+
+def _extract_reply_payload(item: ReputationItem) -> dict[str, Any] | None:
+    signals = item.signals if isinstance(item.signals, dict) else {}
+    reply_text: str | None = None
+    reply_author: str | None = None
+    reply_at: datetime | None = None
+    has_reply_flag = _is_truthy_signal(signals.get("has_reply"))
+
+    for key in _REPLY_TEXT_KEYS:
+        reply_text = _extract_reply_text(signals.get(key))
+        if reply_text:
+            break
+
+    for key in _REPLY_CONTAINER_KEYS:
+        container = signals.get(key)
+        if not isinstance(container, dict):
+            continue
+        if reply_text is None:
+            reply_text = _extract_reply_text(container)
+        if reply_author is None:
+            reply_author = _extract_reply_author(container)
+        if reply_at is None:
+            reply_at = _parse_datetime_any(container)
+
+    if reply_author is None:
+        for key in _REPLY_AUTHOR_KEYS:
+            reply_author = _extract_reply_author(signals.get(key))
+            if reply_author:
+                break
+
+    if reply_at is None:
+        for key in _REPLY_DATE_KEYS:
+            reply_at = _parse_datetime_any(signals.get(key))
+            if reply_at:
+                break
+
+    if not reply_text and not has_reply_flag and reply_author is None and reply_at is None:
+        return None
+
+    return {
+        "text": reply_text or "",
+        "author": reply_author,
+        "replied_at": reply_at.isoformat() if reply_at else None,
+    }
+
+
+def _secondary_actor_canonicals(
+    cfg: dict[str, Any],
+    alias_map: dict[str, str],
+    principal_canonical: str | None,
+) -> set[str]:
+    configured: set[str] = set(_safe_list(cfg.get("otros_actores_globales")))
+    for actors in _safe_dict_list(cfg.get("otros_actores_por_geografia")).values():
+        configured.update(actors)
+    canonicals = {
+        canonicalize_actor(name, alias_map)
+        for name in configured
+        if isinstance(name, str) and name.strip()
+    }
+    canonicals.discard("")
+    if principal_canonical:
+        canonicals.discard(principal_canonical)
+    return canonicals
+
+
+def _reply_similarity_tokens(reply_text: str) -> set[str]:
+    raw_tokens = [token for token in tokenize(reply_text) if token and len(token) > 1]
+    if not raw_tokens:
+        return set()
+    informative = {
+        token for token in raw_tokens if len(token) > 2 and token not in _REPLY_SIMILARITY_STOPWORDS
+    }
+    return informative or set(raw_tokens)
+
+
+def _reply_similarity_score(
+    left_key: str,
+    left_tokens: set[str],
+    right_key: str,
+    right_tokens: set[str],
+) -> float:
+    if not left_key or not right_key:
+        return 0.0
+    if left_key == right_key:
+        return 1.0
+    if not left_tokens or not right_tokens:
+        return 0.0
+
+    overlap = len(left_tokens & right_tokens)
+    if overlap < _REPLY_SIMILARITY_MIN_OVERLAP_TOKENS:
+        return 0.0
+
+    min_size = min(len(left_tokens), len(right_tokens))
+    union_size = len(left_tokens | right_tokens)
+    if min_size <= 0 or union_size <= 0:
+        return 0.0
+
+    containment = overlap / float(min_size)
+    jaccard = overlap / float(union_size)
+    return (0.7 * containment) + (0.3 * jaccard)
+
+
+def _normalize_similarity_threshold(value: float) -> float:
+    if value != value:
+        return _REPLY_SIMILARITY_THRESHOLD_DEFAULT
+    return max(
+        _REPLY_SIMILARITY_THRESHOLD_MIN,
+        min(value, _REPLY_SIMILARITY_THRESHOLD_MAX),
+    )
+
+
+def _select_cluster_representative(
+    variants: dict[str, dict[str, Any]],
+) -> tuple[str, str, set[str]]:
+    best_entry: dict[str, Any] | None = None
+    best_key = ""
+    for key, entry in variants.items():
+        if best_entry is None:
+            best_entry = entry
+            best_key = key
+            continue
+        current_key = (
+            int(entry.get("count", 0)),
+            len(entry.get("tokens", set())),
+            len(str(entry.get("reply_text", ""))),
+            str(entry.get("reply_text", "")),
+        )
+        best_tuple = (
+            int(best_entry.get("count", 0)),
+            len(best_entry.get("tokens", set())),
+            len(str(best_entry.get("reply_text", ""))),
+            str(best_entry.get("reply_text", "")),
+        )
+        if current_key > best_tuple:
+            best_entry = entry
+            best_key = key
+    if best_entry is None:
+        return "", "", set()
+    return (
+        str(best_entry.get("reply_text", "")),
+        best_key,
+        set(best_entry.get("tokens", set())),
+    )
+
+
+def _cluster_repeated_replies(
+    occurrences: list[dict[str, Any]],
+    *,
+    similarity_threshold: float,
+) -> list[dict[str, Any]]:
+    if not occurrences:
+        return []
+
+    threshold = _normalize_similarity_threshold(similarity_threshold)
+    clusters: list[dict[str, Any]] = []
+
+    for occurrence in occurrences:
+        reply_text = str(occurrence.get("reply_text") or "")
+        reply_key = normalize_text(reply_text)
+        if not reply_key:
+            continue
+
+        reply_tokens = _reply_similarity_tokens(reply_text)
+        responder = str(occurrence.get("responder") or "Actor desconocido")
+        sentiment = _safe_sentiment(str(occurrence.get("sentiment") or "unknown"))
+        item_id = str(occurrence.get("item_id") or "").strip()
+
+        best_idx = -1
+        best_score = 0.0
+        for idx, cluster in enumerate(clusters):
+            score = _reply_similarity_score(
+                reply_key,
+                reply_tokens,
+                str(cluster.get("reply_key") or ""),
+                set(cluster.get("tokens") or set()),
+            )
+            if score > best_score:
+                best_score = score
+                best_idx = idx
+
+        if best_idx >= 0 and best_score >= threshold:
+            cluster = clusters[best_idx]
+        else:
+            cluster = {
+                "reply_text": reply_text,
+                "reply_key": reply_key,
+                "tokens": set(reply_tokens),
+                "count": 0,
+                "actors": Counter(),
+                "sentiments": Counter(),
+                "sample_item_ids": [],
+                "variants": {},
+            }
+            clusters.append(cluster)
+
+        variants: dict[str, dict[str, Any]] = cluster["variants"]
+        variant = variants.get(reply_key)
+        if variant is None:
+            variants[reply_key] = {
+                "reply_text": reply_text,
+                "tokens": set(reply_tokens),
+                "count": 1,
+            }
+        else:
+            variant["count"] = int(variant.get("count", 0)) + 1
+            if len(reply_text) > len(str(variant.get("reply_text", ""))):
+                variant["reply_text"] = reply_text
+                variant["tokens"] = set(reply_tokens)
+
+        cluster["count"] = int(cluster.get("count", 0)) + 1
+        cluster["actors"][responder] += 1
+        cluster["sentiments"][sentiment] += 1
+        if item_id and len(cluster["sample_item_ids"]) < 5:
+            cluster["sample_item_ids"].append(item_id)
+
+        representative_text, representative_key, representative_tokens = (
+            _select_cluster_representative(variants)
+        )
+        cluster["reply_text"] = representative_text
+        cluster["reply_key"] = representative_key
+        cluster["tokens"] = representative_tokens
+
+    return clusters
+
+
+def _build_response_summary(
+    *,
+    items: list[ReputationItem],
+    alias_map: dict[str, str],
+    principal_canonical: str | None,
+    secondary_canonicals: set[str],
+    detail_limit: int = _RESPONSE_DETAIL_LIMIT_DEFAULT,
+    reply_similarity_threshold: float = _REPLY_SIMILARITY_THRESHOLD_DEFAULT,
+) -> dict[str, Any]:
+    bounded_limit = max(1, min(detail_limit, _RESPONSE_DETAIL_LIMIT_MAX))
+    total = len(items)
+
+    answered_total = 0
+    answered_by_sentiment: Counter[str] = Counter()
+    unanswered_by_sentiment: Counter[str] = Counter()
+    answered_items: list[dict[str, Any]] = []
+    reply_occurrences: list[dict[str, Any]] = []
+
+    actor_breakdown: dict[tuple[str, str], dict[str, Any]] = {}
+
+    for item in items:
+        sentiment = _safe_sentiment(item.sentiment)
+        item_dt = _item_datetime(item)
+        item_actor_canonical = canonicalize_actor(item.actor, alias_map) if item.actor else ""
+
+        reply = _extract_reply_payload(item)
+        if reply is None:
+            unanswered_by_sentiment[sentiment] += 1
+            continue
+
+        answered_total += 1
+        answered_by_sentiment[sentiment] += 1
+
+        responder_name = _safe_text(reply.get("author")) or item.actor or ""
+        responder_canonical_from_author = (
+            canonicalize_actor(responder_name, alias_map) if responder_name else ""
+        )
+        responder_canonical = (
+            responder_canonical_from_author or item_actor_canonical or "Actor desconocido"
+        )
+
+        if principal_canonical and responder_canonical == principal_canonical:
+            responder_type = "principal"
+        elif responder_canonical in secondary_canonicals:
+            responder_type = "secondary"
+        else:
+            responder_type = "unknown"
+
+        item_actor_type = "unknown"
+        if principal_canonical and item_actor_canonical == principal_canonical:
+            item_actor_type = "principal"
+        elif item_actor_canonical in secondary_canonicals:
+            item_actor_type = "secondary"
+
+        if responder_type == "unknown" and item_actor_type != "unknown":
+            responder_type = item_actor_type
+            responder_canonical = item_actor_canonical or responder_canonical
+
+        actor_key = (responder_canonical, responder_type)
+        actor_entry = actor_breakdown.setdefault(
+            actor_key,
+            {
+                "actor": responder_canonical,
+                "actor_type": responder_type,
+                "answered": 0,
+                "answered_positive": 0,
+                "answered_neutral": 0,
+                "answered_negative": 0,
+            },
+        )
+        actor_entry["answered"] += 1
+        actor_entry[f"answered_{sentiment}"] += 1
+
+        reply_text = str(reply.get("text") or "")
+        reply_key = normalize_text(reply_text)
+        if reply_key:
+            reply_occurrences.append(
+                {
+                    "reply_text": reply_text,
+                    "responder": responder_canonical,
+                    "sentiment": sentiment,
+                    "item_id": item.id,
+                }
+            )
+
+        if len(answered_items) < bounded_limit:
+            answered_items.append(
+                {
+                    "id": item.id,
+                    "source": item.source,
+                    "geo": _safe_geo(item.geo),
+                    "sentiment": sentiment,
+                    "actor": item.actor,
+                    "actor_canonical": item_actor_canonical or None,
+                    "responder_actor": responder_canonical,
+                    "responder_actor_type": responder_type,
+                    "reply_text": reply_text,
+                    "reply_excerpt": _safe_excerpt(reply_text, max_len=220),
+                    "reply_author": reply.get("author"),
+                    "replied_at": reply.get("replied_at"),
+                    "published_at": item_dt.isoformat() if item_dt else None,
+                    "title": item.title or "",
+                    "url": item.url,
+                }
+            )
+
+    clustered_replies = _cluster_repeated_replies(
+        reply_occurrences,
+        similarity_threshold=reply_similarity_threshold,
+    )
+    repeated_replies = sorted(
+        clustered_replies,
+        key=lambda entry: (-int(entry["count"]), str(entry["reply_text"])),
+    )[:_RESPONSE_REPEAT_LIMIT]
+
+    repeated_serialized = [
+        {
+            "reply_text": entry["reply_text"],
+            "count": int(entry["count"]),
+            "actors": [
+                {"actor": actor_name, "count": count}
+                for actor_name, count in Counter(entry["actors"]).most_common(5)
+            ],
+            "sentiments": {
+                "positive": int(entry["sentiments"].get("positive", 0)),
+                "neutral": int(entry["sentiments"].get("neutral", 0)),
+                "negative": int(entry["sentiments"].get("negative", 0)),
+                "unknown": int(entry["sentiments"].get("unknown", 0)),
+            },
+            "sample_item_ids": list(entry["sample_item_ids"]),
+        }
+        for entry in repeated_replies
+    ]
+
+    actor_breakdown_rows = sorted(
+        actor_breakdown.values(),
+        key=lambda entry: (-int(entry["answered"]), str(entry["actor"])),
+    )
+
+    return {
+        "totals": {
+            "opinions_total": total,
+            "answered_total": answered_total,
+            "answered_ratio": _ratio(answered_total, total),
+            "answered_positive": int(answered_by_sentiment.get("positive", 0)),
+            "answered_neutral": int(answered_by_sentiment.get("neutral", 0)),
+            "answered_negative": int(answered_by_sentiment.get("negative", 0)),
+            "unanswered_positive": int(unanswered_by_sentiment.get("positive", 0)),
+            "unanswered_neutral": int(unanswered_by_sentiment.get("neutral", 0)),
+            "unanswered_negative": int(unanswered_by_sentiment.get("negative", 0)),
+        },
+        "actor_breakdown": actor_breakdown_rows,
+        "repeated_replies": repeated_serialized,
+        "answered_items": answered_items,
+    }
+
+
+def _filter_response_tracked_sources(items: Iterable[ReputationItem]) -> list[ReputationItem]:
+    return [item for item in items if item.source in _RESPONSE_TRACKED_SOURCES]
+
+
+def _filter_response_items(
+    items: Iterable[ReputationItem],
+    group: dict[str, Any],
+    alias_map: dict[str, str],
+    aliases_by_canonical: dict[str, list[str]],
+    principal_canonical: str | None,
+    principal_terms: list[str],
+    *,
+    include_reply_datetime: bool = False,
+) -> list[ReputationItem]:
+    base_group = dict(group)
+    base_group["from_date"] = None
+    base_group["to_date"] = None
+    filtered = _filter_items(
+        items,
+        base_group,
+        alias_map,
+        aliases_by_canonical,
+        principal_canonical,
+        principal_terms,
+    )
+    from_dt = _parse_datetime_bound(group.get("from_date"), end_of_day=False)
+    to_dt = _parse_datetime_bound(group.get("to_date"), end_of_day=True)
+    if from_dt is None and to_dt is None:
+        return filtered
+    return [
+        item
+        for item in filtered
+        if _item_matches_date_range(
+            item,
+            from_dt=from_dt,
+            to_dt=to_dt,
+            include_reply_datetime=include_reply_datetime,
+        )
+    ]
 
 
 def _actor_terms_for_group(
@@ -257,11 +1136,13 @@ def _filter_items(
         principal_canonical=principal_canonical,
         principal_terms=principal_terms,
     )
+    entity_filter = _normalize_scalar(group.get("entity"))
+    exclude_principal = entity_filter in _OTHER_ACTORS_ENTITY_KEYS
     geo_filter = _normalize_scalar(group.get("geo"))
     sentiment_filter = _normalize_scalar(group.get("sentiment"))
     sources_filter = _parse_sources(group.get("sources") or group.get("source"))
-    from_dt = _parse_datetime(group.get("from_date"))
-    to_dt = _parse_datetime(group.get("to_date"))
+    from_dt = _parse_datetime_bound(group.get("from_date"), end_of_day=False)
+    to_dt = _parse_datetime_bound(group.get("to_date"), end_of_day=True)
 
     filtered: list[ReputationItem] = []
     for item in items:
@@ -275,14 +1156,15 @@ def _filter_items(
             item_sentiment = _normalize_scalar(item.sentiment)
             if not item_sentiment or item_sentiment != sentiment_filter:
                 continue
-        if from_dt or to_dt:
-            item_dt = _item_datetime(item)
-            if item_dt is None:
-                continue
-            if from_dt and item_dt < from_dt:
-                continue
-            if to_dt and item_dt > to_dt:
-                continue
+        if not _item_matches_date_range(item, from_dt=from_dt, to_dt=to_dt):
+            continue
+        if exclude_principal and _actor_matches(
+            item,
+            principal_canonical,
+            principal_terms,
+            alias_map,
+        ):
+            continue
         if not _actor_matches(item, canonical, terms, alias_map):
             continue
         filtered.append(item)
@@ -365,6 +1247,29 @@ def reputation_items_override(
 
     if not geo and not sentiment:
         raise HTTPException(status_code=400, detail="geo or sentiment is required")
+
+    doc = _load_cache_optional()
+    source_by_id: dict[str, str] = {}
+    if doc is not None:
+        source_by_id = {
+            item.id: item.source
+            for item in doc.items
+            if isinstance(item.id, str) and isinstance(item.source, str)
+        }
+    blocked_ids = [
+        item_id
+        for item_id in payload.ids
+        if _is_manual_override_blocked_source(source_by_id.get(item_id))
+    ]
+    if blocked_ids:
+        sources = sorted({source_by_id.get(item_id, "") for item_id in blocked_ids})
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "manual overrides are not allowed for market/store sources "
+                f"({', '.join(source for source in sources if source)}): {blocked_ids}"
+            ),
+        )
 
     repo = ReputationOverridesRepo(settings.overrides_path)
     overrides = repo.load()
@@ -450,6 +1355,557 @@ def reputation_items_compare(
             "items": [item.model_dump(mode="json") for item in combined_items],
             "stats": {"count": len(combined_items)},
         },
+    }
+
+
+@router.get("/responses/summary")
+def reputation_responses_summary(
+    entity: str | None = None,
+    actor: str | None = None,
+    geo: str | None = None,
+    sentiment: str | None = None,
+    sources: str | None = None,
+    from_date: str | None = None,
+    to_date: str | None = None,
+    detail_limit: int = _RESPONSE_DETAIL_LIMIT_DEFAULT,
+) -> dict[str, Any]:
+    doc = _load_cache_optional() or _build_empty_cache_document()
+    overrides = _load_overrides()
+    items = _apply_overrides(doc.items, overrides)
+
+    visible_sources = settings.enabled_sources()
+    visible_sources_set = set(visible_sources)
+    items = [item for item in items if item.source in visible_sources_set]
+
+    try:
+        cfg = load_business_config()
+    except Exception:
+        cfg = {}
+
+    alias_map = build_actor_alias_map(cfg)
+    aliases_by_canonical = build_actor_aliases_by_canonical(cfg)
+    principal_info = primary_actor_info(cfg)
+    principal_canonical = None
+    if principal_info:
+        principal_canonical = str(principal_info.get("canonical") or "").strip() or None
+    principal_terms = actor_principal_terms(cfg)
+    secondary_canonicals = _secondary_actor_canonicals(cfg, alias_map, principal_canonical)
+
+    response_group = {
+        "entity": entity,
+        "actor": actor,
+        "geo": geo,
+        "sentiment": sentiment,
+        "sources": sources,
+        "from_date": from_date,
+        "to_date": to_date,
+    }
+    filtered_items = _filter_response_items(
+        _filter_response_tracked_sources(items),
+        response_group,
+        alias_map,
+        aliases_by_canonical,
+        principal_canonical,
+        principal_terms,
+    )
+
+    summary = _build_response_summary(
+        items=filtered_items,
+        alias_map=alias_map,
+        principal_canonical=principal_canonical,
+        secondary_canonicals=secondary_canonicals,
+        detail_limit=detail_limit,
+    )
+
+    return {
+        "generated_at": doc.generated_at.isoformat(),
+        "filters": {
+            "entity": entity or "all",
+            "actor": actor,
+            "geo": geo or "all",
+            "sentiment": sentiment or "all",
+            "sources": _parse_sources(sources),
+            "from_date": from_date,
+            "to_date": to_date,
+            "detail_limit": max(1, min(detail_limit, _RESPONSE_DETAIL_LIMIT_MAX)),
+        },
+        **summary,
+    }
+
+
+@router.get("/markets/insights")
+def reputation_markets_insights(
+    geo: str | None = None,
+    from_date: str | None = None,
+    to_date: str | None = None,
+    sources: str | None = None,
+) -> dict[str, Any]:
+    doc = _load_cache_optional() or _build_empty_cache_document()
+    overrides = _load_overrides()
+    items = _apply_overrides(doc.items, overrides)
+
+    visible_sources = settings.enabled_sources()
+    visible_sources_set = set(visible_sources)
+    items = [item for item in items if item.source in visible_sources_set]
+    items = [item for item in items if item.source in _MARKET_SOURCES]
+
+    try:
+        cfg = load_business_config()
+    except Exception:
+        cfg = {}
+
+    alias_map = build_actor_alias_map(cfg)
+    aliases_by_canonical = build_actor_aliases_by_canonical(cfg)
+    principal_info = primary_actor_info(cfg)
+    principal_canonical = None
+    if principal_info:
+        principal_canonical = str(principal_info.get("canonical") or "").strip() or None
+    principal_terms = actor_principal_terms(cfg)
+    secondary_canonicals = _secondary_actor_canonicals(cfg, alias_map, principal_canonical)
+
+    normalized_geo = _normalize_scalar(geo)
+    geo_filter = None if normalized_geo in {"", "all"} else geo
+
+    scoped_items = _filter_items(
+        items,
+        {
+            "entity": "actor_principal",
+            "geo": geo_filter,
+            "from_date": from_date,
+            "to_date": to_date,
+            "sources": sources,
+        },
+        alias_map,
+        aliases_by_canonical,
+        principal_canonical,
+        principal_terms,
+    )
+    response_items = _filter_response_items(
+        _filter_response_tracked_sources(items),
+        {
+            "entity": "actor_principal",
+            "geo": geo_filter,
+            "from_date": from_date,
+            "to_date": to_date,
+            "sources": sources,
+        },
+        alias_map,
+        aliases_by_canonical,
+        principal_canonical,
+        principal_terms,
+        include_reply_datetime=True,
+    )
+    response_summary = _build_response_summary(
+        items=response_items,
+        alias_map=alias_map,
+        principal_canonical=principal_canonical,
+        secondary_canonicals=secondary_canonicals,
+        detail_limit=120,
+    )
+    response_source_stats: dict[str, dict[str, int]] = {}
+    for response_item in response_items:
+        source = response_item.source or "desconocida"
+        if source not in _RESPONSE_TRACKED_SOURCES:
+            continue
+        sentiment = _safe_sentiment(response_item.sentiment)
+        bucket = response_source_stats.setdefault(
+            source,
+            {"total": 0, "positive": 0, "neutral": 0, "negative": 0, "unknown": 0},
+        )
+        bucket["total"] += 1
+        bucket[sentiment] = bucket.get(sentiment, 0) + 1
+
+    total_mentions = len(scoped_items)
+    sentiment_counts: Counter[str] = Counter()
+    score_total = 0.0
+    score_count = 0
+    daily_volume: Counter[str] = Counter()
+    source_stats: dict[str, dict[str, int]] = {}
+    geo_stats: dict[str, dict[str, int]] = {}
+    author_stats: dict[str, dict[str, Any]] = {}
+    id_to_item: dict[str, ReputationItem] = {}
+
+    feature_counts: Counter[str] = Counter()
+    feature_display: dict[str, str] = {}
+    feature_evidence: dict[str, list[str]] = defaultdict(list)
+    source_feature_counts: dict[str, Counter[str]] = defaultdict(Counter)
+    candidates = _feature_candidates(cfg, principal_terms)
+
+    for item in scoped_items:
+        id_to_item[item.id] = item
+        source = item.source or "desconocida"
+        item_geo = _safe_geo(item.geo)
+        sentiment = _safe_sentiment(item.sentiment)
+        item_dt = _item_datetime(item)
+
+        source_bucket = source_stats.setdefault(
+            source,
+            {"total": 0, "positive": 0, "neutral": 0, "negative": 0, "unknown": 0},
+        )
+        source_bucket["total"] += 1
+        source_bucket[sentiment] = source_bucket.get(sentiment, 0) + 1
+
+        geo_bucket = geo_stats.setdefault(
+            item_geo,
+            {"total": 0, "positive": 0, "neutral": 0, "negative": 0, "unknown": 0},
+        )
+        geo_bucket["total"] += 1
+        geo_bucket[sentiment] = geo_bucket.get(sentiment, 0) + 1
+
+        sentiment_counts[sentiment] += 1
+        score = _safe_score(item)
+        if score is not None:
+            score_total += score
+            score_count += 1
+        if item_dt:
+            daily_volume[item_dt.date().isoformat()] += 1
+
+        raw_author = (_resolve_item_author(item) or "").strip()
+        if raw_author:
+            author_key = normalize_text(raw_author)
+            if author_key:
+                author_bucket = author_stats.setdefault(
+                    author_key,
+                    {
+                        "author": _safe_author(raw_author),
+                        "opinions_count": 0,
+                        "sentiments": {"positive": 0, "neutral": 0, "negative": 0, "unknown": 0},
+                        "last_seen": None,
+                        "opinions": [],
+                    },
+                )
+                author_bucket["opinions_count"] += 1
+                author_bucket["sentiments"][sentiment] = (
+                    author_bucket["sentiments"].get(sentiment, 0) + 1
+                )
+                published_at_iso = item_dt.isoformat() if item_dt else None
+                last_seen = author_bucket.get("last_seen")
+                if published_at_iso and (not last_seen or published_at_iso > last_seen):
+                    author_bucket["last_seen"] = published_at_iso
+                opinions = author_bucket["opinions"]
+                if len(opinions) < _MARKET_AUTHOR_OPINION_LIMIT:
+                    opinions.append(
+                        {
+                            "id": item.id,
+                            "author": _safe_author(raw_author),
+                            "source": source,
+                            "geo": item_geo,
+                            "sentiment": sentiment,
+                            "published_at": published_at_iso,
+                            "title": item.title or "",
+                            "url": item.url,
+                            "excerpt": _safe_excerpt(item.text),
+                        }
+                    )
+
+        if sentiment != "negative":
+            continue
+
+        matched_features: set[str] = set()
+        for aspect in item.aspects:
+            maybe_feature = _feature_key(aspect)
+            if not maybe_feature:
+                continue
+            key, display = maybe_feature
+            matched_features.add(key)
+            feature_display.setdefault(key, display)
+            if len(matched_features) >= 3:
+                break
+
+        if not matched_features:
+            tokens = set(tokenize(_item_text(item)))
+            if tokens:
+                for key, display, candidate_tokens in candidates:
+                    if all(token in tokens for token in candidate_tokens):
+                        matched_features.add(key)
+                        feature_display.setdefault(key, display)
+                    if len(matched_features) >= 3:
+                        break
+
+        for feature_key in matched_features:
+            feature_counts[feature_key] += 1
+            source_feature_counts[source][feature_key] += 1
+            evidence = feature_evidence[feature_key]
+            if len(evidence) < _MARKET_FEATURE_EVIDENCE_LIMIT:
+                evidence.append(item.id)
+
+    recurring_authors: list[dict[str, Any]] = []
+    for bucket in author_stats.values():
+        count = int(bucket.get("opinions_count") or 0)
+        if count < 2:
+            continue
+        raw_opinions = bucket.get("opinions")
+        opinions = list(raw_opinions) if isinstance(raw_opinions, list) else []
+        opinions.sort(key=lambda entry: str(entry.get("published_at") or ""), reverse=True)
+        recurring_authors.append(
+            {
+                "author": bucket.get("author") or "Autor sin nombre",
+                "opinions_count": count,
+                "sentiments": bucket.get("sentiments") or {},
+                "last_seen": bucket.get("last_seen"),
+                "opinions": opinions,
+            }
+        )
+    recurring_authors.sort(
+        key=lambda entry: (
+            -int(entry.get("opinions_count") or 0),
+            -int((entry.get("sentiments") or {}).get("negative") or 0),
+            str(entry.get("author") or ""),
+        )
+    )
+    recurring_authors = recurring_authors[:_MARKET_RECURRING_AUTHOR_LIMIT]
+
+    top_penalized_features: list[dict[str, Any]] = []
+    for feature_key, count in feature_counts.most_common(_MARKET_FEATURE_LIMIT):
+        evidence_items = []
+        for evidence_id in feature_evidence.get(feature_key, []):
+            evidence_item = id_to_item.get(evidence_id)
+            if evidence_item is None:
+                continue
+            evidence_dt = _item_datetime(evidence_item)
+            evidence_items.append(
+                {
+                    "id": evidence_item.id,
+                    "source": evidence_item.source,
+                    "geo": _safe_geo(evidence_item.geo),
+                    "sentiment": _safe_sentiment(evidence_item.sentiment),
+                    "published_at": evidence_dt.isoformat() if evidence_dt else None,
+                    "title": evidence_item.title or "",
+                    "excerpt": _safe_excerpt(evidence_item.text),
+                    "url": evidence_item.url,
+                }
+            )
+        top_penalized_features.append(
+            {
+                "feature": feature_display.get(feature_key, feature_key),
+                "key": feature_key,
+                "count": count,
+                "evidence": evidence_items,
+            }
+        )
+
+    source_friction: list[dict[str, Any]] = []
+    for source, stats in source_stats.items():
+        total = int(stats.get("total") or 0)
+        negative = int(stats.get("negative") or 0)
+        source_friction.append(
+            {
+                "source": source,
+                "total": total,
+                "negative": negative,
+                "positive": int(stats.get("positive") or 0),
+                "neutral": int(stats.get("neutral") or 0),
+                "negative_ratio": _ratio(negative, total),
+                "top_features": [
+                    {
+                        "feature": feature_display.get(feature_key, feature_key),
+                        "count": count,
+                    }
+                    for feature_key, count in source_feature_counts[source].most_common(3)
+                ],
+            }
+        )
+    source_friction.sort(
+        key=lambda entry: (-float(entry["negative_ratio"]), -int(entry["total"]), entry["source"])
+    )
+    response_totals_raw = (
+        response_summary.get("totals") if isinstance(response_summary, dict) else {}
+    )
+    response_totals = response_totals_raw if isinstance(response_totals_raw, dict) else {}
+    response_opinions_total = int(response_totals.get("opinions_total") or 0)
+    response_friction_denominator = response_opinions_total
+    if response_friction_denominator <= 0:
+        response_friction_denominator = sum(
+            int(stats.get("total") or 0) for stats in response_source_stats.values()
+        )
+
+    response_source_friction: list[dict[str, Any]] = []
+    for source, stats in response_source_stats.items():
+        total = int(stats.get("total") or 0)
+        negative = int(stats.get("negative") or 0)
+        response_source_friction.append(
+            {
+                "source": source,
+                "total": total,
+                "negative": negative,
+                "positive": int(stats.get("positive") or 0),
+                "neutral": int(stats.get("neutral") or 0),
+                "negative_ratio": _ratio(negative, response_friction_denominator),
+                "top_features": [
+                    {
+                        "feature": feature_display.get(feature_key, feature_key),
+                        "count": count,
+                    }
+                    for feature_key, count in source_feature_counts[source].most_common(3)
+                ],
+            }
+        )
+    response_source_friction.sort(
+        key=lambda entry: (
+            -float(entry["negative_ratio"]),
+            -int(entry["negative"]),
+            entry["source"],
+        )
+    )
+    geo_summary: list[dict[str, Any]] = []
+    for item_geo, stats in geo_stats.items():
+        total = int(stats.get("total") or 0)
+        negative = int(stats.get("negative") or 0)
+        geo_summary.append(
+            {
+                "geo": item_geo,
+                "total": total,
+                "negative": negative,
+                "positive": int(stats.get("positive") or 0),
+                "neutral": int(stats.get("neutral") or 0),
+                "negative_ratio": _ratio(negative, total),
+                "share": _ratio(total, total_mentions),
+            }
+        )
+    geo_summary.sort(key=lambda entry: (-int(entry["total"]), entry["geo"]))
+
+    negative_mentions = int(sentiment_counts.get("negative", 0))
+    negative_ratio = _ratio(negative_mentions, total_mentions)
+    avg_score = round(score_total / score_count, 4) if score_count else None
+    kpis = {
+        "total_mentions": total_mentions,
+        "negative_mentions": negative_mentions,
+        "negative_ratio": negative_ratio,
+        "positive_mentions": int(sentiment_counts.get("positive", 0)),
+        "neutral_mentions": int(sentiment_counts.get("neutral", 0)),
+        "unique_authors": len(author_stats),
+        "recurring_authors": len(recurring_authors),
+        "average_sentiment_score": avg_score,
+    }
+
+    alerts: list[dict[str, Any]] = []
+    if total_mentions >= 15 and negative_ratio >= 0.45:
+        alerts.append(
+            {
+                "id": "global-negative-ratio",
+                "severity": "critical",
+                "title": "Tensión reputacional elevada",
+                "summary": (
+                    f"El {negative_ratio * 100:.1f}% de las menciones del actor principal son negativas."
+                ),
+                "geo": "all",
+                "source": None,
+                "evidence_ids": [item.id for item in scoped_items[:3]],
+            }
+        )
+
+    for source_row in source_friction[:3]:
+        if int(source_row["total"]) < 6 or float(source_row["negative_ratio"]) < 0.5:
+            continue
+        alerts.append(
+            {
+                "id": f"source-{source_row['source']}",
+                "severity": "high",
+                "title": f"Fuente bajo presión: {source_row['source']}",
+                "summary": (
+                    f"{source_row['negative']}/{source_row['total']} menciones negativas "
+                    f"({float(source_row['negative_ratio']) * 100:.1f}%)."
+                ),
+                "geo": "all",
+                "source": source_row["source"],
+                "evidence_ids": [],
+            }
+        )
+
+    if top_penalized_features:
+        top_feature = top_penalized_features[0]
+        if int(top_feature.get("count") or 0) >= 3:
+            alerts.append(
+                {
+                    "id": f"feature-{top_feature.get('key')}",
+                    "severity": "high",
+                    "title": f"Funcionalidad más penalizada: {top_feature.get('feature')}",
+                    "summary": (
+                        f"Acumula {top_feature.get('count', 0)} menciones negativas en el periodo."
+                    ),
+                    "geo": "all",
+                    "source": None,
+                    "evidence_ids": [
+                        entry.get("id")
+                        for entry in top_feature.get("evidence", [])
+                        if isinstance(entry, dict) and entry.get("id")
+                    ],
+                }
+            )
+
+    for geo_row in geo_summary:
+        if int(geo_row["total"]) < 8 or float(geo_row["negative_ratio"]) < 0.45:
+            continue
+        alerts.append(
+            {
+                "id": f"geo-{geo_row['geo']}",
+                "severity": "medium",
+                "title": f"Riesgo geográfico: {geo_row['geo']}",
+                "summary": (
+                    f"{geo_row['negative']}/{geo_row['total']} menciones negativas "
+                    f"({float(geo_row['negative_ratio']) * 100:.1f}%)."
+                ),
+                "geo": geo_row["geo"],
+                "source": None,
+                "evidence_ids": [],
+            }
+        )
+
+    if recurring_authors:
+        top_author = recurring_authors[0]
+        if int(top_author.get("opinions_count") or 0) >= 3:
+            alerts.append(
+                {
+                    "id": "author-recurring",
+                    "severity": "medium",
+                    "title": "Autor muy recurrente",
+                    "summary": (
+                        f"{top_author.get('author')} acumula "
+                        f"{top_author.get('opinions_count')} opiniones en el periodo."
+                    ),
+                    "geo": "all",
+                    "source": None,
+                    "evidence_ids": [
+                        entry.get("id")
+                        for entry in top_author.get("opinions", [])
+                        if isinstance(entry, dict) and entry.get("id")
+                    ][:3],
+                }
+            )
+
+    severity_order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+    alerts.sort(
+        key=lambda entry: (
+            severity_order.get(str(entry.get("severity")), 99),
+            str(entry.get("id") or ""),
+        )
+    )
+    alerts = alerts[:_MARKET_ALERT_LIMIT]
+
+    principal_label = principal_canonical or "Actor principal"
+
+    return {
+        "generated_at": doc.generated_at.isoformat(),
+        "principal_actor": principal_label,
+        "comparisons_enabled": False,
+        "filters": {
+            "geo": geo_filter or "all",
+            "from_date": from_date,
+            "to_date": to_date,
+            "sources": _parse_sources(sources),
+        },
+        "kpis": kpis,
+        "daily_volume": [
+            {"date": day, "count": count}
+            for day, count in sorted(daily_volume.items(), key=lambda entry: entry[0])
+        ],
+        "geo_summary": geo_summary,
+        "recurring_authors": recurring_authors,
+        "top_penalized_features": top_penalized_features,
+        "source_friction": source_friction,
+        "response_source_friction": response_source_friction,
+        "alerts": alerts,
+        "responses": response_summary,
     }
 
 

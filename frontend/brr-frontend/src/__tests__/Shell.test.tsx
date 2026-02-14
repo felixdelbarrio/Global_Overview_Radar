@@ -45,6 +45,8 @@ describe("Shell", () => {
     );
 
     expect(screen.getAllByRole("link", { name: "Dashboard" }).length).toBeGreaterThan(0);
-    expect(screen.getAllByRole("link", { name: "Sentimiento" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("link", { name: "Sentimiento Markets" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("link", { name: "Sentimiento Prensa" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("link", { name: "Respuestas en Markets" }).length).toBeGreaterThan(0);
   });
 });

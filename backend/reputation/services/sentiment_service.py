@@ -38,11 +38,7 @@ _STAR_SENTIMENT_SOURCES = {"appstore", "google_play", "google_reviews"}
 _ACTOR_TEXT_REQUIRED_SOURCES = {"news", "blogs", "gdelt", "newsapi", "guardian"}
 
 
-def _extract_star_rating(item: ReputationItem) -> float | None:
-    signals = item.signals or {}
-    raw = signals.get("rating")
-    if raw is None:
-        return None
+def _coerce_star_value(raw: object) -> float | None:
     value: float | None = None
     if isinstance(raw, (int, float)):
         value = float(raw)
@@ -58,14 +54,43 @@ def _extract_star_rating(item: ReputationItem) -> float | None:
     return min(5.0, max(0.0, value))
 
 
+def _extract_star_rating(item: ReputationItem) -> float | None:
+    signals = item.signals or {}
+    candidates: list[object] = [
+        signals.get("rating"),
+        signals.get("score"),
+        signals.get("stars"),
+        signals.get("star_rating"),
+        signals.get("user_rating"),
+        signals.get("rating_value"),
+        signals.get("reviewRating"),
+    ]
+    for candidate in candidates:
+        if candidate in (None, ""):
+            continue
+        if isinstance(candidate, dict):
+            for nested_key in ("value", "rating", "score", "stars"):
+                nested = _coerce_star_value(candidate.get(nested_key))
+                if nested is not None:
+                    return nested
+            continue
+        value = _coerce_star_value(candidate)
+        if value is not None:
+            return value
+    return None
+
+
 def _sentiment_from_stars(stars: float) -> tuple[str, float]:
-    if stars >= 4.0:
-        label = "positive"
-    elif stars <= 2.0:
+    if stars < 2.5:
         label = "negative"
+    elif stars > 2.5:
+        label = "positive"
     else:
         label = "neutral"
-    score = max(-1.0, min(1.0, (stars - 3.0) / 2.0))
+
+    # Piecewise scaling keeps 1/5 as the worst point, 2.5/5 as neutral, and 5/5 as best.
+    score = (stars - 2.5) / 1.5 if stars <= 2.5 else (stars - 2.5) / 2.5
+    score = max(-1.0, min(1.0, score))
     return label, score
 
 
@@ -192,6 +217,45 @@ class ReputationSentimentService:
             )
             if cleaned:
                 self._actor_aliases[name] = cleaned
+        self._actor_keywords_by_name: dict[str, tuple[str, ...]] = {}
+        for name in self._principal_canonicals:
+            aliases = self._actor_aliases.get(name) or []
+            self._actor_keywords_by_name[name] = tuple(dict.fromkeys([name, *aliases]))
+        for name in self._global_actors:
+            aliases = self._actor_aliases.get(name) or []
+            self._actor_keywords_by_name[name] = tuple(dict.fromkeys([name, *aliases]))
+        for names in self._actors_by_geo.values():
+            for name in names:
+                aliases = self._actor_aliases.get(name) or []
+                self._actor_keywords_by_name[name] = tuple(dict.fromkeys([name, *aliases]))
+
+        def _scoped(geo: str | None) -> list[str]:
+            scoped: list[str] = []
+            seen: set[str] = set()
+
+            def _add(values: list[str]) -> None:
+                for value in values:
+                    if value in seen:
+                        continue
+                    seen.add(value)
+                    scoped.append(value)
+
+            if geo and geo in self._actors_by_geo:
+                _add(self._actors_by_geo.get(geo, []))
+            elif not geo:
+                for names in self._actors_by_geo.values():
+                    _add(names)
+            _add(self._global_actors)
+            _add(self._principal_canonicals)
+            return scoped
+
+        self._scoped_actors_all = _scoped(None)
+        self._scoped_actors_by_geo = {geo: _scoped(geo) for geo in self._actors_by_geo}
+
+        self._normalized_actor_cache: dict[str, str] = {}
+        for actor in self._scoped_actors_all:
+            self._normalized_actor_cache[actor] = normalize_text(actor)
+
         self._compiled_keyword_cache: dict[str, CompiledKeywords] = {}
         self._prime_keyword_cache()
 
@@ -211,11 +275,33 @@ class ReputationSentimentService:
                 )
                 if cleaned:
                     self._geo_aliases[geo] = cleaned
+        self._geo_matchers: list[tuple[str, tuple[tuple[str, bool], ...]]] = []
+        for geo in self._geos:
+            candidates: list[tuple[str, bool]] = []
+            seen: set[tuple[str, bool]] = set()
+            geo_norm = normalize_text(geo)
+            if geo_norm:
+                marker = (geo_norm, False)
+                candidates.append(marker)
+                seen.add(marker)
+            for alias in self._geo_aliases.get(geo, []):
+                alias_norm = normalize_text(alias)
+                if not alias_norm:
+                    continue
+                marker = (alias_norm, len(alias_norm) <= 3)
+                if marker in seen:
+                    continue
+                seen.add(marker)
+                candidates.append(marker)
+            if candidates:
+                self._geo_matchers.append((geo, tuple(candidates)))
 
         raw_guard = cfg.get("actor_context_guard") or []
         self._context_guard_actors = {
             normalize_text(actor) for actor in raw_guard if isinstance(actor, str) and actor.strip()
         }
+        for actor in self._context_guard_actors:
+            self._normalized_actor_cache.setdefault(actor, actor)
         segment_terms = [
             t.strip() for t in cfg.get("segment_terms", []) if isinstance(t, str) and t.strip()
         ]
@@ -581,7 +667,11 @@ class ReputationSentimentService:
             return actors
         filtered: list[str] = []
         for actor in actors:
-            if normalize_text(actor) in self._context_guard_actors:
+            actor_norm = self._normalized_actor_cache.get(actor)
+            if actor_norm is None:
+                actor_norm = normalize_text(actor)
+                self._normalized_actor_cache[actor] = actor_norm
+            if actor_norm in self._context_guard_actors:
                 continue
             filtered.append(actor)
         return filtered
@@ -602,21 +692,17 @@ class ReputationSentimentService:
             if mapped:
                 return mapped
         normalized = normalize_text(text)
-        tokens = set(normalized.split())
-        for geo in self._geos:
-            geo_norm = normalize_text(geo)
-            if geo_norm and geo_norm in normalized:
-                return geo
-            aliases = self._geo_aliases.get(geo, [])
-            for alias in aliases:
-                alias_norm = normalize_text(alias)
-                if not alias_norm:
-                    continue
-                if len(alias_norm) <= 3:
-                    if alias_norm in tokens:
+        if not normalized:
+            return None
+        tokens: set[str] | None = None
+        for geo, candidates in self._geo_matchers:
+            for candidate, token_match in candidates:
+                if token_match:
+                    if tokens is None:
+                        tokens = set(normalized.split())
+                    if candidate in tokens:
                         return geo
-                    continue
-                if alias_norm in normalized:
+                elif candidate in normalized:
                     return geo
         return None
 
@@ -626,7 +712,6 @@ class ReputationSentimentService:
         geo: str | None,
         signals: dict[str, Any] | None = None,
     ) -> list[str]:
-        actors: list[str] = []
         hints: list[str] = []
         if signals:
             for key in ("entity", "entity_hint", "query"):
@@ -634,69 +719,62 @@ class ReputationSentimentService:
                 if isinstance(value, str) and value.strip():
                     hints.append(value.strip())
 
-        scoped = []
-        if geo and geo in self._actors_by_geo:
-            scoped.extend(self._actors_by_geo.get(geo, []))
-        elif not geo:
-            for names in self._actors_by_geo.values():
-                scoped.extend(names)
-        scoped.extend(self._global_actors)
-        scoped.extend(self._principal_canonicals)
+        scoped = self._scoped_actors_by_geo.get(geo) if geo else self._scoped_actors_all
+        if not scoped:
+            return []
 
         text_tokens = self._text_tokens(text)
         hint_tokens = [self._text_tokens(hint) for hint in hints if hint]
+        has_hints = bool(hint_tokens)
+        text_match_cache: dict[str, bool] = {}
+        hint_match_cache: dict[str, bool] = {}
 
-        def hint_matches(keyword: str) -> bool:
+        def _keyword_matches_text(keyword: str) -> bool:
+            cached = text_match_cache.get(keyword)
+            if cached is not None:
+                return cached
+            matched = bool(text_tokens) and match_compiled(
+                text_tokens, self._compiled_keyword(keyword)
+            )
+            text_match_cache[keyword] = matched
+            return matched
+
+        def _keyword_matches_hint(keyword: str) -> bool:
+            cached = hint_match_cache.get(keyword)
+            if cached is not None:
+                return cached
             compiled = self._compiled_keyword(keyword)
-            return any(tokens and match_compiled(tokens, compiled) for tokens in hint_tokens)
+            matched = any(tokens and match_compiled(tokens, compiled) for tokens in hint_tokens)
+            hint_match_cache[keyword] = matched
+            return matched
+
+        def _actor_matches_hint(actor: str) -> bool:
+            if not has_hints:
+                return False
+            keywords = self._actor_keywords_by_name.get(actor) or (actor,)
+            return any(_keyword_matches_hint(keyword) for keyword in keywords)
+
+        def _actor_matches_text(actor: str) -> bool:
+            keywords = self._actor_keywords_by_name.get(actor) or (actor,)
+            return any(_keyword_matches_text(keyword) for keyword in keywords)
 
         hint_actors: list[str] = []
-        if hints:
+        if has_hints:
             for name in scoped:
-                matched = hint_matches(name)
-                if not matched:
-                    aliases = self._actor_aliases.get(name) or []
-                    for alias in aliases:
-                        if hint_matches(alias):
-                            matched = True
-                            break
-                if matched:
+                if _actor_matches_hint(name):
                     hint_actors.append(name)
 
-        if hint_actors:
-            actors.extend(hint_actors)
-
+        actors = list(hint_actors)
+        hinted = set(hint_actors)
         for name in scoped:
-            if name in actors:
+            if name in hinted:
                 continue
-            matched = bool(text_tokens) and match_compiled(
-                text_tokens, self._compiled_keyword(name)
-            )
-            if not matched:
-                aliases = self._actor_aliases.get(name) or []
-                for alias in aliases:
-                    if text_tokens and match_compiled(text_tokens, self._compiled_keyword(alias)):
-                        matched = True
-                        break
-            if not matched and hints:
-                if hint_matches(name):
-                    matched = True
-                else:
-                    aliases = self._actor_aliases.get(name) or []
-                    for alias in aliases:
-                        if isinstance(alias, str) and hint_matches(alias):
-                            matched = True
-                            break
+            matched = _actor_matches_text(name)
+            if not matched and has_hints:
+                matched = _actor_matches_hint(name)
             if matched:
                 actors.append(name)
-
-        seen: set[str] = set()
-        ordered: list[str] = []
-        for name in actors:
-            if name not in seen:
-                ordered.append(name)
-                seen.add(name)
-        return ordered
+        return actors
 
     @staticmethod
     def _score_to_label(score: float) -> str:

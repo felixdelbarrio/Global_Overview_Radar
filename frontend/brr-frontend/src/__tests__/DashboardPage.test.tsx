@@ -79,6 +79,66 @@ it("renders dashboard header and combined mentions", async () => {
         stats: { count: 2 },
       });
     }
+    if (path.startsWith("/reputation/responses/summary")) {
+      return Promise.resolve({
+        totals: {
+          opinions_total: 2,
+          answered_total: 1,
+          answered_ratio: 0.5,
+          answered_positive: 1,
+          answered_neutral: 0,
+          answered_negative: 0,
+          unanswered_positive: 1,
+          unanswered_neutral: 0,
+          unanswered_negative: 0,
+        },
+        actor_breakdown: [],
+        repeated_replies: [],
+        answered_items: [],
+      });
+    }
+    if (path.startsWith("/reputation/markets/insights")) {
+      return Promise.resolve({
+        generated_at: "2025-01-02T00:00:00Z",
+        principal_actor: "BBVA",
+        comparisons_enabled: false,
+        filters: { geo: "España", from_date: "2025-01-01", to_date: "2025-01-31", sources: [] },
+        kpis: {
+          total_mentions: 2,
+          negative_mentions: 1,
+          negative_ratio: 0.5,
+          positive_mentions: 1,
+          neutral_mentions: 0,
+          unique_authors: 2,
+          recurring_authors: 0,
+          average_sentiment_score: 0.2,
+        },
+        daily_volume: [{ date: "2025-01-01", count: 2 }],
+        geo_summary: [],
+        recurring_authors: [],
+        top_penalized_features: [{ feature: "login", key: "login", count: 4, evidence: [] }],
+        source_friction: [
+          {
+            source: "appstore",
+            total: 2,
+            negative: 1,
+            positive: 1,
+            neutral: 0,
+            negative_ratio: 0.5,
+            top_features: [{ feature: "login", count: 1 }],
+          },
+        ],
+        alerts: [
+          {
+            id: "alert-1",
+            severity: "high",
+            title: "Riesgo en login",
+            summary: "Sube fricción en login.",
+          },
+        ],
+        responses: undefined,
+      });
+    }
     return Promise.resolve({});
   };
   apiGetMock.mockImplementation(handleGet);
@@ -87,5 +147,128 @@ it("renders dashboard header and combined mentions", async () => {
   render(<DashboardPage />);
 
   expect(await screen.findByText("Dashboard reputacional")).toBeInTheDocument();
-  expect(await screen.findByText("Comentario positivo")).toBeInTheDocument();
+  expect(await screen.findByText("TOP 10 FUNCIONALIDADES PENALIZADAS")).toBeInTheDocument();
+  expect(await screen.findByText("ALERTAS CALIENTES")).toBeInTheDocument();
+  expect(await screen.findByText("MAPA DE CALOR DE OPINIONES NEGATIVAS EN LOS MARKETS")).toBeInTheDocument();
+  expect(screen.queryByText("ÚLTIMAS MENCIONES")).not.toBeInTheDocument();
+});
+
+it("renders dashboard market blocks without waiting for chart dataset", async () => {
+  const pendingChartRequest = new Promise<never>(() => {
+    // intentionally unresolved: emulates slow chart query on first load
+  });
+
+  const handleCachedGet = (path: string) => {
+    if (path.startsWith("/reputation/meta")) {
+      return Promise.resolve({
+        actor_principal: { canonical: "BBVA" },
+        geos: ["España"],
+        sources_enabled: ["gdelt", "appstore"],
+        sources_available: ["gdelt", "appstore"],
+      });
+    }
+    if (path.startsWith("/reputation/profiles")) {
+      return Promise.resolve({
+        active: { source: "samples", profiles: [], profile_key: "default" },
+        options: { default: [], samples: [] },
+      });
+    }
+    return Promise.resolve({});
+  };
+
+  const handleGet = (path: string) => {
+    if (path.startsWith("/reputation/items")) {
+      if (!path.includes("entity=actor_principal")) {
+        return pendingChartRequest;
+      }
+      return Promise.resolve({
+        generated_at: "2025-01-02T00:00:00Z",
+        config_hash: "hash",
+        sources_enabled: ["gdelt", "appstore"],
+        items: [
+          {
+            id: "1",
+            source: "gdelt",
+            geo: "España",
+            actor: "BBVA",
+            title: "Comentario positivo",
+            text: "Excelente servicio",
+            sentiment: "positive",
+            published_at: "2025-01-01T10:00:00Z",
+            signals: { sentiment_score: 0.5 },
+          },
+        ],
+        stats: { count: 1 },
+      });
+    }
+    if (path.startsWith("/reputation/responses/summary")) {
+      return Promise.resolve({
+        totals: {
+          opinions_total: 1,
+          answered_total: 0,
+          answered_ratio: 0,
+          answered_positive: 0,
+          answered_neutral: 0,
+          answered_negative: 0,
+          unanswered_positive: 1,
+          unanswered_neutral: 0,
+          unanswered_negative: 0,
+        },
+        actor_breakdown: [],
+        repeated_replies: [],
+        answered_items: [],
+      });
+    }
+    if (path.startsWith("/reputation/markets/insights")) {
+      return Promise.resolve({
+        generated_at: "2025-01-02T00:00:00Z",
+        principal_actor: "BBVA",
+        comparisons_enabled: false,
+        filters: { geo: "España", from_date: "2025-01-01", to_date: "2025-01-31", sources: [] },
+        kpis: {
+          total_mentions: 1,
+          negative_mentions: 1,
+          negative_ratio: 1,
+          positive_mentions: 0,
+          neutral_mentions: 0,
+          unique_authors: 1,
+          recurring_authors: 0,
+          average_sentiment_score: -0.5,
+        },
+        daily_volume: [{ date: "2025-01-01", count: 1 }],
+        geo_summary: [],
+        recurring_authors: [],
+        top_penalized_features: [{ feature: "transferencias", key: "transferencias", count: 2, evidence: [] }],
+        source_friction: [
+          {
+            source: "appstore",
+            total: 1,
+            negative: 1,
+            positive: 0,
+            neutral: 0,
+            negative_ratio: 1,
+            top_features: [{ feature: "transferencias", count: 1 }],
+          },
+        ],
+        alerts: [
+          {
+            id: "alert-2",
+            severity: "critical",
+            title: "Fallo crítico",
+            summary: "Riesgo operacional alto.",
+          },
+        ],
+        responses: undefined,
+      });
+    }
+    return Promise.resolve({});
+  };
+
+  apiGetCachedMock.mockImplementation(handleCachedGet);
+  apiGetMock.mockImplementation(handleGet);
+
+  render(<DashboardPage />);
+
+  expect(await screen.findByText("TOP 10 FUNCIONALIDADES PENALIZADAS")).toBeInTheDocument();
+  expect(await screen.findByText("ALERTAS CALIENTES")).toBeInTheDocument();
 });
