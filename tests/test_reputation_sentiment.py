@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from reputation.collectors.base import ReputationCollector
-from reputation.models import ReputationItem
+from reputation.models import MarketRating, ReputationItem
 from reputation.services.ingest_service import ReputationIngestService
 from reputation.services.sentiment_service import ReputationSentimentService
 
@@ -1084,3 +1084,161 @@ def test_merge_items_accepts_publisher_geo_override() -> None:
     merged = ReputationIngestService._merge_items([existing], [incoming])
 
     assert merged[0].geo == "México"
+
+
+def test_merge_market_ratings_with_fallback_reuses_missing_keys() -> None:
+    existing = [
+        MarketRating(
+            source="appstore",
+            actor="BBVA",
+            geo="España",
+            app_id="app-1",
+            rating=3.5,
+            rating_count=100,
+        ),
+        MarketRating(
+            source="google_play",
+            actor="BBVA",
+            geo="España",
+            package_id="pkg-1",
+            rating=4.2,
+            rating_count=200,
+        ),
+    ]
+    latest = [
+        MarketRating(
+            source="appstore",
+            actor="BBVA",
+            geo="España",
+            app_id="app-1",
+            rating=3.7,
+            rating_count=130,
+        ),
+    ]
+
+    merged, reused = ReputationIngestService._merge_market_ratings_with_fallback(
+        existing,
+        latest,
+    )
+
+    assert reused == 1
+    assert len(merged) == 2
+    # App Store keeps the latest value.
+    assert any(
+        entry.source == "appstore" and abs(entry.rating - 3.7) < 0.0001
+        for entry in merged
+    )
+    # Google Play is reused from previous cache when missing in latest.
+    assert any(
+        entry.source == "google_play" and abs(entry.rating - 4.2) < 0.0001
+        for entry in merged
+    )
+
+
+def test_merge_market_ratings_with_fallback_uses_latest_when_present() -> None:
+    existing = [
+        MarketRating(
+            source="appstore",
+            actor="BBVA",
+            geo="España",
+            app_id="app-1",
+            rating=3.1,
+            rating_count=90,
+        )
+    ]
+    latest = [
+        MarketRating(
+            source="appstore",
+            actor="BBVA",
+            geo="España",
+            app_id="app-1",
+            rating=3.9,
+            rating_count=150,
+        )
+    ]
+
+    merged, reused = ReputationIngestService._merge_market_ratings_with_fallback(
+        existing,
+        latest,
+    )
+
+    assert reused == 0
+    assert len(merged) == 1
+    assert abs(merged[0].rating - 3.9) < 0.0001
+
+
+def test_enforce_market_rating_assignment_reconciles_actor_geo_and_source() -> None:
+    cfg = {
+        "geografias": ["España"],
+        "geografias_aliases": {"España": ["ES", "Espana"]},
+        "actor_principal": {"BBVA": ["BBVA Empresas"]},
+        "actor_principal_aliases": {"BBVA": ["BBVA Bank"]},
+        "appstore": {"app_id_to_actor": {"app-1": "BBVA"}},
+        "google_play": {"package_id_to_actor": {"pkg-1": "Santander"}},
+    }
+    ratings = [
+        MarketRating(
+            source="appstore",
+            actor="BBVA Bank",
+            geo="ES",
+            app_id="app-1",
+            rating=4.2,
+            rating_count=120,
+        ),
+        MarketRating(
+            source="googleplay",
+            actor="BBVA",
+            geo="Espana",
+            package_id="pkg-1",
+            rating=3.6,
+            rating_count=230,
+        ),
+    ]
+    notes: list[str] = []
+
+    result = ReputationIngestService._enforce_market_rating_assignment(cfg, ratings, notes)
+
+    assert len(result) == 2
+    appstore = next(entry for entry in result if entry.source == "appstore")
+    google_play = next(entry for entry in result if entry.source == "google_play")
+    assert appstore.actor == "BBVA"
+    assert google_play.actor == "Santander"
+    assert appstore.geo == "España"
+    assert google_play.geo == "España"
+    assert any("actor_reassigned" in note for note in notes)
+    assert any("geo_normalized" in note for note in notes)
+
+
+def test_enforce_market_rating_assignment_deduplicates_by_identity() -> None:
+    cfg = {
+        "geografias": ["España"],
+        "actor_principal": {"BBVA": ["BBVA Empresas"]},
+        "actor_principal_aliases": {"BBVA": ["BBVA Bank"]},
+        "appstore": {"app_id_to_actor": {"app-1": "BBVA"}},
+    }
+    ratings = [
+        MarketRating(
+            source="appstore",
+            actor="BBVA Bank",
+            geo="España",
+            app_id="app-1",
+            rating=3.1,
+            rating_count=90,
+        ),
+        MarketRating(
+            source="appstore",
+            actor="BBVA",
+            geo="España",
+            app_id="app-1",
+            rating=4.0,
+            rating_count=180,
+        ),
+    ]
+    notes: list[str] = []
+
+    result = ReputationIngestService._enforce_market_rating_assignment(cfg, ratings, notes)
+
+    assert len(result) == 1
+    assert result[0].actor == "BBVA"
+    assert abs(result[0].rating - 4.0) < 0.0001
+    assert result[0].rating_count == 180

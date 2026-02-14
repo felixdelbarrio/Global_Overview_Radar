@@ -122,11 +122,22 @@ const PRESS_SOURCE_COLOR_FALLBACK = [
   "#EC4899",
   "#06B6D4",
 ];
+const SOURCE_KEY_CANONICAL_MAP: Record<string, string> = {
+  appstore: "appstore",
+  googleplay: "google_play",
+  googlereviews: "google_reviews",
+};
 
 type SentimentFilter = (typeof SENTIMENTS)[number];
 type SentimentValue = Exclude<SentimentFilter, "all">;
 type MarketActorSourceKey = (typeof MARKET_ACTOR_SOURCE_ORDER)[number];
 type MarketActorSourceCounts = Record<MarketActorSourceKey, number>;
+type SourceVsCount = {
+  principal: number;
+  comparison: number;
+  total: number;
+};
+type MarketActorSourceTotals = Record<MarketActorSourceKey, SourceVsCount>;
 type MarketActorRow = {
   key: string;
   label: string;
@@ -137,7 +148,14 @@ type PressPublisherRow = {
   key: string;
   label: string;
   count: number;
-  sourceCounts: Record<string, number>;
+  principalCount: number;
+  comparisonCount: number;
+  sourceCounts: Record<string, SourceVsCount>;
+};
+type SourceCountOptions = {
+  principalAliases: string[];
+  comparisonsEnabled: boolean;
+  selectedActorKey: string | null;
 };
 type OverridePayload = {
   ids: string[];
@@ -690,21 +708,28 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
     reputationRefresh,
   ]);
 
-  const sourceCounts = useMemo(() => {
-    const counts: Record<string, { principal: number; others: number; total: number }> = {};
-    for (const item of items) {
-      if (!item.source) continue;
-      const bucket = counts[item.source] ?? { principal: 0, others: 0, total: 0 };
-      bucket.total += 1;
-      if (isPrincipalItem(item, principalAliasKeys)) {
-        bucket.principal += 1;
-      } else {
-        bucket.others += 1;
-      }
-      counts[item.source] = bucket;
-    }
-    return counts;
-  }, [items, principalAliasKeys]);
+  const selectedActor = useMemo(
+    () =>
+      comparisonsEnabled &&
+      effectiveActor !== "all" &&
+      !isPrincipalName(effectiveActor, principalAliasKeys)
+        ? effectiveActor
+        : null,
+    [comparisonsEnabled, effectiveActor, principalAliasKeys],
+  );
+  const selectedActorKey = useMemo(
+    () => (selectedActor ? normalizeKey(selectedActor) : null),
+    [selectedActor],
+  );
+  const sourceCounts = useMemo(
+    () =>
+      countSourceTotals(items, {
+        principalAliases: principalAliasKeys,
+        comparisonsEnabled,
+        selectedActorKey,
+      }),
+    [items, principalAliasKeys, comparisonsEnabled, selectedActorKey],
+  );
   const sourcesOptions = useMemo(() => {
     const fromCounts = Object.keys(sourceCounts);
     if (fromCounts.length) {
@@ -1022,19 +1047,6 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
       ),
     [effectiveActor, geo, principalAliasKeys],
   );
-  const selectedActor = useMemo(
-    () =>
-      comparisonsEnabled &&
-      effectiveActor !== "all" &&
-      !isPrincipalName(effectiveActor, principalAliasKeys)
-        ? effectiveActor
-        : null,
-    [comparisonsEnabled, effectiveActor, principalAliasKeys],
-  );
-  const selectedActorKey = useMemo(
-    () => (selectedActor ? normalizeKey(selectedActor) : null),
-    [selectedActor],
-  );
   const filteredMarketItems = useMemo(
     () =>
       selectedActorKey
@@ -1058,8 +1070,13 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
     [marketActorItems],
   );
   const marketSourceTotals = useMemo(
-    () => countMarketSourceTotals(marketActorItems),
-    [marketActorItems],
+    () =>
+      countMarketSourceTotals(marketActorItems, {
+        principalAliases: principalAliasKeys,
+        comparisonsEnabled,
+        selectedActorKey,
+      }),
+    [marketActorItems, principalAliasKeys, comparisonsEnabled, selectedActorKey],
   );
   const pressContextItems = useMemo(() => {
     if (isDashboard) return [] as ReputationItem[];
@@ -1092,12 +1109,26 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
     [pressContextItems, activePressSources],
   );
   const pressPublisherRows = useMemo(
-    () => buildPressPublisherRows(pressItems),
-    [pressItems],
+    () =>
+      buildPressPublisherRows(pressItems, {
+        principalAliases: principalAliasKeys,
+        comparisonsEnabled,
+        selectedActorKey,
+      }),
+    [pressItems, principalAliasKeys, comparisonsEnabled, selectedActorKey],
   );
   const pressPublisherSourceTotals = useMemo(
-    () => countPressPublisherSourceTotals(pressItems),
-    [pressItems],
+    () =>
+      countPressPublisherSourceTotals(pressItems, {
+        principalAliases: principalAliasKeys,
+        comparisonsEnabled,
+        selectedActorKey,
+      }),
+    [pressItems, principalAliasKeys, comparisonsEnabled, selectedActorKey],
+  );
+  const pressHasComparisonData = useMemo(
+    () => pressPublisherRows.some((row) => row.comparisonCount > 0),
+    [pressPublisherRows],
   );
   const showPressPublishersBlock = !isDashboard && !isSentimentMarkets;
   const selectedMarketActorLabel = selectedActor || "Otro actor del mercado";
@@ -1110,13 +1141,20 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
   const showStoreRatings = !isSentimentPress && (appleStoreEnabled || googlePlayEnabled);
   const hasGeoSelection = geo !== "all";
   const showStoreRatingsForGeo = showStoreRatings && hasGeoSelection;
+  const effectiveMarketRatings = useMemo(
+    () => mergeCurrentAndHistoryRatings(marketRatings, marketRatingsHistory),
+    [marketRatings, marketRatingsHistory],
+  );
   const principalStoreRatings = useMemo(
-    () => buildActorStoreRatings(marketRatings, actorPrincipalName, geo),
-    [marketRatings, actorPrincipalName, geo],
+    () => buildActorStoreRatings(effectiveMarketRatings, actorPrincipalName, geo),
+    [effectiveMarketRatings, actorPrincipalName, geo],
   );
   const actorStoreRatings = useMemo(
-    () => (selectedActor ? buildActorStoreRatings(marketRatings, selectedActor, geo) : null),
-    [marketRatings, selectedActor, geo],
+    () =>
+      selectedActor
+        ? buildActorStoreRatings(effectiveMarketRatings, selectedActor, geo)
+        : null,
+    [effectiveMarketRatings, selectedActor, geo],
   );
   const storeRatingVisibility = useMemo(
     () => ({
@@ -1532,7 +1570,7 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
                   const countPrincipalLabel = sourceCount?.toLocaleString("es-ES");
                   const countComparisonLabel =
                     count && !isDashboard && comparisonsEnabled
-                      ? count.others.toLocaleString("es-ES")
+                      ? count.comparison.toLocaleString("es-ES")
                       : null;
                   return (
                     <button
@@ -1616,7 +1654,10 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
               </div>
               {!itemsLoading && (
                 <div className="mt-3">
-                  <MarketActorSourcesLegend sourceTotals={marketSourceTotals} />
+                  <MarketActorSourcesLegend
+                    sourceTotals={marketSourceTotals}
+                    showComparison={comparisonsEnabled}
+                  />
                 </div>
               )}
             </section>
@@ -1647,6 +1688,7 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
                         value={row.count}
                         maxValue={maxValue}
                         sourceCounts={row.sourceCounts}
+                        showComparison={pressHasComparisonData}
                       />
                     ));
                   })()
@@ -1654,7 +1696,10 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
               </div>
               {!itemsLoading && (
                 <div className="mt-3">
-                  <PressPublisherSourcesLegend sourceTotals={pressPublisherSourceTotals} />
+                  <PressPublisherSourcesLegend
+                    sourceTotals={pressPublisherSourceTotals}
+                    showComparison={pressHasComparisonData}
+                  />
                 </div>
               )}
             </section>
@@ -2745,25 +2790,34 @@ function MarketActorRowMeter({
 
 function MarketActorSourcesLegend({
   sourceTotals,
+  showComparison,
 }: {
-  sourceTotals: MarketActorSourceCounts;
+  sourceTotals: MarketActorSourceTotals;
+  showComparison: boolean;
 }) {
   return (
     <div className="mt-3 flex flex-wrap items-center gap-3 text-[10px] text-[color:var(--text-55)]">
       <span className="uppercase tracking-[0.14em] text-[color:var(--text-45)]">
         Leyenda:
       </span>
-      {MARKET_ACTOR_SOURCE_ORDER.map((sourceKey) => (
-        <span key={sourceKey} className="inline-flex items-center gap-1.5">
-          <span
-            className={`h-2.5 w-2.5 rounded-full ${MARKET_ACTOR_SOURCE_COLOR_CLASS[sourceKey]}`}
-          />
-          <span>
-            {MARKET_ACTOR_SOURCE_LABELS[sourceKey]} (
-            {sourceTotals[sourceKey].toLocaleString("es-ES")})
+      {MARKET_ACTOR_SOURCE_ORDER.map((sourceKey) => {
+        const counts = sourceTotals[sourceKey];
+        const principalLabel = counts.principal.toLocaleString("es-ES");
+        const comparisonLabel = showComparison
+          ? counts.comparison.toLocaleString("es-ES")
+          : null;
+        return (
+          <span key={sourceKey} className="inline-flex items-center gap-1.5">
+            <span
+              className={`h-2.5 w-2.5 rounded-full ${MARKET_ACTOR_SOURCE_COLOR_CLASS[sourceKey]}`}
+            />
+            <span>
+              {MARKET_ACTOR_SOURCE_LABELS[sourceKey]} (
+              {formatVsValue(principalLabel, comparisonLabel)})
+            </span>
           </span>
-        </span>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -2773,26 +2827,33 @@ function PressPublisherRowMeter({
   value,
   maxValue,
   sourceCounts,
+  showComparison,
 }: {
   label: string;
   value: number;
   maxValue: number;
-  sourceCounts: Record<string, number>;
+  sourceCounts: Record<string, SourceVsCount>;
+  showComparison: boolean;
 }) {
   const safeMax = Math.max(1, maxValue);
   const ratio = Math.min(1, Math.max(0, value / safeMax));
   const fillWidthPercent = Math.round(ratio * 100);
   const sourceEntries = Object.entries(sourceCounts)
-    .filter(([, count]) => count > 0)
+    .filter(([, counts]) => counts.total > 0)
     .sort((left, right) => {
-      if (right[1] !== left[1]) return right[1] - left[1];
+      if (right[1].total !== left[1].total) return right[1].total - left[1].total;
       return left[0].localeCompare(right[0]);
     });
-  const sourceTotal = sourceEntries.reduce((sum, [, count]) => sum + count, 0);
+  const sourceTotal = sourceEntries.reduce((sum, [, counts]) => sum + counts.total, 0);
   if (!sourceEntries.length || sourceTotal <= 0) return null;
   const subtitle = sourceEntries
     .slice(0, 3)
-    .map(([source, count]) => `${source}: ${count.toLocaleString("es-ES")}`)
+    .map(([source, counts]) => {
+      const principalLabel = counts.principal.toLocaleString("es-ES");
+      if (!showComparison) return `${source}: ${principalLabel}`;
+      const comparisonLabel = counts.comparison.toLocaleString("es-ES");
+      return `${source}: ${principalLabel} vs ${comparisonLabel}`;
+    })
     .join(" · ");
 
   return (
@@ -2804,15 +2865,19 @@ function PressPublisherRowMeter({
             className="flex h-full overflow-hidden rounded-full"
             style={{ width: `${fillWidthPercent}%` }}
           >
-            {sourceEntries.map(([source, count]) => (
+            {sourceEntries.map(([source, counts]) => (
               <div
                 key={`${label}-${source}`}
                 className="h-full"
                 style={{
-                  width: `${(count / sourceTotal) * 100}%`,
+                  width: `${(counts.total / sourceTotal) * 100}%`,
                   backgroundColor: pressSourceColorHex(source),
                 }}
-                title={`${source}: ${count.toLocaleString("es-ES")}`}
+                title={
+                  showComparison
+                    ? `${source}: ${counts.principal.toLocaleString("es-ES")} vs ${counts.comparison.toLocaleString("es-ES")}`
+                    : `${source}: ${counts.principal.toLocaleString("es-ES")}`
+                }
               />
             ))}
           </div>
@@ -2828,13 +2893,15 @@ function PressPublisherRowMeter({
 
 function PressPublisherSourcesLegend({
   sourceTotals,
+  showComparison,
 }: {
-  sourceTotals: Record<string, number>;
+  sourceTotals: Record<string, SourceVsCount>;
+  showComparison: boolean;
 }) {
   const entries = Object.entries(sourceTotals)
-    .filter(([, count]) => count > 0)
+    .filter(([, counts]) => counts.total > 0)
     .sort((left, right) => {
-      if (right[1] !== left[1]) return right[1] - left[1];
+      if (right[1].total !== left[1].total) return right[1].total - left[1].total;
       return left[0].localeCompare(right[0]);
     })
     .slice(0, 8);
@@ -2849,7 +2916,9 @@ function PressPublisherSourcesLegend({
             style={{ backgroundColor: pressSourceColorHex(source) }}
           />
           <span>
-            {source} ({count.toLocaleString("es-ES")})
+            {showComparison
+              ? `${source} (${count.principal.toLocaleString("es-ES")} vs ${count.comparison.toLocaleString("es-ES")})`
+              : `${source} (${count.principal.toLocaleString("es-ES")})`}
           </span>
         </span>
       ))}
@@ -3329,6 +3398,33 @@ type ActorStoreRatings = {
   google_play: MarketRating | null;
 };
 
+function marketRatingKey(rating: MarketRating) {
+  return [
+    normalizeSourceKey(rating.source || ""),
+    normalizeKey(rating.actor ?? ""),
+    normalizeKey(rating.geo ?? ""),
+    (rating.app_id ?? "").toLowerCase(),
+    (rating.package_id ?? "").toLowerCase(),
+  ].join("|");
+}
+
+function mergeCurrentAndHistoryRatings(
+  current: MarketRating[],
+  history: MarketRating[],
+): MarketRating[] {
+  if (!history.length) return current;
+  if (!current.length) return history;
+  const merged = [...current];
+  const seen = new Set(current.map((entry) => marketRatingKey(entry)));
+  for (const entry of history) {
+    const key = marketRatingKey(entry);
+    if (seen.has(key)) continue;
+    merged.push(entry);
+    seen.add(key);
+  }
+  return merged;
+}
+
 function buildActorStoreRatings(
   ratings: MarketRating[],
   actor: string,
@@ -3428,16 +3524,6 @@ function findPreviousMarketRating(
     return entry;
   }
   return null;
-}
-
-function marketRatingKey(rating: MarketRating) {
-  return [
-    normalizeSourceKey(rating.source || ""),
-    normalizeKey(rating.actor ?? ""),
-    normalizeKey(rating.geo ?? ""),
-    (rating.app_id ?? "").toLowerCase(),
-    (rating.package_id ?? "").toLowerCase(),
-  ].join("|");
 }
 
 function marketRatingTimestamp(value?: string | null) {
@@ -4225,19 +4311,83 @@ function createMarketActorSourceCounts(): MarketActorSourceCounts {
   };
 }
 
+function createSourceVsCount(): SourceVsCount {
+  return { principal: 0, comparison: 0, total: 0 };
+}
+
+function canonicalSourceKey(source?: string | null): string | null {
+  if (!source) return null;
+  const trimmed = source.trim();
+  if (!trimmed) return null;
+  const normalized = normalizeSourceKey(trimmed);
+  if (!normalized) return null;
+  return SOURCE_KEY_CANONICAL_MAP[normalized] ?? trimmed;
+}
+
 function normalizeMarketActorSourceKey(source?: string | null): MarketActorSourceKey | null {
-  const normalizedSource = normalizeSourceKey(source ?? "");
+  const normalizedSource = normalizeSourceKey(canonicalSourceKey(source) ?? "");
   if (normalizedSource === "appstore") return "appstore";
   if (normalizedSource === "googleplay") return "google_play";
   return null;
 }
 
-function countMarketSourceTotals(items: ReputationItem[]): MarketActorSourceCounts {
-  const totals = createMarketActorSourceCounts();
+function isComparisonSourceItem(
+  item: ReputationItem,
+  options: SourceCountOptions,
+): boolean {
+  if (!options.comparisonsEnabled) return false;
+  if (isPrincipalItem(item, options.principalAliases)) return false;
+  if (!options.selectedActorKey) return true;
+  return normalizeKey(item.actor || "") === options.selectedActorKey;
+}
+
+function countSourceTotals(
+  items: ReputationItem[],
+  options: SourceCountOptions,
+): Record<string, SourceVsCount> {
+  const totals: Record<string, SourceVsCount> = {};
+  for (const item of items) {
+    const sourceKey = canonicalSourceKey(item.source);
+    if (!sourceKey) continue;
+    const isPrincipal = isPrincipalItem(item, options.principalAliases);
+    const isComparison = isComparisonSourceItem(item, options);
+    if (!isPrincipal && !isComparison) continue;
+    const bucket = totals[sourceKey] ?? createSourceVsCount();
+    if (isPrincipal) {
+      bucket.principal += 1;
+    } else {
+      bucket.comparison += 1;
+    }
+    bucket.total += 1;
+    totals[sourceKey] = bucket;
+  }
+  return totals;
+}
+
+function createMarketActorSourceTotals(): MarketActorSourceTotals {
+  return {
+    appstore: createSourceVsCount(),
+    google_play: createSourceVsCount(),
+  };
+}
+
+function countMarketSourceTotals(
+  items: ReputationItem[],
+  options: SourceCountOptions,
+): MarketActorSourceTotals {
+  const totals = createMarketActorSourceTotals();
   for (const item of items) {
     const sourceKey = normalizeMarketActorSourceKey(item.source);
     if (!sourceKey) continue;
-    totals[sourceKey] += 1;
+    const isPrincipal = isPrincipalItem(item, options.principalAliases);
+    const isComparison = isComparisonSourceItem(item, options);
+    if (!isPrincipal && !isComparison) continue;
+    if (isPrincipal) {
+      totals[sourceKey].principal += 1;
+    } else {
+      totals[sourceKey].comparison += 1;
+    }
+    totals[sourceKey].total += 1;
   }
   return totals;
 }
@@ -4367,18 +4517,47 @@ function extractPublisherLabel(item: ReputationItem): string | null {
   return null;
 }
 
-function countPressPublisherSourceTotals(items: ReputationItem[]): Record<string, number> {
-  const totals: Record<string, number> = {};
+type PressPublisherBuildOptions = SourceCountOptions;
+
+function isComparisonPressItem(
+  item: ReputationItem,
+  options: PressPublisherBuildOptions,
+): boolean {
+  return isComparisonSourceItem(item, options);
+}
+
+function countPressPublisherSourceTotals(
+  items: ReputationItem[],
+  options: PressPublisherBuildOptions,
+): Record<string, SourceVsCount> {
+  const totals: Record<string, SourceVsCount> = {};
   for (const item of items) {
+    const isPrincipal = isPrincipalItem(item, options.principalAliases);
+    const isComparison = isComparisonPressItem(item, options);
+    if (!isPrincipal && !isComparison) continue;
     const sourceLabel = formatPressSourceLabel(item.source);
-    totals[sourceLabel] = (totals[sourceLabel] || 0) + 1;
+    if (!totals[sourceLabel]) {
+      totals[sourceLabel] = createSourceVsCount();
+    }
+    if (isPrincipal) {
+      totals[sourceLabel].principal += 1;
+    } else {
+      totals[sourceLabel].comparison += 1;
+    }
+    totals[sourceLabel].total += 1;
   }
   return totals;
 }
 
-function buildPressPublisherRows(items: ReputationItem[]): PressPublisherRow[] {
+function buildPressPublisherRows(
+  items: ReputationItem[],
+  options: PressPublisherBuildOptions,
+): PressPublisherRow[] {
   const map = new Map<string, PressPublisherRow>();
   for (const item of items) {
+    const isPrincipal = isPrincipalItem(item, options.principalAliases);
+    const isComparison = isComparisonPressItem(item, options);
+    if (!isPrincipal && !isComparison) continue;
     const sourceLabel = formatPressSourceLabel(item.source);
     const publisherLabel = extractPublisherLabel(item) || "Medio no identificado";
     const key = normalizeKey(publisherLabel) || publisherLabel.toLowerCase();
@@ -4387,13 +4566,24 @@ function buildPressPublisherRows(items: ReputationItem[]): PressPublisherRow[] {
         key,
         label: publisherLabel,
         count: 0,
+        principalCount: 0,
+        comparisonCount: 0,
         sourceCounts: {},
       });
     }
     const row = map.get(key);
     if (!row) continue;
-    row.count += 1;
-    row.sourceCounts[sourceLabel] = (row.sourceCounts[sourceLabel] || 0) + 1;
+    const sourceBucket = row.sourceCounts[sourceLabel] || createSourceVsCount();
+    if (isPrincipal) {
+      row.principalCount += 1;
+      sourceBucket.principal += 1;
+    } else {
+      row.comparisonCount += 1;
+      sourceBucket.comparison += 1;
+    }
+    sourceBucket.total += 1;
+    row.sourceCounts[sourceLabel] = sourceBucket;
+    row.count = row.principalCount + row.comparisonCount;
   }
   return Array.from(map.values()).sort((left, right) => {
     if (right.count !== left.count) return right.count - left.count;
