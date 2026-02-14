@@ -9,6 +9,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from html import unescape
+from threading import Event, Thread
 from typing import Any, Callable, Iterable, Optional, Sequence, cast
 from urllib.parse import parse_qs, quote_plus, unquote_plus, urlparse
 from urllib.request import Request, urlopen
@@ -525,6 +526,7 @@ class ReputationIngestService:
             slow_threshold = 8.0
         if slow_threshold < 0:
             slow_threshold = 0.0
+        collector_timeout_sec = max(1, _env_int("REPUTATION_COLLECTOR_TIMEOUT_SEC", 90))
 
         def collector_progress_name(collector: ReputationCollector) -> str:
             value = getattr(collector, "progress_name", None)
@@ -543,10 +545,12 @@ class ReputationIngestService:
             for collector in collector_list:
                 try:
                     started = time.perf_counter()
-                    count = 0
-                    for entry in collector.collect():
-                        items.append(entry)
-                        count += 1
+                    batch = ReputationIngestService._collector_batch_with_timeout(
+                        collector,
+                        timeout_sec=collector_timeout_sec,
+                    )
+                    items.extend(batch)
+                    count = len(batch)
                     duration = time.perf_counter() - started
                     maybe_note(collector, duration, count)
                 except Exception as exc:  # pragma: no cover - defensive
@@ -564,7 +568,10 @@ class ReputationIngestService:
             collector: ReputationCollector,
         ) -> tuple[list[ReputationItem], float]:
             started = time.perf_counter()
-            batch = ReputationIngestService._collector_batch(collector)
+            batch = ReputationIngestService._collector_batch_with_timeout(
+                collector,
+                timeout_sec=collector_timeout_sec,
+            )
             duration = time.perf_counter() - started
             return batch, duration
 
@@ -593,6 +600,38 @@ class ReputationIngestService:
         if isinstance(collected, list):
             return collected
         return list(collected)
+
+    @staticmethod
+    def _collector_batch_with_timeout(
+        collector: ReputationCollector,
+        *,
+        timeout_sec: int,
+    ) -> list[ReputationItem]:
+        if timeout_sec <= 0:
+            return ReputationIngestService._collector_batch(collector)
+
+        done = Event()
+        error: Exception | None = None
+        batch: list[ReputationItem] = []
+
+        def _runner() -> None:
+            nonlocal error, batch
+            try:
+                batch = ReputationIngestService._collector_batch(collector)
+            except Exception as exc:  # pragma: no cover - defensive
+                error = exc
+            finally:
+                done.set()
+
+        # Run collectors in a daemon thread so a hung fetch cannot block the whole ingest forever.
+        worker = Thread(target=_runner, daemon=True)
+        worker.start()
+        finished = done.wait(timeout=timeout_sec)
+        if not finished:
+            raise TimeoutError(f"timeout after {timeout_sec}s")
+        if error is not None:
+            raise error
+        return batch
 
     @staticmethod
     def _drop_invalid_items(
