@@ -244,6 +244,96 @@ _REPLY_SIGNAL_KEYS = {
 }
 
 
+class _FailoverCollector(ReputationCollector):
+    """Ejecuta un collector primario y activa un fallback cuando hay pocos items."""
+
+    def __init__(
+        self,
+        *,
+        primary: ReputationCollector,
+        fallback: ReputationCollector | None,
+        min_primary_items: int,
+        max_items: int,
+    ) -> None:
+        self._primary = primary
+        self._fallback = fallback
+        self._min_primary_items = max(0, min_primary_items)
+        self._max_items = max(0, max_items)
+        self.source_name = primary.source_name
+        self.progress_name = getattr(primary, "progress_name", primary.source_name)
+        self.last_failover: dict[str, Any] = {}
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._primary, name)
+
+    def collect(self) -> Iterable[ReputationItem]:
+        meta: dict[str, Any] = {
+            "used": False,
+            "primary_items": 0,
+            "fallback_items": 0,
+            "result_items": 0,
+        }
+        primary_items, primary_error = self._collect_safe(self._primary)
+        meta["primary_items"] = len(primary_items)
+        if primary_error:
+            meta["primary_error"] = str(primary_error)
+
+        if self._fallback is None or len(primary_items) >= self._min_primary_items:
+            result = self._trim(primary_items)
+            meta["result_items"] = len(result)
+            self.last_failover = meta
+            return result
+
+        fallback_items, fallback_error = self._collect_safe(self._fallback)
+        meta["used"] = True
+        meta["fallback_items"] = len(fallback_items)
+        if fallback_error:
+            meta["fallback_error"] = str(fallback_error)
+
+        merged = self._merge_items(primary_items, fallback_items)
+        result = self._trim(merged)
+        meta["result_items"] = len(result)
+        self.last_failover = meta
+        return result
+
+    @staticmethod
+    def _collect_safe(
+        collector: ReputationCollector,
+    ) -> tuple[list[ReputationItem], Exception | None]:
+        try:
+            collected = collector.collect()
+            if isinstance(collected, list):
+                return collected, None
+            return list(collected), None
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.warning("Collector failover branch failed (%s): %s", collector.source_name, exc)
+            return [], exc
+
+    @staticmethod
+    def _merge_items(
+        primary_items: list[ReputationItem],
+        fallback_items: list[ReputationItem],
+    ) -> list[ReputationItem]:
+        merged: list[ReputationItem] = []
+        seen: set[tuple[str, str]] = set()
+        for item in [*primary_items, *fallback_items]:
+            source_key = (item.source or "").strip().lower()
+            id_key = item.id or ""
+            key = (source_key, id_key)
+            if key in seen:
+                continue
+            seen.add(key)
+            merged.append(item)
+        return merged
+
+    def _trim(self, items: list[ReputationItem]) -> list[ReputationItem]:
+        if self._max_items <= 0:
+            return []
+        if len(items) <= self._max_items:
+            return items
+        return items[: self._max_items]
+
+
 class ReputationIngestService:
     """Ingesta de reputación: carga config, ejecuta collectors y guarda cache."""
 
@@ -538,6 +628,31 @@ class ReputationIngestService:
             if diag or (slow_threshold and duration >= slow_threshold):
                 notes.append(
                     f"collector: {collector_progress_name(collector)} {duration:.1f}s items={count}"
+                )
+            source = (collector.source_name or "").strip().lower()
+            if source in {"appstore", "google_play"} and count == 0:
+                notes.append(f"collector: {collector_progress_name(collector)} empty")
+
+            failover_meta = getattr(collector, "last_failover", None)
+            if not isinstance(failover_meta, dict):
+                return
+            if failover_meta.get("used"):
+                notes.append(
+                    "collector: "
+                    f"{collector_progress_name(collector)} failover "
+                    f"primary={int(failover_meta.get('primary_items', 0))} "
+                    f"fallback={int(failover_meta.get('fallback_items', 0))} "
+                    f"result={int(failover_meta.get('result_items', 0))}"
+                )
+            primary_error = failover_meta.get("primary_error")
+            if isinstance(primary_error, str) and primary_error.strip():
+                notes.append(
+                    f"collector: {collector_progress_name(collector)} primary error {primary_error}"
+                )
+            fallback_error = failover_meta.get("fallback_error")
+            if isinstance(fallback_error, str) and fallback_error.strip():
+                notes.append(
+                    f"collector: {collector_progress_name(collector)} fallback error {fallback_error}"
                 )
 
         workers = _env_int("REPUTATION_COLLECTOR_WORKERS", 6)
@@ -1490,7 +1605,11 @@ class ReputationIngestService:
                     item.signals["geo_source"] = "content"
                 continue
 
-            publisher_geo = cls._infer_geo_from_publisher(item, geo_country_codes)
+            publisher_geo = cls._infer_geo_from_publisher(
+                item,
+                geo_country_codes,
+                publisher_geo_map=source_geo_map,
+            )
             if publisher_geo and item.geo != publisher_geo:
                 item.geo = publisher_geo
                 item.signals["geo_source"] = "publisher"
@@ -2582,6 +2701,8 @@ class ReputationIngestService:
             country = os.getenv("APPSTORE_COUNTRY", "es").strip().lower() or "es"
             max_reviews = _env_int("APPSTORE_MAX_REVIEWS", 200)
             scrape_timeout = _env_int("APPSTORE_SCRAPE_TIMEOUT", 15)
+            failover_enabled = _env_bool(os.getenv("APPSTORE_FAILOVER_ENABLED", "true"))
+            failover_min_reviews = max(0, _env_int("APPSTORE_FAILOVER_MIN_REVIEWS", 1))
             app_ids_by_geo = _get_dict_str_list_str(appstore_cfg, "app_ids_by_geo")
             country_by_geo = _get_dict_str_str(appstore_cfg, "country_by_geo")
             raw_core_only = appstore_cfg.get("core_only")
@@ -2636,6 +2757,8 @@ class ReputationIngestService:
                             app_id=app_clean,
                             max_reviews=max_reviews,
                             scrape_timeout=scrape_timeout,
+                            failover_enabled=failover_enabled,
+                            failover_min_reviews=failover_min_reviews,
                             geo=geo,
                         )
                     )
@@ -2673,6 +2796,8 @@ class ReputationIngestService:
             default_language = os.getenv("GOOGLE_PLAY_DEFAULT_LANGUAGE", "es").strip()
             max_reviews = _env_int("GOOGLE_PLAY_MAX_REVIEWS", 200)
             scrape_timeout = _env_int("GOOGLE_PLAY_SCRAPE_TIMEOUT", 15)
+            failover_enabled = _env_bool(os.getenv("GOOGLE_PLAY_FAILOVER_ENABLED", "true"))
+            failover_min_reviews = max(0, _env_int("GOOGLE_PLAY_FAILOVER_MIN_REVIEWS", 1))
 
             raw_core_only = gp_cfg.get("core_only")
             if isinstance(raw_core_only, bool):
@@ -2693,7 +2818,9 @@ class ReputationIngestService:
             skipped_core = 0
 
             if api_enabled and not gp_endpoint:
-                notes.append("google_play: missing GOOGLE_PLAY_API_ENDPOINT")
+                notes.append(
+                    "google_play: missing GOOGLE_PLAY_API_ENDPOINT (using scraper fallback)"
+                )
             if not package_ids and not package_ids_by_geo:
                 notes.append("google_play: missing package_ids in config.json")
             else:
@@ -2740,10 +2867,10 @@ class ReputationIngestService:
                         language=language_clean,
                         max_reviews=max_reviews,
                         scrape_timeout=scrape_timeout,
+                        failover_enabled=failover_enabled,
+                        failover_min_reviews=failover_min_reviews,
                         geo=geo,
                     )
-                    if not collector:
-                        return
                     collectors.append(collector)
                     seen_package_locale.add(dedupe_key)
                     if core_only and actor_key:
@@ -3242,22 +3369,48 @@ class ReputationIngestService:
         app_id: str,
         max_reviews: int,
         scrape_timeout: int,
-        geo: str | None,
+        failover_enabled: bool = True,
+        failover_min_reviews: int = 1,
+        geo: str | None = None,
     ) -> ReputationCollector:
-        if api_enabled:
-            return AppStoreCollector(
-                country=country,
-                app_id=app_id,
-                max_reviews=max_reviews,
-                geo=geo,
-            )
-        return AppStoreScraperCollector(
+        progress_name = f"appstore:{app_id}:{country}"
+        if isinstance(geo, str) and geo.strip():
+            progress_name = f"{progress_name}:{geo.strip()}"
+
+        api_collector = AppStoreCollector(
+            country=country,
+            app_id=app_id,
+            max_reviews=max_reviews,
+            geo=geo,
+        )
+        cast(Any, api_collector).progress_name = progress_name
+        scraper_collector = AppStoreScraperCollector(
             country=country,
             app_id=app_id,
             max_reviews=max_reviews,
             geo=geo,
             timeout=scrape_timeout,
         )
+        cast(Any, scraper_collector).progress_name = progress_name
+
+        if api_enabled:
+            primary = cast(ReputationCollector, api_collector)
+            fallback = cast(ReputationCollector, scraper_collector)
+        else:
+            primary = cast(ReputationCollector, scraper_collector)
+            fallback = cast(ReputationCollector, api_collector)
+
+        if not failover_enabled:
+            return primary
+
+        wrapped = _FailoverCollector(
+            primary=primary,
+            fallback=fallback,
+            min_primary_items=failover_min_reviews,
+            max_items=max_reviews,
+        )
+        cast(Any, wrapped).progress_name = progress_name
+        return wrapped
 
     @staticmethod
     def _build_google_play_collector(
@@ -3270,26 +3423,14 @@ class ReputationIngestService:
         language: str,
         max_reviews: int,
         scrape_timeout: int,
-        geo: str | None,
-    ) -> ReputationCollector | None:
+        failover_enabled: bool = True,
+        failover_min_reviews: int = 1,
+        geo: str | None = None,
+    ) -> ReputationCollector:
         progress_name = f"google_play:{package_id}:{country}/{language}"
         if isinstance(geo, str) and geo.strip():
             progress_name = f"{progress_name}:{geo.strip()}"
-        if api_enabled:
-            if not endpoint:
-                return None
-            api_collector = GooglePlayApiCollector(
-                endpoint=endpoint,
-                api_key=api_key,
-                api_key_param=api_key_param,
-                package_id=package_id,
-                country=country,
-                language=language,
-                max_reviews=max_reviews,
-                geo=geo,
-            )
-            cast(Any, api_collector).progress_name = progress_name
-            return api_collector
+
         scraper_collector = GooglePlayScraperCollector(
             package_id=package_id,
             country=country,
@@ -3299,7 +3440,43 @@ class ReputationIngestService:
             timeout=scrape_timeout,
         )
         cast(Any, scraper_collector).progress_name = progress_name
-        return scraper_collector
+
+        api_collector: ReputationCollector | None = None
+        if endpoint:
+            built_api_collector = GooglePlayApiCollector(
+                endpoint=endpoint,
+                api_key=api_key,
+                api_key_param=api_key_param,
+                package_id=package_id,
+                country=country,
+                language=language,
+                max_reviews=max_reviews,
+                geo=geo,
+            )
+            cast(Any, built_api_collector).progress_name = progress_name
+            api_collector = cast(ReputationCollector, built_api_collector)
+
+        if api_enabled and api_collector is not None:
+            primary = api_collector
+            fallback = cast(ReputationCollector, scraper_collector)
+        elif api_enabled and api_collector is None:
+            primary = cast(ReputationCollector, scraper_collector)
+            fallback = None
+        else:
+            primary = cast(ReputationCollector, scraper_collector)
+            fallback = api_collector
+
+        if not failover_enabled or fallback is None:
+            return primary
+
+        wrapped = _FailoverCollector(
+            primary=primary,
+            fallback=fallback,
+            min_primary_items=failover_min_reviews,
+            max_items=max_reviews,
+        )
+        cast(Any, wrapped).progress_name = progress_name
+        return wrapped
 
     @staticmethod
     def _default_keyword_queries(keywords: list[str], include_unquoted: bool = False) -> list[str]:
@@ -3687,7 +3864,7 @@ class ReputationIngestService:
         site_sources = news_cfg.get("site_sources_by_geo") or {}
         if not site_sources or not geos:
             return {}
-        mapping: dict[str, str] = {}
+        domains_to_geos: dict[str, set[str]] = {}
         for geo in geos:
             entries = cls._flatten_site_sources(site_sources, geo)
             for entry in entries:
@@ -3695,7 +3872,15 @@ class ReputationIngestService:
                 geo_value = entry.get("geo") or geo
                 if not domain or not geo_value:
                     continue
-                mapping.setdefault(domain, geo_value)
+                bucket = domains_to_geos.setdefault(domain, set())
+                bucket.add(str(geo_value).strip())
+        mapping: dict[str, str] = {}
+        for domain, geo_values in domains_to_geos.items():
+            if len(geo_values) != 1:
+                continue
+            geo_value = next(iter(geo_values), "").strip()
+            if geo_value:
+                mapping[domain] = geo_value
         return mapping
 
     @staticmethod
@@ -3799,9 +3984,12 @@ class ReputationIngestService:
 
     @classmethod
     def _infer_geo_from_publisher(
-        cls, item: ReputationItem, geo_country_codes: dict[str, str]
+        cls,
+        item: ReputationItem,
+        geo_country_codes: dict[str, str],
+        publisher_geo_map: dict[str, str] | None = None,
     ) -> str | None:
-        if not geo_country_codes:
+        if not geo_country_codes and not publisher_geo_map:
             return None
         signals = item.signals or {}
         candidates: list[str] = []
@@ -3817,6 +4005,10 @@ class ReputationIngestService:
             normalized_domain = cls._normalize_site_domain(domain or candidate)
             if not normalized_domain:
                 continue
+            if publisher_geo_map:
+                explicit_geo = cls._lookup_geo_for_domain(normalized_domain, publisher_geo_map)
+                if explicit_geo:
+                    return explicit_geo
             country_code = cls._country_code_from_domain(normalized_domain)
             if not country_code:
                 continue
@@ -3916,9 +4108,30 @@ class ReputationIngestService:
                 domain = cls._normalize_site_domain(candidate)
             if not domain:
                 continue
-            geo = source_geo_map.get(domain)
+            geo = cls._lookup_geo_for_domain(domain, source_geo_map)
             if geo:
                 return geo
+        return None
+
+    @classmethod
+    def _lookup_geo_for_domain(cls, domain: str, domain_geo_map: dict[str, str]) -> str | None:
+        if not domain or not domain_geo_map:
+            return None
+        normalized = cls._normalize_site_domain(domain)
+        if not normalized:
+            return None
+        host = normalized.split("/", 1)[0]
+        if ":" in host:
+            host = host.split(":", 1)[0]
+
+        candidate = host
+        while candidate:
+            geo = domain_geo_map.get(candidate)
+            if geo:
+                return geo
+            if "." not in candidate:
+                break
+            candidate = candidate.split(".", 1)[1]
         return None
 
     @staticmethod

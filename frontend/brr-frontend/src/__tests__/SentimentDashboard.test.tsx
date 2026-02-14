@@ -498,53 +498,166 @@ describe("SentimentView dashboard", () => {
     expect((responsesCard?.textContent || "").includes("(2/3)")).toBe(false);
   });
 
-  it("uses natural month range and supports month navigation", async () => {
+  it("keeps dashboard sentiment chart visible with fallback series when primary scores are unavailable", async () => {
+    const handleGet = (path: string) => {
+      if (path.startsWith("/reputation/meta")) {
+        return Promise.resolve(metaResponse);
+      }
+      if (path.startsWith("/reputation/profiles")) {
+        return Promise.resolve(profilesResponse);
+      }
+      if (path.startsWith("/reputation/items")) {
+        return Promise.resolve({
+          ...itemsResponse,
+          items: [
+            {
+              id: "fallback-1",
+              source: "news",
+              geo: "España",
+              actor: "Acme Bank",
+              title: "Mención sin score",
+              text: "Contenido sin puntuación explícita.",
+              sentiment: null,
+              published_at: "2025-01-05T10:00:00Z",
+              signals: {},
+            },
+            {
+              id: "fallback-2",
+              source: "news",
+              geo: "España",
+              actor: "Acme Bank",
+              title: "Otra mención sin score",
+              text: "Otra mención sin etiquetas.",
+              sentiment: null,
+              published_at: "2025-01-06T10:00:00Z",
+              signals: {},
+            },
+          ],
+          stats: { count: 2 },
+        });
+      }
+      if (path.startsWith("/reputation/responses/summary")) {
+        return Promise.resolve({
+          totals: {
+            opinions_total: 0,
+            answered_total: 0,
+            answered_ratio: 0,
+            answered_positive: 0,
+            answered_neutral: 0,
+            answered_negative: 0,
+            unanswered_positive: 0,
+            unanswered_neutral: 0,
+            unanswered_negative: 0,
+          },
+          actor_breakdown: [],
+          repeated_replies: [],
+          answered_items: [],
+        });
+      }
+      if (path.startsWith("/reputation/markets/insights")) {
+        return Promise.resolve({
+          generated_at: "2025-01-12T00:00:00Z",
+          principal_actor: "Acme Bank",
+          comparisons_enabled: false,
+          filters: { geo: "España", from_date: "2025-01-01", to_date: "2025-01-31", sources: [] },
+          kpis: {
+            total_mentions: 2,
+            negative_mentions: 0,
+            negative_ratio: 0,
+            positive_mentions: 0,
+            neutral_mentions: 0,
+            unique_authors: 2,
+            recurring_authors: 0,
+            average_sentiment_score: -0.07,
+          },
+          daily_volume: [
+            { date: "2025-01-05", count: 1 },
+            { date: "2025-01-06", count: 1 },
+          ],
+          geo_summary: [],
+          recurring_authors: [],
+          top_penalized_features: [],
+          source_friction: [],
+          alerts: [],
+          responses: undefined,
+        });
+      }
+      if (path.startsWith("/reputation/settings")) {
+        return Promise.resolve({ groups: [], advanced_options: [] });
+      }
+      return Promise.resolve({});
+    };
+
+    apiGetMock.mockImplementation(handleGet);
+    apiGetCachedMock.mockImplementation(handleGet);
+
     render(<SentimentView mode="dashboard" />);
-    await screen.findByText("Dashboard reputacional");
 
-    const now = new Date();
-    const currentStart = toDate(new Date(now.getFullYear(), now.getMonth(), 1));
-    const currentEnd = toDate(now);
-    const currentLabel = monthLabel(new Date(now.getFullYear(), now.getMonth(), 1));
-
-    expect(screen.getByTestId("dashboard-month-label")).toHaveTextContent(currentLabel);
-    expect(screen.getByRole("button", { name: "Mes siguiente" })).toBeDisabled();
+    const sentimentSection = await screen.findByText("SENTIMIENTO");
+    const chartSection = sentimentSection.closest("section");
+    expect(chartSection).toBeTruthy();
 
     await waitFor(() => {
-      const queriedCurrentMonth = apiGetMock.mock.calls.some(([path]) => {
-        if (typeof path !== "string") return false;
-        return (
-          path.startsWith("/reputation/items?") &&
-          path.includes(`from_date=${currentStart}`) &&
-          path.includes(`to_date=${currentEnd}`)
-        );
-      });
-      expect(queriedCurrentMonth).toBe(true);
+      expect(
+        within(chartSection as HTMLElement).queryByText("No hay datos para el periodo seleccionado."),
+      ).not.toBeInTheDocument();
+      expect((chartSection as HTMLElement).querySelector("svg")).toBeTruthy();
     });
+  });
 
-    fireEvent.click(screen.getByRole("button", { name: "Mes anterior" }));
+  it("uses natural month range and supports month navigation", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2025-01-15T12:00:00Z"));
+    try {
+      render(<SentimentView mode="dashboard" />);
+      await screen.findByText("Dashboard reputacional");
 
-    const previousDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const previousStart = toDate(previousDate);
-    const previousEnd = toDate(
-      new Date(previousDate.getFullYear(), previousDate.getMonth() + 1, 0),
-    );
-    const previousLabel = monthLabel(previousDate);
+      const now = new Date();
+      const currentStart = toDate(new Date(now.getFullYear(), now.getMonth(), 1));
+      const currentEnd = toDate(now);
+      const currentLabel = monthLabel(new Date(now.getFullYear(), now.getMonth(), 1));
 
-    await waitFor(() => {
-      expect(screen.getByTestId("dashboard-month-label")).toHaveTextContent(previousLabel);
-      const queriedPreviousMonth = apiGetMock.mock.calls.some(([path]) => {
-        if (typeof path !== "string") return false;
-        return (
-          path.startsWith("/reputation/items?") &&
-          path.includes(`from_date=${previousStart}`) &&
-          path.includes(`to_date=${previousEnd}`)
-        );
+      expect(screen.getByTestId("dashboard-month-label")).toHaveTextContent(currentLabel);
+      expect(screen.getByRole("button", { name: "Mes siguiente" })).toBeDisabled();
+
+      await waitFor(() => {
+        const queriedCurrentMonth = apiGetMock.mock.calls.some(([path]) => {
+          if (typeof path !== "string") return false;
+          return (
+            path.startsWith("/reputation/items?") &&
+            path.includes(`from_date=${currentStart}`) &&
+            path.includes(`to_date=${currentEnd}`)
+          );
+        });
+        expect(queriedCurrentMonth).toBe(true);
       });
-      expect(queriedPreviousMonth).toBe(true);
-    });
 
-    expect(screen.getByRole("button", { name: "Mes siguiente" })).not.toBeDisabled();
+      fireEvent.click(screen.getByRole("button", { name: "Mes anterior" }));
+
+      const previousDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const previousStart = toDate(previousDate);
+      const previousEnd = toDate(
+        new Date(previousDate.getFullYear(), previousDate.getMonth() + 1, 0),
+      );
+      const previousLabel = monthLabel(previousDate);
+
+      await waitFor(() => {
+        expect(screen.getByTestId("dashboard-month-label")).toHaveTextContent(previousLabel);
+        const queriedPreviousMonth = apiGetMock.mock.calls.some(([path]) => {
+          if (typeof path !== "string") return false;
+          return (
+            path.startsWith("/reputation/items?") &&
+            path.includes(`from_date=${previousStart}`) &&
+            path.includes(`to_date=${previousEnd}`)
+          );
+        });
+        expect(queriedPreviousMonth).toBe(true);
+      });
+
+      expect(screen.getByRole("button", { name: "Mes siguiente" })).not.toBeDisabled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

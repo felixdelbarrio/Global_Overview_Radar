@@ -106,6 +106,86 @@ const ADVANCED_LOG_KEYS = new Set([
 ]);
 const ADVANCED_EDITABLE_WITHOUT_LOG = new Set(["language.preference"]);
 const DISABLE_ADVANCED_SETTINGS = process.env.NEXT_PUBLIC_DISABLE_ADVANCED_SETTINGS === "true";
+const INGEST_STORAGE_KEY = "gor-ingest-jobs";
+const INGEST_KINDS: IngestJobKind[] = ["reputation"];
+const INGEST_STATUSES = new Set<IngestJob["status"]>([
+  "queued",
+  "running",
+  "success",
+  "error",
+]);
+
+function clampProgress(value: unknown): number {
+  if (typeof value !== "number" || Number.isNaN(value)) return 0;
+  if (value < 0) return 0;
+  if (value > 100) return 100;
+  return value;
+}
+
+function parseStoredIngestJob(raw: unknown, kind: IngestJobKind): IngestJob | null {
+  if (!raw || typeof raw !== "object") return null;
+  const data = raw as Record<string, unknown>;
+  const id = typeof data.id === "string" ? data.id.trim() : "";
+  if (!id) return null;
+  const statusRaw = data.status;
+  const status =
+    typeof statusRaw === "string" && INGEST_STATUSES.has(statusRaw as IngestJob["status"])
+      ? (statusRaw as IngestJob["status"])
+      : null;
+  if (!status) return null;
+  return {
+    id,
+    kind,
+    status,
+    progress: clampProgress(data.progress),
+    stage: typeof data.stage === "string" ? data.stage : null,
+    started_at: typeof data.started_at === "string" ? data.started_at : null,
+    finished_at: typeof data.finished_at === "string" ? data.finished_at : null,
+    error: typeof data.error === "string" ? data.error : null,
+    meta:
+      data.meta && typeof data.meta === "object"
+        ? (data.meta as Record<string, unknown>)
+        : null,
+  };
+}
+
+function readStoredIngestJobs(): Record<IngestJobKind, IngestJob | null> | null {
+  try {
+    if (typeof window === "undefined") return null;
+    const storage = window.localStorage;
+    if (!storage || typeof storage.getItem !== "function") return null;
+    const raw = storage.getItem(INGEST_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return null;
+    const source = parsed as Record<string, unknown>;
+    return {
+      reputation: parseStoredIngestJob(source.reputation, "reputation"),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function persistIngestJobs(jobs: Record<IngestJobKind, IngestJob | null>) {
+  try {
+    if (typeof window === "undefined") return;
+    const storage = window.localStorage;
+    if (!storage || typeof storage.setItem !== "function") return;
+    const payload: Partial<Record<IngestJobKind, IngestJob>> = {};
+    INGEST_KINDS.forEach((kind) => {
+      const job = jobs[kind];
+      if (job) payload[kind] = job;
+    });
+    if (!Object.keys(payload).length) {
+      storage.removeItem(INGEST_STORAGE_KEY);
+      return;
+    }
+    storage.setItem(INGEST_STORAGE_KEY, JSON.stringify(payload));
+  } catch {
+    // ignore storage failures
+  }
+}
 
 function sanitizeSettingsForUi(data: ReputationSettingsResponse): ReputationSettingsResponse {
   if (!DISABLE_ADVANCED_SETTINGS) return data;
@@ -380,6 +460,16 @@ export function Shell({ children }: { children: React.ReactNode }) {
       alive = false;
     };
   }, [settingsOpen]);
+
+  useEffect(() => {
+    const stored = readStoredIngestJobs();
+    if (!stored) return;
+    setIngestJobs((prev) => ({ ...prev, ...stored }));
+  }, []);
+
+  useEffect(() => {
+    persistIngestJobs(ingestJobs);
+  }, [ingestJobs]);
 
   const ingestJobsRef = useRef(ingestJobs);
 
@@ -975,6 +1065,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
     {
       href: "/",
       label: "Dashboard",
+      mobileLabel: "Dashboard",
       icon: LayoutDashboard,
       description: "Señales clave",
     },
@@ -983,6 +1074,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
           {
             href: "/sentimiento/markets",
             label: "Sentimiento Markets",
+            mobileLabel: "Markets",
             icon: HeartPulse,
             description: "Apps y marketplaces",
           },
@@ -993,6 +1085,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
           {
             href: "/sentimiento/prensa",
             label: "Sentimiento Prensa",
+            mobileLabel: "Prensa",
             icon: Newspaper,
             description: "Histórico en medios",
           },
@@ -1003,6 +1096,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
           {
             href: "/markets",
             label: "Respuestas en Markets",
+            mobileLabel: "Respuestas",
             icon: MessageSquare,
             description: "Seguimiento VoC",
           },
@@ -2439,8 +2533,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
                   <Link
                     key={`mobile-${item.href}`}
                     href={item.href}
+                    aria-label={item.label}
                     className={
-                      "flex flex-col items-center justify-center gap-1 px-3 py-3 text-[10px] uppercase tracking-[0.24em] transition " +
+                      "flex min-h-[66px] flex-col items-center justify-center gap-1.5 px-2 py-3 transition " +
                       (active
                         ? "text-white"
                         : "text-[color:var(--text-60)] hover:text-white")
@@ -2461,7 +2556,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
                           : "h-5 w-5 text-[color:var(--blue)]"
                       }
                     />
-                    <span>{item.label}</span>
+                    <span className="hidden min-[430px]:block mt-0.5 text-[9px] uppercase tracking-[0.16em] leading-tight text-center text-current">
+                      {item.mobileLabel}
+                    </span>
                   </Link>
                 );
               })}

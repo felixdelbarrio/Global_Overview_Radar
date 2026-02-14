@@ -638,6 +638,33 @@ def test_build_collectors_google_play_applies_core_only_and_dedupe(
     assert any("google_play: skipped collectors" in note for note in notes)
 
 
+def test_build_collectors_google_play_uses_scraper_when_api_endpoint_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("GOOGLE_PLAY_API_ENABLED", "true")
+    monkeypatch.delenv("GOOGLE_PLAY_API_ENDPOINT", raising=False)
+    monkeypatch.setenv("GOOGLE_PLAY_DEFAULT_COUNTRY", "ES")
+    monkeypatch.setenv("GOOGLE_PLAY_DEFAULT_LANGUAGE", "es")
+
+    cfg = {
+        "actor_principal": "BBVA",
+        "keywords": ["bbva"],
+        "google_play": {
+            "package_ids": ["pkg.bbva"],
+        },
+    }
+
+    service = ReputationIngestService()
+    collectors, notes = service._build_collectors(cfg, ["google_play"])
+
+    assert len(collectors) == 1
+    assert getattr(collectors[0], "_package_id", "") == "pkg.bbva"
+    assert any(
+        "missing GOOGLE_PLAY_API_ENDPOINT (using scraper fallback)" in note
+        for note in notes
+    )
+
+
 def test_build_collectors_appstore_applies_core_only_and_dedupe(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -687,6 +714,74 @@ def test_build_collectors_appstore_applies_core_only_and_dedupe(
     assert ("app.santander.es", "es", "España") in tuples
     assert ("app.santander.mx", "mx", "México") in tuples
     assert any("appstore: skipped collectors" in note for note in notes)
+
+
+def test_collect_items_google_play_failover_uses_secondary_collector(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "reputation.collectors.google_play.GooglePlayScraperCollector.collect",
+        lambda self: [],
+    )
+    monkeypatch.setattr(
+        "reputation.collectors.google_play.GooglePlayApiCollector.collect",
+        lambda self: [
+            ReputationItem(id="gp-fallback-1", source="google_play", text="ok")
+        ],
+    )
+
+    collector = ReputationIngestService._build_google_play_collector(
+        api_enabled=False,
+        endpoint="https://collector.example/google-play",
+        api_key=None,
+        api_key_param="key",
+        package_id="pkg.bbva",
+        country="ES",
+        language="es",
+        max_reviews=10,
+        scrape_timeout=5,
+        failover_enabled=True,
+        failover_min_reviews=1,
+        geo="España",
+    )
+
+    notes: list[str] = []
+    items = ReputationIngestService._collect_items([collector], notes)
+
+    assert len(items) == 1
+    assert items[0].id == "gp-fallback-1"
+    assert any("google_play" in note and "failover" in note for note in notes)
+
+
+def test_collect_items_appstore_failover_uses_secondary_collector(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "reputation.collectors.appstore.AppStoreScraperCollector.collect",
+        lambda self: [],
+    )
+    monkeypatch.setattr(
+        "reputation.collectors.appstore.AppStoreCollector.collect",
+        lambda self: [ReputationItem(id="as-fallback-1", source="appstore", text="ok")],
+    )
+
+    collector = ReputationIngestService._build_appstore_collector(
+        api_enabled=False,
+        country="es",
+        app_id="12345",
+        max_reviews=10,
+        scrape_timeout=5,
+        failover_enabled=True,
+        failover_min_reviews=1,
+        geo="España",
+    )
+
+    notes: list[str] = []
+    items = ReputationIngestService._collect_items([collector], notes)
+
+    assert len(items) == 1
+    assert items[0].id == "as-fallback-1"
+    assert any("appstore" in note and "failover" in note for note in notes)
 
 
 def test_merge_items_backfills_author_and_reply_signals() -> None:
@@ -772,6 +867,63 @@ def test_apply_geo_hints_prefers_publisher_country_tld() -> None:
 
     assert result[0].geo == "México"
     assert result[0].signals.get("geo_source") == "publisher"
+
+
+def test_apply_geo_hints_matches_publisher_subdomain_from_site_sources_map() -> None:
+    cfg = {
+        "geografias": ["España", "México"],
+        "geografias_aliases": {
+            "España": ["Spain", "ES"],
+            "México": ["Mexico", "MX"],
+        },
+        "news": {
+            "site_sources_by_geo": {
+                "España": {"press": ["expansion.com"]},
+                "México": {"press": ["ovaciones.com"]},
+            }
+        },
+    }
+    item = ReputationItem(
+        id="geo-pub-map-1",
+        source="news",
+        geo="España",
+        title="BBVA amplía operaciones",
+        signals={"publisher_domain": "rss.ovaciones.com"},
+    )
+
+    result = ReputationIngestService._apply_geo_hints(cfg, [item])
+
+    assert result[0].geo == "México"
+    assert result[0].signals.get("geo_source") == "publisher"
+
+
+def test_apply_geo_hints_ignores_ambiguous_site_source_domain() -> None:
+    cfg = {
+        "geografias": ["España", "México"],
+        "geografias_aliases": {
+            "España": ["Spain", "ES"],
+            "México": ["Mexico", "MX"],
+        },
+        "news": {
+            "site_sources_by_geo": {
+                "España": {"press": ["reuters.com"]},
+                "México": {"press": ["reuters.com"]},
+            }
+        },
+    }
+    item = ReputationItem(
+        id="geo-ambiguous-domain-1",
+        source="news",
+        geo="México",
+        title="BBVA acelera su agenda digital",
+        url="https://www.reuters.com/world/europe/bbva-test-story",
+        signals={},
+    )
+
+    result = ReputationIngestService._apply_geo_hints(cfg, [item])
+
+    assert result[0].geo == "México"
+    assert result[0].signals.get("geo_source") is None
 
 
 def test_apply_geo_hints_detects_geo_with_html_and_url_encoding() -> None:
