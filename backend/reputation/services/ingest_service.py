@@ -1609,8 +1609,6 @@ class ReputationIngestService:
         if rating is None:
             return False
         label, score = _sentiment_from_stars(rating)
-        if not isinstance(item.signals, dict):
-            item.signals = {}
         item.sentiment = label
         item.signals["sentiment_score"] = score
         item.signals["sentiment_provider"] = "stars"
@@ -1905,10 +1903,7 @@ class ReputationIngestService:
                 and _matches_noise_terms()
                 and (
                     not has_context_terms
-                    or (
-                        compiled_context_terms is not None
-                        and not _matches_default_context()
-                    )
+                    or (compiled_context_terms is not None and not _matches_default_context())
                 )
             ):
                 dropped_noise += 1
@@ -3855,8 +3850,8 @@ class ReputationIngestService:
         while remaining:
             remaining = False
             for bucket_key in order:
-                bucket = buckets.get(bucket_key) or []
-                if not bucket:
+                bucket = buckets.get(bucket_key)
+                if bucket is None or not bucket:
                     continue
                 result.append(bucket.popleft())
                 remaining = True
