@@ -293,7 +293,9 @@ describe("Shell settings and ingest", () => {
     fireEvent.click(screen.getByLabelText("Configuración"));
     expect(await screen.findByText("CONFIGURACIÓN")).toBeInTheDocument();
 
-    const newsCredentialToggle = screen.getByLabelText("Activar Noticias (RSS)");
+    const newsCredentialToggle = await screen.findByRole("button", {
+      name: /Activar\s+Noticias/i,
+    });
     fireEvent.click(newsCredentialToggle);
     fireEvent.click(screen.getByText("Guardar"));
 

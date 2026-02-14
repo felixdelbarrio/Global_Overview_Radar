@@ -499,52 +499,58 @@ describe("SentimentView dashboard", () => {
   });
 
   it("uses natural month range and supports month navigation", async () => {
-    render(<SentimentView mode="dashboard" />);
-    await screen.findByText("Dashboard reputacional");
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2025-01-15T12:00:00Z"));
+    try {
+      render(<SentimentView mode="dashboard" />);
+      await screen.findByText("Dashboard reputacional");
 
-    const now = new Date();
-    const currentStart = toDate(new Date(now.getFullYear(), now.getMonth(), 1));
-    const currentEnd = toDate(now);
-    const currentLabel = monthLabel(new Date(now.getFullYear(), now.getMonth(), 1));
+      const now = new Date();
+      const currentStart = toDate(new Date(now.getFullYear(), now.getMonth(), 1));
+      const currentEnd = toDate(now);
+      const currentLabel = monthLabel(new Date(now.getFullYear(), now.getMonth(), 1));
 
-    expect(screen.getByTestId("dashboard-month-label")).toHaveTextContent(currentLabel);
-    expect(screen.getByRole("button", { name: "Mes siguiente" })).toBeDisabled();
+      expect(screen.getByTestId("dashboard-month-label")).toHaveTextContent(currentLabel);
+      expect(screen.getByRole("button", { name: "Mes siguiente" })).toBeDisabled();
 
-    await waitFor(() => {
-      const queriedCurrentMonth = apiGetMock.mock.calls.some(([path]) => {
-        if (typeof path !== "string") return false;
-        return (
-          path.startsWith("/reputation/items?") &&
-          path.includes(`from_date=${currentStart}`) &&
-          path.includes(`to_date=${currentEnd}`)
-        );
+      await waitFor(() => {
+        const queriedCurrentMonth = apiGetMock.mock.calls.some(([path]) => {
+          if (typeof path !== "string") return false;
+          return (
+            path.startsWith("/reputation/items?") &&
+            path.includes(`from_date=${currentStart}`) &&
+            path.includes(`to_date=${currentEnd}`)
+          );
+        });
+        expect(queriedCurrentMonth).toBe(true);
       });
-      expect(queriedCurrentMonth).toBe(true);
-    });
 
-    fireEvent.click(screen.getByRole("button", { name: "Mes anterior" }));
+      fireEvent.click(screen.getByRole("button", { name: "Mes anterior" }));
 
-    const previousDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const previousStart = toDate(previousDate);
-    const previousEnd = toDate(
-      new Date(previousDate.getFullYear(), previousDate.getMonth() + 1, 0),
-    );
-    const previousLabel = monthLabel(previousDate);
+      const previousDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const previousStart = toDate(previousDate);
+      const previousEnd = toDate(
+        new Date(previousDate.getFullYear(), previousDate.getMonth() + 1, 0),
+      );
+      const previousLabel = monthLabel(previousDate);
 
-    await waitFor(() => {
-      expect(screen.getByTestId("dashboard-month-label")).toHaveTextContent(previousLabel);
-      const queriedPreviousMonth = apiGetMock.mock.calls.some(([path]) => {
-        if (typeof path !== "string") return false;
-        return (
-          path.startsWith("/reputation/items?") &&
-          path.includes(`from_date=${previousStart}`) &&
-          path.includes(`to_date=${previousEnd}`)
-        );
+      await waitFor(() => {
+        expect(screen.getByTestId("dashboard-month-label")).toHaveTextContent(previousLabel);
+        const queriedPreviousMonth = apiGetMock.mock.calls.some(([path]) => {
+          if (typeof path !== "string") return false;
+          return (
+            path.startsWith("/reputation/items?") &&
+            path.includes(`from_date=${previousStart}`) &&
+            path.includes(`to_date=${previousEnd}`)
+          );
+        });
+        expect(queriedPreviousMonth).toBe(true);
       });
-      expect(queriedPreviousMonth).toBe(true);
-    });
 
-    expect(screen.getByRole("button", { name: "Mes siguiente" })).not.toBeDisabled();
+      expect(screen.getByRole("button", { name: "Mes siguiente" })).not.toBeDisabled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
