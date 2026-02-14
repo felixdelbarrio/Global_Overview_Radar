@@ -153,6 +153,47 @@ def _compile_single_keyword(keyword: str) -> CompiledKeywords:
     return compile_keywords([keyword])
 
 
+@lru_cache(maxsize=32768)
+def _normalize_site_domain_cached(domain: str) -> str:
+    cleaned = domain.strip().lower()
+    for prefix in ("https://", "http://"):
+        if cleaned.startswith(prefix):
+            cleaned = cleaned[len(prefix) :]
+            break
+    if cleaned.startswith("www."):
+        cleaned = cleaned[4:]
+    return cleaned.strip("/")
+
+
+@lru_cache(maxsize=32768)
+def _extract_domain_cached(value: str) -> str:
+    if not value:
+        return ""
+    try:
+        parsed = urlparse(value)
+        if parsed.netloc:
+            return parsed.netloc
+    except Exception:
+        pass
+    try:
+        parsed = urlparse(f"http://{value}")
+        return parsed.netloc
+    except Exception:
+        return ""
+
+
+@lru_cache(maxsize=4096)
+def _normalize_geo_hint_text_cached(text: str) -> str:
+    if not text:
+        return ""
+    decoded = text
+    if "&" in decoded:
+        decoded = unescape(decoded)
+    if "%" in decoded or "+" in decoded:
+        decoded = unquote_plus(decoded)
+    return normalize_text(decoded)
+
+
 def _primary_actor_canonical(cfg: dict[str, Any]) -> str:
     info = primary_actor_info(cfg)
     if not info:
@@ -1392,10 +1433,10 @@ class ReputationIngestService:
                     continue
 
             title_only = item.title or ""
-            content_geo = cls._detect_geo_in_text(title_only, geo_matchers)
-            if not content_geo and item.text:
-                text = f"{title_only} {item.text}" if title_only else item.text
-                content_geo = cls._detect_geo_in_text(text, geo_matchers)
+            content_geo = cls._detect_geo_in_text(title_only, geo_matchers) if title_only else None
+            body_only = item.text or ""
+            if not content_geo and body_only:
+                content_geo = cls._detect_geo_in_text(body_only, geo_matchers)
             if content_geo:
                 if item.geo != content_geo:
                     item.geo = content_geo
@@ -1717,43 +1758,65 @@ class ReputationIngestService:
         dropped_noise = 0
         dropped_context = 0
         geo_key_cache: dict[str, str] = {}
+        canonical_actor_cache: dict[str, str] = {}
 
         for item in items:
             source = (item.source or "").strip().lower()
             needs_actor = source in require_actor_sources
             needs_context = source in require_context_sources
             needs_noise = has_noise_terms and source in noise_sources
-            needs_actor_candidates = needs_actor or geo_filter_enabled or guard_context_enabled
-
-            actor_candidates: list[str] = []
-            canonical_candidates: list[str] = []
-            if needs_actor_candidates:
-                actor_candidates = cls._item_actor_candidates(item)
-                if actor_candidates:
-                    canonical_candidates = cls._canonicalize_actor_candidates(
-                        actor_candidates,
-                        alias_map,
-                    )
+            needs_actor_candidates = needs_actor or (geo_filter_enabled and bool(item.geo))
+            needs_actor_candidates = needs_actor_candidates or guard_context_enabled
 
             title = item.title or ""
             body = item.text or ""
             has_text = bool((title and title.strip()) or (body and body.strip()))
+            combined_text = ""
+            if has_text:
+                combined_text = f"{title} {body}" if title and body else (title or body)
+            actor_candidates: list[str] | None = None
+            canonical_candidates: list[str] | None = None
             text_tokens: set[str] | None = None
+
+            def _ensure_actor_candidates() -> list[str]:
+                nonlocal actor_candidates
+                if actor_candidates is not None:
+                    return actor_candidates
+                if not needs_actor_candidates:
+                    actor_candidates = []
+                else:
+                    actor_candidates = cls._item_actor_candidates(item)
+                return actor_candidates
+
+            def _ensure_canonical_candidates() -> list[str]:
+                nonlocal canonical_candidates
+                if canonical_candidates is not None:
+                    return canonical_candidates
+                candidates_local = _ensure_actor_candidates()
+                if not candidates_local:
+                    canonical_candidates = []
+                else:
+                    canonical_candidates = cls._canonicalize_actor_candidates(
+                        candidates_local,
+                        alias_map,
+                        canonical_cache=canonical_actor_cache,
+                    )
+                return canonical_candidates
 
             def _ensure_text_tokens() -> set[str]:
                 nonlocal text_tokens
                 if text_tokens is not None:
                     return text_tokens
-                if not has_text:
+                if not has_text or not combined_text:
                     text_tokens = set()
                     return text_tokens
-                if title and body:
-                    text_tokens = cls._text_tokens(f"{title} {body}")
-                else:
-                    text_tokens = cls._text_tokens(title or body)
+                text_tokens = cls._text_tokens(combined_text)
                 return text_tokens
 
-            if needs_actor and not actor_candidates:
+            actor_candidates_current: list[str] | None = None
+            if needs_actor:
+                actor_candidates_current = _ensure_actor_candidates()
+            if needs_actor and not actor_candidates_current:
                 dropped_actor += 1
                 continue
             if needs_actor and not cls._item_actor_in_text(
@@ -1761,8 +1824,8 @@ class ReputationIngestService:
                 alias_map,
                 aliases_by_canonical,
                 text_tokens=_ensure_text_tokens(),
-                candidates=actor_candidates,
-                canonical_candidates=canonical_candidates,
+                candidates=actor_candidates_current,
+                canonical_candidates=_ensure_canonical_candidates(),
             ):
                 dropped_actor_text += 1
                 continue
@@ -1788,7 +1851,7 @@ class ReputationIngestService:
                     allowed_by_geo,
                     known_actors,
                     alias_map,
-                    canonical_candidates=canonical_candidates,
+                    canonical_candidates=_ensure_canonical_candidates(),
                     geo_key=geo_key,
                 ):
                     dropped_geo += 1
@@ -1799,7 +1862,7 @@ class ReputationIngestService:
                     item,
                     guard_actors,
                     alias_map,
-                    canonical_candidates=canonical_candidates,
+                    canonical_candidates=_ensure_canonical_candidates(),
                 )
                 and has_text
                 and compiled_context_terms is not None
@@ -1881,13 +1944,20 @@ class ReputationIngestService:
     def _canonicalize_actor_candidates(
         candidates: list[str],
         alias_map: dict[str, str],
+        canonical_cache: dict[str, str] | None = None,
     ) -> list[str]:
         if not candidates:
             return []
         canonical_candidates: list[str] = []
         seen: set[str] = set()
         for candidate in candidates:
-            canonical = canonicalize_actor(candidate, alias_map) if alias_map else candidate
+            canonical = ""
+            if canonical_cache is not None and candidate in canonical_cache:
+                canonical = canonical_cache[candidate]
+            else:
+                canonical = canonicalize_actor(candidate, alias_map) if alias_map else candidate
+                if canonical_cache is not None:
+                    canonical_cache[candidate] = canonical or ""
             if not canonical or canonical in seen:
                 continue
             seen.add(canonical)
@@ -3142,14 +3212,7 @@ class ReputationIngestService:
 
     @staticmethod
     def _normalize_site_domain(domain: str) -> str:
-        cleaned = domain.strip().lower()
-        for prefix in ("https://", "http://"):
-            if cleaned.startswith(prefix):
-                cleaned = cleaned[len(prefix) :]
-                break
-        if cleaned.startswith("www."):
-            cleaned = cleaned[4:]
-        return cleaned.strip("/")
+        return _normalize_site_domain_cached(domain)
 
     @staticmethod
     def _signal_text(value: object) -> str:
@@ -3498,12 +3561,7 @@ class ReputationIngestService:
     ) -> str | None:
         if not text or not geo_matchers:
             return None
-        decoded = text
-        if "&" in decoded:
-            decoded = unescape(decoded)
-        if "%" in decoded or "+" in decoded:
-            decoded = unquote_plus(decoded)
-        normalized = normalize_text(decoded)
+        normalized = _normalize_geo_hint_text_cached(text)
         if not normalized:
             return None
         tokens: set[str] | None = None
@@ -3691,19 +3749,7 @@ class ReputationIngestService:
 
     @staticmethod
     def _extract_domain(value: str) -> str:
-        if not value:
-            return ""
-        try:
-            parsed = urlparse(value)
-            if parsed.netloc:
-                return parsed.netloc
-        except Exception:
-            pass
-        try:
-            parsed = urlparse(f"http://{value}")
-            return parsed.netloc
-        except Exception:
-            return ""
+        return _extract_domain_cached(value)
 
     @staticmethod
     def _extract_domains(text: str, source_geo_map: dict[str, str]) -> list[str]:
