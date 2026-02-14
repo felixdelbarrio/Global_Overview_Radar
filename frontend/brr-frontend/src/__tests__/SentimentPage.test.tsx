@@ -866,6 +866,117 @@ describe("Sentimiento page", () => {
     });
   });
 
+  it("aligns press publishers with selected source filters in press scope", async () => {
+    const metaPressResponse = {
+      ...metaResponse,
+      sources_enabled: ["news", "downdetector", "trustpilot"],
+      sources_available: ["news", "downdetector", "trustpilot"],
+    };
+    const itemsPressResponse = {
+      ...itemsResponse,
+      sources_enabled: ["news", "downdetector", "trustpilot"],
+      items: [
+        {
+          id: "press-news-2",
+          source: "news",
+          geo: "España",
+          actor: "Acme Bank",
+          title: "BBVA mejora métricas - eleconomista.es",
+          text: '<font color="#6f6f6f">eleconomista.es</font>',
+          sentiment: "positive",
+          published_at: "2025-01-01T10:00:00Z",
+          signals: { source: "Google News" },
+          url: "https://news.google.com/rss/articles/def?oc=5",
+        },
+        {
+          id: "press-dd-2",
+          source: "downdetector",
+          geo: "España",
+          actor: "Acme Bank",
+          title: "Incidencias en banca móvil",
+          text: "Pico de incidencias",
+          sentiment: "negative",
+          published_at: "2025-01-02T10:00:00Z",
+          signals: {
+            publisher_name: "Downdetector",
+            publisher_domain: "downdetector.es",
+          },
+          url: "https://downdetector.es",
+        },
+        {
+          id: "press-tp-1",
+          source: "trustpilot",
+          geo: "España",
+          actor: "Acme Bank",
+          title: "Opinión en Trustpilot",
+          text: "Valoración",
+          sentiment: "neutral",
+          published_at: "2025-01-03T10:00:00Z",
+          signals: {
+            publisher_name: "Trustpilot",
+            publisher_domain: "trustpilot.com",
+          },
+          url: "https://www.trustpilot.com",
+        },
+      ],
+      stats: { count: 3 },
+    };
+
+    const handleGetPressFilter = (path: string) => {
+      if (path.startsWith("/reputation/meta")) {
+        return Promise.resolve(metaPressResponse);
+      }
+      if (path.startsWith("/reputation/profiles")) {
+        return Promise.resolve(profilesResponse);
+      }
+      if (path.startsWith("/reputation/items")) {
+        return Promise.resolve(itemsPressResponse);
+      }
+      if (path.startsWith("/reputation/settings")) {
+        return Promise.resolve({ groups: [], advanced_options: [] });
+      }
+      return Promise.resolve({ items: [] });
+    };
+
+    apiGetMock.mockImplementation(handleGetPressFilter);
+    apiGetCachedMock.mockImplementation(handleGetPressFilter);
+
+    render(<SentimentView mode="sentiment" scope="press" />);
+
+    expect(await screen.findByText("Sentimiento en Prensa")).toBeInTheDocument();
+    await waitFor(() => {
+      const publishersBlock = screen.getByText("MEDIOS EN PRENSA").parentElement;
+      expect(publishersBlock).toBeTruthy();
+      expect(within(publishersBlock as HTMLElement).getByText("eleconomista.es")).toBeInTheDocument();
+      expect(within(publishersBlock as HTMLElement).getByText("Downdetector")).toBeInTheDocument();
+      expect(within(publishersBlock as HTMLElement).getByText("Trustpilot")).toBeInTheDocument();
+      expect(within(publishersBlock as HTMLElement).getByText("News (1)")).toBeInTheDocument();
+      expect(within(publishersBlock as HTMLElement).getByText("Downdetector (1)")).toBeInTheDocument();
+      expect(within(publishersBlock as HTMLElement).getByText("Trustpilot (1)")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /^news/i }));
+
+    await waitFor(() => {
+      const publishersBlock = screen.getByText("MEDIOS EN PRENSA").parentElement;
+      expect(publishersBlock).toBeTruthy();
+      expect(within(publishersBlock as HTMLElement).getByText("eleconomista.es")).toBeInTheDocument();
+      expect(
+        within(publishersBlock as HTMLElement).queryByText("Downdetector")
+      ).not.toBeInTheDocument();
+      expect(
+        within(publishersBlock as HTMLElement).queryByText("Trustpilot")
+      ).not.toBeInTheDocument();
+      expect(within(publishersBlock as HTMLElement).getByText("News (1)")).toBeInTheDocument();
+      expect(
+        within(publishersBlock as HTMLElement).queryByText("Downdetector (1)")
+      ).not.toBeInTheDocument();
+      expect(
+        within(publishersBlock as HTMLElement).queryByText("Trustpilot (1)")
+      ).not.toBeInTheDocument();
+    });
+  });
+
   it("refreshes reputation meta bypassing cache after settings change", async () => {
     render(<SentimientoPage />);
 
@@ -955,6 +1066,81 @@ describe("Sentimiento page", () => {
       expect(within(actorsBlock as HTMLElement).queryByText("Beta Bank")).not.toBeInTheDocument();
       expect(within(actorsBlock as HTMLElement).getByText("App Store (1)")).toBeInTheDocument();
       expect(within(actorsBlock as HTMLElement).getByText("Google Play (0)")).toBeInTheDocument();
+    });
+  });
+
+  it("keeps press publishers aligned with principal context when comparisons are disabled", async () => {
+    const metaNoComparisonsPress = {
+      ...metaResponse,
+      ui_show_comparisons: false,
+      sources_enabled: ["news", "trustpilot"],
+      sources_available: ["news", "trustpilot"],
+    };
+    const itemsNoComparisonsPress = {
+      ...itemsResponse,
+      sources_enabled: ["news", "trustpilot"],
+      items: [
+        {
+          id: "principal-news-press",
+          source: "news",
+          geo: "España",
+          actor: "Acme Bank",
+          title: "Acme en portada - democrata.es",
+          text: '<font color="#6f6f6f">democrata.es</font>',
+          sentiment: "positive",
+          published_at: "2025-01-01T10:00:00Z",
+          signals: { source: "Google News" },
+          url: "https://news.google.com/rss/articles/ghi?oc=5",
+        },
+        {
+          id: "other-trustpilot-press",
+          source: "trustpilot",
+          geo: "España",
+          actor: "Beta Bank",
+          title: "Opinión externa",
+          text: "Reseña de otro actor",
+          sentiment: "negative",
+          published_at: "2025-01-02T10:00:00Z",
+          signals: { publisher_name: "Trustpilot", publisher_domain: "trustpilot.com" },
+          url: "https://www.trustpilot.com",
+        },
+      ],
+      stats: { count: 2 },
+    };
+
+    const handleGetNoComparisonsPress = (path: string) => {
+      if (path.startsWith("/reputation/meta")) {
+        return Promise.resolve(metaNoComparisonsPress);
+      }
+      if (path.startsWith("/reputation/profiles")) {
+        return Promise.resolve(profilesResponse);
+      }
+      if (path.startsWith("/reputation/items")) {
+        return Promise.resolve(itemsNoComparisonsPress);
+      }
+      if (path.startsWith("/reputation/settings")) {
+        return Promise.resolve({ groups: [], advanced_options: [] });
+      }
+      return Promise.resolve({ items: [] });
+    };
+
+    apiGetMock.mockImplementation(handleGetNoComparisonsPress);
+    apiGetCachedMock.mockImplementation(handleGetNoComparisonsPress);
+
+    render(<SentimentView mode="sentiment" scope="press" />);
+
+    expect(await screen.findByText("Sentimiento en Prensa")).toBeInTheDocument();
+    await waitFor(() => {
+      const publishersBlock = screen.getByText("MEDIOS EN PRENSA").parentElement;
+      expect(publishersBlock).toBeTruthy();
+      expect(within(publishersBlock as HTMLElement).getByText("democrata.es")).toBeInTheDocument();
+      expect(within(publishersBlock as HTMLElement).getByText("News (1)")).toBeInTheDocument();
+      expect(
+        within(publishersBlock as HTMLElement).queryByText("Trustpilot")
+      ).not.toBeInTheDocument();
+      expect(
+        within(publishersBlock as HTMLElement).queryByText("Trustpilot (1)")
+      ).not.toBeInTheDocument();
     });
   });
 
