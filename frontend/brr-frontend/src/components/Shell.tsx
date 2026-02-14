@@ -975,6 +975,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
     {
       href: "/",
       label: "Dashboard",
+      mobileLabel: "Dashboard",
       icon: LayoutDashboard,
       description: "Señales clave",
     },
@@ -983,6 +984,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
           {
             href: "/sentimiento/markets",
             label: "Sentimiento Markets",
+            mobileLabel: "Markets",
             icon: HeartPulse,
             description: "Apps y marketplaces",
           },
@@ -993,6 +995,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
           {
             href: "/sentimiento/prensa",
             label: "Sentimiento Prensa",
+            mobileLabel: "Prensa",
             icon: Newspaper,
             description: "Histórico en medios",
           },
@@ -1003,6 +1006,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
           {
             href: "/markets",
             label: "Respuestas en Markets",
+            mobileLabel: "Respuestas",
             icon: MessageSquare,
             description: "Seguimiento VoC",
           },
@@ -2439,8 +2443,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
                   <Link
                     key={`mobile-${item.href}`}
                     href={item.href}
+                    aria-label={item.label}
                     className={
-                      "flex flex-col items-center justify-center gap-1 px-3 py-3 text-[10px] uppercase tracking-[0.24em] transition " +
+                      "flex min-h-[66px] flex-col items-center justify-center gap-1.5 px-2 py-3 transition " +
                       (active
                         ? "text-white"
                         : "text-[color:var(--text-60)] hover:text-white")
@@ -2461,7 +2466,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
                           : "h-5 w-5 text-[color:var(--blue)]"
                       }
                     />
-                    <span>{item.label}</span>
+                    <span className="hidden min-[430px]:block mt-0.5 text-[9px] uppercase tracking-[0.16em] leading-tight text-center text-current">
+                      {item.mobileLabel}
+                    </span>
                   </Link>
                 );
               })}

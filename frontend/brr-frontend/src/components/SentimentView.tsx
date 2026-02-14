@@ -179,6 +179,26 @@ const DashboardChart = dynamic(
   { ssr: false }
 );
 
+function detectHttpStatus(error: unknown): number | null {
+  if (typeof error === "object" && error !== null && "status" in error) {
+    const status = Number((error as { status?: unknown }).status);
+    if (Number.isInteger(status) && status > 0) return status;
+  }
+  const text = error instanceof Error ? error.message : String(error);
+  const match = text.match(/failed:\s*(\d{3})/i);
+  if (!match) return null;
+  const parsed = Number(match[1]);
+  return Number.isInteger(parsed) ? parsed : null;
+}
+
+function formatLoadError(error: unknown): string {
+  const status = detectHttpStatus(error);
+  if (status === 429) {
+    return "Límite temporal de peticiones alcanzado (429). Espera unos segundos y vuelve a intentar.";
+  }
+  return error instanceof Error ? error.message : String(error);
+}
+
 export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentViewProps) {
   const today = useMemo(() => new Date(), []);
   const defaultTo = useMemo(() => toDateInput(today), [today]);
@@ -525,7 +545,7 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
           setItems(doc.combined.items ?? []);
           setError(null);
         } catch (e) {
-          if (alive) setError(String(e));
+          if (alive) setError(formatLoadError(e));
         } finally {
           if (alive) setItemsLoading(false);
         }
@@ -550,7 +570,7 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
         setLastUpdatedAt(doc.generated_at ?? null);
         setError(null);
       } catch (e) {
-        if (alive) setError(String(e));
+        if (alive) setError(formatLoadError(e));
       } finally {
         if (alive) setItemsLoading(false);
       }
@@ -594,7 +614,7 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
         setChartError(null);
       })
       .catch((e) => {
-        if (alive) setChartError(String(e));
+        if (alive) setChartError(formatLoadError(e));
       })
       .finally(() => {
         if (alive) setChartLoading(false);
@@ -646,7 +666,7 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
       .catch((e) => {
         if (!alive) return;
         setDashboardMarketInsights(null);
-        setDashboardMarketInsightsError(String(e));
+        setDashboardMarketInsightsError(formatLoadError(e));
       })
       .finally(() => {
         if (alive) {
