@@ -1886,15 +1886,15 @@ class ReputationIngestService:
                     continue
             if (
                 guard_context_enabled
-                and has_text
-                and compiled_context_terms is not None
-                and not _matches_default_context()
                 and cls._item_has_guard_actor(
                     item,
                     guard_actors,
                     alias_map,
                     canonical_candidates=_ensure_canonical_candidates(),
                 )
+                and has_text
+                and compiled_context_terms is not None
+                and not _matches_default_context()
             ):
                 dropped_guard += 1
                 continue
