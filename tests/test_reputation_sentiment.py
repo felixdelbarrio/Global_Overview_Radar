@@ -869,6 +869,63 @@ def test_apply_geo_hints_prefers_publisher_country_tld() -> None:
     assert result[0].signals.get("geo_source") == "publisher"
 
 
+def test_apply_geo_hints_matches_publisher_subdomain_from_site_sources_map() -> None:
+    cfg = {
+        "geografias": ["España", "México"],
+        "geografias_aliases": {
+            "España": ["Spain", "ES"],
+            "México": ["Mexico", "MX"],
+        },
+        "news": {
+            "site_sources_by_geo": {
+                "España": {"press": ["expansion.com"]},
+                "México": {"press": ["ovaciones.com"]},
+            }
+        },
+    }
+    item = ReputationItem(
+        id="geo-pub-map-1",
+        source="news",
+        geo="España",
+        title="BBVA amplía operaciones",
+        signals={"publisher_domain": "rss.ovaciones.com"},
+    )
+
+    result = ReputationIngestService._apply_geo_hints(cfg, [item])
+
+    assert result[0].geo == "México"
+    assert result[0].signals.get("geo_source") == "publisher"
+
+
+def test_apply_geo_hints_ignores_ambiguous_site_source_domain() -> None:
+    cfg = {
+        "geografias": ["España", "México"],
+        "geografias_aliases": {
+            "España": ["Spain", "ES"],
+            "México": ["Mexico", "MX"],
+        },
+        "news": {
+            "site_sources_by_geo": {
+                "España": {"press": ["reuters.com"]},
+                "México": {"press": ["reuters.com"]},
+            }
+        },
+    }
+    item = ReputationItem(
+        id="geo-ambiguous-domain-1",
+        source="news",
+        geo="México",
+        title="BBVA acelera su agenda digital",
+        url="https://www.reuters.com/world/europe/bbva-test-story",
+        signals={},
+    )
+
+    result = ReputationIngestService._apply_geo_hints(cfg, [item])
+
+    assert result[0].geo == "México"
+    assert result[0].signals.get("geo_source") is None
+
+
 def test_apply_geo_hints_detects_geo_with_html_and_url_encoding() -> None:
     cfg = {
         "geografias": ["España", "México"],

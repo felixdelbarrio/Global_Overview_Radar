@@ -341,6 +341,10 @@ describe("Sentimiento page", () => {
     const summarySection = screen.getByText("RESUMEN").closest("section");
     expect(summarySection).toBeTruthy();
     expect(within(summarySection as HTMLElement).queryByText("Score medio")).not.toBeInTheDocument();
+    expect(within(summarySection as HTMLElement).getAllByText(/RESTO DE ACTORES/i).length).toBeGreaterThan(0);
+    expect(
+      within(summarySection as HTMLElement).getAllByText(/opiniones del market contestadas/i).length
+    ).toBeGreaterThan(1);
 
     const mentionList = screen.getByText("LISTADO").closest("section");
     expect(mentionList).toBeTruthy();
@@ -1102,7 +1106,8 @@ describe("Sentimiento page", () => {
     expect(summarySection).toBeTruthy();
     expect(within(summarySection as HTMLElement).queryByText("Score medio")).not.toBeInTheDocument();
     expect(within(summarySection as HTMLElement).queryByText("Total menciones")).not.toBeInTheDocument();
-    expect(within(summarySection as HTMLElement).getByText(/menciones del/i)).toBeInTheDocument();
+    expect(within(summarySection as HTMLElement).getAllByText(/menciones del/i).length).toBeGreaterThan(0);
+    expect(within(summarySection as HTMLElement).getByText(/RESTO DE ACTORES/i)).toBeInTheDocument();
   });
 
   it("shows publisher chip in press mention cards", async () => {
