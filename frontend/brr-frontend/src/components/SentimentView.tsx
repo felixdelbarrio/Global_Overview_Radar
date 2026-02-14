@@ -156,6 +156,13 @@ type SourceCountOptions = {
   principalAliases: string[];
   comparisonsEnabled: boolean;
   selectedActorKey: string | null;
+  includeAllOthers?: boolean;
+};
+type SourceRole = "principal" | "comparison";
+type SourceCohortStats = {
+  cohortItems: ReputationItem[];
+  sourceCounts: Record<string, SourceVsCount>;
+  marketSourceTotals: MarketActorSourceTotals;
 };
 type OverridePayload = {
   ids: string[];
@@ -721,15 +728,21 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
     () => (selectedActor ? normalizeKey(selectedActor) : null),
     [selectedActor],
   );
-  const sourceCounts = useMemo(
-    () =>
-      countSourceTotals(items, {
-        principalAliases: principalAliasKeys,
-        comparisonsEnabled,
-        selectedActorKey,
-      }),
-    [items, principalAliasKeys, comparisonsEnabled, selectedActorKey],
+  const sourceCountOptions = useMemo<SourceCountOptions>(
+    () => ({
+      principalAliases: principalAliasKeys,
+      comparisonsEnabled,
+      selectedActorKey,
+      includeAllOthers: isDashboard,
+    }),
+    [principalAliasKeys, comparisonsEnabled, selectedActorKey, isDashboard],
   );
+  const sourceCohortStats = useMemo<SourceCohortStats>(
+    () =>
+      buildSourceCohortStats(items, sourceCountOptions),
+    [items, sourceCountOptions],
+  );
+  const sourceCounts = sourceCohortStats.sourceCounts;
   const sourcesOptions = useMemo(() => {
     const fromCounts = Object.keys(sourceCounts);
     if (fromCounts.length) {
@@ -878,14 +891,18 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
     return () => window.clearTimeout(timer);
   }, [filterRestoredAt]);
 
-  const sentimentSummary = useMemo(() => summarize(items), [items]);
+  const displayItems = useMemo(
+    () => (isDashboard ? items : sourceCohortStats.cohortItems),
+    [isDashboard, items, sourceCohortStats],
+  );
+  const sentimentSummary = useMemo(() => summarize(displayItems), [displayItems]);
   const principalItems = useMemo(
-    () => items.filter((item) => isPrincipalItem(item, principalAliasKeys)),
-    [items, principalAliasKeys],
+    () => displayItems.filter((item) => isPrincipalItem(item, principalAliasKeys)),
+    [displayItems, principalAliasKeys],
   );
   const otherItems = useMemo(
-    () => items.filter((item) => !isPrincipalItem(item, principalAliasKeys)),
-    [items, principalAliasKeys],
+    () => displayItems.filter((item) => !isPrincipalItem(item, principalAliasKeys)),
+    [displayItems, principalAliasKeys],
   );
   const principalSentimentSummary = useMemo(() => summarize(principalItems), [principalItems]);
   const otherSentimentSummary = useMemo(() => summarize(otherItems), [otherItems]);
@@ -902,9 +919,8 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
   );
   const splitSummaryByActor = !isDashboard && comparisonsEnabled;
   const mentionsSummaryPrincipal = useMemo(
-    () =>
-      (isDashboard ? items.length : principalItems.length).toLocaleString("es-ES"),
-    [isDashboard, items.length, principalItems.length],
+    () => (isDashboard ? displayItems.length : principalItems.length).toLocaleString("es-ES"),
+    [isDashboard, displayItems.length, principalItems.length],
   );
   const mentionsSummaryComparison = useMemo(
     () => (splitSummaryByActor ? otherItems.length.toLocaleString("es-ES") : null),
@@ -1014,7 +1030,7 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
     effectiveToDate,
     dashboardMarketInsights,
   ]);
-  const groupedMentions = useMemo(() => groupMentions(items), [items]);
+  const groupedMentions = useMemo(() => groupMentions(displayItems), [displayItems]);
   const rangeLabel = useMemo(
     () => buildRangeLabel(effectiveFromDate, effectiveToDate),
     [effectiveFromDate, effectiveToDate],
@@ -1024,8 +1040,8 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
     [effectiveFromDate, effectiveToDate],
   );
   const latestTimestamp = useMemo(
-    () => lastUpdatedAt || getLatestDate(items),
-    [lastUpdatedAt, items],
+    () => lastUpdatedAt || getLatestDate(displayItems),
+    [lastUpdatedAt, displayItems],
   );
   const latestLabel = useMemo(
     () => formatDate(latestTimestamp),
@@ -1047,44 +1063,45 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
       ),
     [effectiveActor, geo, principalAliasKeys],
   );
-  const filteredMarketItems = useMemo(
-    () =>
-      selectedActorKey
-        ? items.filter(
-            (item) =>
-              isPrincipalItem(item, principalAliasKeys) ||
-              normalizeKey(item.actor || "") === selectedActorKey,
-          )
-        : items,
-    [items, principalAliasKeys, selectedActorKey],
-  );
   const marketActorItems = useMemo(
-    () =>
-      comparisonsEnabled
-        ? filteredMarketItems
-        : filteredMarketItems.filter((item) => isPrincipalItem(item, principalAliasKeys)),
-    [comparisonsEnabled, filteredMarketItems, principalAliasKeys],
+    () => (isDashboard ? ([] as ReputationItem[]) : sourceCohortStats.cohortItems),
+    [isDashboard, sourceCohortStats],
   );
   const marketActorRows = useMemo(
     () => buildMarketActorRows(marketActorItems),
     [marketActorItems],
   );
-  const marketSourceTotals = useMemo(
-    () =>
-      countMarketSourceTotals(marketActorItems, {
-        principalAliases: principalAliasKeys,
-        comparisonsEnabled,
-        selectedActorKey,
-      }),
-    [marketActorItems, principalAliasKeys, comparisonsEnabled, selectedActorKey],
+  const marketSourceTotals = sourceCohortStats.marketSourceTotals;
+  const marketConsistencyIssues = useMemo(
+    () => detectMarketSourceConsistencyIssues(marketActorRows, marketSourceTotals),
+    [marketActorRows, marketSourceTotals],
   );
+  useEffect(() => {
+    if (process.env.NODE_ENV === "production") return;
+    if (isDashboard || itemsLoading) return;
+    if (!marketConsistencyIssues.length) return;
+    console.error("[SentimentView] Inconsistent market source totals", {
+      issues: marketConsistencyIssues,
+      fromDate: effectiveFromDate,
+      toDate: effectiveToDate,
+      geo,
+      actor: effectiveActor,
+      scope,
+    });
+  }, [
+    isDashboard,
+    itemsLoading,
+    marketConsistencyIssues,
+    effectiveFromDate,
+    effectiveToDate,
+    geo,
+    effectiveActor,
+    scope,
+  ]);
   const pressContextItems = useMemo(() => {
     if (isDashboard) return [] as ReputationItem[];
-    if (!comparisonsEnabled) {
-      return items.filter((item) => isPrincipalItem(item, principalAliasKeys));
-    }
-    return items;
-  }, [isDashboard, comparisonsEnabled, items, principalAliasKeys]);
+    return sourceCohortStats.cohortItems;
+  }, [isDashboard, sourceCohortStats]);
   const activePressSources = useMemo(() => {
     if (isDashboard) return new Set<string>();
     const selectedOrScopedSources = sources.length
@@ -4335,33 +4352,60 @@ function isComparisonSourceItem(
   item: ReputationItem,
   options: SourceCountOptions,
 ): boolean {
-  if (!options.comparisonsEnabled) return false;
+  if (!(options.comparisonsEnabled || options.includeAllOthers)) return false;
   if (isPrincipalItem(item, options.principalAliases)) return false;
   if (!options.selectedActorKey) return true;
   return normalizeKey(item.actor || "") === options.selectedActorKey;
 }
 
-function countSourceTotals(
+function resolveSourceRole(
+  item: ReputationItem,
+  options: SourceCountOptions,
+): SourceRole | null {
+  if (isPrincipalItem(item, options.principalAliases)) return "principal";
+  if (isComparisonSourceItem(item, options)) return "comparison";
+  return null;
+}
+
+function buildSourceCohortStats(
   items: ReputationItem[],
   options: SourceCountOptions,
-): Record<string, SourceVsCount> {
-  const totals: Record<string, SourceVsCount> = {};
+): SourceCohortStats {
+  const sourceCounts: Record<string, SourceVsCount> = {};
+  const marketSourceTotals = createMarketActorSourceTotals();
+  const cohortItems: ReputationItem[] = [];
+
   for (const item of items) {
+    const role = resolveSourceRole(item, options);
+    if (!role) continue;
+    cohortItems.push(item);
+
     const sourceKey = canonicalSourceKey(item.source);
     if (!sourceKey) continue;
-    const isPrincipal = isPrincipalItem(item, options.principalAliases);
-    const isComparison = isComparisonSourceItem(item, options);
-    if (!isPrincipal && !isComparison) continue;
-    const bucket = totals[sourceKey] ?? createSourceVsCount();
-    if (isPrincipal) {
+    const bucket = sourceCounts[sourceKey] ?? createSourceVsCount();
+    if (role === "principal") {
       bucket.principal += 1;
     } else {
       bucket.comparison += 1;
     }
     bucket.total += 1;
-    totals[sourceKey] = bucket;
+    sourceCounts[sourceKey] = bucket;
+
+    const marketSourceKey = normalizeMarketActorSourceKey(sourceKey);
+    if (!marketSourceKey) continue;
+    if (role === "principal") {
+      marketSourceTotals[marketSourceKey].principal += 1;
+    } else {
+      marketSourceTotals[marketSourceKey].comparison += 1;
+    }
+    marketSourceTotals[marketSourceKey].total += 1;
   }
-  return totals;
+
+  return {
+    cohortItems,
+    sourceCounts,
+    marketSourceTotals,
+  };
 }
 
 function createMarketActorSourceTotals(): MarketActorSourceTotals {
@@ -4369,27 +4413,6 @@ function createMarketActorSourceTotals(): MarketActorSourceTotals {
     appstore: createSourceVsCount(),
     google_play: createSourceVsCount(),
   };
-}
-
-function countMarketSourceTotals(
-  items: ReputationItem[],
-  options: SourceCountOptions,
-): MarketActorSourceTotals {
-  const totals = createMarketActorSourceTotals();
-  for (const item of items) {
-    const sourceKey = normalizeMarketActorSourceKey(item.source);
-    if (!sourceKey) continue;
-    const isPrincipal = isPrincipalItem(item, options.principalAliases);
-    const isComparison = isComparisonSourceItem(item, options);
-    if (!isPrincipal && !isComparison) continue;
-    if (isPrincipal) {
-      totals[sourceKey].principal += 1;
-    } else {
-      totals[sourceKey].comparison += 1;
-    }
-    totals[sourceKey].total += 1;
-  }
-  return totals;
 }
 
 function buildMarketActorRows(items: ReputationItem[]): MarketActorRow[] {
@@ -4416,6 +4439,27 @@ function buildMarketActorRows(items: ReputationItem[]): MarketActorRow[] {
     if (b.count !== a.count) return b.count - a.count;
     return a.label.localeCompare(b.label);
   });
+}
+
+function detectMarketSourceConsistencyIssues(
+  rows: MarketActorRow[],
+  totals: MarketActorSourceTotals,
+): string[] {
+  const aggregated = createMarketActorSourceCounts();
+  for (const row of rows) {
+    for (const sourceKey of MARKET_ACTOR_SOURCE_ORDER) {
+      aggregated[sourceKey] += row.sourceCounts[sourceKey];
+    }
+  }
+  const issues: string[] = [];
+  for (const sourceKey of MARKET_ACTOR_SOURCE_ORDER) {
+    const expected = totals[sourceKey].total;
+    const current = aggregated[sourceKey];
+    if (expected !== current) {
+      issues.push(`${sourceKey}: legend=${expected}, rows=${current}`);
+    }
+  }
+  return issues;
 }
 
 function formatPressSourceLabel(source?: string | null): string {

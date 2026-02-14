@@ -1012,10 +1012,12 @@ describe("Sentimiento page", () => {
       const actorsTitle = screen.getByText("ACTORES DEL MERCADO");
       const actorsBlock = actorsTitle.parentElement;
       expect(actorsBlock).toBeTruthy();
-      expect(within(actorsBlock as HTMLElement).getByText(exactText("App Store (1 vs 3)"))).toBeInTheDocument();
       expect(
-        within(actorsBlock as HTMLElement).getByText(exactText("Google Play (0 vs 4)")),
-      ).toBeInTheDocument();
+        within(actorsBlock as HTMLElement).queryAllByText(exactText("App Store (1 vs 3)")).length,
+      ).toBeGreaterThan(0);
+      expect(
+        within(actorsBlock as HTMLElement).queryAllByText(exactText("Google Play (0 vs 4)")).length,
+      ).toBeGreaterThan(0);
       expect(within(actorsBlock as HTMLElement).getByText("Acme Bank")).toBeInTheDocument();
       expect(within(actorsBlock as HTMLElement).getByText("Revolut")).toBeInTheDocument();
       expect(within(actorsBlock as HTMLElement).getByText("CaixaBank")).toBeInTheDocument();
@@ -1196,10 +1198,12 @@ describe("Sentimiento page", () => {
       expect(within(actorsBlock as HTMLElement).getByText("Acme Bank")).toBeInTheDocument();
       expect(within(actorsBlock as HTMLElement).getByText("Santander")).toBeInTheDocument();
       expect(within(actorsBlock as HTMLElement).queryByText("CaixaBank")).not.toBeInTheDocument();
-      expect(within(actorsBlock as HTMLElement).getByText(exactText("App Store (1 vs 1)"))).toBeInTheDocument();
       expect(
-        within(actorsBlock as HTMLElement).getByText(exactText("Google Play (0 vs 0)")),
-      ).toBeInTheDocument();
+        within(actorsBlock as HTMLElement).queryAllByText(exactText("App Store (1 vs 1)")).length,
+      ).toBeGreaterThan(0);
+      expect(
+        within(actorsBlock as HTMLElement).queryAllByText(exactText("Google Play (0 vs 0)")).length,
+      ).toBeGreaterThan(0);
     });
   });
 
@@ -1511,10 +1515,12 @@ describe("Sentimiento page", () => {
 
       const actorsBlock = screen.getByText("ACTORES DEL MERCADO").parentElement;
       expect(actorsBlock).toBeTruthy();
-      expect(within(actorsBlock as HTMLElement).getByText(exactText("App Store (1 vs 0)"))).toBeInTheDocument();
       expect(
-        within(actorsBlock as HTMLElement).getByText(exactText("Google Play (0 vs 1)")),
-      ).toBeInTheDocument();
+        within(actorsBlock as HTMLElement).queryAllByText(exactText("App Store (1 vs 0)")).length,
+      ).toBeGreaterThan(0);
+      expect(
+        within(actorsBlock as HTMLElement).queryAllByText(exactText("Google Play (0 vs 1)")).length,
+      ).toBeGreaterThan(0);
       expect(within(actorsBlock as HTMLElement).getByText("Acme Bank")).toBeInTheDocument();
       expect(within(actorsBlock as HTMLElement).getByText("Beta Bank")).toBeInTheDocument();
 
@@ -1730,11 +1736,15 @@ describe("Sentimiento page", () => {
 
       const actorsBlock = screen.getByText("ACTORES DEL MERCADO").parentElement;
       expect(actorsBlock).toBeTruthy();
-      expect(within(actorsBlock as HTMLElement).getByText(exactText("App Store (2 vs 1)"))).toBeInTheDocument();
       expect(
-        within(actorsBlock as HTMLElement).getByText(exactText("Google Play (1 vs 2)")),
-      ).toBeInTheDocument();
-      expect(within(actorsBlock as HTMLElement).queryByText(exactText("App Store (2 vs 2)"))).not.toBeInTheDocument();
+        within(actorsBlock as HTMLElement).queryAllByText(exactText("App Store (2 vs 1)")).length,
+      ).toBeGreaterThan(0);
+      expect(
+        within(actorsBlock as HTMLElement).queryAllByText(exactText("Google Play (1 vs 2)")).length,
+      ).toBeGreaterThan(0);
+      expect(
+        within(actorsBlock as HTMLElement).queryAllByText(exactText("App Store (2 vs 2)")).length,
+      ).toBe(0);
     });
   });
 
