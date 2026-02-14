@@ -48,7 +48,9 @@ def test_collect_items_continues_when_one_collector_times_out(monkeypatch) -> No
     items = ReputationIngestService._collect_items(
         [_SlowCollector(), _FastCollector()],
         notes,
-        progress=lambda done, total, source: progress_updates.append((done, total, source)),
+        progress=lambda done, total, source: progress_updates.append(
+            (done, total, source)
+        ),
     )
 
     assert len(items) == 1
@@ -57,4 +59,3 @@ def test_collect_items_continues_when_one_collector_times_out(monkeypatch) -> No
     assert any(update[2] == "google_play" for update in progress_updates)
     assert progress_updates[-1][0] == 2
     assert progress_updates[-1][1] == 2
-

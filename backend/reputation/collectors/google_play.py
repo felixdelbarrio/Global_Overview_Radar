@@ -329,7 +329,9 @@ def _post_reviews_rpc(url: str, payload: bytes, *, timeout: int) -> str:
     return str(raw)
 
 
-def _extract_reviews_from_rpc_response(raw: str, *, limit: int) -> tuple[list[dict[str, Any]], str | None]:
+def _extract_reviews_from_rpc_response(
+    raw: str, *, limit: int
+) -> tuple[list[dict[str, Any]], str | None]:
     if not raw:
         return [], None
     match = _GOOGLE_PLAY_REVIEWS_RPC_HEAD_RE.search(raw)

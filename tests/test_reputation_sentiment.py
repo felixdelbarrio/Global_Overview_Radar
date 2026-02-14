@@ -599,7 +599,11 @@ def test_build_collectors_google_play_applies_core_only_and_dedupe(
             "core_only": True,
             "package_ids": ["pkg.bbva", "pkg.bbva.dup", "pkg.bbva"],
             "package_ids_by_geo": {
-                "España": ["pkg.santander.es", "pkg.santander.es.dup", "pkg.santander.es"],
+                "España": [
+                    "pkg.santander.es",
+                    "pkg.santander.es.dup",
+                    "pkg.santander.es",
+                ],
                 "México": ["pkg.santander.mx", "pkg.santander.mx"],
             },
             "geo_to_gl": {"España": "ES", "México": "MX"},
@@ -648,7 +652,11 @@ def test_build_collectors_appstore_applies_core_only_and_dedupe(
             "core_only": True,
             "app_ids": ["app.bbva", "app.bbva.dup", "app.bbva"],
             "app_ids_by_geo": {
-                "España": ["app.santander.es", "app.santander.es.dup", "app.santander.es"],
+                "España": [
+                    "app.santander.es",
+                    "app.santander.es.dup",
+                    "app.santander.es",
+                ],
                 "México": ["app.santander.mx", "app.santander.mx"],
             },
             "country_by_geo": {"España": "es", "México": "mx"},

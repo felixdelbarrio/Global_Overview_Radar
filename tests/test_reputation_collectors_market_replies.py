@@ -263,7 +263,9 @@ def test_google_play_scraper_uses_rpc_fallback_when_html_empty(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("GOOGLE_PLAY_RPC_ENABLED", "true")
-    monkeypatch.setattr("reputation.collectors.google_play.http_get_text", lambda *_, **__: "")
+    monkeypatch.setattr(
+        "reputation.collectors.google_play.http_get_text", lambda *_, **__: ""
+    )
     monkeypatch.setattr(
         "reputation.collectors.google_play._fetch_reviews_from_rpc",
         lambda **_: [

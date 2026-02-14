@@ -1825,14 +1825,17 @@ class ReputationIngestService:
             default_context_match: bool | None = None
             noise_match: bool | None = None
 
-            def _ensure_actor_candidates() -> list[str]:
+            def _ensure_actor_candidates(
+                item_local: ReputationItem = item,
+                needs_actor_candidates_local: bool = needs_actor_candidates,
+            ) -> list[str]:
                 nonlocal actor_candidates
                 if actor_candidates is not None:
                     return actor_candidates
-                if not needs_actor_candidates:
+                if not needs_actor_candidates_local:
                     actor_candidates = []
                 else:
-                    actor_candidates = cls._item_actor_candidates(item)
+                    actor_candidates = cls._item_actor_candidates(item_local)
                 return actor_candidates
 
             def _ensure_canonical_candidates() -> list[str]:
@@ -1850,37 +1853,46 @@ class ReputationIngestService:
                     )
                 return canonical_candidates
 
-            def _ensure_text_tokens() -> set[str]:
+            def _ensure_text_tokens(
+                has_text_local: bool = has_text,
+                combined_text_local: str = combined_text,
+            ) -> set[str]:
                 nonlocal text_tokens
                 if text_tokens is not None:
                     return text_tokens
-                if not has_text or not combined_text:
+                if not has_text_local or not combined_text_local:
                     text_tokens = set()
                     return text_tokens
-                text_tokens = cls._text_tokens(combined_text)
+                text_tokens = cls._text_tokens(combined_text_local)
                 return text_tokens
 
-            def _matches_default_context() -> bool:
+            def _matches_default_context(
+                has_text_local: bool = has_text,
+                compiled_context_terms_local: CompiledKeywords | None = compiled_context_terms,
+            ) -> bool:
                 nonlocal default_context_match
                 if default_context_match is not None:
                     return default_context_match
-                if not has_text or compiled_context_terms is None:
+                if not has_text_local or compiled_context_terms_local is None:
                     default_context_match = False
                     return default_context_match
                 default_context_match = match_compiled(
                     _ensure_text_tokens(),
-                    compiled_context_terms,
+                    compiled_context_terms_local,
                 )
                 return default_context_match
 
-            def _matches_noise_terms() -> bool:
+            def _matches_noise_terms(
+                has_text_local: bool = has_text,
+                compiled_noise_terms_local: CompiledKeywords | None = compiled_noise_terms,
+            ) -> bool:
                 nonlocal noise_match
                 if noise_match is not None:
                     return noise_match
-                if not has_text or compiled_noise_terms is None:
+                if not has_text_local or compiled_noise_terms_local is None:
                     noise_match = False
                     return noise_match
-                noise_match = match_compiled(_ensure_text_tokens(), compiled_noise_terms)
+                noise_match = match_compiled(_ensure_text_tokens(), compiled_noise_terms_local)
                 return noise_match
 
             actor_candidates_current: list[str] | None = None
@@ -2114,10 +2126,7 @@ class ReputationIngestService:
         if canonical_candidates is None:
             candidates = cls._item_actor_candidates(item)
             canonical_candidates = cls._canonicalize_actor_candidates(candidates, alias_map)
-        for canonical in canonical_candidates:
-            if canonical in guard_actors:
-                return True
-        return False
+        return any(canonical in guard_actors for canonical in canonical_candidates)
 
     @staticmethod
     def _normalize_geo_key(value: str) -> str:
@@ -2593,10 +2602,9 @@ class ReputationIngestService:
             if not app_ids and not app_ids_by_geo:
                 notes.append("appstore: missing app_ids in config.json")
             else:
+
                 def actor_key_for_app(app_id: str) -> str:
                     actor = app_id_to_actor.get(app_id) or fallback_actor
-                    if not isinstance(actor, str):
-                        return ""
                     return actor.strip().lower()
 
                 def add_appstore_collector(
@@ -2609,7 +2617,9 @@ class ReputationIngestService:
                     if not app_clean:
                         return
                     country_clean = (app_country or country).strip().lower()
-                    geo_key = geo.strip().lower() if isinstance(geo, str) and geo.strip() else "global"
+                    geo_key = (
+                        geo.strip().lower() if isinstance(geo, str) and geo.strip() else "global"
+                    )
                     actor_key = actor_key_for_app(app_clean)
                     if core_only and actor_key and (actor_key, geo_key) in seen_actor_geo:
                         skipped_core += 1
@@ -2678,7 +2688,7 @@ class ReputationIngestService:
             geo_to_gl = _get_dict_str_str(gp_cfg, "geo_to_gl")
             geo_to_hl = _get_dict_str_str(gp_cfg, "geo_to_hl")
             seen_package_locale: set[tuple[str, str, str]] = set()
-            seen_actor_geo: set[tuple[str, str]] = set()
+            seen_google_play_actor_geo: set[tuple[str, str]] = set()
             skipped_duplicate = 0
             skipped_core = 0
 
@@ -2687,10 +2697,9 @@ class ReputationIngestService:
             if not package_ids and not package_ids_by_geo:
                 notes.append("google_play: missing package_ids in config.json")
             else:
+
                 def actor_key_for_package(package_id: str) -> str:
                     actor = package_id_to_actor.get(package_id) or fallback_actor
-                    if not isinstance(actor, str):
-                        return ""
                     return actor.strip().lower()
 
                 def add_google_play_collector(
@@ -2705,9 +2714,15 @@ class ReputationIngestService:
                         return
                     country_clean = (country or default_country).strip().upper()
                     language_clean = (language or default_language).strip().lower()
-                    geo_key = geo.strip().lower() if isinstance(geo, str) and geo.strip() else "global"
+                    geo_key = (
+                        geo.strip().lower() if isinstance(geo, str) and geo.strip() else "global"
+                    )
                     actor_key = actor_key_for_package(package_clean)
-                    if core_only and actor_key and (actor_key, geo_key) in seen_actor_geo:
+                    if (
+                        core_only
+                        and actor_key
+                        and (actor_key, geo_key) in seen_google_play_actor_geo
+                    ):
                         skipped_core += 1
                         return
                     dedupe_key = (package_clean, country_clean, language_clean)
@@ -2732,7 +2747,7 @@ class ReputationIngestService:
                     collectors.append(collector)
                     seen_package_locale.add(dedupe_key)
                     if core_only and actor_key:
-                        seen_actor_geo.add((actor_key, geo_key))
+                        seen_google_play_actor_geo.add((actor_key, geo_key))
 
                 for package_id in list(dict.fromkeys(package_ids)):
                     add_google_play_collector(package_id, default_country, default_language, None)
@@ -3263,7 +3278,7 @@ class ReputationIngestService:
         if api_enabled:
             if not endpoint:
                 return None
-            collector = GooglePlayApiCollector(
+            api_collector = GooglePlayApiCollector(
                 endpoint=endpoint,
                 api_key=api_key,
                 api_key_param=api_key_param,
@@ -3273,9 +3288,9 @@ class ReputationIngestService:
                 max_reviews=max_reviews,
                 geo=geo,
             )
-            setattr(collector, "progress_name", progress_name)
-            return collector
-        collector = GooglePlayScraperCollector(
+            cast(Any, api_collector).progress_name = progress_name
+            return api_collector
+        scraper_collector = GooglePlayScraperCollector(
             package_id=package_id,
             country=country,
             language=language,
@@ -3283,8 +3298,8 @@ class ReputationIngestService:
             geo=geo,
             timeout=scrape_timeout,
         )
-        setattr(collector, "progress_name", progress_name)
-        return collector
+        cast(Any, scraper_collector).progress_name = progress_name
+        return scraper_collector
 
     @staticmethod
     def _default_keyword_queries(keywords: list[str], include_unquoted: bool = False) -> list[str]:
@@ -3387,7 +3402,7 @@ class ReputationIngestService:
             return ""
         cleaned = unescape(value)
         cleaned = re.sub(r"<[^>]+>", " ", cleaned)
-        cleaned = re.sub(r"\s+", " ", cleaned).strip(" \t\r\n-–—|,;:.")
+        cleaned = re.sub(r"\s+", " ", cleaned).strip(" \t\r\n-\u2013\u2014|,;:.")
         if len(cleaned) > 120:
             cleaned = cleaned[:120].strip()
         return cleaned
@@ -3437,7 +3452,7 @@ class ReputationIngestService:
         if not raw:
             return ""
         decoded = unescape(raw)
-        separators = (" - ", " | ", " — ", " – ")
+        separators = (" - ", " | ", " \u2014 ", " \u2013 ")
         for separator in separators:
             if separator not in decoded:
                 continue
