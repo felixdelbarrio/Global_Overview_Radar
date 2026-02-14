@@ -1196,7 +1196,9 @@ def test_enforce_market_rating_assignment_reconciles_actor_geo_and_source() -> N
     ]
     notes: list[str] = []
 
-    result = ReputationIngestService._enforce_market_rating_assignment(cfg, ratings, notes)
+    result = ReputationIngestService._enforce_market_rating_assignment(
+        cfg, ratings, notes
+    )
 
     assert len(result) == 2
     appstore = next(entry for entry in result if entry.source == "appstore")
@@ -1236,7 +1238,9 @@ def test_enforce_market_rating_assignment_deduplicates_by_identity() -> None:
     ]
     notes: list[str] = []
 
-    result = ReputationIngestService._enforce_market_rating_assignment(cfg, ratings, notes)
+    result = ReputationIngestService._enforce_market_rating_assignment(
+        cfg, ratings, notes
+    )
 
     assert len(result) == 1
     assert result[0].actor == "BBVA"
