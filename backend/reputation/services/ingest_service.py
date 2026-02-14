@@ -1594,10 +1594,17 @@ class ReputationIngestService:
         if not valid_items:
             return items
         self._lock_manual_sentiment_items(valid_items)
-        keywords = self._load_keywords(cfg)
-        cfg_local = dict(cfg)
-        cfg_local["keywords"] = keywords
-        service = ReputationSentimentService(cfg_local)
+        service: ReputationSentimentService | None = None
+
+        def _sentiment_service() -> ReputationSentimentService:
+            nonlocal service
+            if service is None:
+                keywords = self._load_keywords(cfg)
+                cfg_local = dict(cfg)
+                cfg_local["keywords"] = keywords
+                service = ReputationSentimentService(cfg_local)
+            return service
+
         target_language = _resolve_translation_language()
         existing_keys = {(item.source, item.id) for item in existing} if existing else set()
         if existing_keys:
@@ -1611,21 +1618,21 @@ class ReputationIngestService:
                     pending_by_key[key] = item
                     new_items.append(item)
             if target_language and new_items:
-                service.translate_items(new_items, target_language)
+                _sentiment_service().translate_items(new_items, target_language)
             if pending_by_key:
-                service.analyze_items(pending_by_key.values())
+                _sentiment_service().analyze_items(pending_by_key.values())
         else:
-            if target_language:
-                service.translate_items(valid_items, target_language)
             pending: list[ReputationItem] = []
             for item in valid_items:
                 if self._apply_star_sentiment_fast(item):
                     continue
                 pending.append(item)
+            if target_language and pending:
+                _sentiment_service().translate_items(pending, target_language)
             if pending:
-                service.analyze_items(pending)
+                _sentiment_service().analyze_items(pending)
 
-        if service.llm_warning and notes is not None:
+        if service and service.llm_warning and notes is not None:
             notes.append(service.llm_warning)
         self._apply_source_sentiment_rules(items)
         return items

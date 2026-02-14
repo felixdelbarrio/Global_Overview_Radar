@@ -450,6 +450,77 @@ def test_apply_star_sentiment_fast_respects_locked_sentiment() -> None:
     assert item.signals.get("sentiment_score") == 0.0
 
 
+def test_apply_sentiment_does_not_init_service_when_existing_items_are_star_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import reputation.services.ingest_service as ingest_service
+
+    monkeypatch.setenv("LLM_ENABLED", "false")
+    monkeypatch.delenv("REPUTATION_TRANSLATE_TARGET", raising=False)
+
+    class _ShouldNotInit:
+        def __init__(self, *_: object, **__: object) -> None:
+            raise AssertionError("ReputationSentimentService no debe inicializarse")
+
+    monkeypatch.setattr(ingest_service, "ReputationSentimentService", _ShouldNotInit)
+
+    service = ReputationIngestService()
+    existing = [
+        ReputationItem(
+            id="gp-existing-only",
+            source="google_play",
+            title="Antes",
+            text="",
+            signals={"rating": 4.8},
+        )
+    ]
+    incoming = [
+        ReputationItem(
+            id="gp-existing-only",
+            source="google_play",
+            title="Ahora",
+            text="",
+            signals={"rating": 4.8},
+        )
+    ]
+
+    result = service._apply_sentiment({}, incoming, existing=existing, notes=[])
+
+    assert result[0].sentiment == "positive"
+    assert result[0].signals.get("sentiment_provider") == "stars"
+
+
+def test_apply_sentiment_does_not_init_service_when_no_existing_star_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import reputation.services.ingest_service as ingest_service
+
+    monkeypatch.setenv("LLM_ENABLED", "false")
+    monkeypatch.delenv("REPUTATION_TRANSLATE_TARGET", raising=False)
+
+    class _ShouldNotInit:
+        def __init__(self, *_: object, **__: object) -> None:
+            raise AssertionError("ReputationSentimentService no debe inicializarse")
+
+    monkeypatch.setattr(ingest_service, "ReputationSentimentService", _ShouldNotInit)
+
+    service = ReputationIngestService()
+    incoming = [
+        ReputationItem(
+            id="gp-no-existing-only",
+            source="google_play",
+            title="Ahora",
+            text="",
+            signals={"rating": 1.0},
+        )
+    ]
+
+    result = service._apply_sentiment({}, incoming, existing=None, notes=[])
+
+    assert result[0].sentiment == "negative"
+    assert result[0].signals.get("sentiment_provider") == "stars"
+
+
 def test_tokens_match_keyword_reuses_compiled_cache(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
