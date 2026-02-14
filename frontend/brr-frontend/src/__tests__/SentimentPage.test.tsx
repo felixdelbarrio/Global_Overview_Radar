@@ -1202,33 +1202,41 @@ describe("Sentimiento page", () => {
   });
 
   it("defaults sentiment filters to current month and Spain when available", async () => {
-    render(<SentimentView mode="sentiment" scope="all" />);
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2025-01-15T12:00:00Z"));
+    try {
+      render(<SentimentView mode="sentiment" scope="all" />);
 
-    const geoSelect = (await screen.findByLabelText("País")) as HTMLSelectElement;
-    await waitFor(() => {
-      expect(geoSelect.value).toBe("España");
-    });
+      const geoSelect = (await screen.findByLabelText("País")) as HTMLSelectElement;
+      await waitFor(() => {
+        expect(geoSelect.value).toBe("España");
+      });
 
-    const fromInput = screen.getByLabelText("Desde") as HTMLInputElement;
-    const toInput = screen.getByLabelText("Hasta") as HTMLInputElement;
-    const now = new Date();
-    const yyyy = String(now.getFullYear());
-    const mm = String(now.getMonth() + 1).padStart(2, "0");
-    const dd = String(now.getDate()).padStart(2, "0");
-    const expectedFrom = `${yyyy}-${mm}-01`;
-    const expectedTo = `${yyyy}-${mm}-${dd}`;
-    expect(fromInput.value).toBe(expectedFrom);
-    expect(toInput.value).toBe(expectedTo);
+      const fromInput = screen.getByLabelText("Desde") as HTMLInputElement;
+      const toInput = screen.getByLabelText("Hasta") as HTMLInputElement;
+      const now = new Date();
+      const yyyy = String(now.getFullYear());
+      const mm = String(now.getMonth() + 1).padStart(2, "0");
+      const dd = String(now.getDate()).padStart(2, "0");
+      const expectedFrom = `${yyyy}-${mm}-01`;
+      const expectedTo = `${yyyy}-${mm}-${dd}`;
+      expect(fromInput.value).toBe(expectedFrom);
+      expect(toInput.value).toBe(expectedTo);
 
-    const listedHeader = screen.getByText("LISTADO");
-    const listedContainer = listedHeader.parentElement;
-    expect(listedContainer).toBeTruthy();
-    expect(within(listedContainer as HTMLElement).queryByText("LISTADO COMPLETO")).not.toBeInTheDocument();
-    expect(
-      within(listedContainer as HTMLElement).getByText(
-        /SENTIMIENTO:\s*Todos\s*·\s*PAÍS:\s*España/i
-      )
-    ).toBeInTheDocument();
+      const listedHeader = screen.getByText("LISTADO");
+      const listedContainer = listedHeader.parentElement;
+      expect(listedContainer).toBeTruthy();
+      expect(
+        within(listedContainer as HTMLElement).queryByText("LISTADO COMPLETO")
+      ).not.toBeInTheDocument();
+      expect(
+        within(listedContainer as HTMLElement).getByText(
+          /SENTIMIENTO:\s*Todos\s*·\s*PAÍS:\s*España/i
+        )
+      ).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("renders Google Play stars when rating is provided as score", async () => {
