@@ -1725,16 +1725,6 @@ class ReputationIngestService:
         alias_map = build_actor_alias_map(cfg)
         aliases_by_canonical = build_actor_aliases_by_canonical(cfg)
         guard_actors = cls._load_guard_actors(cfg, alias_map)
-        guard_actor_terms: set[str] = set()
-        if guard_actors:
-            for actor in guard_actors:
-                actor_norm = normalize_text(actor)
-                if actor_norm:
-                    guard_actor_terms.add(actor_norm)
-                for alias in aliases_by_canonical.get(actor) or []:
-                    alias_norm = normalize_text(alias)
-                    if alias_norm:
-                        guard_actor_terms.add(alias_norm)
         allowed_by_geo, known_actors = cls._build_actor_geo_allowlist(cfg, alias_map)
         source_context_terms: dict[str, list[str]] = {}
         source_context_compiled: dict[str, CompiledKeywords] = {}
@@ -1743,7 +1733,7 @@ class ReputationIngestService:
         has_noise_terms = bool(noise_terms)
         compiled_noise_terms = compile_keywords(noise_terms) if has_noise_terms else None
         guard_context_enabled = bool(
-            guard_actor_terms and has_context_terms and compiled_context_terms is not None
+            guard_actors and has_context_terms and compiled_context_terms is not None
         )
         geo_filter_enabled = bool(allowed_by_geo)
         if require_context_sources:
@@ -1769,7 +1759,6 @@ class ReputationIngestService:
         dropped_context = 0
         geo_key_cache: dict[str, str] = {}
         canonical_actor_cache: dict[str, str] = {}
-        guard_candidate_norm_cache: dict[str, str] = {}
 
         for item in items:
             source = (item.source or "").strip().lower()
@@ -1897,22 +1886,15 @@ class ReputationIngestService:
                     continue
             if (
                 guard_context_enabled
-                and any(
-                    (
-                        (
-                            guard_candidate_norm_cache.get(candidate)
-                            or guard_candidate_norm_cache.setdefault(
-                                candidate,
-                                normalize_text(candidate),
-                            )
-                        )
-                        in guard_actor_terms
-                    )
-                    for candidate in _ensure_actor_candidates()
-                )
                 and has_text
                 and compiled_context_terms is not None
                 and not _matches_default_context()
+                and cls._item_has_guard_actor(
+                    item,
+                    guard_actors,
+                    alias_map,
+                    canonical_candidates=_ensure_canonical_candidates(),
+                )
             ):
                 dropped_guard += 1
                 continue
