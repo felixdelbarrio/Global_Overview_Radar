@@ -1605,7 +1605,11 @@ class ReputationIngestService:
                     item.signals["geo_source"] = "content"
                 continue
 
-            publisher_geo = cls._infer_geo_from_publisher(item, geo_country_codes)
+            publisher_geo = cls._infer_geo_from_publisher(
+                item,
+                geo_country_codes,
+                publisher_geo_map=source_geo_map,
+            )
             if publisher_geo and item.geo != publisher_geo:
                 item.geo = publisher_geo
                 item.signals["geo_source"] = "publisher"
@@ -3860,7 +3864,7 @@ class ReputationIngestService:
         site_sources = news_cfg.get("site_sources_by_geo") or {}
         if not site_sources or not geos:
             return {}
-        mapping: dict[str, str] = {}
+        domains_to_geos: dict[str, set[str]] = {}
         for geo in geos:
             entries = cls._flatten_site_sources(site_sources, geo)
             for entry in entries:
@@ -3868,7 +3872,15 @@ class ReputationIngestService:
                 geo_value = entry.get("geo") or geo
                 if not domain or not geo_value:
                     continue
-                mapping.setdefault(domain, geo_value)
+                bucket = domains_to_geos.setdefault(domain, set())
+                bucket.add(str(geo_value).strip())
+        mapping: dict[str, str] = {}
+        for domain, geo_values in domains_to_geos.items():
+            if len(geo_values) != 1:
+                continue
+            geo_value = next(iter(geo_values), "").strip()
+            if geo_value:
+                mapping[domain] = geo_value
         return mapping
 
     @staticmethod
@@ -3972,9 +3984,12 @@ class ReputationIngestService:
 
     @classmethod
     def _infer_geo_from_publisher(
-        cls, item: ReputationItem, geo_country_codes: dict[str, str]
+        cls,
+        item: ReputationItem,
+        geo_country_codes: dict[str, str],
+        publisher_geo_map: dict[str, str] | None = None,
     ) -> str | None:
-        if not geo_country_codes:
+        if not geo_country_codes and not publisher_geo_map:
             return None
         signals = item.signals or {}
         candidates: list[str] = []
@@ -3990,6 +4005,10 @@ class ReputationIngestService:
             normalized_domain = cls._normalize_site_domain(domain or candidate)
             if not normalized_domain:
                 continue
+            if publisher_geo_map:
+                explicit_geo = cls._lookup_geo_for_domain(normalized_domain, publisher_geo_map)
+                if explicit_geo:
+                    return explicit_geo
             country_code = cls._country_code_from_domain(normalized_domain)
             if not country_code:
                 continue
@@ -4089,9 +4108,30 @@ class ReputationIngestService:
                 domain = cls._normalize_site_domain(candidate)
             if not domain:
                 continue
-            geo = source_geo_map.get(domain)
+            geo = cls._lookup_geo_for_domain(domain, source_geo_map)
             if geo:
                 return geo
+        return None
+
+    @classmethod
+    def _lookup_geo_for_domain(cls, domain: str, domain_geo_map: dict[str, str]) -> str | None:
+        if not domain or not domain_geo_map:
+            return None
+        normalized = cls._normalize_site_domain(domain)
+        if not normalized:
+            return None
+        host = normalized.split("/", 1)[0]
+        if ":" in host:
+            host = host.split(":", 1)[0]
+
+        candidate = host
+        while candidate:
+            geo = domain_geo_map.get(candidate)
+            if geo:
+                return geo
+            if "." not in candidate:
+                break
+            candidate = candidate.split(".", 1)[1]
         return None
 
     @staticmethod
