@@ -7,6 +7,7 @@ import {
   Clipboard,
   Globe2,
   Loader2,
+  MessageSquare,
   Newspaper,
   Sparkles,
   TrendingDown,
@@ -22,13 +23,6 @@ import {
 } from "@/lib/events";
 import type { MarketInsightsResponse, ReputationMeta } from "@/lib/types";
 
-function toDateInput(value: Date): string {
-  const year = value.getFullYear();
-  const month = String(value.getMonth() + 1).padStart(2, "0");
-  const day = String(value.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
 function fmtPercent(value: number | null | undefined): string {
   if (typeof value !== "number" || Number.isNaN(value)) return "0.0%";
   return `${(value * 100).toFixed(1)}%`;
@@ -42,6 +36,66 @@ function fmtDateTime(value: string | null | undefined): string {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(date);
+}
+
+function toDateKey(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const raw = value.trim();
+  if (!raw) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toISOString().slice(0, 10);
+}
+
+function fmtDate(value: string | null | undefined): string {
+  if (!value) return "n/d";
+  const parsed = new Date(`${value}T00:00:00Z`);
+  if (Number.isNaN(parsed.getTime())) return "n/d";
+  return new Intl.DateTimeFormat("es-ES", {
+    dateStyle: "medium",
+    timeZone: "UTC",
+  }).format(parsed);
+}
+
+function resolveCacheRange(
+  insights: MarketInsightsResponse | null,
+): { from: string | null; to: string | null } {
+  if (!insights) return { from: null, to: null };
+  const dates = new Set<string>();
+
+  insights.daily_volume.forEach((row) => {
+    const dateKey = toDateKey(row.date);
+    if (dateKey) dates.add(dateKey);
+  });
+
+  insights.recurring_authors.forEach((author) => {
+    const lastSeen = toDateKey(author.last_seen ?? null);
+    if (lastSeen) dates.add(lastSeen);
+    author.opinions.forEach((opinion) => {
+      const opinionDate = toDateKey(opinion.published_at ?? null);
+      if (opinionDate) dates.add(opinionDate);
+    });
+  });
+
+  insights.top_penalized_features.forEach((feature) => {
+    feature.evidence.forEach((evidence) => {
+      const evidenceDate = toDateKey(evidence.published_at ?? null);
+      if (evidenceDate) dates.add(evidenceDate);
+    });
+  });
+
+  const answeredItems = insights.responses?.answered_items ?? [];
+  answeredItems.forEach((item) => {
+    const publishedDate = toDateKey(item.published_at ?? null);
+    if (publishedDate) dates.add(publishedDate);
+    const repliedDate = toDateKey(item.replied_at ?? null);
+    if (repliedDate) dates.add(repliedDate);
+  });
+
+  const sorted = Array.from(dates).sort((left, right) => left.localeCompare(right));
+  if (!sorted.length) return { from: null, to: null };
+  return { from: sorted[0], to: sorted[sorted.length - 1] };
 }
 
 function compactText(value: string | null | undefined): string {
@@ -60,16 +114,6 @@ function buildOpinionComment(title: string | undefined, excerpt: string | undefi
 }
 
 export function MarketInsightsView() {
-  const today = useMemo(() => new Date(), []);
-  const defaultTo = useMemo(() => toDateInput(today), [today]);
-  const defaultFrom = useMemo(() => {
-    const d = new Date(today);
-    d.setDate(d.getDate() - 29);
-    return toDateInput(d);
-  }, [today]);
-
-  const [fromDate, setFromDate] = useState(defaultFrom);
-  const [toDate, setToDate] = useState(defaultTo);
   const [geo, setGeo] = useState("all");
   const [metaGeos, setMetaGeos] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -143,8 +187,6 @@ export function MarketInsightsView() {
     setLoading(true);
     setError(null);
     const params = new URLSearchParams();
-    if (fromDate) params.set("from_date", fromDate);
-    if (toDate) params.set("to_date", toDate);
     if (geo !== "all") params.set("geo", geo);
 
     try {
@@ -158,14 +200,15 @@ export function MarketInsightsView() {
     } finally {
       setLoading(false);
     }
-  }, [fromDate, toDate, geo]);
+  }, [geo]);
 
   useEffect(() => {
     void loadInsights();
   }, [loadInsights, reputationRefresh]);
 
+  const cacheRange = useMemo(() => resolveCacheRange(insights), [insights]);
   const headerSubtitle =
-    "Inteligencia de mercado lista para acción: voces insistentes y respuestas oficiales. Solo actor principal.";
+    "Seguimiento VoC de respuestas reales en app stores y marketplaces para el actor principal.";
   const responseTotals = insights?.responses?.totals;
   const repeatedReplies = insights?.responses?.repeated_replies ?? [];
   const actorReplies = insights?.responses?.actor_breakdown ?? [];
@@ -179,17 +222,17 @@ export function MarketInsightsView() {
         </div>
         <div className="relative">
           <div className="inline-flex items-center gap-2 rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-[color:var(--blue)] shadow-sm">
-            <Newspaper className="h-3.5 w-3.5" />
-            Markets Intelligence
+            <MessageSquare className="h-3.5 w-3.5" />
+            Respuestas en Markets
           </div>
           <h1 className="mt-4 text-3xl sm:text-4xl font-display font-semibold text-[color:var(--ink)]">
-            Wow Radar de mercado
+            Respuestas en Markets - Seguimiento VoC
           </h1>
           <p className="mt-2 max-w-3xl text-sm text-[color:var(--text-60)]">{headerSubtitle}</p>
           <div className="mt-4 flex flex-wrap items-center gap-3 text-xs text-[color:var(--text-55)]">
             <span className="inline-flex items-center gap-2 rounded-full bg-[color:var(--surface-70)] px-3 py-1">
               <Calendar className="h-3.5 w-3.5 text-[color:var(--blue)]" />
-              Rango: {fromDate} → {toDate}
+              Rango cache: {fmtDate(cacheRange.from)} → {fmtDate(cacheRange.to)}
             </span>
             <span className="inline-flex items-center gap-2 rounded-full bg-[color:var(--surface-70)] px-3 py-1">
               <Globe2 className="h-3.5 w-3.5 text-[color:var(--blue)]" />
@@ -204,22 +247,19 @@ export function MarketInsightsView() {
       </section>
 
       <section className="mt-4 rounded-[24px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-4 shadow-[var(--shadow-md)]">
+        <div className="mb-3 text-xs text-[color:var(--text-55)]">
+          Periodo automático del cache (solo lectura).
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-          <Field label="Desde">
-            <input
-              type="date"
-              value={fromDate}
-              onChange={(event) => setFromDate(event.target.value)}
-              className="w-full rounded-xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-2 text-sm text-[color:var(--ink)] outline-none focus:border-[color:var(--aqua)]"
-            />
+          <Field label="Desde (cache)">
+            <div className="rounded-xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-2 text-sm text-[color:var(--text-60)]">
+              {fmtDate(cacheRange.from)}
+            </div>
           </Field>
-          <Field label="Hasta">
-            <input
-              type="date"
-              value={toDate}
-              onChange={(event) => setToDate(event.target.value)}
-              className="w-full rounded-xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-2 text-sm text-[color:var(--ink)] outline-none focus:border-[color:var(--aqua)]"
-            />
+          <Field label="Hasta (cache)">
+            <div className="rounded-xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-2 text-sm text-[color:var(--text-60)]">
+              {fmtDate(cacheRange.to)}
+            </div>
           </Field>
           <Field label="Geografía">
             <select
@@ -311,7 +351,7 @@ export function MarketInsightsView() {
                 Respuestas oficiales
               </h2>
               <p className="mt-2 text-xs text-[color:var(--text-55)]">
-                Opiniones contestadas por el mercado en el periodo seleccionado, agrupadas por similitud (&gt;=70%).
+                Opiniones contestadas por el mercado en todo el rango del cache, agrupadas por similitud (&gt;=70%).
               </p>
               <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-2">
                 <MetricPill
@@ -400,7 +440,7 @@ export function MarketInsightsView() {
                 </span>
               </div>
               <p className="mt-2 text-xs text-[color:var(--text-55)]">
-                Usuarios con múltiples opiniones en el periodo seleccionado.
+                Usuarios con múltiples opiniones en todo el rango del cache.
               </p>
               <div className="mt-4 space-y-3">
                 {insights.recurring_authors.length === 0 && (

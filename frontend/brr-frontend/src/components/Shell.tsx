@@ -15,6 +15,7 @@ import {
   HeartPulse,
   Layers,
   Loader2,
+  MessageSquare,
   Moon,
   Newspaper,
   Search,
@@ -1001,9 +1002,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
       ? [
           {
             href: "/markets",
-            label: "Markets WoW",
-            icon: Newspaper,
-            description: "WOW intelligence",
+            label: "Respuestas en Markets",
+            icon: MessageSquare,
+            description: "Seguimiento VoC",
           },
         ]
       : []),

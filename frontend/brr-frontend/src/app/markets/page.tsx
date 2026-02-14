@@ -5,7 +5,7 @@ import { PageSkeleton } from "@/components/PageSkeleton";
 
 const MarketInsightsView = dynamic(
   () => import("@/components/MarketInsightsView").then((mod) => mod.MarketInsightsView),
-  { ssr: false, loading: () => <PageSkeleton title="Wow Radar de mercado" /> }
+  { ssr: false, loading: () => <PageSkeleton title="Respuestas en Markets - Seguimiento VoC" /> }
 );
 
 export default function MarketsPage() {

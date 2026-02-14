@@ -1,4 +1,4 @@
-/** Tests de la navegación Markets Intelligence. */
+/** Tests de la navegación de Respuestas en Markets. */
 
 import React from "react";
 import { render, screen } from "@testing-library/react";
@@ -174,10 +174,14 @@ describe("MarketsPage", () => {
     apiGetCachedMock.mockImplementation(handleGet);
   });
 
-  it("renders wow markets page with insights", async () => {
+  it("renders responses in markets page with insights", async () => {
     render(<MarketsPage />);
 
-    expect(await screen.findByText("Wow Radar de mercado")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Respuestas en Markets - Seguimiento VoC")
+    ).toBeInTheDocument();
+    expect(await screen.findByText("Periodo automático del cache (solo lectura).")).toBeInTheDocument();
+    expect(document.querySelectorAll('input[type="date"]').length).toBe(0);
     expect(await screen.findByText("Voces insistentes")).toBeInTheDocument();
     expect(await screen.findByText("Respuestas oficiales")).toBeInTheDocument();
     expect(screen.queryByText("Top 10 funcionalidades penalizadas")).not.toBeInTheDocument();
@@ -186,6 +190,6 @@ describe("MarketsPage", () => {
     expect(await screen.findByText("Ana")).toBeInTheDocument();
     expect(await screen.findByText("Autor: ana_1989")).toBeInTheDocument();
     expect(await screen.findByText("ID: a1")).toBeInTheDocument();
-    expect((await screen.findAllByText("Markets WoW")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("Respuestas en Markets")).length).toBeGreaterThan(0);
   });
 });
