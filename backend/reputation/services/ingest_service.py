@@ -153,7 +153,7 @@ def _compile_single_keyword(keyword: str) -> CompiledKeywords:
     return compile_keywords([keyword])
 
 
-@lru_cache(maxsize=32768)
+@lru_cache(maxsize=8192)
 def _normalize_site_domain_cached(domain: str) -> str:
     cleaned = domain.strip().lower()
     for prefix in ("https://", "http://"):
@@ -165,7 +165,7 @@ def _normalize_site_domain_cached(domain: str) -> str:
     return cleaned.strip("/")
 
 
-@lru_cache(maxsize=32768)
+@lru_cache(maxsize=8192)
 def _extract_domain_cached(value: str) -> str:
     if not value:
         return ""

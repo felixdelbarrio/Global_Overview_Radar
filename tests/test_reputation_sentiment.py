@@ -751,6 +751,28 @@ def test_apply_geo_hints_does_not_match_short_alias_inside_words() -> None:
     assert result[0].signals.get("geo_source") is None
 
 
+def test_apply_geo_hints_prefers_title_geo_when_body_conflicts() -> None:
+    cfg = {
+        "geografias": ["España", "México"],
+        "geografias_aliases": {
+            "España": ["Spain", "ES"],
+            "México": ["Mexico", "MX"],
+        },
+    }
+    item = ReputationItem(
+        id="geo-title-priority-1",
+        source="news",
+        title="BBVA México anuncia nuevo acuerdo financiero",
+        text="Analistas en España valoran el impacto del anuncio.",
+        signals={},
+    )
+
+    result = ReputationIngestService._apply_geo_hints(cfg, [item])
+
+    assert result[0].geo == "México"
+    assert result[0].signals.get("geo_source") == "content"
+
+
 def test_round_robin_preserves_bucket_order() -> None:
     ordered = ReputationIngestService._round_robin(
         [
