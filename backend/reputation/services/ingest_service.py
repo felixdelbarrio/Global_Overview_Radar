@@ -2575,35 +2575,76 @@ class ReputationIngestService:
             scrape_timeout = _env_int("APPSTORE_SCRAPE_TIMEOUT", 15)
             app_ids_by_geo = _get_dict_str_list_str(appstore_cfg, "app_ids_by_geo")
             country_by_geo = _get_dict_str_str(appstore_cfg, "country_by_geo")
+            raw_core_only = appstore_cfg.get("core_only")
+            if isinstance(raw_core_only, bool):
+                core_only = raw_core_only
+            elif isinstance(raw_core_only, str):
+                core_only = _env_bool(raw_core_only)
+            else:
+                core_only = _env_bool(os.getenv("APPSTORE_CORE_ONLY", "false"))
+            app_id_to_actor = _get_dict_str_str(appstore_cfg, "app_id_to_actor")
+            fallback_actor = _primary_actor_canonical(cfg)
+            seen_app_locale: set[tuple[str, str]] = set()
+            seen_actor_geo: set[tuple[str, str]] = set()
+            skipped_duplicate = 0
+            skipped_core = 0
 
             app_ids = list(dict.fromkeys(app_ids))
             if not app_ids and not app_ids_by_geo:
                 notes.append("appstore: missing app_ids in config.json")
             else:
-                for app_id_value in app_ids:
+                def actor_key_for_app(app_id: str) -> str:
+                    actor = app_id_to_actor.get(app_id) or fallback_actor
+                    if not isinstance(actor, str):
+                        return ""
+                    return actor.strip().lower()
+
+                def add_appstore_collector(
+                    app_id: str,
+                    app_country: str,
+                    geo: str | None,
+                ) -> None:
+                    nonlocal skipped_duplicate, skipped_core
+                    app_clean = app_id.strip()
+                    if not app_clean:
+                        return
+                    country_clean = (app_country or country).strip().lower()
+                    geo_key = geo.strip().lower() if isinstance(geo, str) and geo.strip() else "global"
+                    actor_key = actor_key_for_app(app_clean)
+                    if core_only and actor_key and (actor_key, geo_key) in seen_actor_geo:
+                        skipped_core += 1
+                        return
+                    dedupe_key = (app_clean, country_clean)
+                    if dedupe_key in seen_app_locale:
+                        skipped_duplicate += 1
+                        return
+
                     collectors.append(
                         self._build_appstore_collector(
                             api_enabled=api_enabled,
-                            country=country,
-                            app_id=app_id_value,
+                            country=country_clean,
+                            app_id=app_clean,
                             max_reviews=max_reviews,
                             scrape_timeout=scrape_timeout,
-                            geo=None,
+                            geo=geo,
                         )
                     )
+                    seen_app_locale.add(dedupe_key)
+                    if core_only and actor_key:
+                        seen_actor_geo.add((actor_key, geo_key))
+
+                for app_id_value in app_ids:
+                    add_appstore_collector(app_id_value, country, None)
                 for geo, geo_app_ids in app_ids_by_geo.items():
                     geo_country = country_by_geo.get(geo, country)
                     for app_id_value in geo_app_ids:
-                        collectors.append(
-                            self._build_appstore_collector(
-                                api_enabled=api_enabled,
-                                country=geo_country,
-                                app_id=app_id_value,
-                                max_reviews=max_reviews,
-                                scrape_timeout=scrape_timeout,
-                                geo=geo,
-                            )
-                        )
+                        add_appstore_collector(app_id_value, geo_country, geo)
+
+                if skipped_duplicate or skipped_core:
+                    notes.append(
+                        "appstore: skipped collectors "
+                        f"(duplicate_locale={skipped_duplicate}, core_only={skipped_core})"
+                    )
 
         if "google_play" in sources_enabled:
             handled_sources.add("google_play")

@@ -791,6 +791,63 @@ describe("Sentimiento page", () => {
     expect(within(summarySection as HTMLElement).getByText(/menciones del/i)).toBeInTheDocument();
   });
 
+  it("shows publisher chip in press mention cards", async () => {
+    const metaPressResponse = {
+      ...metaResponse,
+      sources_enabled: ["news"],
+      sources_available: ["news"],
+    };
+    const itemsPressResponse = {
+      ...itemsResponse,
+      sources_enabled: ["news"],
+      items: [
+        {
+          id: "press-chip-1",
+          source: "news",
+          geo: "España",
+          actor: "Acme Bank",
+          title: "Nueva funcionalidad móvil para empresas",
+          text: "Cobertura del lanzamiento en prensa económica.",
+          sentiment: "positive",
+          published_at: "2025-01-01T10:00:00Z",
+          signals: {
+            publisher_name: "El Diario Financiero",
+          },
+          url: "https://example.com/noticia",
+        },
+      ],
+      stats: { count: 1 },
+    };
+
+    const handleGetPressPublisherChip = (path: string) => {
+      if (path.startsWith("/reputation/meta")) {
+        return Promise.resolve(metaPressResponse);
+      }
+      if (path.startsWith("/reputation/profiles")) {
+        return Promise.resolve(profilesResponse);
+      }
+      if (path.startsWith("/reputation/items")) {
+        return Promise.resolve(itemsPressResponse);
+      }
+      if (path.startsWith("/reputation/settings")) {
+        return Promise.resolve({ groups: [], advanced_options: [] });
+      }
+      return Promise.resolve({ items: [] });
+    };
+
+    apiGetMock.mockImplementation(handleGetPressPublisherChip);
+    apiGetCachedMock.mockImplementation(handleGetPressPublisherChip);
+
+    render(<SentimentView mode="sentiment" scope="press" />);
+
+    const cardTitle = await screen.findByText("Nueva funcionalidad móvil para empresas");
+    const mentionCard = cardTitle.closest("article");
+    expect(mentionCard).toBeTruthy();
+    expect(
+      within(mentionCard as HTMLElement).getByText("El Diario Financiero")
+    ).toBeInTheDocument();
+  });
+
   it("shows press publishers including downdetector and inferred news media", async () => {
     const metaPressResponse = {
       ...metaResponse,

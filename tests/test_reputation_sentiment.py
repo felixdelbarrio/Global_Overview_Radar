@@ -634,6 +634,53 @@ def test_build_collectors_google_play_applies_core_only_and_dedupe(
     assert any("google_play: skipped collectors" in note for note in notes)
 
 
+def test_build_collectors_appstore_applies_core_only_and_dedupe(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("APPSTORE_API_ENABLED", "false")
+    monkeypatch.setenv("APPSTORE_COUNTRY", "es")
+    monkeypatch.delenv("APPSTORE_CORE_ONLY", raising=False)
+
+    cfg = {
+        "actor_principal": "BBVA",
+        "keywords": ["bbva"],
+        "appstore": {
+            "core_only": True,
+            "app_ids": ["app.bbva", "app.bbva.dup", "app.bbva"],
+            "app_ids_by_geo": {
+                "España": ["app.santander.es", "app.santander.es.dup", "app.santander.es"],
+                "México": ["app.santander.mx", "app.santander.mx"],
+            },
+            "country_by_geo": {"España": "es", "México": "mx"},
+            "app_id_to_actor": {
+                "app.bbva": "BBVA",
+                "app.bbva.dup": "BBVA",
+                "app.santander.es": "Santander",
+                "app.santander.es.dup": "Santander",
+                "app.santander.mx": "Santander",
+            },
+        },
+    }
+
+    service = ReputationIngestService()
+    collectors, notes = service._build_collectors(cfg, ["appstore"])
+
+    tuples = {
+        (
+            getattr(collector, "_app_id", ""),
+            getattr(collector, "_country", ""),
+            getattr(collector, "_geo", None),
+        )
+        for collector in collectors
+    }
+
+    assert len(collectors) == 3
+    assert ("app.bbva", "es", None) in tuples
+    assert ("app.santander.es", "es", "España") in tuples
+    assert ("app.santander.mx", "mx", "México") in tuples
+    assert any("appstore: skipped collectors" in note for note in notes)
+
+
 def test_merge_items_backfills_author_and_reply_signals() -> None:
     existing = ReputationItem(
         id="merge-1",

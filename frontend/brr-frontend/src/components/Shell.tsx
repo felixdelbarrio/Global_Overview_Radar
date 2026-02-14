@@ -103,6 +103,7 @@ const ADVANCED_LOG_KEYS = new Set([
   "advanced.log_file_name",
   "advanced.log_debug",
 ]);
+const ADVANCED_EDITABLE_WITHOUT_LOG = new Set(["language.preference"]);
 const DISABLE_ADVANCED_SETTINGS = process.env.NEXT_PUBLIC_DISABLE_ADVANCED_SETTINGS === "true";
 
 function sanitizeSettingsForUi(data: ReputationSettingsResponse): ReputationSettingsResponse {
@@ -2099,6 +2100,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
                                 const fieldDisabled =
                                   isAdvanced &&
                                   field.key !== "advanced.log_enabled" &&
+                                  !ADVANCED_EDITABLE_WITHOUT_LOG.has(field.key) &&
                                   advancedLocked;
                                 return (
                                   <div

@@ -1955,7 +1955,6 @@ def reputation_meta() -> dict[str, Any]:
         "market_ratings": market_ratings,
         "market_ratings_history": market_ratings_history,
         "ui_show_comparisons": settings.ui_show_comparisons,
-        "ui_show_dashboard_responses": settings.ui_show_dashboard_responses,
         "profiles_active": active_profiles(),
         "profile_key": active_profile_key(),
         "profile_source": active_profile_source(),
