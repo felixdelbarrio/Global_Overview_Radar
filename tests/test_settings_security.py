@@ -268,7 +268,8 @@ def test_update_settings_persists_advanced_values_in_advanced_file_only(
 
     assert "REPUTATION_LOG_ENABLED" not in base_values
     assert "REPUTATION_HTTP_CACHE_TTL_SEC" not in base_values
-    assert base_values["NEWS_LANG"] == "en"
+    assert "NEWS_LANG" not in base_values
+    assert advanced_values["NEWS_LANG"] == "en"
     assert advanced_values["REPUTATION_LOG_ENABLED"] == "true"
     assert advanced_values["REPUTATION_HTTP_CACHE_TTL_SEC"] == "90"
 

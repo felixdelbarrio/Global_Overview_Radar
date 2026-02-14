@@ -19,6 +19,7 @@ import {
   Loader2,
   MapPin,
   MessageSquare,
+  Newspaper,
   User,
   Star,
   PenSquare,
@@ -446,8 +447,7 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
     if (scopeAllowedSources.length) return scopeAllowedSources;
     return [DISABLED_SCOPE_SOURCE_SENTINEL];
   }, [sources, isDashboard, scopeAllowedSources]);
-  const showResponsesSummary =
-    isSentimentMarkets || (isDashboard && Boolean(meta?.ui_show_dashboard_responses));
+  const showResponsesSummary = isSentimentMarkets || isDashboard;
   const listedSentimentLabel = useMemo(
     () => formatSentimentFilterLabel(effectiveSentiment),
     [effectiveSentiment],
@@ -2753,6 +2753,7 @@ type MentionGroup = {
   geo?: string;
   actor?: string;
   author?: string;
+  publisher?: string;
   sentiment?: string;
   rating?: number | null;
   rating_source?: string | null;
@@ -2801,6 +2802,21 @@ function MentionCard({
   const hasMarketSource = item.sources.some((source) =>
     MARKET_OPINION_SOURCE_KEYS.has(normalizeSourceKey(source.name)),
   );
+  const hasPressSource = item.sources.some((source) => {
+    const sourceName = (source.name || "").trim().toLowerCase();
+    if (!sourceName) return false;
+    if (PRESS_REPUTATION_SOURCE_SET.has(sourceName)) return true;
+    const normalizedSourceName = normalizeSourceKey(sourceName);
+    for (const candidate of PRESS_REPUTATION_SOURCE_SET) {
+      if (normalizeSourceKey(candidate) === normalizedSourceName) {
+        return true;
+      }
+    }
+    return false;
+  });
+  const publisherLabel = hasPressSource
+    ? cleanPublisherLabel(item.publisher || "")
+    : "";
   const opinionAuthor = item.author || (hasMarketSource ? "Autor sin nombre" : null);
   const manualOverrideBlocked =
     !manualControlsEnabled ||
@@ -2874,6 +2890,15 @@ function MentionCard({
           <Building2 className="h-3.5 w-3.5 text-[color:var(--blue)]" />
           {item.actor || principalLabel}
         </span>
+        {publisherLabel && (
+          <span
+            className="inline-flex max-w-[260px] items-center gap-1 rounded-full border border-[color:var(--border-70)] bg-[color:var(--surface-80)] px-2.5 py-1"
+            title={publisherLabel}
+          >
+            <Newspaper className="h-3.5 w-3.5 text-[color:var(--blue)]" />
+            <span className="truncate">{publisherLabel}</span>
+          </span>
+        )}
         {opinionAuthor && (
           <span
             className="inline-flex max-w-[250px] items-center gap-1 rounded-full border border-[color:var(--border-70)] bg-[color:var(--surface-80)] px-2.5 py-1"
@@ -3365,6 +3390,7 @@ function groupMentions(items: ReputationItem[]) {
   for (const item of items) {
     const extractedActor = extractActor(item);
     const extractedAuthor = extractOpinionAuthor(item);
+    const extractedPublisher = extractPublisherLabel(item);
     const title = cleanText(item.title || "");
     const text = cleanText(item.text || "");
     const reply = extractReply(item);
@@ -3387,6 +3413,7 @@ function groupMentions(items: ReputationItem[]) {
         geo: item.geo || undefined,
         actor: extractedActor || undefined,
         author: extractedAuthor || undefined,
+        publisher: extractedPublisher || undefined,
         sentiment: item.sentiment || undefined,
         rating: extractRating(item),
         rating_source: extractRatingSource(item),
@@ -3447,6 +3474,14 @@ function groupMentions(items: ReputationItem[]) {
       if (!group.author || (candidateAuthorDate && candidateAuthorDate > currentAuthorDate)) {
         group.author = extractedAuthor;
         group.author_item_date = itemDate;
+      }
+    }
+
+    if (extractedPublisher) {
+      if (!group.publisher) {
+        group.publisher = extractedPublisher;
+      } else if (normalizeKey(group.publisher) !== normalizeKey(extractedPublisher)) {
+        group.publisher = "Varios medios";
       }
     }
 

@@ -11,7 +11,9 @@ from reputation.collectors.appstore import (
     AppStoreScraperCollector,
 )
 from reputation.collectors.google_play import (
+    GooglePlayScraperCollector,
     _extract_reviews_from_html,
+    _extract_reviews_from_rpc_response,
     _map_play_review,
 )
 
@@ -216,3 +218,76 @@ def test_google_play_api_map_extracts_nested_developer_reply() -> None:
     assert item.signals.get("has_reply") is True
     assert "Gracias por avisar" in str(item.signals.get("reply_text"))
     assert item.signals.get("reply_author") == "Acme Support"
+
+
+def test_google_play_rpc_response_extracts_reviews_and_token() -> None:
+    payload = [
+        [
+            [
+                "rpc-1",
+                ["Usuario Uno"],
+                1,
+                None,
+                "No funciona",
+                [1735689600, 0],
+                0,
+                [2, "Gracias por avisar", [1735776000, 0]],
+            ],
+            [
+                "rpc-2",
+                ["Usuario Dos"],
+                5,
+                None,
+                "Excelente",
+                [1735689700, 0],
+                0,
+                None,
+            ],
+        ],
+        [None, "NEXT_TOKEN"],
+    ]
+    raw = ")]}'\n\n" + json.dumps([["wrb.fr", "oCPfdb", json.dumps(payload), None]])
+
+    reviews, token = _extract_reviews_from_rpc_response(raw, limit=10)
+
+    assert token == "NEXT_TOKEN"
+    assert len(reviews) == 2
+    assert reviews[0].get("reviewId") == "rpc-1"
+    assert reviews[0].get("userName") == "Usuario Uno"
+    assert reviews[0].get("content") == "No funciona"
+    assert reviews[0].get("replyContent") == "Gracias por avisar"
+    assert reviews[0].get("repliedAt") == "2025-01-02T00:00:00+00:00"
+
+
+def test_google_play_scraper_uses_rpc_fallback_when_html_empty(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("GOOGLE_PLAY_RPC_ENABLED", "true")
+    monkeypatch.setattr(
+        "reputation.collectors.google_play.http_get_text", lambda *_, **__: ""
+    )
+    monkeypatch.setattr(
+        "reputation.collectors.google_play._fetch_reviews_from_rpc",
+        lambda **_: [
+            {
+                "reviewId": "rpc-fallback-1",
+                "userName": "Cliente Android",
+                "content": "La app falla al iniciar",
+                "score": 1,
+                "date": "2026-02-14T10:00:00+00:00",
+            }
+        ],
+    )
+
+    collector = GooglePlayScraperCollector(
+        package_id="com.example.app",
+        country="ES",
+        language="es",
+        max_reviews=10,
+    )
+    items = list(collector.collect())
+
+    assert len(items) == 1
+    assert items[0].id == "rpc-fallback-1"
+    assert items[0].author == "Cliente Android"
+    assert items[0].signals.get("rating") == 1

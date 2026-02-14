@@ -69,7 +69,6 @@ export type ReputationMeta = {
   market_ratings?: MarketRating[];
   market_ratings_history?: MarketRating[];
   ui_show_comparisons?: boolean;
-  ui_show_dashboard_responses?: boolean;
   profiles_active?: string[];
   profile_key?: string;
   profile_source?: string;

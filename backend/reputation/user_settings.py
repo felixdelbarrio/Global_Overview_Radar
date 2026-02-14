@@ -37,8 +37,8 @@ class UserSettingField:
 GROUPS: list[dict[str, str]] = [
     {
         "id": "language",
-        "label": "Idioma",
-        "description": "Selecciona el idioma general para noticias y traducciones de opiniones.",
+        "label": "Visualización",
+        "description": "Ajustes de visualización del panel.",
     },
     {
         "id": "sources_markets",
@@ -94,7 +94,7 @@ FIELDS: list[UserSettingField] = [
     UserSettingField(
         key="language.preference",
         env="NEWS_LANG",
-        group="language",
+        group="advanced",
         label="Idioma general",
         description="Se aplica a RSS, NewsAPI y traducciones.",
         kind="select",
@@ -110,15 +110,6 @@ FIELDS: list[UserSettingField] = [
             "Si está desactivado, el frontend oculta la comparación con otros actores "
             "y muestra solo el actor principal."
         ),
-        kind="boolean",
-        default=False,
-    ),
-    UserSettingField(
-        key="visualization.show_dashboard_responses",
-        env="REPUTATION_UI_SHOW_DASHBOARD_RESPONSES",
-        group="language",
-        label="Opiniones contestadas en Dashboard",
-        description=("Si está activado, el Dashboard muestra el bloque de opiniones contestadas."),
         kind="boolean",
         default=False,
     ),
@@ -403,6 +394,7 @@ FIELDS_BY_ENV = {field.env: field for field in FIELDS}
 ADVANCED_GROUP_ID = "advanced"
 ADVANCED_FIELDS = [field for field in FIELDS if field.group == ADVANCED_GROUP_ID]
 ADVANCED_FIELD_ENVS = {field.env for field in ADVANCED_FIELDS}
+ADVANCED_EDITABLE_WITHOUT_LOG = {"language.preference"}
 
 SOURCE_CREDENTIAL_REQUIREMENTS: dict[str, list[str]] = {
     "REPUTATION_SOURCE_NEWSAPI": ["NEWSAPI_API_KEY"],
@@ -654,13 +646,19 @@ def _env_truthy(value: str | None) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
-def _resolve_language_preference(env_values: dict[str, str], default: str) -> str:
-    preferred = env_values.get("NEWS_LANG")
-    if preferred and preferred.strip():
-        return preferred.strip()
-    fallback = env_values.get("NEWSAPI_LANGUAGE")
-    if fallback and fallback.strip():
-        return fallback.strip()
+def _resolve_language_preference(
+    primary_env_values: dict[str, str],
+    secondary_env_values: dict[str, str],
+    default: str,
+) -> str:
+    for env_values in (primary_env_values, secondary_env_values):
+        preferred = env_values.get("NEWS_LANG")
+        if preferred and preferred.strip():
+            return preferred.strip()
+    for env_values in (primary_env_values, secondary_env_values):
+        fallback = env_values.get("NEWSAPI_LANGUAGE")
+        if fallback and fallback.strip():
+            return fallback.strip()
     return default
 
 
@@ -700,8 +698,6 @@ def _render_main_env_file(values: dict[str, str]) -> str:
             elif field.kind == "secret":
                 value = encrypt_env_secret(value)
             lines.append(f"{field.env}={value}")
-            if field.key == "language.preference":
-                lines.append(f"NEWSAPI_LANGUAGE={value}")
         lines.append("")
 
     return "\n".join(lines).rstrip() + "\n"
@@ -812,7 +808,7 @@ def get_user_settings_snapshot() -> dict[str, Any]:
     language_field = FIELDS_BY_KEY.get("language.preference")
     if language_field:
         values_by_key[language_field.key] = _resolve_language_preference(
-            main_env_values, language_field.default
+            advanced_env_values, main_env_values, language_field.default
         )
     llm_enabled_field = FIELDS_BY_KEY.get("llm.enabled")
     if llm_enabled_field:
@@ -922,6 +918,16 @@ def update_user_settings(values: dict[str, Any]) -> dict[str, Any]:
     )
     base_advanced_env_values = advanced_env_values.copy()
     advanced_touched = False
+    # Backward-compat migration: if NEWS_LANG lives in main env, move it to advanced.
+    if (
+        not cloud_run_runtime
+        and "NEWS_LANG" in main_env_values
+        and "NEWS_LANG" not in advanced_env_values
+    ):
+        migrated_lang = str(main_env_values.get("NEWS_LANG", "")).strip()
+        if migrated_lang:
+            advanced_env_values["NEWS_LANG"] = migrated_lang
+            advanced_touched = True
 
     if not cloud_run_runtime and not REPUTATION_ADVANCED_ENV_PATH.exists():
         wants_advanced_change = False
@@ -978,13 +984,14 @@ def update_user_settings(values: dict[str, Any]) -> dict[str, Any]:
             # Keep current secret value when client sends masked marker.
             continue
         coerced = _coerce_update(value, field)
+        formatted = _format_env_value(coerced, field)
         if field.group == ADVANCED_GROUP_ID:
-            advanced_env_values[field.env] = _format_env_value(coerced, field)
+            advanced_env_values[field.env] = formatted
             advanced_touched = True
         else:
-            main_env_values[field.env] = _format_env_value(coerced, field)
+            main_env_values[field.env] = formatted
         if field.key == "language.preference":
-            main_env_values["NEWSAPI_LANGUAGE"] = main_env_values[field.env]
+            main_env_values["NEWSAPI_LANGUAGE"] = formatted
 
     llm_key_env = _active_llm_api_key_env(main_env_values)
     if not main_env_values.get(llm_key_env, "").strip():
@@ -993,7 +1000,7 @@ def update_user_settings(values: dict[str, Any]) -> dict[str, Any]:
     log_enabled = _env_truthy(advanced_env_values.get("REPUTATION_LOG_ENABLED"))
     if not log_enabled:
         for field in ADVANCED_FIELDS:
-            if field.key == "advanced.log_enabled":
+            if field.key == "advanced.log_enabled" or field.key in ADVANCED_EDITABLE_WITHOUT_LOG:
                 continue
             if field.env in base_advanced_env_values:
                 advanced_env_values[field.env] = base_advanced_env_values[field.env]

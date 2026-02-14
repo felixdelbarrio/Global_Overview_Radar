@@ -562,6 +562,133 @@ def test_collector_batch_returns_list_without_copying() -> None:
     assert batch is payload
 
 
+def test_build_google_play_collector_sets_progress_name() -> None:
+    collector = ReputationIngestService._build_google_play_collector(
+        api_enabled=False,
+        endpoint="",
+        api_key=None,
+        api_key_param="key",
+        package_id="com.example.app",
+        country="ES",
+        language="es",
+        max_reviews=10,
+        scrape_timeout=5,
+        geo="España",
+    )
+
+    assert collector is not None
+    assert collector.source_name == "google_play"
+    assert (
+        getattr(collector, "progress_name", "")
+        == "google_play:com.example.app:ES/es:España"
+    )
+
+
+def test_build_collectors_google_play_applies_core_only_and_dedupe(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("GOOGLE_PLAY_API_ENABLED", "false")
+    monkeypatch.delenv("GOOGLE_PLAY_PACKAGE_IDS", raising=False)
+    monkeypatch.setenv("GOOGLE_PLAY_DEFAULT_COUNTRY", "ES")
+    monkeypatch.setenv("GOOGLE_PLAY_DEFAULT_LANGUAGE", "es")
+
+    cfg = {
+        "actor_principal": "BBVA",
+        "keywords": ["bbva"],
+        "google_play": {
+            "core_only": True,
+            "package_ids": ["pkg.bbva", "pkg.bbva.dup", "pkg.bbva"],
+            "package_ids_by_geo": {
+                "España": [
+                    "pkg.santander.es",
+                    "pkg.santander.es.dup",
+                    "pkg.santander.es",
+                ],
+                "México": ["pkg.santander.mx", "pkg.santander.mx"],
+            },
+            "geo_to_gl": {"España": "ES", "México": "MX"},
+            "geo_to_hl": {"España": "es", "México": "es-419"},
+            "package_id_to_actor": {
+                "pkg.bbva": "BBVA",
+                "pkg.bbva.dup": "BBVA",
+                "pkg.santander.es": "Santander",
+                "pkg.santander.es.dup": "Santander",
+                "pkg.santander.mx": "Santander",
+            },
+        },
+    }
+
+    service = ReputationIngestService()
+    collectors, notes = service._build_collectors(cfg, ["google_play"])
+
+    tuples = {
+        (
+            getattr(collector, "_package_id", ""),
+            getattr(collector, "_country", ""),
+            getattr(collector, "_language", ""),
+            getattr(collector, "_geo", None),
+        )
+        for collector in collectors
+    }
+
+    assert len(collectors) == 3
+    assert ("pkg.bbva", "ES", "es", None) in tuples
+    assert ("pkg.santander.es", "ES", "es", "España") in tuples
+    assert ("pkg.santander.mx", "MX", "es-419", "México") in tuples
+    assert any("google_play: skipped collectors" in note for note in notes)
+
+
+def test_build_collectors_appstore_applies_core_only_and_dedupe(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("APPSTORE_API_ENABLED", "false")
+    monkeypatch.setenv("APPSTORE_COUNTRY", "es")
+    monkeypatch.delenv("APPSTORE_CORE_ONLY", raising=False)
+
+    cfg = {
+        "actor_principal": "BBVA",
+        "keywords": ["bbva"],
+        "appstore": {
+            "core_only": True,
+            "app_ids": ["app.bbva", "app.bbva.dup", "app.bbva"],
+            "app_ids_by_geo": {
+                "España": [
+                    "app.santander.es",
+                    "app.santander.es.dup",
+                    "app.santander.es",
+                ],
+                "México": ["app.santander.mx", "app.santander.mx"],
+            },
+            "country_by_geo": {"España": "es", "México": "mx"},
+            "app_id_to_actor": {
+                "app.bbva": "BBVA",
+                "app.bbva.dup": "BBVA",
+                "app.santander.es": "Santander",
+                "app.santander.es.dup": "Santander",
+                "app.santander.mx": "Santander",
+            },
+        },
+    }
+
+    service = ReputationIngestService()
+    collectors, notes = service._build_collectors(cfg, ["appstore"])
+
+    tuples = {
+        (
+            getattr(collector, "_app_id", ""),
+            getattr(collector, "_country", ""),
+            getattr(collector, "_geo", None),
+        )
+        for collector in collectors
+    }
+
+    assert len(collectors) == 3
+    assert ("app.bbva", "es", None) in tuples
+    assert ("app.santander.es", "es", "España") in tuples
+    assert ("app.santander.mx", "mx", "México") in tuples
+    assert any("appstore: skipped collectors" in note for note in notes)
+
+
 def test_merge_items_backfills_author_and_reply_signals() -> None:
     existing = ReputationItem(
         id="merge-1",

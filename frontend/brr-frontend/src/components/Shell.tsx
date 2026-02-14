@@ -15,6 +15,7 @@ import {
   HeartPulse,
   Layers,
   Loader2,
+  MessageSquare,
   Moon,
   Newspaper,
   Search,
@@ -103,6 +104,7 @@ const ADVANCED_LOG_KEYS = new Set([
   "advanced.log_file_name",
   "advanced.log_debug",
 ]);
+const ADVANCED_EDITABLE_WITHOUT_LOG = new Set(["language.preference"]);
 const DISABLE_ADVANCED_SETTINGS = process.env.NEXT_PUBLIC_DISABLE_ADVANCED_SETTINGS === "true";
 
 function sanitizeSettingsForUi(data: ReputationSettingsResponse): ReputationSettingsResponse {
@@ -1000,9 +1002,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
       ? [
           {
             href: "/markets",
-            label: "Markets WoW",
-            icon: Newspaper,
-            description: "WOW intelligence",
+            label: "Respuestas en Markets",
+            icon: MessageSquare,
+            description: "Seguimiento VoC",
           },
         ]
       : []),
@@ -2099,6 +2101,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
                                 const fieldDisabled =
                                   isAdvanced &&
                                   field.key !== "advanced.log_enabled" &&
+                                  !ADVANCED_EDITABLE_WITHOUT_LOG.has(field.key) &&
                                   advancedLocked;
                                 return (
                                   <div

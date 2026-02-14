@@ -9,6 +9,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from html import unescape
+from threading import Event, Thread
 from typing import Any, Callable, Iterable, Optional, Sequence, cast
 from urllib.parse import parse_qs, quote_plus, unquote_plus, urlparse
 from urllib.request import Request, urlopen
@@ -525,29 +526,40 @@ class ReputationIngestService:
             slow_threshold = 8.0
         if slow_threshold < 0:
             slow_threshold = 0.0
+        collector_timeout_sec = max(1, _env_int("REPUTATION_COLLECTOR_TIMEOUT_SEC", 90))
+
+        def collector_progress_name(collector: ReputationCollector) -> str:
+            value = getattr(collector, "progress_name", None)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+            return collector.source_name
 
         def maybe_note(collector: ReputationCollector, duration: float, count: int) -> None:
             if diag or (slow_threshold and duration >= slow_threshold):
-                notes.append(f"collector: {collector.source_name} {duration:.1f}s items={count}")
+                notes.append(
+                    f"collector: {collector_progress_name(collector)} {duration:.1f}s items={count}"
+                )
 
         workers = _env_int("REPUTATION_COLLECTOR_WORKERS", 6)
         if workers <= 1 or len(collector_list) == 1:
             for collector in collector_list:
                 try:
                     started = time.perf_counter()
-                    count = 0
-                    for entry in collector.collect():
-                        items.append(entry)
-                        count += 1
+                    batch = ReputationIngestService._collector_batch_with_timeout(
+                        collector,
+                        timeout_sec=collector_timeout_sec,
+                    )
+                    items.extend(batch)
+                    count = len(batch)
                     duration = time.perf_counter() - started
                     maybe_note(collector, duration, count)
                 except Exception as exc:  # pragma: no cover - defensive
-                    notes.append(f"{collector.source_name}: error {exc}")
+                    notes.append(f"{collector_progress_name(collector)}: error {exc}")
                     logger.warning("Collector %s failed: %s", collector.source_name, exc)
                 finally:
                     done += 1
                     if progress:
-                        progress(done, total, collector.source_name)
+                        progress(done, total, collector_progress_name(collector))
             return items
 
         max_workers = max(1, min(workers, len(collector_list)))
@@ -556,7 +568,10 @@ class ReputationIngestService:
             collector: ReputationCollector,
         ) -> tuple[list[ReputationItem], float]:
             started = time.perf_counter()
-            batch = ReputationIngestService._collector_batch(collector)
+            batch = ReputationIngestService._collector_batch_with_timeout(
+                collector,
+                timeout_sec=collector_timeout_sec,
+            )
             duration = time.perf_counter() - started
             return batch, duration
 
@@ -571,12 +586,12 @@ class ReputationIngestService:
                     items.extend(batch)
                     maybe_note(collector, duration, len(batch))
                 except Exception as exc:  # pragma: no cover - defensive
-                    notes.append(f"{collector.source_name}: error {exc}")
+                    notes.append(f"{collector_progress_name(collector)}: error {exc}")
                     logger.warning("Collector %s failed: %s", collector.source_name, exc)
                 finally:
                     done += 1
                     if progress:
-                        progress(done, total, collector.source_name)
+                        progress(done, total, collector_progress_name(collector))
         return items
 
     @staticmethod
@@ -585,6 +600,38 @@ class ReputationIngestService:
         if isinstance(collected, list):
             return collected
         return list(collected)
+
+    @staticmethod
+    def _collector_batch_with_timeout(
+        collector: ReputationCollector,
+        *,
+        timeout_sec: int,
+    ) -> list[ReputationItem]:
+        if timeout_sec <= 0:
+            return ReputationIngestService._collector_batch(collector)
+
+        done = Event()
+        error: Exception | None = None
+        batch: list[ReputationItem] = []
+
+        def _runner() -> None:
+            nonlocal error, batch
+            try:
+                batch = ReputationIngestService._collector_batch(collector)
+            except Exception as exc:  # pragma: no cover - defensive
+                error = exc
+            finally:
+                done.set()
+
+        # Run collectors in a daemon thread so a hung fetch cannot block the whole ingest forever.
+        worker = Thread(target=_runner, daemon=True)
+        worker.start()
+        finished = done.wait(timeout=timeout_sec)
+        if not finished:
+            raise TimeoutError(f"timeout after {timeout_sec}s")
+        if error is not None:
+            raise error
+        return batch
 
     @staticmethod
     def _drop_invalid_items(
@@ -1778,14 +1825,17 @@ class ReputationIngestService:
             default_context_match: bool | None = None
             noise_match: bool | None = None
 
-            def _ensure_actor_candidates() -> list[str]:
+            def _ensure_actor_candidates(
+                item_local: ReputationItem = item,
+                needs_actor_candidates_local: bool = needs_actor_candidates,
+            ) -> list[str]:
                 nonlocal actor_candidates
                 if actor_candidates is not None:
                     return actor_candidates
-                if not needs_actor_candidates:
+                if not needs_actor_candidates_local:
                     actor_candidates = []
                 else:
-                    actor_candidates = cls._item_actor_candidates(item)
+                    actor_candidates = cls._item_actor_candidates(item_local)
                 return actor_candidates
 
             def _ensure_canonical_candidates() -> list[str]:
@@ -1803,37 +1853,46 @@ class ReputationIngestService:
                     )
                 return canonical_candidates
 
-            def _ensure_text_tokens() -> set[str]:
+            def _ensure_text_tokens(
+                has_text_local: bool = has_text,
+                combined_text_local: str = combined_text,
+            ) -> set[str]:
                 nonlocal text_tokens
                 if text_tokens is not None:
                     return text_tokens
-                if not has_text or not combined_text:
+                if not has_text_local or not combined_text_local:
                     text_tokens = set()
                     return text_tokens
-                text_tokens = cls._text_tokens(combined_text)
+                text_tokens = cls._text_tokens(combined_text_local)
                 return text_tokens
 
-            def _matches_default_context() -> bool:
+            def _matches_default_context(
+                has_text_local: bool = has_text,
+                compiled_context_terms_local: CompiledKeywords | None = compiled_context_terms,
+            ) -> bool:
                 nonlocal default_context_match
                 if default_context_match is not None:
                     return default_context_match
-                if not has_text or compiled_context_terms is None:
+                if not has_text_local or compiled_context_terms_local is None:
                     default_context_match = False
                     return default_context_match
                 default_context_match = match_compiled(
                     _ensure_text_tokens(),
-                    compiled_context_terms,
+                    compiled_context_terms_local,
                 )
                 return default_context_match
 
-            def _matches_noise_terms() -> bool:
+            def _matches_noise_terms(
+                has_text_local: bool = has_text,
+                compiled_noise_terms_local: CompiledKeywords | None = compiled_noise_terms,
+            ) -> bool:
                 nonlocal noise_match
                 if noise_match is not None:
                     return noise_match
-                if not has_text or compiled_noise_terms is None:
+                if not has_text_local or compiled_noise_terms_local is None:
                     noise_match = False
                     return noise_match
-                noise_match = match_compiled(_ensure_text_tokens(), compiled_noise_terms)
+                noise_match = match_compiled(_ensure_text_tokens(), compiled_noise_terms_local)
                 return noise_match
 
             actor_candidates_current: list[str] | None = None
@@ -2067,10 +2126,7 @@ class ReputationIngestService:
         if canonical_candidates is None:
             candidates = cls._item_actor_candidates(item)
             canonical_candidates = cls._canonicalize_actor_candidates(candidates, alias_map)
-        for canonical in canonical_candidates:
-            if canonical in guard_actors:
-                return True
-        return False
+        return any(canonical in guard_actors for canonical in canonical_candidates)
 
     @staticmethod
     def _normalize_geo_key(value: str) -> str:
@@ -2528,35 +2584,77 @@ class ReputationIngestService:
             scrape_timeout = _env_int("APPSTORE_SCRAPE_TIMEOUT", 15)
             app_ids_by_geo = _get_dict_str_list_str(appstore_cfg, "app_ids_by_geo")
             country_by_geo = _get_dict_str_str(appstore_cfg, "country_by_geo")
+            raw_core_only = appstore_cfg.get("core_only")
+            if isinstance(raw_core_only, bool):
+                core_only = raw_core_only
+            elif isinstance(raw_core_only, str):
+                core_only = _env_bool(raw_core_only)
+            else:
+                core_only = _env_bool(os.getenv("APPSTORE_CORE_ONLY", "false"))
+            app_id_to_actor = _get_dict_str_str(appstore_cfg, "app_id_to_actor")
+            fallback_actor = _primary_actor_canonical(cfg)
+            seen_app_locale: set[tuple[str, str]] = set()
+            seen_actor_geo: set[tuple[str, str]] = set()
+            skipped_duplicate = 0
+            skipped_core = 0
 
             app_ids = list(dict.fromkeys(app_ids))
             if not app_ids and not app_ids_by_geo:
                 notes.append("appstore: missing app_ids in config.json")
             else:
-                for app_id_value in app_ids:
+
+                def actor_key_for_app(app_id: str) -> str:
+                    actor = app_id_to_actor.get(app_id) or fallback_actor
+                    return actor.strip().lower()
+
+                def add_appstore_collector(
+                    app_id: str,
+                    app_country: str,
+                    geo: str | None,
+                ) -> None:
+                    nonlocal skipped_duplicate, skipped_core
+                    app_clean = app_id.strip()
+                    if not app_clean:
+                        return
+                    country_clean = (app_country or country).strip().lower()
+                    geo_key = (
+                        geo.strip().lower() if isinstance(geo, str) and geo.strip() else "global"
+                    )
+                    actor_key = actor_key_for_app(app_clean)
+                    if core_only and actor_key and (actor_key, geo_key) in seen_actor_geo:
+                        skipped_core += 1
+                        return
+                    dedupe_key = (app_clean, country_clean)
+                    if dedupe_key in seen_app_locale:
+                        skipped_duplicate += 1
+                        return
+
                     collectors.append(
                         self._build_appstore_collector(
                             api_enabled=api_enabled,
-                            country=country,
-                            app_id=app_id_value,
+                            country=country_clean,
+                            app_id=app_clean,
                             max_reviews=max_reviews,
                             scrape_timeout=scrape_timeout,
-                            geo=None,
+                            geo=geo,
                         )
                     )
+                    seen_app_locale.add(dedupe_key)
+                    if core_only and actor_key:
+                        seen_actor_geo.add((actor_key, geo_key))
+
+                for app_id_value in app_ids:
+                    add_appstore_collector(app_id_value, country, None)
                 for geo, geo_app_ids in app_ids_by_geo.items():
                     geo_country = country_by_geo.get(geo, country)
                     for app_id_value in geo_app_ids:
-                        collectors.append(
-                            self._build_appstore_collector(
-                                api_enabled=api_enabled,
-                                country=geo_country,
-                                app_id=app_id_value,
-                                max_reviews=max_reviews,
-                                scrape_timeout=scrape_timeout,
-                                geo=geo,
-                            )
-                        )
+                        add_appstore_collector(app_id_value, geo_country, geo)
+
+                if skipped_duplicate or skipped_core:
+                    notes.append(
+                        "appstore: skipped collectors "
+                        f"(duplicate_locale={skipped_duplicate}, core_only={skipped_core})"
+                    )
 
         if "google_play" in sources_enabled:
             handled_sources.add("google_play")
@@ -2576,49 +2674,95 @@ class ReputationIngestService:
             max_reviews = _env_int("GOOGLE_PLAY_MAX_REVIEWS", 200)
             scrape_timeout = _env_int("GOOGLE_PLAY_SCRAPE_TIMEOUT", 15)
 
+            raw_core_only = gp_cfg.get("core_only")
+            if isinstance(raw_core_only, bool):
+                core_only = raw_core_only
+            elif isinstance(raw_core_only, str):
+                core_only = _env_bool(raw_core_only)
+            else:
+                core_only = _env_bool(os.getenv("GOOGLE_PLAY_CORE_ONLY", "false"))
+            package_id_to_actor = _get_dict_str_str(gp_cfg, "package_id_to_actor")
+            fallback_actor = _primary_actor_canonical(cfg)
+
             package_ids_by_geo = _get_dict_str_list_str(gp_cfg, "package_ids_by_geo")
             geo_to_gl = _get_dict_str_str(gp_cfg, "geo_to_gl")
             geo_to_hl = _get_dict_str_str(gp_cfg, "geo_to_hl")
+            seen_package_locale: set[tuple[str, str, str]] = set()
+            seen_google_play_actor_geo: set[tuple[str, str]] = set()
+            skipped_duplicate = 0
+            skipped_core = 0
 
             if api_enabled and not gp_endpoint:
                 notes.append("google_play: missing GOOGLE_PLAY_API_ENDPOINT")
             if not package_ids and not package_ids_by_geo:
                 notes.append("google_play: missing package_ids in config.json")
             else:
-                for package_id in list(dict.fromkeys(package_ids)):
+
+                def actor_key_for_package(package_id: str) -> str:
+                    actor = package_id_to_actor.get(package_id) or fallback_actor
+                    return actor.strip().lower()
+
+                def add_google_play_collector(
+                    package_id: str,
+                    country: str,
+                    language: str,
+                    geo: str | None,
+                ) -> None:
+                    nonlocal skipped_duplicate, skipped_core
+                    package_clean = package_id.strip()
+                    if not package_clean:
+                        return
+                    country_clean = (country or default_country).strip().upper()
+                    language_clean = (language or default_language).strip().lower()
+                    geo_key = (
+                        geo.strip().lower() if isinstance(geo, str) and geo.strip() else "global"
+                    )
+                    actor_key = actor_key_for_package(package_clean)
+                    if (
+                        core_only
+                        and actor_key
+                        and (actor_key, geo_key) in seen_google_play_actor_geo
+                    ):
+                        skipped_core += 1
+                        return
+                    dedupe_key = (package_clean, country_clean, language_clean)
+                    if dedupe_key in seen_package_locale:
+                        skipped_duplicate += 1
+                        return
+
                     collector = self._build_google_play_collector(
                         api_enabled=api_enabled,
                         endpoint=gp_endpoint,
                         api_key=api_key,
                         api_key_param=api_key_param,
-                        package_id=package_id,
-                        country=default_country,
-                        language=default_language,
+                        package_id=package_clean,
+                        country=country_clean,
+                        language=language_clean,
                         max_reviews=max_reviews,
                         scrape_timeout=scrape_timeout,
-                        geo=None,
+                        geo=geo,
                     )
-                    if collector:
-                        collectors.append(collector)
+                    if not collector:
+                        return
+                    collectors.append(collector)
+                    seen_package_locale.add(dedupe_key)
+                    if core_only and actor_key:
+                        seen_google_play_actor_geo.add((actor_key, geo_key))
+
+                for package_id in list(dict.fromkeys(package_ids)):
+                    add_google_play_collector(package_id, default_country, default_language, None)
 
                 for geo, geo_packages in package_ids_by_geo.items():
                     geo_country = geo_to_gl.get(geo, default_country)
                     geo_language = geo_to_hl.get(geo, default_language)
                     for package_id in geo_packages:
-                        collector = self._build_google_play_collector(
-                            api_enabled=api_enabled,
-                            endpoint=gp_endpoint,
-                            api_key=api_key,
-                            api_key_param=api_key_param,
-                            package_id=package_id,
-                            country=geo_country,
-                            language=geo_language,
-                            max_reviews=max_reviews,
-                            scrape_timeout=scrape_timeout,
-                            geo=geo,
-                        )
-                        if collector:
-                            collectors.append(collector)
+                        add_google_play_collector(package_id, geo_country, geo_language, geo)
+
+                if skipped_duplicate or skipped_core:
+                    notes.append(
+                        "google_play: skipped collectors "
+                        f"(duplicate_locale={skipped_duplicate}, core_only={skipped_core})"
+                    )
 
         if "reddit" in sources_enabled:
             handled_sources.add("reddit")
@@ -3128,10 +3272,13 @@ class ReputationIngestService:
         scrape_timeout: int,
         geo: str | None,
     ) -> ReputationCollector | None:
+        progress_name = f"google_play:{package_id}:{country}/{language}"
+        if isinstance(geo, str) and geo.strip():
+            progress_name = f"{progress_name}:{geo.strip()}"
         if api_enabled:
             if not endpoint:
                 return None
-            return GooglePlayApiCollector(
+            api_collector = GooglePlayApiCollector(
                 endpoint=endpoint,
                 api_key=api_key,
                 api_key_param=api_key_param,
@@ -3141,7 +3288,9 @@ class ReputationIngestService:
                 max_reviews=max_reviews,
                 geo=geo,
             )
-        return GooglePlayScraperCollector(
+            cast(Any, api_collector).progress_name = progress_name
+            return api_collector
+        scraper_collector = GooglePlayScraperCollector(
             package_id=package_id,
             country=country,
             language=language,
@@ -3149,6 +3298,8 @@ class ReputationIngestService:
             geo=geo,
             timeout=scrape_timeout,
         )
+        cast(Any, scraper_collector).progress_name = progress_name
+        return scraper_collector
 
     @staticmethod
     def _default_keyword_queries(keywords: list[str], include_unquoted: bool = False) -> list[str]:
@@ -3251,7 +3402,7 @@ class ReputationIngestService:
             return ""
         cleaned = unescape(value)
         cleaned = re.sub(r"<[^>]+>", " ", cleaned)
-        cleaned = re.sub(r"\s+", " ", cleaned).strip(" \t\r\n-–—|,;:.")
+        cleaned = re.sub(r"\s+", " ", cleaned).strip(" \t\r\n-\u2013\u2014|,;:.")
         if len(cleaned) > 120:
             cleaned = cleaned[:120].strip()
         return cleaned
@@ -3301,7 +3452,7 @@ class ReputationIngestService:
         if not raw:
             return ""
         decoded = unescape(raw)
-        separators = (" - ", " | ", " — ", " – ")
+        separators = (" - ", " | ", " \u2014 ", " \u2013 ")
         for separator in separators:
             if separator not in decoded:
                 continue

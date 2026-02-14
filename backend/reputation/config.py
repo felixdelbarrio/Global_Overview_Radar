@@ -158,10 +158,6 @@ class ReputationSettings(BaseSettings):
         default=False,
         alias="REPUTATION_UI_SHOW_COMPARISONS",
     )
-    ui_show_dashboard_responses: bool = Field(
-        default=False,
-        alias="REPUTATION_UI_SHOW_DASHBOARD_RESPONSES",
-    )
 
     # Auth (Google ID tokens)
     # If true, the UI requires an end-user Google login (ID token).

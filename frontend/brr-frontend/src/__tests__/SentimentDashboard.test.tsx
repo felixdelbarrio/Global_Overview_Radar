@@ -346,7 +346,6 @@ describe("SentimentView dashboard", () => {
       if (path.startsWith("/reputation/meta")) {
         return Promise.resolve({
           ...metaResponse,
-          ui_show_dashboard_responses: true,
           sources_enabled: ["appstore", "google_play"],
           sources_available: ["appstore", "google_play"],
           market_ratings: [
