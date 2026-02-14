@@ -1725,6 +1725,16 @@ class ReputationIngestService:
         alias_map = build_actor_alias_map(cfg)
         aliases_by_canonical = build_actor_aliases_by_canonical(cfg)
         guard_actors = cls._load_guard_actors(cfg, alias_map)
+        guard_actor_terms: set[str] = set()
+        if guard_actors:
+            for actor in guard_actors:
+                actor_norm = normalize_text(actor)
+                if actor_norm:
+                    guard_actor_terms.add(actor_norm)
+                for alias in aliases_by_canonical.get(actor) or []:
+                    alias_norm = normalize_text(alias)
+                    if alias_norm:
+                        guard_actor_terms.add(alias_norm)
         allowed_by_geo, known_actors = cls._build_actor_geo_allowlist(cfg, alias_map)
         source_context_terms: dict[str, list[str]] = {}
         source_context_compiled: dict[str, CompiledKeywords] = {}
@@ -1733,7 +1743,7 @@ class ReputationIngestService:
         has_noise_terms = bool(noise_terms)
         compiled_noise_terms = compile_keywords(noise_terms) if has_noise_terms else None
         guard_context_enabled = bool(
-            guard_actors and has_context_terms and compiled_context_terms is not None
+            guard_actor_terms and has_context_terms and compiled_context_terms is not None
         )
         geo_filter_enabled = bool(allowed_by_geo)
         if require_context_sources:
@@ -1759,6 +1769,7 @@ class ReputationIngestService:
         dropped_context = 0
         geo_key_cache: dict[str, str] = {}
         canonical_actor_cache: dict[str, str] = {}
+        guard_candidate_norm_cache: dict[str, str] = {}
 
         for item in items:
             source = (item.source or "").strip().lower()
@@ -1777,6 +1788,8 @@ class ReputationIngestService:
             actor_candidates: list[str] | None = None
             canonical_candidates: list[str] | None = None
             text_tokens: set[str] | None = None
+            default_context_match: bool | None = None
+            noise_match: bool | None = None
 
             def _ensure_actor_candidates() -> list[str]:
                 nonlocal actor_candidates
@@ -1813,6 +1826,29 @@ class ReputationIngestService:
                 text_tokens = cls._text_tokens(combined_text)
                 return text_tokens
 
+            def _matches_default_context() -> bool:
+                nonlocal default_context_match
+                if default_context_match is not None:
+                    return default_context_match
+                if not has_text or compiled_context_terms is None:
+                    default_context_match = False
+                    return default_context_match
+                default_context_match = match_compiled(
+                    _ensure_text_tokens(),
+                    compiled_context_terms,
+                )
+                return default_context_match
+
+            def _matches_noise_terms() -> bool:
+                nonlocal noise_match
+                if noise_match is not None:
+                    return noise_match
+                if not has_text or compiled_noise_terms is None:
+                    noise_match = False
+                    return noise_match
+                noise_match = match_compiled(_ensure_text_tokens(), compiled_noise_terms)
+                return noise_match
+
             actor_candidates_current: list[str] | None = None
             if needs_actor:
                 actor_candidates_current = _ensure_actor_candidates()
@@ -1835,9 +1871,12 @@ class ReputationIngestService:
                     compiled_terms = source_context_compiled.get(source)
                     if compiled_terms is None:
                         compiled_terms = compiled_context_terms
-                    if compiled_terms is not None and not match_compiled(
-                        _ensure_text_tokens(), compiled_terms
-                    ):
+                    context_matches = False
+                    if compiled_terms is compiled_context_terms:
+                        context_matches = _matches_default_context()
+                    elif compiled_terms is not None:
+                        context_matches = match_compiled(_ensure_text_tokens(), compiled_terms)
+                    if compiled_terms is not None and not context_matches:
                         dropped_context += 1
                         continue
             if geo_filter_enabled and item.geo:
@@ -1858,15 +1897,22 @@ class ReputationIngestService:
                     continue
             if (
                 guard_context_enabled
-                and cls._item_has_guard_actor(
-                    item,
-                    guard_actors,
-                    alias_map,
-                    canonical_candidates=_ensure_canonical_candidates(),
+                and any(
+                    (
+                        (
+                            guard_candidate_norm_cache.get(candidate)
+                            or guard_candidate_norm_cache.setdefault(
+                                candidate,
+                                normalize_text(candidate),
+                            )
+                        )
+                        in guard_actor_terms
+                    )
+                    for candidate in _ensure_actor_candidates()
                 )
                 and has_text
                 and compiled_context_terms is not None
-                and not match_compiled(_ensure_text_tokens(), compiled_context_terms)
+                and not _matches_default_context()
             ):
                 dropped_guard += 1
                 continue
@@ -1874,12 +1920,12 @@ class ReputationIngestService:
                 needs_noise
                 and has_text
                 and compiled_noise_terms is not None
-                and match_compiled(_ensure_text_tokens(), compiled_noise_terms)
+                and _matches_noise_terms()
                 and (
                     not has_context_terms
                     or (
                         compiled_context_terms is not None
-                        and not match_compiled(_ensure_text_tokens(), compiled_context_terms)
+                        and not _matches_default_context()
                     )
                 )
             ):
