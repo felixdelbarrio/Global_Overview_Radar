@@ -131,6 +131,9 @@ def main() -> None:
     def stage_sentiment_no_existing() -> None:
         service._apply_sentiment(cfg, _clone_items(base_items), existing=None, notes=[])
 
+    def stage_merge_dedupe() -> None:
+        service._merge_items(_clone_items(existing_items), _clone_items(base_items))
+
     def stage_postprocess_pipeline() -> None:
         items = _clone_items(base_items)
         items = service._apply_geo_hints(cfg, items)
@@ -149,6 +152,12 @@ def main() -> None:
         _bench(
             "ingest:sentiment_no_existing",
             stage_sentiment_no_existing,
+            args.iterations,
+            args.warmup,
+        ),
+        _bench(
+            "ingest:merge_dedupe",
+            stage_merge_dedupe,
             args.iterations,
             args.warmup,
         ),
