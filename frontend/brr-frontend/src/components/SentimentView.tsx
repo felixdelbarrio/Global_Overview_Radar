@@ -597,6 +597,7 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
 
   useEffect(() => {
     let alive = true;
+    setChartLoading(true);
     const params = new URLSearchParams();
     if (effectiveFromDate) params.set("from_date", effectiveFromDate);
     if (effectiveToDate) params.set("to_date", effectiveToDate);
@@ -635,7 +636,8 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
 
   useEffect(() => {
     let alive = true;
-    if (!isDashboard) {
+    const shouldLoadMarketsInsights = isDashboard || isSentimentMarkets;
+    if (!shouldLoadMarketsInsights) {
       setDashboardMarketInsights(null);
       setDashboardMarketInsightsLoading(false);
       setDashboardMarketInsightsError(null);
@@ -679,6 +681,7 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
     };
   }, [
     isDashboard,
+    isSentimentMarkets,
     effectiveFromDate,
     effectiveToDate,
     geo,
@@ -748,12 +751,16 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
     }
   }, [geoOptions, preferredGeo, geo]);
 
+  const chartItemsForSeries = useMemo(
+    () => (chartItems.length ? chartItems : items),
+    [chartItems, items],
+  );
   const availableActorSet = useMemo(() => {
-    const values = chartItems
+    const values = chartItemsForSeries
       .map((i) => i.actor)
       .filter(Boolean) as string[];
     return new Set(values.map((value) => normalizeKey(value)));
-  }, [chartItems]);
+  }, [chartItemsForSeries]);
 
   const allowedActorSet = useMemo(() => {
     if (geo === "all") return null;
@@ -767,7 +774,7 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
   const actorOptions = useMemo(() => {
     const fromMetaGeo = (meta?.otros_actores_por_geografia ?? {})[geo] ?? [];
     const fromMetaGlobal = meta?.otros_actores_globales ?? [];
-    const fromItems = chartItems.map((i) => i.actor).filter(Boolean) as string[];
+    const fromItems = chartItemsForSeries.map((i) => i.actor).filter(Boolean) as string[];
     const base =
       geo !== "all"
         ? [...fromMetaGeo, ...fromMetaGlobal]
@@ -778,7 +785,7 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
       .filter((v) => (allowedActorSet ? allowedActorSet.has(normalizeKey(v)) : true))
       .filter((v) => availableActorSet.has(normalizeKey(v)))
       .sort((a, b) => a.localeCompare(b));
-  }, [chartItems, principalAliasKeys, geo, meta, availableActorSet, allowedActorSet]);
+  }, [chartItemsForSeries, principalAliasKeys, geo, meta, availableActorSet, allowedActorSet]);
 
   useEffect(() => {
     if (isDashboard || actor === "all") return;
@@ -908,14 +915,43 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
   const sentimentSeries = useMemo(
     () =>
       buildComparativeSeries(
-        chartItems,
+        chartItemsForSeries,
         actorForSeries,
         principalAliasKeys,
         effectiveFromDate,
         effectiveToDate,
       ),
-    [chartItems, actorForSeries, principalAliasKeys, effectiveFromDate, effectiveToDate],
+    [chartItemsForSeries, actorForSeries, principalAliasKeys, effectiveFromDate, effectiveToDate],
   );
+  const hideSentimentChart = useMemo(() => {
+    const restrictActor =
+      comparisonsEnabled &&
+      actorForSeries !== "all" &&
+      !isPrincipalName(actorForSeries, principalAliasKeys);
+    const selectedActorKey = normalizeKey(actorForSeries);
+    let total = 0;
+    let nonNeutral = 0;
+
+    for (const item of chartItemsForSeries) {
+      const principal = isPrincipalItem(item, principalAliasKeys);
+      if (!principal) {
+        if (!comparisonsEnabled) continue;
+        if (
+          restrictActor &&
+          normalizeKey(item.actor || "") !== selectedActorKey
+        ) {
+          continue;
+        }
+      }
+
+      total += 1;
+      if (item.sentiment !== "neutral") {
+        nonNeutral += 1;
+      }
+    }
+
+    return total > 0 && nonNeutral === 0;
+  }, [chartItemsForSeries, comparisonsEnabled, actorForSeries, principalAliasKeys]);
   const dashboardSeries = useMemo(
     () =>
       sentimentSeries.map((row) => ({
@@ -1183,11 +1219,8 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
   const responseSummaryUsesRatios = isDashboard || isSentimentMarkets;
   const responseCoverageIncludeTotals = !isDashboard && !isSentimentMarkets;
   const responseTotalsPrincipal = useMemo(() => {
-    if (isDashboard) {
+    if (isDashboard || isSentimentMarkets) {
       return dashboardResponseTotals ?? summarizeAnsweredMentions(principalReplyTrackedMentions);
-    }
-    if (isSentimentMarkets) {
-      return summarizeAnsweredMentions(principalReplyTrackedMentions);
     }
     return summarizeAnsweredMentions(principalMentions);
   }, [
@@ -1961,70 +1994,72 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
         </section>
       </div>
 
-      <section className="mt-6 rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-5 shadow-[var(--shadow-md)] backdrop-blur-xl animate-rise" style={{ animationDelay: "300ms" }}>
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
-            {mode === "dashboard" ? "SENTIMIENTO" : "ÍNDICE REPUTACIONAL ACUMULADO"}
+      {!hideSentimentChart && (
+        <section className="mt-6 rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-5 shadow-[var(--shadow-md)] backdrop-blur-xl animate-rise" style={{ animationDelay: "300ms" }}>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
+              {mode === "dashboard" ? "SENTIMIENTO" : "ÍNDICE REPUTACIONAL ACUMULADO"}
+            </div>
+            <div className="text-xs text-[color:var(--text-55)]">
+              {mode === "dashboard"
+                ? `${principalLabel} · ${dashboardMonthLabel}`
+                : comparisonsEnabled
+                  ? (
+                      <>
+                        Comparativa{" "}
+                        {formatVsValue(principalLabel, actorLabel, {
+                          containerClassName: "inline-flex items-center whitespace-nowrap",
+                          vsClassName:
+                            "mx-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-[color:var(--text-45)]",
+                        })}{" "}
+                        · {rangeLabel}
+                      </>
+                    )
+                  : `${principalLabel} · ${rangeLabel}`}
+            </div>
           </div>
-          <div className="text-xs text-[color:var(--text-55)]">
-            {mode === "dashboard"
-              ? `${principalLabel} · ${dashboardMonthLabel}`
-              : comparisonsEnabled
-                ? (
-                    <>
-                      Comparativa{" "}
-                      {formatVsValue(principalLabel, actorLabel, {
-                        containerClassName: "inline-flex items-center whitespace-nowrap",
-                        vsClassName:
-                          "mx-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-[color:var(--text-45)]",
-                      })}{" "}
-                      · {rangeLabel}
-                    </>
+          {showDownloads && (
+            <div className="mt-3 flex flex-wrap gap-2 text-xs">
+              <button
+                onClick={() =>
+                  downloadChartCsv(
+                    sentimentSeries,
+                    principalLabel,
+                    actorLabel,
+                    buildDownloadName("sentimiento_grafico", fromDate, toDate),
+                    comparisonsEnabled,
                   )
-                : `${principalLabel} · ${rangeLabel}`}
-          </div>
-        </div>
-        {showDownloads && (
-          <div className="mt-3 flex flex-wrap gap-2 text-xs">
-            <button
-              onClick={() =>
-                downloadChartCsv(
-                  sentimentSeries,
-                  principalLabel,
-                  actorLabel,
-                  buildDownloadName("sentimiento_grafico", fromDate, toDate),
-                  comparisonsEnabled,
-                )
-              }
-              className="inline-flex items-center gap-2 rounded-full border border-[color:var(--border-70)] bg-[color:var(--surface-80)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--brand-ink)] shadow-[var(--shadow-pill)] transition hover:-translate-y-0.5 hover:shadow-[var(--shadow-pill-hover)]"
-            >
-              Descargar gráfico
-            </button>
-          </div>
-        )}
-        <div
-          ref={chartSectionRef}
-          className="mt-3 h-72 min-h-[240px]"
-        >
-          {!chartsVisible ? (
-            <div className="h-full rounded-[22px] border border-[color:var(--border-60)] bg-[color:var(--surface-70)] animate-pulse" />
-          ) : chartLoading ? (
-            <div className="h-full rounded-[22px] border border-[color:var(--border-60)] bg-[color:var(--surface-70)] animate-pulse" />
-          ) : mode === "dashboard" ? (
-            <DashboardChart
-              data={dashboardSeries}
-              sentimentLabel={principalLabel}
-            />
-          ) : (
-            <SentimentChart
-              data={sentimentSeries}
-              principalLabel={principalLabel}
-              actorLabel={actorLabel}
-              showActor={comparisonsEnabled}
-            />
+                }
+                className="inline-flex items-center gap-2 rounded-full border border-[color:var(--border-70)] bg-[color:var(--surface-80)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--brand-ink)] shadow-[var(--shadow-pill)] transition hover:-translate-y-0.5 hover:shadow-[var(--shadow-pill-hover)]"
+              >
+                Descargar gráfico
+              </button>
+            </div>
           )}
-        </div>
-      </section>
+          <div
+            ref={chartSectionRef}
+            className="mt-3 h-72 min-h-[240px]"
+          >
+            {!chartsVisible ? (
+              <div className="h-full rounded-[22px] border border-[color:var(--border-60)] bg-[color:var(--surface-70)] animate-pulse" />
+            ) : chartLoading ? (
+              <div className="h-full rounded-[22px] border border-[color:var(--border-60)] bg-[color:var(--surface-70)] animate-pulse" />
+            ) : mode === "dashboard" ? (
+              <DashboardChart
+                data={dashboardSeries}
+                sentimentLabel={principalLabel}
+              />
+            ) : (
+              <SentimentChart
+                data={sentimentSeries}
+                principalLabel={principalLabel}
+                actorLabel={actorLabel}
+                showActor={comparisonsEnabled}
+              />
+            )}
+          </div>
+        </section>
+      )}
 
 
       {mode === "dashboard" ? (
@@ -4055,6 +4090,15 @@ function getSentimentTone(sentiment?: string | null) {
   };
 }
 
+function resolveSentimentScore(item: ReputationItem): number | null {
+  const score = Number((item.signals as Record<string, unknown>)?.sentiment_score);
+  if (Number.isFinite(score)) return score;
+  if (item.sentiment === "positive") return 1;
+  if (item.sentiment === "negative") return -1;
+  if (item.sentiment === "neutral") return 0;
+  return null;
+}
+
 function summarize(items: ReputationItem[]) {
   let positive = 0;
   let neutral = 0;
@@ -4066,8 +4110,8 @@ function summarize(items: ReputationItem[]) {
     if (item.sentiment === "positive") positive += 1;
     if (item.sentiment === "neutral") neutral += 1;
     if (item.sentiment === "negative") negative += 1;
-    const score = Number((item.signals as Record<string, unknown>)?.sentiment_score);
-    if (!Number.isNaN(score)) {
+    const score = resolveSentimentScore(item);
+    if (typeof score === "number") {
       totalScore += score;
       scored += 1;
     }
@@ -4308,10 +4352,8 @@ function buildComparativeSeries(
     const rawDate = item.published_at || item.collected_at;
     if (!rawDate) continue;
     const date = rawDate.slice(0, 10);
-    const score = Number(
-      (item.signals as Record<string, unknown>)?.sentiment_score,
-    );
-    if (Number.isNaN(score)) continue;
+    const score = resolveSentimentScore(item);
+    if (typeof score !== "number") continue;
 
     if (!map.has(date)) {
       map.set(date, {
