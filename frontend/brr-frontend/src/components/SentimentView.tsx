@@ -976,12 +976,35 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
     () => countMarketSourceTotals(marketActorItems),
     [marketActorItems],
   );
+  const pressContextItems = useMemo(() => {
+    if (isDashboard) return [] as ReputationItem[];
+    if (!comparisonsEnabled) {
+      return items.filter((item) => isPrincipalItem(item, principalAliasKeys));
+    }
+    return items;
+  }, [isDashboard, comparisonsEnabled, items, principalAliasKeys]);
+  const activePressSources = useMemo(() => {
+    if (isDashboard) return new Set<string>();
+    const selectedOrScopedSources = sources.length
+      ? sources
+      : scope === "press"
+        ? scopeAllowedSources
+        : [];
+    return new Set(
+      selectedOrScopedSources
+        .map((source) => normalizeSourceKey(source))
+        .filter((sourceKey) => PRESS_REPUTATION_SOURCE_SET.has(sourceKey)),
+    );
+  }, [isDashboard, sources, scope, scopeAllowedSources]);
   const pressItems = useMemo(
     () =>
-      items.filter((item) =>
-        PRESS_REPUTATION_SOURCE_SET.has((item.source || "").trim().toLowerCase()),
-      ),
-    [items],
+      pressContextItems.filter((item) => {
+        const sourceKey = normalizeSourceKey(item.source || "");
+        if (!PRESS_REPUTATION_SOURCE_SET.has(sourceKey)) return false;
+        if (!activePressSources.size) return true;
+        return activePressSources.has(sourceKey);
+      }),
+    [pressContextItems, activePressSources],
   );
   const pressPublisherRows = useMemo(
     () => buildPressPublisherRows(pressItems),

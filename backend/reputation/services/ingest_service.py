@@ -4,6 +4,7 @@ import math
 import os
 import re
 import time
+from collections import deque
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
@@ -67,6 +68,8 @@ from reputation.repositories.overrides_repo import ReputationOverridesRepo
 from reputation.services.sentiment_service import (
     ReputationSentimentService,
     _extract_star_rating,
+    _is_sentiment_locked,
+    _sentiment_from_stars,
 )
 
 logger = get_logger(__name__)
@@ -142,11 +145,53 @@ _PUBLISHER_DOMAIN_KEYS = (
     "source_domain",
 )
 _COUNTRY_TLD_CODES = {"es", "mx", "pe", "co", "ar", "tr"}
+_DOMAIN_PATTERN = re.compile(r"\b(?:[a-z0-9-]+\.)+[a-z]{2,}\b")
 
 
 @lru_cache(maxsize=8192)
 def _compile_single_keyword(keyword: str) -> CompiledKeywords:
     return compile_keywords([keyword])
+
+
+@lru_cache(maxsize=8192)
+def _normalize_site_domain_cached(domain: str) -> str:
+    cleaned = domain.strip().lower()
+    for prefix in ("https://", "http://"):
+        if cleaned.startswith(prefix):
+            cleaned = cleaned[len(prefix) :]
+            break
+    if cleaned.startswith("www."):
+        cleaned = cleaned[4:]
+    return cleaned.strip("/")
+
+
+@lru_cache(maxsize=8192)
+def _extract_domain_cached(value: str) -> str:
+    if not value:
+        return ""
+    try:
+        parsed = urlparse(value)
+        if parsed.netloc:
+            return parsed.netloc
+    except Exception:
+        pass
+    try:
+        parsed = urlparse(f"http://{value}")
+        return parsed.netloc
+    except Exception:
+        return ""
+
+
+@lru_cache(maxsize=4096)
+def _normalize_geo_hint_text_cached(text: str) -> str:
+    if not text:
+        return ""
+    decoded = text
+    if "&" in decoded:
+        decoded = unescape(decoded)
+    if "%" in decoded or "+" in decoded:
+        decoded = unquote_plus(decoded)
+    return normalize_text(decoded)
 
 
 def _primary_actor_canonical(cfg: dict[str, Any]) -> str:
@@ -1374,6 +1419,7 @@ class ReputationIngestService:
         source_geo_map = cls._build_source_geo_map(cfg, geos)
         if not geos and not source_geo_map:
             return items
+        geo_matchers = cls._compile_geo_matchers(geos, geo_aliases)
 
         actor_geo_map = cls._build_actor_geo_map(cfg)
         geo_country_codes = cls._build_geo_country_codes(geos, geo_aliases)
@@ -1387,10 +1433,10 @@ class ReputationIngestService:
                     continue
 
             title_only = item.title or ""
-            content_geo = cls._detect_geo_in_text(title_only, geos, geo_aliases)
-            if not content_geo:
-                text = f"{item.title or ''} {item.text or ''}"
-                content_geo = cls._detect_geo_in_text(text, geos, geo_aliases)
+            content_geo = cls._detect_geo_in_text(title_only, geo_matchers) if title_only else None
+            body_only = item.text or ""
+            if not content_geo and body_only:
+                content_geo = cls._detect_geo_in_text(body_only, geo_matchers)
             if content_geo:
                 if item.geo != content_geo:
                     item.geo = content_geo
@@ -1553,6 +1599,23 @@ class ReputationIngestService:
             item.signals["sentiment_provider"] = "manual_override"
             item.signals.pop("sentiment_model", None)
 
+    @staticmethod
+    def _apply_star_sentiment_fast(item: ReputationItem) -> bool:
+        if item.source not in _STAR_SENTIMENT_SOURCES:
+            return False
+        if _is_sentiment_locked(item):
+            return False
+        rating = _extract_star_rating(item)
+        if rating is None:
+            return False
+        label, score = _sentiment_from_stars(rating)
+        item.sentiment = label
+        item.signals["sentiment_score"] = score
+        item.signals["sentiment_provider"] = "stars"
+        item.signals["sentiment_scale"] = "1-5"
+        item.signals["client_sentiment"] = True
+        return True
+
     def _apply_sentiment(
         self,
         cfg: dict[str, Any],
@@ -1562,55 +1625,56 @@ class ReputationIngestService:
     ) -> list[ReputationItem]:
         if not items:
             return items
-        valid_items = [item for item in items if not self._is_invalid_segment(item)]
+        valid_items: list[ReputationItem] = []
+        for item in items:
+            if self._is_invalid_segment(item):
+                continue
+            valid_items.append(item)
         if not valid_items:
             return items
         self._lock_manual_sentiment_items(valid_items)
-        keywords = self._load_keywords(cfg)
-        cfg_local = dict(cfg)
-        cfg_local["keywords"] = keywords
-        service = ReputationSentimentService(cfg_local)
+        service: ReputationSentimentService | None = None
+
+        def _sentiment_service() -> ReputationSentimentService:
+            nonlocal service
+            if service is None:
+                keywords = self._load_keywords(cfg)
+                cfg_local = dict(cfg)
+                cfg_local["keywords"] = keywords
+                service = ReputationSentimentService(cfg_local)
+            return service
+
         target_language = _resolve_translation_language()
         existing_keys = {(item.source, item.id) for item in existing} if existing else set()
         if existing_keys:
-            star_items = [
-                item
-                for item in valid_items
-                if item.source in _STAR_SENTIMENT_SOURCES and _extract_star_rating(item) is not None
-            ]
-            new_items = [
-                item for item in valid_items if (item.source, item.id) not in existing_keys
-            ]
+            new_items: list[ReputationItem] = []
+            pending_by_key: dict[tuple[str, str], ReputationItem] = {}
+            for item in valid_items:
+                key = (item.source, item.id)
+                if self._apply_star_sentiment_fast(item):
+                    continue
+                if key not in existing_keys:
+                    pending_by_key[key] = item
+                    new_items.append(item)
             if target_language and new_items:
-                new_items = service.translate_items(new_items, target_language)
-            pending_by_key = {(item.source, item.id): item for item in new_items}
-            for star_item in star_items:
-                pending_by_key[(star_item.source, star_item.id)] = star_item
-            updated = service.analyze_items(list(pending_by_key.values()))
-            updated_map = {(item.source, item.id): item for item in updated}
-            result_map = {
-                (item.source, item.id): updated_map.get((item.source, item.id), item)
-                for item in valid_items
-            }
+                _sentiment_service().translate_items(new_items, target_language)
+            if pending_by_key:
+                _sentiment_service().analyze_items(pending_by_key.values())
         else:
-            if target_language:
-                valid_items = service.translate_items(valid_items, target_language)
-            updated = service.analyze_items(valid_items)
-            result_map = {(item.source, item.id): item for item in updated}
+            pending: list[ReputationItem] = []
+            for item in valid_items:
+                if self._apply_star_sentiment_fast(item):
+                    continue
+                pending.append(item)
+            if target_language and pending:
+                _sentiment_service().translate_items(pending, target_language)
+            if pending:
+                _sentiment_service().analyze_items(pending)
 
-        if service.llm_warning and notes is not None:
+        if service and service.llm_warning and notes is not None:
             notes.append(service.llm_warning)
-        if not result_map:
-            self._apply_source_sentiment_rules(items)
-            return items
-        result: list[ReputationItem] = []
-        for item in items:
-            if self._is_invalid_segment(item):
-                result.append(item)
-            else:
-                result.append(result_map.get((item.source, item.id), item))
-        self._apply_source_sentiment_rules(result)
-        return result
+        self._apply_source_sentiment_rules(items)
+        return items
 
     @classmethod
     def _filter_hard_exclude_items(
@@ -1664,7 +1728,12 @@ class ReputationIngestService:
         source_context_compiled: dict[str, CompiledKeywords] = {}
         has_context_terms = bool(context_terms)
         compiled_context_terms = compile_keywords(context_terms) if has_context_terms else None
-        compiled_noise_terms = compile_keywords(noise_terms) if noise_terms else None
+        has_noise_terms = bool(noise_terms)
+        compiled_noise_terms = compile_keywords(noise_terms) if has_noise_terms else None
+        guard_context_enabled = bool(
+            guard_actors and has_context_terms and compiled_context_terms is not None
+        )
+        geo_filter_enabled = bool(allowed_by_geo)
         if require_context_sources:
             for source in require_context_sources:
                 extra_terms: list[str] = []
@@ -1686,61 +1755,155 @@ class ReputationIngestService:
         dropped_geo = 0
         dropped_noise = 0
         dropped_context = 0
+        geo_key_cache: dict[str, str] = {}
+        canonical_actor_cache: dict[str, str] = {}
 
         for item in items:
-            text = f"{item.title or ''} {item.text or ''}".strip()
-            has_text = bool(text)
-            text_tokens = cls._text_tokens(text) if has_text else set()
-            if item.source in require_actor_sources and not cls._item_has_actor(item):
+            source = (item.source or "").strip().lower()
+            needs_actor = source in require_actor_sources
+            needs_context = source in require_context_sources
+            needs_noise = has_noise_terms and source in noise_sources
+            needs_actor_candidates = needs_actor or (geo_filter_enabled and bool(item.geo))
+            needs_actor_candidates = needs_actor_candidates or guard_context_enabled
+
+            title = item.title or ""
+            body = item.text or ""
+            has_text = bool((title and title.strip()) or (body and body.strip()))
+            combined_text = ""
+            if has_text:
+                combined_text = f"{title} {body}" if title and body else (title or body)
+            actor_candidates: list[str] | None = None
+            canonical_candidates: list[str] | None = None
+            text_tokens: set[str] | None = None
+            default_context_match: bool | None = None
+            noise_match: bool | None = None
+
+            def _ensure_actor_candidates() -> list[str]:
+                nonlocal actor_candidates
+                if actor_candidates is not None:
+                    return actor_candidates
+                if not needs_actor_candidates:
+                    actor_candidates = []
+                else:
+                    actor_candidates = cls._item_actor_candidates(item)
+                return actor_candidates
+
+            def _ensure_canonical_candidates() -> list[str]:
+                nonlocal canonical_candidates
+                if canonical_candidates is not None:
+                    return canonical_candidates
+                candidates_local = _ensure_actor_candidates()
+                if not candidates_local:
+                    canonical_candidates = []
+                else:
+                    canonical_candidates = cls._canonicalize_actor_candidates(
+                        candidates_local,
+                        alias_map,
+                        canonical_cache=canonical_actor_cache,
+                    )
+                return canonical_candidates
+
+            def _ensure_text_tokens() -> set[str]:
+                nonlocal text_tokens
+                if text_tokens is not None:
+                    return text_tokens
+                if not has_text or not combined_text:
+                    text_tokens = set()
+                    return text_tokens
+                text_tokens = cls._text_tokens(combined_text)
+                return text_tokens
+
+            def _matches_default_context() -> bool:
+                nonlocal default_context_match
+                if default_context_match is not None:
+                    return default_context_match
+                if not has_text or compiled_context_terms is None:
+                    default_context_match = False
+                    return default_context_match
+                default_context_match = match_compiled(
+                    _ensure_text_tokens(),
+                    compiled_context_terms,
+                )
+                return default_context_match
+
+            def _matches_noise_terms() -> bool:
+                nonlocal noise_match
+                if noise_match is not None:
+                    return noise_match
+                if not has_text or compiled_noise_terms is None:
+                    noise_match = False
+                    return noise_match
+                noise_match = match_compiled(_ensure_text_tokens(), compiled_noise_terms)
+                return noise_match
+
+            actor_candidates_current: list[str] | None = None
+            if needs_actor:
+                actor_candidates_current = _ensure_actor_candidates()
+            if needs_actor and not actor_candidates_current:
                 dropped_actor += 1
                 continue
-            if item.source in require_actor_sources and not cls._item_actor_in_text(
-                item, alias_map, aliases_by_canonical, text_tokens=text_tokens
+            if needs_actor and not cls._item_actor_in_text(
+                item,
+                alias_map,
+                aliases_by_canonical,
+                text_tokens=_ensure_text_tokens(),
+                candidates=actor_candidates_current,
+                canonical_candidates=_ensure_canonical_candidates(),
             ):
                 dropped_actor_text += 1
                 continue
-            if require_context_sources and item.source in require_context_sources:
-                terms = source_context_terms.get(item.source, context_terms)
+            if needs_context:
+                terms = source_context_terms.get(source, context_terms)
                 if has_text and terms:
-                    compiled_terms = source_context_compiled.get(item.source)
+                    compiled_terms = source_context_compiled.get(source)
                     if compiled_terms is None:
                         compiled_terms = compiled_context_terms
-                    if compiled_terms is not None and not match_compiled(
-                        text_tokens, compiled_terms
-                    ):
+                    context_matches = False
+                    if compiled_terms is compiled_context_terms:
+                        context_matches = _matches_default_context()
+                    elif compiled_terms is not None:
+                        context_matches = match_compiled(_ensure_text_tokens(), compiled_terms)
+                    if compiled_terms is not None and not context_matches:
                         dropped_context += 1
                         continue
+            if geo_filter_enabled and item.geo:
+                geo_key = geo_key_cache.get(item.geo)
+                if geo_key is None:
+                    geo_key = cls._normalize_geo_key(item.geo)
+                    geo_key_cache[item.geo] = geo_key
+                if not cls._item_actor_allowed_for_geo(
+                    item,
+                    item.geo,
+                    allowed_by_geo,
+                    known_actors,
+                    alias_map,
+                    canonical_candidates=_ensure_canonical_candidates(),
+                    geo_key=geo_key,
+                ):
+                    dropped_geo += 1
+                    continue
             if (
-                allowed_by_geo
-                and item.geo
-                and not cls._item_actor_allowed_for_geo(
-                    item, item.geo, allowed_by_geo, known_actors, alias_map
-                )
-            ):
-                dropped_geo += 1
-                continue
-            if (
-                guard_actors
-                and cls._item_has_guard_actor(item, guard_actors, alias_map)
+                guard_context_enabled
                 and has_text
-                and has_context_terms
                 and compiled_context_terms is not None
-                and not match_compiled(text_tokens, compiled_context_terms)
+                and cls._item_has_guard_actor(
+                    item,
+                    guard_actors,
+                    alias_map,
+                    canonical_candidates=_ensure_canonical_candidates(),
+                )
+                and not _matches_default_context()
             ):
                 dropped_guard += 1
                 continue
             if (
-                noise_terms
-                and item.source in noise_sources
+                needs_noise
                 and has_text
                 and compiled_noise_terms is not None
-                and match_compiled(text_tokens, compiled_noise_terms)
+                and _matches_noise_terms()
                 and (
                     not has_context_terms
-                    or (
-                        compiled_context_terms is not None
-                        and not match_compiled(text_tokens, compiled_context_terms)
-                    )
+                    or (compiled_context_terms is not None and not _matches_default_context())
                 )
             ):
                 dropped_noise += 1
@@ -1801,6 +1964,30 @@ class ReputationIngestService:
         return list(dict.fromkeys(candidates))
 
     @staticmethod
+    def _canonicalize_actor_candidates(
+        candidates: list[str],
+        alias_map: dict[str, str],
+        canonical_cache: dict[str, str] | None = None,
+    ) -> list[str]:
+        if not candidates:
+            return []
+        canonical_candidates: list[str] = []
+        seen: set[str] = set()
+        for candidate in candidates:
+            canonical = ""
+            if canonical_cache is not None and candidate in canonical_cache:
+                canonical = canonical_cache[candidate]
+            else:
+                canonical = canonicalize_actor(candidate, alias_map) if alias_map else candidate
+                if canonical_cache is not None:
+                    canonical_cache[candidate] = canonical or ""
+            if not canonical or canonical in seen:
+                continue
+            seen.add(canonical)
+            canonical_candidates.append(canonical)
+        return canonical_candidates
+
+    @staticmethod
     def _text_tokens(text: str) -> set[str]:
         if not text:
             return set()
@@ -1818,6 +2005,8 @@ class ReputationIngestService:
         alias_map: dict[str, str],
         aliases_by_canonical: dict[str, list[str]],
         text_tokens: set[str] | None = None,
+        candidates: list[str] | None = None,
+        canonical_candidates: list[str] | None = None,
     ) -> bool:
         if text_tokens is None:
             text = f"{item.title or ''} {item.text or ''}".strip()
@@ -1826,22 +2015,29 @@ class ReputationIngestService:
             text_tokens = cls._text_tokens(text)
         if not text_tokens:
             return False
-        candidates = cls._item_actor_candidates(item)
+        if candidates is None:
+            candidates = cls._item_actor_candidates(item)
         if not candidates:
             return False
+        if canonical_candidates is None:
+            canonical_candidates = cls._canonicalize_actor_candidates(candidates, alias_map)
+        checked_keywords: set[str] = set()
+
+        def _matches_keyword(keyword: str) -> bool:
+            if not keyword or keyword in checked_keywords:
+                return False
+            checked_keywords.add(keyword)
+            return cls._tokens_match_keyword(text_tokens, keyword)
+
         for candidate in candidates:
-            if cls._tokens_match_keyword(text_tokens, candidate):
+            if _matches_keyword(candidate):
                 return True
-            canonical = canonicalize_actor(candidate, alias_map) if alias_map else candidate
-            if (
-                canonical
-                and canonical != candidate
-                and cls._tokens_match_keyword(text_tokens, canonical)
-            ):
+        for canonical in canonical_candidates:
+            if _matches_keyword(canonical):
                 return True
             aliases = aliases_by_canonical.get(canonical) or []
             for alias in aliases:
-                if cls._tokens_match_keyword(text_tokens, alias):
+                if _matches_keyword(alias):
                     return True
         return False
 
@@ -1864,11 +2060,14 @@ class ReputationIngestService:
         item: ReputationItem,
         guard_actors: set[str],
         alias_map: dict[str, str],
+        canonical_candidates: list[str] | None = None,
     ) -> bool:
         if not guard_actors:
             return False
-        for candidate in cls._item_actor_candidates(item):
-            canonical = canonicalize_actor(candidate, alias_map) if alias_map else candidate
+        if canonical_candidates is None:
+            candidates = cls._item_actor_candidates(item)
+            canonical_candidates = cls._canonicalize_actor_candidates(candidates, alias_map)
+        for canonical in canonical_candidates:
             if canonical in guard_actors:
                 return True
         return False
@@ -1939,17 +2138,21 @@ class ReputationIngestService:
         allowed_by_geo: dict[str, set[str]],
         known_actors: set[str],
         alias_map: dict[str, str],
+        canonical_candidates: list[str] | None = None,
+        geo_key: str | None = None,
     ) -> bool:
-        geo_key = cls._normalize_geo_key(geo)
+        if geo_key is None:
+            geo_key = cls._normalize_geo_key(geo)
         allowed = allowed_by_geo.get(geo_key)
         if not allowed:
             return True
-        candidates = cls._item_actor_candidates(item)
-        if not candidates:
+        if canonical_candidates is None:
+            candidates = cls._item_actor_candidates(item)
+            canonical_candidates = cls._canonicalize_actor_candidates(candidates, alias_map)
+        if not canonical_candidates:
             return True
         matched_known = False
-        for candidate in candidates:
-            canonical = canonicalize_actor(candidate, alias_map) if alias_map else candidate
+        for canonical in canonical_candidates:
             if canonical in known_actors:
                 matched_known = True
                 if canonical in allowed:
@@ -3032,14 +3235,7 @@ class ReputationIngestService:
 
     @staticmethod
     def _normalize_site_domain(domain: str) -> str:
-        cleaned = domain.strip().lower()
-        for prefix in ("https://", "http://"):
-            if cleaned.startswith(prefix):
-                cleaned = cleaned[len(prefix) :]
-                break
-        if cleaned.startswith("www."):
-            cleaned = cleaned[4:]
-        return cleaned.strip("/")
+        return _normalize_site_domain_cached(domain)
 
     @staticmethod
     def _signal_text(value: object) -> str:
@@ -3295,7 +3491,7 @@ class ReputationIngestService:
             if source in {"appstore", "google_play", "google_reviews"}:
                 continue
 
-            signals = dict(item.signals or {})
+            signals = item.signals or {}
             original_name = cls._signal_text(signals.get("publisher_name"))
             original_domain = cls._signal_text(signals.get("publisher_domain"))
 
@@ -3316,16 +3512,17 @@ class ReputationIngestService:
             if not publisher_name:
                 publisher_name = cls._infer_publisher_name(item, signals, publisher_domain)
 
-            changed = False
+            updates: dict[str, str] = {}
             if publisher_domain and publisher_domain != original_domain:
-                signals["publisher_domain"] = publisher_domain
-                changed = True
+                updates["publisher_domain"] = publisher_domain
             if publisher_name and publisher_name != original_name:
-                signals["publisher_name"] = publisher_name
-                changed = True
+                updates["publisher_name"] = publisher_name
 
-            if changed:
-                item.signals = signals
+            if updates:
+                if signals:
+                    signals.update(updates)
+                else:
+                    item.signals = updates
                 updated += 1
 
         if notes is not None and updated:
@@ -3351,28 +3548,54 @@ class ReputationIngestService:
         return mapping
 
     @staticmethod
-    def _detect_geo_in_text(
-        text: str, geos: list[str], geo_aliases: dict[str, list[str]]
-    ) -> str | None:
-        if not text or not geos:
-            return None
-        decoded = unquote_plus(unescape(text))
-        normalized = normalize_text(decoded)
-        tokens = set(normalized.split())
+    def _compile_geo_matchers(
+        geos: list[str],
+        geo_aliases: dict[str, list[str]],
+    ) -> list[tuple[str, tuple[tuple[str, bool], ...]]]:
+        matchers: list[tuple[str, tuple[tuple[str, bool], ...]]] = []
         for geo in geos:
+            candidates: list[tuple[str, bool]] = []
+            seen: set[tuple[str, bool]] = set()
+
             geo_norm = normalize_text(geo)
-            if geo_norm and geo_norm in normalized:
-                return geo
-            aliases = geo_aliases.get(geo, [])
-            for alias in aliases:
+            if geo_norm:
+                marker = (geo_norm, False)
+                candidates.append(marker)
+                seen.add(marker)
+
+            for alias in geo_aliases.get(geo, []):
                 alias_norm = normalize_text(alias)
                 if not alias_norm:
                     continue
-                if len(alias_norm) <= 3:
-                    if alias_norm in tokens:
-                        return geo
+                marker = (alias_norm, len(alias_norm) <= 3)
+                if marker in seen:
                     continue
-                if alias_norm in normalized:
+                seen.add(marker)
+                candidates.append(marker)
+
+            if candidates:
+                matchers.append((geo, tuple(candidates)))
+        return matchers
+
+    @staticmethod
+    def _detect_geo_in_text(
+        text: str,
+        geo_matchers: list[tuple[str, tuple[tuple[str, bool], ...]]],
+    ) -> str | None:
+        if not text or not geo_matchers:
+            return None
+        normalized = _normalize_geo_hint_text_cached(text)
+        if not normalized:
+            return None
+        tokens: set[str] | None = None
+        for geo, candidates in geo_matchers:
+            for candidate, token_match in candidates:
+                if token_match:
+                    if tokens is None:
+                        tokens = set(normalized.split())
+                    if candidate in tokens:
+                        return geo
+                elif candidate in normalized:
                     return geo
         return None
 
@@ -3549,25 +3772,13 @@ class ReputationIngestService:
 
     @staticmethod
     def _extract_domain(value: str) -> str:
-        if not value:
-            return ""
-        try:
-            parsed = urlparse(value)
-            if parsed.netloc:
-                return parsed.netloc
-        except Exception:
-            pass
-        try:
-            parsed = urlparse(f"http://{value}")
-            return parsed.netloc
-        except Exception:
-            return ""
+        return _extract_domain_cached(value)
 
     @staticmethod
     def _extract_domains(text: str, source_geo_map: dict[str, str]) -> list[str]:
         if not text or not source_geo_map:
             return []
-        matches = re.findall(r"\b(?:[a-z0-9-]+\.)+[a-z]{2,}\b", text.lower())
+        matches = _DOMAIN_PATTERN.findall(text.lower())
         if not matches:
             return []
         results: list[str] = []
@@ -3626,12 +3837,12 @@ class ReputationIngestService:
 
     @staticmethod
     def _round_robin(items: list[dict[str, str]], key: str) -> list[dict[str, str]]:
-        buckets: dict[str, list[dict[str, str]]] = {}
+        buckets: dict[str, deque[dict[str, str]]] = {}
         order: list[str] = []
         for item in items:
             bucket_key = item.get(key, "") if key else ""
             if bucket_key not in buckets:
-                buckets[bucket_key] = []
+                buckets[bucket_key] = deque()
                 order.append(bucket_key)
             buckets[bucket_key].append(item)
         result: list[dict[str, str]] = []
@@ -3639,10 +3850,10 @@ class ReputationIngestService:
         while remaining:
             remaining = False
             for bucket_key in order:
-                bucket = buckets.get(bucket_key) or []
-                if not bucket:
+                bucket = buckets.get(bucket_key)
+                if bucket is None or not bucket:
                     continue
-                result.append(bucket.pop(0))
+                result.append(bucket.popleft())
                 remaining = True
         return result
 

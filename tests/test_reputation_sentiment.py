@@ -409,6 +409,118 @@ def test_ingest_service_recomputes_store_sentiment_even_for_existing_ids(
     assert by_id["gp-existing"].signals.get("sentiment_score") == pytest.approx(-1.0)
 
 
+def test_apply_star_sentiment_fast_sets_store_sentiment() -> None:
+    item = ReputationItem(
+        id="gp-fast",
+        source="google_play",
+        title="Resena",
+        text="Contenido",
+        signals={"rating": 4.7},
+    )
+
+    changed = ReputationIngestService._apply_star_sentiment_fast(item)
+
+    assert changed is True
+    assert item.sentiment == "positive"
+    assert item.signals.get("sentiment_provider") == "stars"
+    assert item.signals.get("client_sentiment") is True
+    assert item.signals.get("sentiment_score") == pytest.approx(0.88)
+
+
+def test_apply_star_sentiment_fast_respects_locked_sentiment() -> None:
+    item = ReputationItem(
+        id="gp-fast-locked",
+        source="google_play",
+        title="Resena",
+        text="Contenido",
+        sentiment="neutral",
+        signals={
+            "rating": 1.0,
+            "sentiment_provider": "manual_override",
+            "sentiment_locked": True,
+            "sentiment_score": 0.0,
+        },
+    )
+
+    changed = ReputationIngestService._apply_star_sentiment_fast(item)
+
+    assert changed is False
+    assert item.sentiment == "neutral"
+    assert item.signals.get("sentiment_provider") == "manual_override"
+    assert item.signals.get("sentiment_score") == 0.0
+
+
+def test_apply_sentiment_does_not_init_service_when_existing_items_are_star_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import reputation.services.ingest_service as ingest_service
+
+    monkeypatch.setenv("LLM_ENABLED", "false")
+    monkeypatch.delenv("REPUTATION_TRANSLATE_TARGET", raising=False)
+
+    class _ShouldNotInit:
+        def __init__(self, *_: object, **__: object) -> None:
+            raise AssertionError("ReputationSentimentService no debe inicializarse")
+
+    monkeypatch.setattr(ingest_service, "ReputationSentimentService", _ShouldNotInit)
+
+    service = ReputationIngestService()
+    existing = [
+        ReputationItem(
+            id="gp-existing-only",
+            source="google_play",
+            title="Antes",
+            text="",
+            signals={"rating": 4.8},
+        )
+    ]
+    incoming = [
+        ReputationItem(
+            id="gp-existing-only",
+            source="google_play",
+            title="Ahora",
+            text="",
+            signals={"rating": 4.8},
+        )
+    ]
+
+    result = service._apply_sentiment({}, incoming, existing=existing, notes=[])
+
+    assert result[0].sentiment == "positive"
+    assert result[0].signals.get("sentiment_provider") == "stars"
+
+
+def test_apply_sentiment_does_not_init_service_when_no_existing_star_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import reputation.services.ingest_service as ingest_service
+
+    monkeypatch.setenv("LLM_ENABLED", "false")
+    monkeypatch.delenv("REPUTATION_TRANSLATE_TARGET", raising=False)
+
+    class _ShouldNotInit:
+        def __init__(self, *_: object, **__: object) -> None:
+            raise AssertionError("ReputationSentimentService no debe inicializarse")
+
+    monkeypatch.setattr(ingest_service, "ReputationSentimentService", _ShouldNotInit)
+
+    service = ReputationIngestService()
+    incoming = [
+        ReputationItem(
+            id="gp-no-existing-only",
+            source="google_play",
+            title="Ahora",
+            text="",
+            signals={"rating": 1.0},
+        )
+    ]
+
+    result = service._apply_sentiment({}, incoming, existing=None, notes=[])
+
+    assert result[0].sentiment == "negative"
+    assert result[0].signals.get("sentiment_provider") == "stars"
+
+
 def test_tokens_match_keyword_reuses_compiled_cache(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -556,6 +668,124 @@ def test_apply_geo_hints_detects_geo_with_html_and_url_encoding() -> None:
 
     assert result[0].geo == "México"
     assert result[0].signals.get("geo_source") == "content"
+
+
+def test_filter_noise_items_skips_tokenization_for_irrelevant_source(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cfg = {
+        "require_actor_sources": ["news"],
+        "require_context_sources": ["news"],
+        "noise_filter_sources": ["news"],
+        "segment_terms": ["banco"],
+        "noise_terms": ["deporte"],
+    }
+    item = ReputationItem(
+        id="noise-skip-1",
+        source="appstore",
+        title="Aplicación estable",
+        text="Actualización semanal",
+        signals={},
+    )
+    calls = {"count": 0}
+    original = ReputationIngestService._text_tokens
+
+    def _spy_text_tokens(text: str) -> set[str]:
+        calls["count"] += 1
+        return original(text)
+
+    monkeypatch.setattr(
+        ReputationIngestService,
+        "_text_tokens",
+        staticmethod(_spy_text_tokens),
+    )
+
+    result = ReputationIngestService._filter_noise_items(cfg, [item], notes=[])
+
+    assert len(result) == 1
+    assert result[0].id == item.id
+    assert calls["count"] == 0
+
+
+def test_filter_noise_items_still_drops_noise_without_context_match() -> None:
+    cfg = {
+        "require_actor_sources": ["news"],
+        "noise_filter_sources": ["news"],
+        "segment_terms": ["banco"],
+        "noise_terms": ["deporte"],
+    }
+    item = ReputationItem(
+        id="noise-drop-1",
+        source="news",
+        actor="BBVA",
+        title="BBVA patrocina evento de deporte",
+        text="Resumen deportivo sin contexto bancario",
+        signals={"actors": ["BBVA"]},
+    )
+
+    result = ReputationIngestService._filter_noise_items(cfg, [item], notes=[])
+
+    assert result == []
+
+
+def test_apply_geo_hints_does_not_match_short_alias_inside_words() -> None:
+    cfg = {
+        "geografias": ["España", "México"],
+        "geografias_aliases": {
+            "España": ["ES"],
+            "México": ["MX"],
+        },
+    }
+    item = ReputationItem(
+        id="geo-short-alias-1",
+        source="news",
+        geo="México",
+        title="Clientes satisfechos con nueva funcionalidad",
+        text="Reporte semanal del equipo de producto",
+        signals={},
+    )
+
+    result = ReputationIngestService._apply_geo_hints(cfg, [item])
+
+    assert result[0].geo == "México"
+    assert result[0].signals.get("geo_source") is None
+
+
+def test_apply_geo_hints_prefers_title_geo_when_body_conflicts() -> None:
+    cfg = {
+        "geografias": ["España", "México"],
+        "geografias_aliases": {
+            "España": ["Spain", "ES"],
+            "México": ["Mexico", "MX"],
+        },
+    }
+    item = ReputationItem(
+        id="geo-title-priority-1",
+        source="news",
+        title="BBVA México anuncia nuevo acuerdo financiero",
+        text="Analistas en España valoran el impacto del anuncio.",
+        signals={},
+    )
+
+    result = ReputationIngestService._apply_geo_hints(cfg, [item])
+
+    assert result[0].geo == "México"
+    assert result[0].signals.get("geo_source") == "content"
+
+
+def test_round_robin_preserves_bucket_order() -> None:
+    ordered = ReputationIngestService._round_robin(
+        [
+            {"geo": "ES", "id": "es-1"},
+            {"geo": "ES", "id": "es-2"},
+            {"geo": "MX", "id": "mx-1"},
+            {"geo": "MX", "id": "mx-2"},
+            {"geo": "CO", "id": "co-1"},
+        ],
+        "geo",
+    )
+
+    assert [item["id"] for item in ordered] == ["es-1", "mx-1", "co-1", "es-2", "mx-2"]
 
 
 def test_merge_items_accepts_publisher_geo_override() -> None:
