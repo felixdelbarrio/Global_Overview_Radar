@@ -963,6 +963,11 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
 
     return total > 0 && nonNeutral === 0;
   }, [chartItemsForSeries, comparisonsEnabled, actorForSeries, principalAliasKeys]);
+  const chartPendingState = !chartsVisible
+    ? "preparing"
+    : chartLoading
+      ? "loading"
+      : null;
   const dashboardSeries = useMemo(() => {
     const primary = sentimentSeries.map((row) => ({
       date: row.date,
@@ -1233,6 +1238,9 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
   const mentionsLoading = itemsLoading;
   const splitResponsesByActor = !isDashboard && comparisonsEnabled;
   const responseSummaryUsesRatios = isDashboard || isSentimentMarkets;
+  const responsesSummaryLoading =
+    mentionsLoading ||
+    (responseSummaryUsesRatios && dashboardMarketInsightsLoading);
   const responseCoverageIncludeTotals = !isDashboard && !isSentimentMarkets;
   const responseTotalsPrincipal = useMemo(() => {
     if (isDashboard || isSentimentMarkets) {
@@ -1846,7 +1854,12 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
                     data-testid="responses-summary-title"
                     className="text-[11px] uppercase tracking-[0.16em] text-[color:var(--text-45)]"
                   >
-                    {responseSummaryUsesRatios ? (
+                    {responsesSummaryLoading ? (
+                      <span className="inline-flex items-center gap-2 text-[11px] text-[color:var(--text-55)] normal-case tracking-normal">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        Cargando opiniones del market contestadas
+                      </span>
+                    ) : responseSummaryUsesRatios ? (
                       isSentimentMarkets ? (
                         <>
                           <div className="text-[10px] uppercase tracking-[0.16em] text-[color:var(--text-45)]">
@@ -1895,7 +1908,7 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
                       })}
                     </div>
                   )}
-                  {mentionsLoading ? (
+                  {responsesSummaryLoading ? (
                     <div className="mt-3 space-y-2">
                       <LoadingPill className="h-4 w-28" label="Cargando respuestas" />
                       <LoadingPill className="h-3 w-full" label="Cargando respuestas" />
@@ -1971,40 +1984,49 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
                     <div className="text-[10px] uppercase tracking-[0.16em] text-[color:var(--text-45)]">
                       {comparisonResponsesTitle}
                     </div>
-                    <div className="mt-1 text-[11px] uppercase tracking-[0.16em] text-[color:var(--text-45)]">
-                      <span className="inline-flex items-end gap-1">
-                        <span className="text-2xl font-display font-semibold leading-none text-[color:var(--ink)]">
-                          {answeredTotalComparisonLabel}
-                        </span>
-                        <span className="pb-0.5 text-base font-semibold leading-none text-[color:var(--text-45)]">
-                          /{opinionsTotalComparisonLabel}
-                        </span>
-                        <span className="pb-0.5">opiniones del market contestadas</span>
-                      </span>
-                    </div>
-                    <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
-                      <ResponseStat
-                        label="Positivas"
-                        value={responseTotalsComparison.answeredPositive}
-                        denominator={responseTotalsComparison.opinionsPositive}
-                        prominentRatio
-                      />
-                      <ResponseStat
-                        label="Neutras"
-                        value={responseTotalsComparison.answeredNeutral}
-                        denominator={responseTotalsComparison.opinionsNeutral}
-                        prominentRatio
-                      />
-                      <ResponseStat
-                        label="Negativas"
-                        value={responseTotalsComparison.answeredNegative}
-                        denominator={responseTotalsComparison.opinionsNegative}
-                        prominentRatio
-                      />
-                    </div>
-                    <div className="mt-2 text-[11px] text-[color:var(--text-55)]">
-                      Cobertura de respuesta: {responseCoverageComparison}
-                    </div>
+                    {responsesSummaryLoading ? (
+                      <div className="mt-3 inline-flex items-center gap-2 text-[11px] text-[color:var(--text-55)]">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        Cargando opiniones del market contestadas
+                      </div>
+                    ) : (
+                      <>
+                        <div className="mt-1 text-[11px] uppercase tracking-[0.16em] text-[color:var(--text-45)]">
+                          <span className="inline-flex items-end gap-1">
+                            <span className="text-2xl font-display font-semibold leading-none text-[color:var(--ink)]">
+                              {answeredTotalComparisonLabel}
+                            </span>
+                            <span className="pb-0.5 text-base font-semibold leading-none text-[color:var(--text-45)]">
+                              /{opinionsTotalComparisonLabel}
+                            </span>
+                            <span className="pb-0.5">opiniones del market contestadas</span>
+                          </span>
+                        </div>
+                        <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+                          <ResponseStat
+                            label="Positivas"
+                            value={responseTotalsComparison.answeredPositive}
+                            denominator={responseTotalsComparison.opinionsPositive}
+                            prominentRatio
+                          />
+                          <ResponseStat
+                            label="Neutras"
+                            value={responseTotalsComparison.answeredNeutral}
+                            denominator={responseTotalsComparison.opinionsNeutral}
+                            prominentRatio
+                          />
+                          <ResponseStat
+                            label="Negativas"
+                            value={responseTotalsComparison.answeredNegative}
+                            denominator={responseTotalsComparison.opinionsNegative}
+                            prominentRatio
+                          />
+                        </div>
+                        <div className="mt-2 text-[11px] text-[color:var(--text-55)]">
+                          Cobertura de respuesta: {responseCoverageComparison}
+                        </div>
+                      </>
+                    )}
                   </div>
                 )}
               </>
@@ -2057,12 +2079,20 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
           )}
           <div
             ref={chartSectionRef}
-            className="mt-3 h-72 min-h-[240px]"
+            className="relative mt-3 h-72 min-h-[240px]"
           >
-            {!chartsVisible ? (
-              <div className="h-full rounded-[22px] border border-[color:var(--border-60)] bg-[color:var(--surface-70)] animate-pulse" />
-            ) : chartLoading ? (
-              <div className="h-full rounded-[22px] border border-[color:var(--border-60)] bg-[color:var(--surface-70)] animate-pulse" />
+            {chartPendingState ? (
+              <>
+                <div className="h-full rounded-[22px] border border-[color:var(--border-60)] bg-[color:var(--surface-70)] animate-pulse" />
+                <ChartLoadingOverlay
+                  title={chartPendingState === "preparing" ? "Preparando gráfico" : "Actualizando gráfico"}
+                  detail={
+                    chartPendingState === "preparing"
+                      ? "Estamos montando la visualización."
+                      : "Los datos aún están cargando y pueden cambiar."
+                  }
+                />
+              </>
             ) : mode === "dashboard" ? (
               <DashboardChart
                 data={dashboardSeries}
@@ -2325,6 +2355,30 @@ function LoadingPill({
     >
       <span className="sr-only">{label}</span>
     </span>
+  );
+}
+
+function ChartLoadingOverlay({
+  title,
+  detail,
+}: {
+  title: string;
+  detail: string;
+}) {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="pointer-events-none absolute inset-0 grid place-items-center px-4"
+    >
+      <div className="max-w-sm rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-90)]/95 px-4 py-3 text-center shadow-[var(--shadow-soft)] backdrop-blur">
+        <span className="inline-flex items-center gap-2 text-sm font-semibold text-[color:var(--ink)]">
+          <Loader2 className="h-4 w-4 animate-spin text-[color:var(--blue)]" />
+          {title}
+        </span>
+        <p className="mt-1 text-xs text-[color:var(--text-55)]">{detail}</p>
+      </div>
+    </div>
   );
 }
 
