@@ -642,6 +642,88 @@ describe("Sentimiento page", () => {
     expect(responsesTitle).toHaveTextContent(/opiniones del market contestadas/i);
   });
 
+  it("hides the accumulated chart when all filtered opinions are neutral", async () => {
+    const neutralOnlyMetaResponse = {
+      ...metaResponse,
+      ui_show_comparisons: false,
+      sources_enabled: ["news", "downdetector"],
+      sources_available: ["news", "downdetector"],
+      cache_available: true,
+    };
+    const neutralOnlyItemsResponse = {
+      ...itemsResponse,
+      sources_enabled: ["news", "downdetector"],
+      items: [
+        {
+          id: "n1",
+          source: "news",
+          geo: "España",
+          actor: "Acme Bank",
+          title: "Neutral 1",
+          text: "Neutral 1",
+          sentiment: "neutral",
+          published_at: "2025-02-01T10:00:00Z",
+        },
+        {
+          id: "n2",
+          source: "downdetector",
+          geo: "España",
+          actor: "Acme Bank",
+          title: "Neutral 2",
+          text: "Neutral 2",
+          sentiment: "neutral",
+          published_at: "2025-02-02T10:00:00Z",
+        },
+      ],
+      stats: { count: 2 },
+    };
+
+    const handleGetNeutralOnly = (path: string) => {
+      if (path.startsWith("/reputation/meta")) {
+        return Promise.resolve(neutralOnlyMetaResponse);
+      }
+      if (path.startsWith("/reputation/profiles")) {
+        return Promise.resolve(profilesResponse);
+      }
+      if (path.startsWith("/reputation/items")) {
+        return Promise.resolve(neutralOnlyItemsResponse);
+      }
+      if (path.startsWith("/reputation/responses/summary")) {
+        return Promise.resolve({
+          totals: {
+            opinions_total: 0,
+            answered_total: 0,
+            answered_ratio: 0,
+            answered_positive: 0,
+            answered_neutral: 0,
+            answered_negative: 0,
+            unanswered_positive: 0,
+            unanswered_neutral: 0,
+            unanswered_negative: 0,
+          },
+          actor_breakdown: [],
+          repeated_replies: [],
+          answered_items: [],
+        });
+      }
+      if (path.startsWith("/reputation/settings")) {
+        return Promise.resolve({ groups: [], advanced_options: [] });
+      }
+      return Promise.resolve({ items: [] });
+    };
+
+    apiGetMock.mockImplementation(handleGetNeutralOnly);
+    apiGetCachedMock.mockImplementation(handleGetNeutralOnly);
+
+    render(<SentimentView mode="sentiment" scope="press" />);
+
+    await screen.findByText("Sentimiento en Prensa");
+    await screen.findByText("MEDIOS EN PRENSA");
+
+    expect(screen.queryByText("ÍNDICE REPUTACIONAL ACUMULADO")).not.toBeInTheDocument();
+    expect(screen.queryByText("Descargar gráfico")).not.toBeInTheDocument();
+  });
+
   it("shows all market actors with source legend in the actors table", async () => {
     const marketMetaResponse = {
       ...metaResponse,

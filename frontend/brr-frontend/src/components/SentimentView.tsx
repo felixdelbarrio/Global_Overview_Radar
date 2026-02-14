@@ -923,6 +923,35 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
       ),
     [chartItemsForSeries, actorForSeries, principalAliasKeys, effectiveFromDate, effectiveToDate],
   );
+  const hideSentimentChart = useMemo(() => {
+    const restrictActor =
+      comparisonsEnabled &&
+      actorForSeries !== "all" &&
+      !isPrincipalName(actorForSeries, principalAliasKeys);
+    const selectedActorKey = normalizeKey(actorForSeries);
+    let total = 0;
+    let nonNeutral = 0;
+
+    for (const item of chartItemsForSeries) {
+      const principal = isPrincipalItem(item, principalAliasKeys);
+      if (!principal) {
+        if (!comparisonsEnabled) continue;
+        if (
+          restrictActor &&
+          normalizeKey(item.actor || "") !== selectedActorKey
+        ) {
+          continue;
+        }
+      }
+
+      total += 1;
+      if (item.sentiment !== "neutral") {
+        nonNeutral += 1;
+      }
+    }
+
+    return total > 0 && nonNeutral === 0;
+  }, [chartItemsForSeries, comparisonsEnabled, actorForSeries, principalAliasKeys]);
   const dashboardSeries = useMemo(
     () =>
       sentimentSeries.map((row) => ({
@@ -1965,70 +1994,72 @@ export function SentimentView({ mode = "sentiment", scope = "all" }: SentimentVi
         </section>
       </div>
 
-      <section className="mt-6 rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-5 shadow-[var(--shadow-md)] backdrop-blur-xl animate-rise" style={{ animationDelay: "300ms" }}>
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
-            {mode === "dashboard" ? "SENTIMIENTO" : "ÍNDICE REPUTACIONAL ACUMULADO"}
+      {!hideSentimentChart && (
+        <section className="mt-6 rounded-[26px] border border-[color:var(--border-60)] bg-[color:var(--panel)] p-5 shadow-[var(--shadow-md)] backdrop-blur-xl animate-rise" style={{ animationDelay: "300ms" }}>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="text-[11px] font-semibold tracking-[0.3em] text-[color:var(--blue)]">
+              {mode === "dashboard" ? "SENTIMIENTO" : "ÍNDICE REPUTACIONAL ACUMULADO"}
+            </div>
+            <div className="text-xs text-[color:var(--text-55)]">
+              {mode === "dashboard"
+                ? `${principalLabel} · ${dashboardMonthLabel}`
+                : comparisonsEnabled
+                  ? (
+                      <>
+                        Comparativa{" "}
+                        {formatVsValue(principalLabel, actorLabel, {
+                          containerClassName: "inline-flex items-center whitespace-nowrap",
+                          vsClassName:
+                            "mx-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-[color:var(--text-45)]",
+                        })}{" "}
+                        · {rangeLabel}
+                      </>
+                    )
+                  : `${principalLabel} · ${rangeLabel}`}
+            </div>
           </div>
-          <div className="text-xs text-[color:var(--text-55)]">
-            {mode === "dashboard"
-              ? `${principalLabel} · ${dashboardMonthLabel}`
-              : comparisonsEnabled
-                ? (
-                    <>
-                      Comparativa{" "}
-                      {formatVsValue(principalLabel, actorLabel, {
-                        containerClassName: "inline-flex items-center whitespace-nowrap",
-                        vsClassName:
-                          "mx-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-[color:var(--text-45)]",
-                      })}{" "}
-                      · {rangeLabel}
-                    </>
+          {showDownloads && (
+            <div className="mt-3 flex flex-wrap gap-2 text-xs">
+              <button
+                onClick={() =>
+                  downloadChartCsv(
+                    sentimentSeries,
+                    principalLabel,
+                    actorLabel,
+                    buildDownloadName("sentimiento_grafico", fromDate, toDate),
+                    comparisonsEnabled,
                   )
-                : `${principalLabel} · ${rangeLabel}`}
-          </div>
-        </div>
-        {showDownloads && (
-          <div className="mt-3 flex flex-wrap gap-2 text-xs">
-            <button
-              onClick={() =>
-                downloadChartCsv(
-                  sentimentSeries,
-                  principalLabel,
-                  actorLabel,
-                  buildDownloadName("sentimiento_grafico", fromDate, toDate),
-                  comparisonsEnabled,
-                )
-              }
-              className="inline-flex items-center gap-2 rounded-full border border-[color:var(--border-70)] bg-[color:var(--surface-80)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--brand-ink)] shadow-[var(--shadow-pill)] transition hover:-translate-y-0.5 hover:shadow-[var(--shadow-pill-hover)]"
-            >
-              Descargar gráfico
-            </button>
-          </div>
-        )}
-        <div
-          ref={chartSectionRef}
-          className="mt-3 h-72 min-h-[240px]"
-        >
-          {!chartsVisible ? (
-            <div className="h-full rounded-[22px] border border-[color:var(--border-60)] bg-[color:var(--surface-70)] animate-pulse" />
-          ) : chartLoading ? (
-            <div className="h-full rounded-[22px] border border-[color:var(--border-60)] bg-[color:var(--surface-70)] animate-pulse" />
-          ) : mode === "dashboard" ? (
-            <DashboardChart
-              data={dashboardSeries}
-              sentimentLabel={principalLabel}
-            />
-          ) : (
-            <SentimentChart
-              data={sentimentSeries}
-              principalLabel={principalLabel}
-              actorLabel={actorLabel}
-              showActor={comparisonsEnabled}
-            />
+                }
+                className="inline-flex items-center gap-2 rounded-full border border-[color:var(--border-70)] bg-[color:var(--surface-80)] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--brand-ink)] shadow-[var(--shadow-pill)] transition hover:-translate-y-0.5 hover:shadow-[var(--shadow-pill-hover)]"
+              >
+                Descargar gráfico
+              </button>
+            </div>
           )}
-        </div>
-      </section>
+          <div
+            ref={chartSectionRef}
+            className="mt-3 h-72 min-h-[240px]"
+          >
+            {!chartsVisible ? (
+              <div className="h-full rounded-[22px] border border-[color:var(--border-60)] bg-[color:var(--surface-70)] animate-pulse" />
+            ) : chartLoading ? (
+              <div className="h-full rounded-[22px] border border-[color:var(--border-60)] bg-[color:var(--surface-70)] animate-pulse" />
+            ) : mode === "dashboard" ? (
+              <DashboardChart
+                data={dashboardSeries}
+                sentimentLabel={principalLabel}
+              />
+            ) : (
+              <SentimentChart
+                data={sentimentSeries}
+                principalLabel={principalLabel}
+                actorLabel={actorLabel}
+                showActor={comparisonsEnabled}
+              />
+            )}
+          </div>
+        </section>
+      )}
 
 
       {mode === "dashboard" ? (
