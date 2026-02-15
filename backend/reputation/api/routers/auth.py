@@ -24,4 +24,3 @@ def auth_me(user: AuthUser = Depends(require_google_user)) -> dict[str, Any]:  #
         "picture": user.picture,
         "subject": user.subject,
     }
-
