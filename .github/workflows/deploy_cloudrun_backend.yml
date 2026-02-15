@@ -24,70 +24,30 @@ jobs:
       contents: read
       deployments: write
       id-token: write
+
     env:
       GCP_PROJECT: global-overview-radar
       GCP_REGION: europe-southwest1
-
       BACKEND_SERVICE: gor-backend
 
-      # ✅ Runtime service account (Cloud Run execution identity) - YA TENÉIS: gor-backend-sa
+      # Runtime identity (Cloud Run execution SA)
       BACKEND_RUNTIME_SA: gor-backend-sa@global-overview-radar.iam.gserviceaccount.com
 
-      # ✅ Deployer SA (Workload Identity). Lo usa google-github-actions/auth
-      # (viene de secrets.GCP_SERVICE_ACCOUNT)
-      # ✅ Build SA: NO lo forzamos. En vuestro makefile se usa Cloud Build + AR,
-      # aquí usamos --source (buildpacks) así que basta con el SA autenticado.
-
-      BACKEND_PYTHON_RUNTIME: "3.13"
+      # Runtime knobs
       BACKEND_MAX_INSTANCES: "1"
       BACKEND_CONCURRENCY: "2"
       BACKEND_MEMORY: 768Mi
       BACKEND_CPU: "1"
+
+      # Python entrypoint for buildpacks
+      GOOGLE_RUNTIME_VERSION: "3.12"
+      GOOGLE_ENTRYPOINT: python -m uvicorn reputation.api.main:app --host 0.0.0.0 --port 8080
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6
         with:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
-
-      - name: Create GitHub Deployment (Production - Backend)
-        id: create_deploy
-        uses: actions/github-script@v8
-        with:
-          script: |
-            const owner = context.repo.owner;
-            const repo = context.repo.repo;
-            const sha = (context.payload.workflow_run && context.payload.workflow_run.head_sha) || context.sha;
-
-            const res = await github.rest.repos.createDeployment({
-              owner,
-              repo,
-              ref: sha,
-              environment: "Production",
-              auto_merge: false,
-              required_contexts: [],
-              description: "Cloud Run backend deployment",
-              transient_environment: false,
-              production_environment: true,
-            });
-
-            core.setOutput("deployment_id", String(res.data.id));
-
-      - name: Mark deployment as in_progress
-        uses: actions/github-script@v8
-        with:
-          script: |
-            const owner = context.repo.owner;
-            const repo = context.repo.repo;
-            const deployment_id = Number(`${{ steps.create_deploy.outputs.deployment_id }}`);
-
-            await github.rest.repos.createDeploymentStatus({
-              owner,
-              repo,
-              deployment_id,
-              state: "in_progress",
-              description: "Deploying backend to Cloud Run",
-            });
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v3
@@ -105,13 +65,11 @@ jobs:
         run: |
           set -euo pipefail
           value="$(echo "${RAW_LOGIN_REQUESTED:-false}" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
-          if [ "$value" != "true" ]; then
-            value="false"
-          fi
+          if [ "$value" != "true" ]; then value="false"; fi
           echo "value=${value}" >> "$GITHUB_OUTPUT"
           echo "GOOGLE_CLOUD_LOGIN_REQUESTED=${value}"
 
-      - name: Prepare backend env file (no PII when bypass=false)
+      - name: Prepare backend env file
         env:
           AUTH_GOOGLE_CLIENT_ID: ${{ secrets.AUTH_GOOGLE_CLIENT_ID }}
           AUTH_ALLOWED_EMAILS: ${{ secrets.AUTH_ALLOWED_EMAILS }}
@@ -119,68 +77,55 @@ jobs:
         run: |
           set -euo pipefail
 
+          cp backend/reputation/cloudrun.env.example backend/reputation/cloudrun.env
+
+          # remove any existing keys we will manage
+          awk '$0 !~ /^(AUTH_GOOGLE_CLIENT_ID|AUTH_ALLOWED_EMAILS|GOOGLE_CLOUD_LOGIN_REQUESTED|REPUTATION_STATE_BUCKET|REPUTATION_STATE_PREFIX)=/' \
+            backend/reputation/cloudrun.env > backend/reputation/cloudrun.env.tmp
+          mv backend/reputation/cloudrun.env.tmp backend/reputation/cloudrun.env
+
           LOGIN_REQUESTED="${{ steps.login_toggle.outputs.value }}"
           STATE_BUCKET="$(echo "${REPUTATION_STATE_BUCKET:-}" | tr -d '\r\n')"
           STATE_PREFIX="reputation-state"
 
+          if [ "${LOGIN_REQUESTED}" = "true" ] && [ -z "${AUTH_GOOGLE_CLIENT_ID:-}" ]; then
+            echo "Missing AUTH_GOOGLE_CLIENT_ID secret."
+            exit 1
+          fi
+          if [ "${LOGIN_REQUESTED}" = "true" ] && [ -z "${AUTH_ALLOWED_EMAILS:-}" ]; then
+            echo "Missing AUTH_ALLOWED_EMAILS secret."
+            exit 1
+          fi
           if [ -z "${STATE_BUCKET}" ]; then
             echo "Missing REPUTATION_STATE_BUCKET secret (durable persistence required)."
             exit 1
           fi
 
-          # Si login requerido, validamos secrets (y los incluimos)
-          if [ "${LOGIN_REQUESTED}" = "true" ]; then
-            if [ -z "${AUTH_GOOGLE_CLIENT_ID:-}" ]; then
-              echo "Missing AUTH_GOOGLE_CLIENT_ID secret."
-              exit 1
-            fi
-            if [ -z "${AUTH_ALLOWED_EMAILS:-}" ]; then
-              echo "Missing AUTH_ALLOWED_EMAILS secret."
-              exit 1
-            fi
-            if ! echo "${AUTH_GOOGLE_CLIENT_ID}" | grep -q '\.apps\.googleusercontent\.com$'; then
-              echo "ERROR: AUTH_GOOGLE_CLIENT_ID must end in .apps.googleusercontent.com (got: ${AUTH_GOOGLE_CLIENT_ID})"
-              exit 1
-            fi
-          fi
-
-          # Generamos un env file mínimo (y sin PII cuando bypass)
-          cat > backend/reputation/cloudrun.env <<EOF
+          cat >> backend/reputation/cloudrun.env <<EOF
           GOOGLE_CLOUD_LOGIN_REQUESTED=${LOGIN_REQUESTED}
+          AUTH_GOOGLE_CLIENT_ID=${AUTH_GOOGLE_CLIENT_ID}
+          AUTH_ALLOWED_EMAILS=${AUTH_ALLOWED_EMAILS}
           REPUTATION_STATE_BUCKET=${STATE_BUCKET}
           REPUTATION_STATE_PREFIX=${STATE_PREFIX}
           EOF
 
-          if [ "${LOGIN_REQUESTED}" = "true" ]; then
-            cat >> backend/reputation/cloudrun.env <<EOF
-          AUTH_GOOGLE_CLIENT_ID=${AUTH_GOOGLE_CLIENT_ID}
-          AUTH_ALLOWED_EMAILS=${AUTH_ALLOWED_EMAILS}
-          EOF
-          fi
-
-          echo "---- backend/reputation/cloudrun.env (sanitized) ----"
-          sed -e 's/\(AUTH_ALLOWED_EMAILS=\).*/\1<redacted>/' \
-              -e 's/\(AUTH_GOOGLE_CLIENT_ID=\).*/\1<redacted>/' \
-              backend/reputation/cloudrun.env
-
-      - name: Bundle profile templates into backend source (samples required)
+      - name: Bundle samples into backend source (must exist in container)
         run: |
           set -euo pipefail
           mkdir -p backend/data
-          rsync -a --delete data/reputation/ backend/data/reputation/
-          rsync -a --delete data/reputation_llm/ backend/data/reputation_llm/
+
+          # These DO exist in repo (git ls-files confirmed)
           rsync -a --delete data/reputation_samples/ backend/data/reputation_samples/
           rsync -a --delete data/reputation_llm_samples/ backend/data/reputation_llm_samples/
 
-      - name: Deploy backend (Cloud Run)
+          echo "== backend/data after bundling =="
+          ls -la backend/data
+          ls -la backend/data/reputation_samples | head
+          ls -la backend/data/reputation_llm_samples | head
+
+      - name: Deploy backend (Cloud Run) using buildpacks
         run: |
           set -euo pipefail
-          unset CLOUDSDK_RUN_DEPLOY_ENV_VARS_FILE CLOUDSDK_RUN_DEPLOY_SET_ENV_VARS CLOUDSDK_RUN_DEPLOY_UPDATE_ENV_VARS CLOUDSDK_RUN_DEPLOY_REMOVE_ENV_VARS CLOUDSDK_RUN_DEPLOY_CLEAR_ENV_VARS
-
-          echo "Runtime SA: ${BACKEND_RUNTIME_SA}"
-
-          # Buildpacks entrypoint/runtime (similar a vuestra estrategia con make)
-          BUILD_VARS="GOOGLE_RUNTIME_VERSION=${BACKEND_PYTHON_RUNTIME},GOOGLE_ENTRYPOINT=python -m uvicorn reputation.api.main:app --host 0.0.0.0 --port 8080"
 
           gcloud run deploy "$BACKEND_SERVICE" \
             --project "$GCP_PROJECT" \
@@ -195,7 +140,7 @@ jobs:
             --memory "$BACKEND_MEMORY" \
             --cpu-throttling \
             --timeout 300 \
-            --set-build-env-vars "${BUILD_VARS}" \
+            --set-build-env-vars "GOOGLE_RUNTIME_VERSION=${GOOGLE_RUNTIME_VERSION},GOOGLE_ENTRYPOINT=${GOOGLE_ENTRYPOINT}" \
             --env-vars-file backend/reputation/cloudrun.env
 
       - name: Route backend traffic to latest revision
@@ -205,35 +150,6 @@ jobs:
             --project "$GCP_PROJECT" \
             --region "$GCP_REGION" \
             --to-latest
-
-      - name: Show latest failed Cloud Build details
-        if: failure()
-        run: |
-          set -euo pipefail
-          SERVICE_TAG="service_${BACKEND_SERVICE}"
-          BUILD_ID="$(gcloud builds list \
-            --project "$GCP_PROJECT" \
-            --region "$GCP_REGION" \
-            --filter "tags:${SERVICE_TAG} AND status=FAILURE" \
-            --sort-by '~createTime' \
-            --limit 1 \
-            --format 'value(id)')"
-
-          if [ -z "${BUILD_ID:-}" ]; then
-            echo "No failed Cloud Build found for ${BACKEND_SERVICE}."
-            exit 0
-          fi
-
-          echo "Latest failed Cloud Build ID: ${BUILD_ID}"
-          gcloud builds describe "$BUILD_ID" \
-            --project "$GCP_PROJECT" \
-            --region "$GCP_REGION" \
-            --format 'yaml(id,status,createTime,finishTime,statusDetail,logUrl,steps.id,steps.status,steps.exitCode)'
-          if ! gcloud builds log "$BUILD_ID" \
-            --project "$GCP_PROJECT" \
-            --region "$GCP_REGION"; then
-            echo "::warning::Unable to stream Cloud Build logs for ${BUILD_ID}. Check the logUrl above and ensure the CI service account has log-view permissions."
-          fi
 
       - name: Show backend URL
         id: backend_url
@@ -245,41 +161,3 @@ jobs:
             --format 'value(status.url)')"
           echo "url=$BACKEND_URL" >> "$GITHUB_OUTPUT"
           echo "$BACKEND_URL"
-
-      - name: Mark deployment as success
-        if: success()
-        uses: actions/github-script@v8
-        with:
-          script: |
-            const owner = context.repo.owner;
-            const repo = context.repo.repo;
-            const deployment_id = Number(`${{ steps.create_deploy.outputs.deployment_id }}`);
-            const backendUrl = `${{ steps.backend_url.outputs.url }}`;
-
-            const payload = {
-              owner,
-              repo,
-              deployment_id,
-              state: "success",
-              description: "Backend deployed to Cloud Run",
-            };
-            if (backendUrl) payload.environment_url = backendUrl;
-
-            await github.rest.repos.createDeploymentStatus(payload);
-
-      - name: Mark deployment as failure
-        if: failure()
-        uses: actions/github-script@v8
-        with:
-          script: |
-            const owner = context.repo.owner;
-            const repo = context.repo.repo;
-            const deployment_id = Number(`${{ steps.create_deploy.outputs.deployment_id }}`);
-
-            await github.rest.repos.createDeploymentStatus({
-              owner,
-              repo,
-              deployment_id,
-              state: "failure",
-              description: "Backend deploy failed",
-            });
