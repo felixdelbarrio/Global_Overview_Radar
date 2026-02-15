@@ -970,17 +970,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
     }
   };
 
-  
-  const hideIngestOnGcpNoReputationCache = useMemo(() => {
-    if (!DISABLE_ADVANCED_SETTINGS) return false;
-    const warning =
-      typeof ingestJobs.reputation?.meta?.warning === "string"
-        ? ingestJobs.reputation.meta.warning.toLowerCase()
-        : "";
-    return Boolean(warning) && warning.includes("reput") && (warning.includes("cache") || warning.includes("caché"));
-  }, [ingestJobs]);
-
-const ingestActive = useMemo(
+  const ingestActive = useMemo(
     () =>
       Object.values(ingestJobs).some(
         (job) => job && (job.status === "queued" || job.status === "running")
@@ -1151,8 +1141,7 @@ const ingestActive = useMemo(
             )}
             <div className="flex items-center gap-2 order-1 w-auto sm:order-none">
               <div className="relative">
-                  {!hideIngestOnGcpNoReputationCache && (
-<button
+                  <button
                     type="button"
                     onClick={toggleIngestPanel}
                     aria-label="Centro de ingestas"
@@ -1172,7 +1161,6 @@ const ingestActive = useMemo(
                       <Sparkles className={ingestActive ? "h-4 w-4 animate-pulse" : "h-4 w-4"} />
                     </span>
                   </button>
-                  )}
 
                   {ingestOpen && (
                     <div className="fixed left-1/2 top-[calc(env(safe-area-inset-top)+6.5rem)] bottom-[calc(env(safe-area-inset-bottom)+5.5rem)] z-[70] mt-0 w-[92vw] max-w-[360px] -translate-x-1/2 rounded-[22px] border border-[color:var(--border-60)] bg-[color:var(--panel-strong)] shadow-[var(--shadow-lg)] backdrop-blur-xl overflow-y-auto overflow-x-hidden overscroll-contain touch-pan-y sm:absolute sm:left-auto sm:top-auto sm:bottom-auto sm:max-h-none sm:translate-x-0 sm:right-0 sm:mt-3 sm:w-[320px]">
@@ -1240,8 +1228,6 @@ const ingestActive = useMemo(
                               ? "Lanzar de nuevo"
                               : "Iniciar ingesta";
                           const actionDisabled = busy;
-                          const hideStartIngest =
-                            hideIngestOnGcpNoReputationCache && kind === "reputation" && !isError && !isSuccess;
                           return (
                             <div
                               key={kind}
@@ -1303,19 +1289,17 @@ const ingestActive = useMemo(
                               )}
 
                               <div className="relative mt-3 flex items-center justify-end">
-                                {!hideStartIngest && (
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setIngestOpen(false);
-                                      void startIngest(kind);
-                                    }}
-                                    disabled={actionDisabled}
-                                    className="rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-[color:var(--text-55)] transition hover:bg-[color:var(--surface-60)] disabled:opacity-60"
-                                  >
-                                    {actionLabel}
-                                  </button>
-                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setIngestOpen(false);
+                                    void startIngest(kind);
+                                  }}
+                                  disabled={actionDisabled}
+                                  className="rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-[color:var(--text-55)] transition hover:bg-[color:var(--surface-60)] disabled:opacity-60"
+                                >
+                                  {actionLabel}
+                                </button>
                               </div>
                             </div>
                           );
