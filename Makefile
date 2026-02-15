@@ -51,9 +51,15 @@ BENCH_BASELINE_INGEST ?= $(BENCH_DIR)/ingest.baseline.json
 VISUAL_QA_URL ?= http://localhost:$(FRONT_PORT)
 VISUAL_QA_OUT ?= docs/visual-qa
 
+# --- GCS cache sync (reputation-state) ---
+# Por defecto replica ./data/cache/*.json a gs://<bucket>/<prefix>/cache/
+# y BORRA en destino los JSON que ya no existen localmente.
+STATE_BUCKET ?= global-overview-radar-reputation-state
+STATE_CACHE_PREFIX ?= reputation-state/data/cache
+
 .DEFAULT_GOAL := help
 
-.PHONY: help venv install install-backend install-front env ensure-backend ensure-front ensure-cloudrun-env ingest ingest-filtered reputation-ingest reputation-ingest-filtered serve serve-back dev-back dev-front build-front start-front lint lint-back lint-front typecheck typecheck-back typecheck-front format format-back format-front check codeql codeql-install codeql-python codeql-js codeql-clean test test-back test-front test-coverage test-coverage-back test-coverage-front bench bench-baseline bench-ingest bench-ingest-baseline visual-qa clean reset cloudrun-config cloudrun-env deploy-cloudrun-back deploy-cloudrun-front deploy-cloudrun ingest-cloudrun
+.PHONY: help venv install install-backend install-front env ensure-backend ensure-front ensure-cloudrun-env ingest ingest-filtered reputation-ingest reputation-ingest-filtered serve serve-back dev-back dev-front build-front start-front lint lint-back lint-front typecheck typecheck-back typecheck-front format format-back format-front check codeql codeql-install codeql-python codeql-js codeql-clean test test-back test-front test-coverage test-coverage-back test-coverage-front bench bench-baseline bench-ingest bench-ingest-baseline visual-qa clean reset cloudrun-config cloudrun-env deploy-cloudrun-back deploy-cloudrun-front deploy-cloudrun ingest-cloudrun sync-cache-gcs upload-cache-gcs
 
 help:
 	@echo "Make targets disponibles:"
@@ -95,6 +101,8 @@ help:
 	@echo "  make deploy-cloudrun-front - Deploy frontend en Cloud Run (usa env vars + proxy /api)"
 	@echo "  make deploy-cloudrun       - Deploy backend + frontend (Cloud Run)"
 	@echo "  make ingest-cloudrun       - Lanzar ingesta remota en Cloud Run y esperar resultado"
+	@echo "  make sync-cache-gcs        - Sync ./data/cache/*.json -> gs://$(STATE_BUCKET)/$(STATE_CACHE_PREFIX)/ (BORRA JSON huérfanos en destino)"
+	@echo "  make upload-cache-gcs      - Copia (cp) todos los JSON de ./data/cache/ a gs://$(STATE_BUCKET)/$(STATE_CACHE_PREFIX)/ (NO borra en destino)"
 	@echo ""
 	@echo "Notas:"
 	@echo " - Fullstack Cloud Run con backend privado: el frontend usa proxy /api hacia el backend"
@@ -136,6 +144,57 @@ env:
 ensure-backend: install-backend
 ensure-front: install-front
 	@true
+
+# -------------------------
+# GCS cache sync/upload
+# -------------------------
+
+# Sync por defecto: borra en destino los JSON que ya no existan localmente.
+# Nota: rsync sincroniza TODO lo que hay en ./data/cache/ (y por tanto borraría extras en destino),
+# pero incluimos --include/--exclude para que sólo afecte a *.json y al "directorio" base.
+sync-cache-gcs:
+	@echo "==> Sync cachés JSON a GCS (con delete de huérfanos en destino)..."
+	@set -euo pipefail; \
+	if ! command -v gcloud >/dev/null 2>&1; then \
+		echo "ERROR: gcloud no está instalado o no está en PATH."; \
+		exit 1; \
+	fi; \
+	if [ ! -d "./data/cache" ]; then \
+		echo "ERROR: No existe ./data/cache"; \
+		exit 1; \
+	fi; \
+	dest="gs://$(STATE_BUCKET)/$(STATE_CACHE_PREFIX)/"; \
+	echo "Origen: ./data/cache"; \
+	echo "Destino: $$dest"; \
+	gcloud storage rsync -r "./data/cache" "$$dest" \
+		--delete-unmatched-destination-objects \
+		--include="*.json" \
+		--exclude="**"; \
+	echo "==> OK: sync completado."
+
+# Alternativa "cp" sin borrados (por si un día la necesitas).
+upload-cache-gcs:
+	@echo "==> Subiendo TODOS los JSON de ./data/cache a GCS (sin borrar en destino)..."
+	@set -euo pipefail; \
+	if ! command -v gcloud >/dev/null 2>&1; then \
+		echo "ERROR: gcloud no está instalado o no está en PATH."; \
+		exit 1; \
+	fi; \
+	if [ ! -d "./data/cache" ]; then \
+		echo "ERROR: No existe ./data/cache"; \
+		exit 1; \
+	fi; \
+	shopt -s nullglob; \
+	files=(./data/cache/*.json); \
+	if [ "$${#files[@]}" -eq 0 ]; then \
+		echo "ERROR: No hay .json en ./data/cache"; \
+		exit 1; \
+	fi; \
+	dest="gs://$(STATE_BUCKET)/$(STATE_CACHE_PREFIX)/"; \
+	echo "Destino: $$dest"; \
+	echo "Ficheros: $${#files[@]}"; \
+	gcloud storage cp "$${files[@]}" "$$dest" --content-type=application/json; \
+	echo "==> OK: cachés subidos."
 
 # -------------------------
 # Cloud Run helpers
@@ -190,11 +249,11 @@ cloudrun-config: ensure-cloudrun-env
 	ALLOWED_EMAILS_DEFAULT="$$(env_get AUTH_ALLOWED_EMAILS)"; \
 	read -r -p "AUTH_ALLOWED_EMAILS (coma separada) [$$ALLOWED_EMAILS_DEFAULT]: " AUTH_ALLOWED_EMAILS_IN; \
 	AUTH_ALLOWED_EMAILS_VAL="$${AUTH_ALLOWED_EMAILS_IN:-$$ALLOWED_EMAILS_DEFAULT}"; \
-		STATE_BUCKET_DEFAULT="$$(env_get REPUTATION_STATE_BUCKET)"; \
-		if [ -z "$$STATE_BUCKET_DEFAULT" ]; then STATE_BUCKET_DEFAULT="$${GCP_PROJECT_VAL}-reputation-state"; fi; \
-		read -r -p "REPUTATION_STATE_BUCKET [$$STATE_BUCKET_DEFAULT]: " REPUTATION_STATE_BUCKET_IN; \
-		REPUTATION_STATE_BUCKET_VAL="$${REPUTATION_STATE_BUCKET_IN:-$$STATE_BUCKET_DEFAULT}"; \
-		REPUTATION_STATE_PREFIX_VAL="reputation-state"; \
+	STATE_BUCKET_DEFAULT="$$(env_get REPUTATION_STATE_BUCKET)"; \
+	if [ -z "$$STATE_BUCKET_DEFAULT" ]; then STATE_BUCKET_DEFAULT="$${GCP_PROJECT_VAL}-reputation-state"; fi; \
+	read -r -p "REPUTATION_STATE_BUCKET [$$STATE_BUCKET_DEFAULT]: " REPUTATION_STATE_BUCKET_IN; \
+	REPUTATION_STATE_BUCKET_VAL="$${REPUTATION_STATE_BUCKET_IN:-$$STATE_BUCKET_DEFAULT}"; \
+	REPUTATION_STATE_PREFIX_VAL="reputation-state"; \
 	if [ "$$GOOGLE_CLOUD_LOGIN_REQUESTED_VAL" = "true" ] && [ -z "$$AUTH_GOOGLE_CLIENT_ID_VAL" ]; then \
 		echo "Falta AUTH_GOOGLE_CLIENT_ID (required cuando GOOGLE_CLOUD_LOGIN_REQUESTED=true)."; \
 		exit 1; \
@@ -248,7 +307,7 @@ cloudrun-env: ensure-cloudrun-env
 		echo "Falta REPUTATION_STATE_BUCKET (ponlo en backend/reputation/cloudrun.env)."; \
 		exit 1; \
 	fi; \
-		if [ "$$LOGIN_REQUESTED_VAL" = "true" ]; then \
+	if [ "$$LOGIN_REQUESTED_VAL" = "true" ]; then \
 		if [ -z "$$CLIENT_ID_VAL" ]; then \
 			echo "Falta AUTH_GOOGLE_CLIENT_ID (ponlo en backend/reputation/cloudrun.env)."; \
 			exit 1; \
@@ -261,9 +320,9 @@ cloudrun-env: ensure-cloudrun-env
 			echo "ERROR: AUTH_GOOGLE_CLIENT_ID debe ser un OAuth Client ID (termina en .apps.googleusercontent.com). Valor actual: $$CLIENT_ID_VAL"; \
 			exit 1; \
 		fi; \
-		else \
-			echo "INFO: GOOGLE_CLOUD_LOGIN_REQUESTED=false; el backend operara en modo bypass."; \
-		fi; \
+	else \
+		echo "INFO: GOOGLE_CLOUD_LOGIN_REQUESTED=false; el backend operara en modo bypass."; \
+	fi; \
 	TMP_FILE="$$ENV_FILE.tmp"; \
 	awk '$$0 !~ /^(AUTH_GOOGLE_CLIENT_ID|AUTH_ALLOWED_EMAILS|GOOGLE_CLOUD_LOGIN_REQUESTED|REPUTATION_STATE_BUCKET|REPUTATION_STATE_PREFIX)=/' "$$ENV_FILE" > "$$TMP_FILE"; \
 	mv "$$TMP_FILE" "$$ENV_FILE"; \
@@ -275,7 +334,6 @@ cloudrun-env: ensure-cloudrun-env
 		printf '%s\n' "REPUTATION_STATE_BUCKET=$$STATE_BUCKET_VAL"; \
 		printf '%s\n' "REPUTATION_STATE_PREFIX=$$STATE_PREFIX_VAL"; \
 	} >> "$$ENV_FILE"
-
 	@echo "==> cloudrun.env validado."
 
 deploy-cloudrun-back: cloudrun-env
@@ -294,15 +352,15 @@ deploy-cloudrun-back: cloudrun-env
 		PROJECT_NUMBER=$$(gcloud projects describe "$$GCP_PROJECT" --format='value(projectNumber)'); \
 		BACKEND_SA="$$PROJECT_NUMBER-compute@developer.gserviceaccount.com"; \
 	fi; \
-		# Prevent inherited CLOUDSDK_* vars from injecting conflicting env-var flags. \
-		unset CLOUDSDK_RUN_DEPLOY_ENV_VARS_FILE CLOUDSDK_RUN_DEPLOY_SET_ENV_VARS CLOUDSDK_RUN_DEPLOY_UPDATE_ENV_VARS CLOUDSDK_RUN_DEPLOY_REMOVE_ENV_VARS CLOUDSDK_RUN_DEPLOY_CLEAR_ENV_VARS; \
-		mkdir -p backend/data; \
-		rsync -a --delete data/reputation/ backend/data/reputation/; \
-		rsync -a --delete data/reputation_llm/ backend/data/reputation_llm/; \
-		rsync -a --delete data/reputation_samples/ backend/data/reputation_samples/; \
-		rsync -a --delete data/reputation_llm_samples/ backend/data/reputation_llm_samples/; \
-		BUILD_VARS="GOOGLE_RUNTIME_VERSION=$(BACKEND_PYTHON_RUNTIME),GOOGLE_ENTRYPOINT=python -m uvicorn reputation.api.main:app --host 0.0.0.0 --port 8080"; \
-		gcloud run deploy "$$BACKEND_SERVICE" \
+	# Prevent inherited CLOUDSDK_* vars from injecting conflicting env-var flags. \
+	unset CLOUDSDK_RUN_DEPLOY_ENV_VARS_FILE CLOUDSDK_RUN_DEPLOY_SET_ENV_VARS CLOUDSDK_RUN_DEPLOY_UPDATE_ENV_VARS CLOUDSDK_RUN_DEPLOY_REMOVE_ENV_VARS CLOUDSDK_RUN_DEPLOY_CLEAR_ENV_VARS; \
+	mkdir -p backend/data; \
+	rsync -a --delete data/reputation/ backend/data/reputation/; \
+	rsync -a --delete data/reputation_llm/ backend/data/reputation_llm/; \
+	rsync -a --delete data/reputation_samples/ backend/data/reputation_samples/; \
+	rsync -a --delete data/reputation_llm_samples/ backend/data/reputation_llm_samples/; \
+	BUILD_VARS="GOOGLE_RUNTIME_VERSION=$(BACKEND_PYTHON_RUNTIME),GOOGLE_ENTRYPOINT=python -m uvicorn reputation.api.main:app --host 0.0.0.0 --port 8080"; \
+	gcloud run deploy "$$BACKEND_SERVICE" \
 		--project "$$GCP_PROJECT" \
 		--region "$$GCP_REGION" \
 		--source backend \
@@ -310,15 +368,15 @@ deploy-cloudrun-back: cloudrun-env
 		--no-allow-unauthenticated \
 		--min-instances 0 \
 		--max-instances $(BACKEND_MAX_INSTANCES) \
-			--concurrency $(BACKEND_CONCURRENCY) \
-			--cpu $(BACKEND_CPU) \
-			--memory $(BACKEND_MEMORY) \
-			--cpu-throttling \
-			--set-build-env-vars "$$BUILD_VARS" \
-			--env-vars-file "$$ENV_FILE"; \
-		# In some services, traffic may remain pinned to an older revision. Force latest. \
-		gcloud run services update-traffic "$$BACKEND_SERVICE" \
-			--project "$$GCP_PROJECT" \
+		--concurrency $(BACKEND_CONCURRENCY) \
+		--cpu $(BACKEND_CPU) \
+		--memory $(BACKEND_MEMORY) \
+		--cpu-throttling \
+		--set-build-env-vars "$$BUILD_VARS" \
+		--env-vars-file "$$ENV_FILE"; \
+	# In some services, traffic may remain pinned to an older revision. Force latest. \
+	gcloud run services update-traffic "$$BACKEND_SERVICE" \
+		--project "$$GCP_PROJECT" \
 		--region "$$GCP_REGION" \
 		--to-latest
 
@@ -387,24 +445,24 @@ ingest-cloudrun: cloudrun-env
 	GCP_REGION="$${GCP_REGION:-europe-southwest1}"; \
 	BACKEND_SERVICE="$${BACKEND_SERVICE:-$$(env_get BACKEND_SERVICE)}"; \
 	BACKEND_SERVICE="$${BACKEND_SERVICE:-gor-backend}"; \
-		LOGIN_REQUESTED_VAL="$$(env_get GOOGLE_CLOUD_LOGIN_REQUESTED)"; \
-		LOGIN_REQUESTED_VAL=$$(echo "$$LOGIN_REQUESTED_VAL" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]'); \
-		if [ "$$LOGIN_REQUESTED_VAL" != "true" ]; then LOGIN_REQUESTED_VAL="false"; fi; \
-		CLIENT_ID_VAL="$$(env_get AUTH_GOOGLE_CLIENT_ID)"; \
-		CLIENT_ID_VAL=$$(printf '%s' "$$CLIENT_ID_VAL" | tr -d '\r'); \
-		echo "==> Lanzando ingesta remota en Cloud Run ($$BACKEND_SERVICE)..."; \
-		CALLER_SERVICE_ACCOUNT_VAL="$${CALLER_SERVICE_ACCOUNT:-gor-github-deploy@$${GCP_PROJECT}.iam.gserviceaccount.com}"; \
-		if [ "$$LOGIN_REQUESTED_VAL" = "true" ]; then \
+	LOGIN_REQUESTED_VAL="$$(env_get GOOGLE_CLOUD_LOGIN_REQUESTED)"; \
+	LOGIN_REQUESTED_VAL=$$(echo "$$LOGIN_REQUESTED_VAL" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]'); \
+	if [ "$$LOGIN_REQUESTED_VAL" != "true" ]; then LOGIN_REQUESTED_VAL="false"; fi; \
+	CLIENT_ID_VAL="$$(env_get AUTH_GOOGLE_CLIENT_ID)"; \
+	CLIENT_ID_VAL=$$(printf '%s' "$$CLIENT_ID_VAL" | tr -d '\r'); \
+	echo "==> Lanzando ingesta remota en Cloud Run ($$BACKEND_SERVICE)..."; \
+	CALLER_SERVICE_ACCOUNT_VAL="$${CALLER_SERVICE_ACCOUNT:-gor-github-deploy@$${GCP_PROJECT}.iam.gserviceaccount.com}"; \
+	if [ "$$LOGIN_REQUESTED_VAL" = "true" ]; then \
 		if [ -z "$$CLIENT_ID_VAL" ]; then \
 			echo "Falta AUTH_GOOGLE_CLIENT_ID (ponlo en backend/reputation/cloudrun.env)."; \
 			exit 1; \
 		fi; \
-			if ! echo "$$CLIENT_ID_VAL" | grep -q '\\.apps\\.googleusercontent\\.com$$'; then \
-				echo "ERROR: AUTH_GOOGLE_CLIENT_ID debe ser un OAuth Client ID (termina en .apps.googleusercontent.com). Valor actual: $$CLIENT_ID_VAL"; \
-				exit 1; \
-			fi; \
+		if ! echo "$$CLIENT_ID_VAL" | grep -q '\\.apps\\.googleusercontent\\.com$$'; then \
+			echo "ERROR: AUTH_GOOGLE_CLIENT_ID debe ser un OAuth Client ID (termina en .apps.googleusercontent.com). Valor actual: $$CLIENT_ID_VAL"; \
+			exit 1; \
 		fi; \
-		BACKEND_URL=$$(gcloud run services describe "$$BACKEND_SERVICE" --project "$$GCP_PROJECT" --region "$$GCP_REGION" --format 'value(status.url)'); \
+	fi; \
+	BACKEND_URL=$$(gcloud run services describe "$$BACKEND_SERVICE" --project "$$GCP_PROJECT" --region "$$GCP_REGION" --format 'value(status.url)'); \
 	if [ -z "$$BACKEND_URL" ]; then \
 		echo "No se pudo obtener BACKEND_URL. Verifica deploy del backend y permisos."; \
 		exit 1; \
@@ -418,12 +476,12 @@ ingest-cloudrun: cloudrun-env
 	USER_TOKEN=""; \
 	if [ "$$LOGIN_REQUESTED_VAL" = "true" ]; then \
 		USER_TOKEN=$$(gcloud auth print-identity-token "$${TOKEN_FLAGS[@]}" --audiences="$$CLIENT_ID_VAL" --include-email); \
-		fi; \
-		PAYLOAD="{\"force\":$(INGEST_FORCE),\"all_sources\":$(INGEST_ALL_SOURCES)}"; \
-		CURL_HEADERS=(-H "Authorization: Bearer $$RUN_TOKEN"); \
-		if [ -n "$$USER_TOKEN" ]; then CURL_HEADERS+=(-H "x-user-id-token: $$USER_TOKEN"); fi; \
-		RESPONSE=$$(curl -sS -f -X POST "$$BACKEND_URL/ingest/reputation" \
-			"$${CURL_HEADERS[@]}" \
+	fi; \
+	PAYLOAD="{\"force\":$(INGEST_FORCE),\"all_sources\":$(INGEST_ALL_SOURCES)}"; \
+	CURL_HEADERS=(-H "Authorization: Bearer $$RUN_TOKEN"); \
+	if [ -n "$$USER_TOKEN" ]; then CURL_HEADERS+=(-H "x-user-id-token: $$USER_TOKEN"); fi; \
+	RESPONSE=$$(curl -sS -f -X POST "$$BACKEND_URL/ingest/reputation" \
+		"$${CURL_HEADERS[@]}" \
 		-H "Content-Type: application/json" \
 		-d "$$PAYLOAD"); \
 	JOB_ID=$$(printf '%s' "$$RESPONSE" | python3 -c 'import json,sys; print((json.loads(sys.stdin.read() or "{}")).get("id",""))'); \
@@ -689,4 +747,4 @@ dev:
 	@echo "- Terminal B: make dev-front"
 	@echo ""
 	@echo "Si quieres hacerlo todo en un solo terminal instala 'concurrently' y ejecuta:"
-	@echo "cd $(FRONTDIR) && npx concurrently \"$(PY) -m uvicorn reputation.api.main:app --reload --host $(HOST) --port $(API_PORT)\" \"npm run dev\""
+	@echo "cd $(FRONTDIR) && npx concurrently \"$(PY) -m uvicorn reputation.api.main:app --reload --host $(HOST) --port $(API_PORT)\" \"npm run dev\""make
