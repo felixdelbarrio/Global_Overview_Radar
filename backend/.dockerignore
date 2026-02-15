@@ -43,3 +43,7 @@ frontend/build/
 data/cache/
 data/reputation/
 data/reputation_llm/
+
+# PERO NO ignorar los samples (son necesarios en el contenedor)
+!data/reputation_samples/
+!data/reputation_llm_samples/

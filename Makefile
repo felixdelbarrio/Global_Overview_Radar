@@ -32,7 +32,6 @@ BACKEND_MEMORY ?= 768Mi
 FRONTEND_MEMORY ?= 768Mi
 BACKEND_CPU ?= 1
 FRONTEND_CPU ?= 1
-BACKEND_PYTHON_RUNTIME ?= 3.13
 
 INGEST_FORCE ?= true
 INGEST_ALL_SOURCES ?= false
@@ -57,9 +56,26 @@ VISUAL_QA_OUT ?= docs/visual-qa
 STATE_BUCKET ?= global-overview-radar-reputation-state
 STATE_CACHE_PREFIX ?= reputation-state/data/cache
 
+# -------------------------
+# Cloud Run / Deploy identity
+# -------------------------
+# Deployer identity (impersonación) para deploys:
+DEPLOY_SA ?= gor-github-deploy@global-overview-radar.iam.gserviceaccount.com
+
+# Artifact Registry (repo usado por Cloud Run Source Deployments)
+AR_REPO ?= cloud-run-source-deploy
+AR_IMAGE_BACK_NAME ?= gor-backend
+
 .DEFAULT_GOAL := help
 
-.PHONY: help venv install install-backend install-front env ensure-backend ensure-front ensure-cloudrun-env ingest ingest-filtered reputation-ingest reputation-ingest-filtered serve serve-back dev-back dev-front build-front start-front lint lint-back lint-front typecheck typecheck-back typecheck-front format format-back format-front check codeql codeql-install codeql-python codeql-js codeql-clean test test-back test-front test-coverage test-coverage-back test-coverage-front bench bench-baseline bench-ingest bench-ingest-baseline visual-qa clean reset cloudrun-config cloudrun-env deploy-cloudrun-back deploy-cloudrun-front deploy-cloudrun ingest-cloudrun sync-cache-gcs upload-cache-gcs
+.PHONY: help venv install install-backend install-front env ensure-backend ensure-front ensure-cloudrun-env \
+	ingest ingest-filtered reputation-ingest reputation-ingest-filtered serve serve-back dev-back dev-front \
+	build-front start-front lint lint-back lint-front typecheck typecheck-back typecheck-front format format-back \
+	format-front check codeql codeql-install codeql-python codeql-js codeql-clean test test-back test-front \
+	test-coverage test-coverage-back test-coverage-front bench bench-baseline bench-ingest bench-ingest-baseline \
+	visual-qa clean reset cloudrun-config cloudrun-env deploy-cloudrun-back deploy-cloudrun-front deploy-cloudrun \
+	ingest-cloudrun sync-cache-gcs upload-cache-gcs gcloud-impersonate gcloud-unimpersonate ensure-ar-writer \
+	bundle-backend-data
 
 help:
 	@echo "Make targets disponibles:"
@@ -97,8 +113,8 @@ help:
 	@echo "  make clean           - Eliminar venv, caches, node_modules (frontend)"
 	@echo "  make cloudrun-config - Configurar backend/reputation/cloudrun.env (preguntas interactivas)"
 	@echo "  make cloudrun-env    - Validar/normalizar backend/reputation/cloudrun.env"
-	@echo "  make deploy-cloudrun-back  - Deploy backend en Cloud Run (usa env vars)"
-	@echo "  make deploy-cloudrun-front - Deploy frontend en Cloud Run (usa env vars + proxy /api)"
+	@echo "  make deploy-cloudrun-back  - Build (Cloud Build) + deploy backend por IMAGEN"
+	@echo "  make deploy-cloudrun-front - Redeploy frontend con MISMA imagen (solo cambia deployer SA)"
 	@echo "  make deploy-cloudrun       - Deploy backend + frontend (Cloud Run)"
 	@echo "  make ingest-cloudrun       - Lanzar ingesta remota en Cloud Run y esperar resultado"
 	@echo "  make sync-cache-gcs        - Sync ./data/cache/*.json -> gs://$(STATE_BUCKET)/$(STATE_CACHE_PREFIX)/ (BORRA JSON huérfanos en destino)"
@@ -106,6 +122,8 @@ help:
 	@echo ""
 	@echo "Notas:"
 	@echo " - Fullstack Cloud Run con backend privado: el frontend usa proxy /api hacia el backend"
+	@echo " - Deploy identity (impersonación) fija a: $(DEPLOY_SA)"
+	@echo " - Runtime SAs NO cambian: backend usa compute@developer..., frontend usa gor-frontend-sa"
 	@echo " - Login OAuth: revisa en Google Cloud que exista redirect URI: https://<frontend>/login/callback"
 
 # -------------------------
@@ -148,10 +166,6 @@ ensure-front: install-front
 # -------------------------
 # GCS cache sync/upload
 # -------------------------
-
-# Sync por defecto: borra en destino los JSON que ya no existan localmente.
-# Nota: rsync sincroniza TODO lo que hay en ./data/cache/ (y por tanto borraría extras en destino),
-# pero incluimos --include/--exclude para que sólo afecte a *.json y al "directorio" base.
 sync-cache-gcs:
 	@echo "==> Sync cachés JSON a GCS (con delete de huérfanos en destino)..."
 	@set -euo pipefail; \
@@ -172,7 +186,6 @@ sync-cache-gcs:
 		--exclude="**"; \
 	echo "==> OK: sync completado."
 
-# Alternativa "cp" sin borrados (por si un día la necesitas).
 upload-cache-gcs:
 	@echo "==> Subiendo TODOS los JSON de ./data/cache a GCS (sin borrar en destino)..."
 	@set -euo pipefail; \
@@ -199,6 +212,15 @@ upload-cache-gcs:
 # -------------------------
 # Cloud Run helpers
 # -------------------------
+gcloud-impersonate:
+	@echo "==> Activando impersonación: $(DEPLOY_SA)"
+	@gcloud config set auth/impersonate_service_account "$(DEPLOY_SA)" >/dev/null
+	@echo "==> impersonate_service_account=$$(gcloud config get-value auth/impersonate_service_account)"
+
+gcloud-unimpersonate:
+	@echo "==> Desactivando impersonación..."
+	@gcloud config unset auth/impersonate_service_account >/dev/null || true
+	@echo "==> impersonate_service_account=$$(gcloud config get-value auth/impersonate_service_account 2>/dev/null || echo "(unset)")"
 
 ensure-cloudrun-env:
 	@mkdir -p backend/reputation
@@ -227,8 +249,8 @@ cloudrun-config: ensure-cloudrun-env
 	read -r -p "BACKEND_SERVICE [$$BACKEND_SERVICE_DEFAULT]: " BACKEND_SERVICE_IN; \
 	BACKEND_SERVICE_VAL="$${BACKEND_SERVICE_IN:-$$BACKEND_SERVICE_DEFAULT}"; \
 	BACKEND_SA_DEFAULT="$$(env_get BACKEND_SA)"; \
-	if [ -z "$$BACKEND_SA_DEFAULT" ]; then BACKEND_SA_DEFAULT="gor-backend-sa@$${GCP_PROJECT_VAL}.iam.gserviceaccount.com"; fi; \
-	read -r -p "BACKEND_SA [$$BACKEND_SA_DEFAULT]: " BACKEND_SA_IN; \
+	if [ -z "$$BACKEND_SA_DEFAULT" ]; then BACKEND_SA_DEFAULT=""; fi; \
+	read -r -p "BACKEND_SA (vacío => <projectNumber>-compute@developer.gserviceaccount.com) [$$BACKEND_SA_DEFAULT]: " BACKEND_SA_IN; \
 	BACKEND_SA_VAL="$${BACKEND_SA_IN:-$$BACKEND_SA_DEFAULT}"; \
 	FRONTEND_SERVICE_DEFAULT="$$(env_get FRONTEND_SERVICE)"; \
 	FRONTEND_SERVICE_DEFAULT="$${FRONTEND_SERVICE_DEFAULT:-$$DEFAULT_FRONTEND_SERVICE}"; \
@@ -336,8 +358,37 @@ cloudrun-env: ensure-cloudrun-env
 	} >> "$$ENV_FILE"
 	@echo "==> cloudrun.env validado."
 
-deploy-cloudrun-back: cloudrun-env
-	@echo "==> Deploy backend en Cloud Run..."
+# -------------------------
+# Bundle backend data for container build
+# -------------------------
+bundle-backend-data:
+	@echo "==> Bundle profile templates into backend source..."
+	@set -euo pipefail; \
+	mkdir -p backend/data; \
+	rsync -a --delete data/reputation/ backend/data/reputation/; \
+	rsync -a --delete data/reputation_llm/ backend/data/reputation_llm/; \
+	rsync -a --delete data/reputation_samples/ backend/data/reputation_samples/; \
+	rsync -a --delete data/reputation_llm_samples/ backend/data/reputation_llm_samples/; \
+	echo "==> OK: backend/data actualizado."
+
+# -------------------------------------------------------
+# Cloud Run deploy (NUEVO): build -> image -> deploy image
+# -------------------------------------------------------
+ensure-ar-writer:
+	@echo "==> Verificando (informativo) que Cloud Build builder SA pueda push a Artifact Registry (repo=$(AR_REPO))..."
+	@set -euo pipefail; \
+	ENV_FILE="backend/reputation/cloudrun.env"; \
+	env_get() { awk -F= -v k="$$1" '$$0 ~ ("^"k"=") {print substr($$0,index($$0,"=")+1)}' "$$ENV_FILE" | tail -n1; }; \
+	GCP_PROJECT="$${GCP_PROJECT:-$$(env_get GCP_PROJECT)}"; \
+	GCP_PROJECT="$${GCP_PROJECT:-global-overview-radar}"; \
+	PROJECT_NUMBER=$$(gcloud projects describe "$$GCP_PROJECT" --format='value(projectNumber)'); \
+	BUILD_SA="$$PROJECT_NUMBER-compute@developer.gserviceaccount.com"; \
+	echo "Cloud Build builder SA esperado: $$BUILD_SA"; \
+	echo "Si vuelve a fallar docker push, asegura: roles/artifactregistry.writer en el repo para $$BUILD_SA"; \
+	true
+
+deploy-cloudrun-back: cloudrun-env gcloud-impersonate ensure-ar-writer bundle-backend-data
+	@echo "==> Deploy backend en Cloud Run (Cloud Build -> Artifact Registry -> Cloud Run)..."
 	@set -euo pipefail; \
 	ENV_FILE="backend/reputation/cloudrun.env"; \
 	env_get() { awk -F= -v k="$$1" '$$0 ~ ("^"k"=") {print substr($$0,index($$0,"=")+1)}' "$$ENV_FILE" | tail -n1; }; \
@@ -352,36 +403,42 @@ deploy-cloudrun-back: cloudrun-env
 		PROJECT_NUMBER=$$(gcloud projects describe "$$GCP_PROJECT" --format='value(projectNumber)'); \
 		BACKEND_SA="$$PROJECT_NUMBER-compute@developer.gserviceaccount.com"; \
 	fi; \
-	# Prevent inherited CLOUDSDK_* vars from injecting conflicting env-var flags. \
-	unset CLOUDSDK_RUN_DEPLOY_ENV_VARS_FILE CLOUDSDK_RUN_DEPLOY_SET_ENV_VARS CLOUDSDK_RUN_DEPLOY_UPDATE_ENV_VARS CLOUDSDK_RUN_DEPLOY_REMOVE_ENV_VARS CLOUDSDK_RUN_DEPLOY_CLEAR_ENV_VARS; \
-	mkdir -p backend/data; \
-	rsync -a --delete data/reputation/ backend/data/reputation/; \
-	rsync -a --delete data/reputation_llm/ backend/data/reputation_llm/; \
-	rsync -a --delete data/reputation_samples/ backend/data/reputation_samples/; \
-	rsync -a --delete data/reputation_llm_samples/ backend/data/reputation_llm_samples/; \
-	BUILD_VARS="GOOGLE_RUNTIME_VERSION=$(BACKEND_PYTHON_RUNTIME),GOOGLE_ENTRYPOINT=python -m uvicorn reputation.api.main:app --host 0.0.0.0 --port 8080"; \
+	CB_BUCKET="$${GCP_PROJECT}-cloudbuild"; \
+	IMAGE="$${GCP_REGION}-docker.pkg.dev/$${GCP_PROJECT}/$(AR_REPO)/$(AR_IMAGE_BACK_NAME):$$(date +%Y%m%d-%H%M%S)"; \
+	echo "GCP_PROJECT=$$GCP_PROJECT"; \
+	echo "GCP_REGION=$$GCP_REGION"; \
+	echo "BACKEND_SERVICE=$$BACKEND_SERVICE"; \
+	echo "RUNTIME_SA=$$BACKEND_SA"; \
+	echo "IMAGE=$$IMAGE"; \
+	gcloud builds submit . \
+		--project="$$GCP_PROJECT" --region="$$GCP_REGION" \
+		--config=cloudbuild-backend.yaml \
+		--substitutions=_IMAGE="$$IMAGE" \
+		--gcs-source-staging-dir="gs://$$CB_BUCKET/source"; \
 	gcloud run deploy "$$BACKEND_SERVICE" \
 		--project "$$GCP_PROJECT" \
 		--region "$$GCP_REGION" \
-		--source backend \
+		--image "$$IMAGE" \
 		--service-account "$$BACKEND_SA" \
 		--no-allow-unauthenticated \
+		--port 8080 \
 		--min-instances 0 \
 		--max-instances $(BACKEND_MAX_INSTANCES) \
 		--concurrency $(BACKEND_CONCURRENCY) \
 		--cpu $(BACKEND_CPU) \
 		--memory $(BACKEND_MEMORY) \
 		--cpu-throttling \
-		--set-build-env-vars "$$BUILD_VARS" \
+		--timeout 300 \
 		--env-vars-file "$$ENV_FILE"; \
-	# In some services, traffic may remain pinned to an older revision. Force latest. \
 	gcloud run services update-traffic "$$BACKEND_SERVICE" \
 		--project "$$GCP_PROJECT" \
 		--region "$$GCP_REGION" \
-		--to-latest
+		--to-latest; \
+	echo "==> OK backend. Service URL:"; \
+	gcloud run services describe "$$BACKEND_SERVICE" --project "$$GCP_PROJECT" --region "$$GCP_REGION" --format 'value(status.url)'
 
-deploy-cloudrun-front: cloudrun-env
-	@echo "==> Deploy frontend en Cloud Run (proxy /api -> backend)..."
+deploy-cloudrun-front: cloudrun-env gcloud-impersonate
+	@echo "==> Redeploy frontend en Cloud Run con MISMA imagen (solo cambia deployer SA)..."
 	@set -euo pipefail; \
 	ENV_FILE="backend/reputation/cloudrun.env"; \
 	test -f "$$ENV_FILE" || (echo "Falta $$ENV_FILE (ejecuta: make cloudrun-env)"; exit 1); \
@@ -390,50 +447,38 @@ deploy-cloudrun-front: cloudrun-env
 	GCP_PROJECT="$${GCP_PROJECT:-global-overview-radar}"; \
 	GCP_REGION="$${GCP_REGION:-$$(env_get GCP_REGION)}"; \
 	GCP_REGION="$${GCP_REGION:-europe-southwest1}"; \
-	BACKEND_SERVICE="$${BACKEND_SERVICE:-$$(env_get BACKEND_SERVICE)}"; \
-	BACKEND_SERVICE="$${BACKEND_SERVICE:-gor-backend}"; \
 	FRONTEND_SERVICE="$${FRONTEND_SERVICE:-$$(env_get FRONTEND_SERVICE)}"; \
 	FRONTEND_SERVICE="$${FRONTEND_SERVICE:-gor-frontend}"; \
-	FRONTEND_SA="$${FRONTEND_SA:-$$(env_get FRONTEND_SA)}"; \
-	if [ -z "$$FRONTEND_SA" ]; then FRONTEND_SA="gor-frontend-sa@$${GCP_PROJECT}.iam.gserviceaccount.com"; fi; \
-	LOGIN_REQUESTED_VAL="$$(env_get GOOGLE_CLOUD_LOGIN_REQUESTED)"; \
-	LOGIN_REQUESTED_VAL=$$(echo "$$LOGIN_REQUESTED_VAL" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]'); \
-	if [ "$$LOGIN_REQUESTED_VAL" != "true" ]; then LOGIN_REQUESTED_VAL="false"; fi; \
-	CLIENT_ID_VAL="$$(env_get AUTH_GOOGLE_CLIENT_ID)"; \
-	CLIENT_ID_VAL=$$(printf '%s' "$$CLIENT_ID_VAL" | tr -d '\r'); \
-	if [ "$$LOGIN_REQUESTED_VAL" = "true" ]; then \
-		if [ -z "$$CLIENT_ID_VAL" ]; then \
-			echo "Falta AUTH_GOOGLE_CLIENT_ID (ponlo en backend/reputation/cloudrun.env)."; \
-			exit 1; \
-		fi; \
-		if ! echo "$$CLIENT_ID_VAL" | grep -q '\\.apps\\.googleusercontent\\.com$$'; then \
-			echo "ERROR: AUTH_GOOGLE_CLIENT_ID debe ser un OAuth Client ID (termina en .apps.googleusercontent.com). Valor actual: $$CLIENT_ID_VAL"; \
-			exit 1; \
-		fi; \
-	fi; \
-	BACKEND_URL=$$(gcloud run services describe "$$BACKEND_SERVICE" --project "$$GCP_PROJECT" --region "$$GCP_REGION" --format 'value(status.url)'); \
-	if [ -z "$$BACKEND_URL" ]; then \
-		echo "No se pudo obtener BACKEND_URL. Deploy del backend primero."; \
+	IMAGE_FRONT="$$(gcloud run services describe "$$FRONTEND_SERVICE" --project "$$GCP_PROJECT" --region "$$GCP_REGION" --format="value(spec.template.spec.containers[0].image)")"; \
+	RUNTIME_SA_FRONT="$$(gcloud run services describe "$$FRONTEND_SERVICE" --project "$$GCP_PROJECT" --region "$$GCP_REGION" --format="value(spec.template.spec.serviceAccountName)")"; \
+	if [ -z "$$IMAGE_FRONT" ] || [ -z "$$RUNTIME_SA_FRONT" ]; then \
+		echo "ERROR: No pude leer imagen/runtime SA del servicio $$FRONTEND_SERVICE"; \
 		exit 1; \
 	fi; \
+	echo "Frontend service: $$FRONTEND_SERVICE"; \
+	echo "Image: $$IMAGE_FRONT"; \
+	echo "Runtime SA: $$RUNTIME_SA_FRONT"; \
 	gcloud run deploy "$$FRONTEND_SERVICE" \
 		--project "$$GCP_PROJECT" \
 		--region "$$GCP_REGION" \
-		--source frontend/brr-frontend \
-		--service-account "$$FRONTEND_SA" \
+		--image "$$IMAGE_FRONT" \
+		--service-account "$$RUNTIME_SA_FRONT" \
 		--allow-unauthenticated \
 		--min-instances 0 \
 		--max-instances $(FRONTEND_MAX_INSTANCES) \
 		--concurrency $(FRONTEND_CONCURRENCY) \
 		--cpu $(FRONTEND_CPU) \
 		--memory $(FRONTEND_MEMORY) \
-		--cpu-throttling \
-		--set-env-vars USE_SERVER_PROXY=true,API_PROXY_TARGET=$$BACKEND_URL,NEXT_PUBLIC_API_BASE_URL=/api,NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED=$$LOGIN_REQUESTED_VAL,AUTH_GOOGLE_CLIENT_ID=$$CLIENT_ID_VAL,NEXT_PUBLIC_DISABLE_ADVANCED_SETTINGS=true \
-		--set-build-env-vars USE_SERVER_PROXY=true,API_PROXY_TARGET=$$BACKEND_URL,NEXT_PUBLIC_API_BASE_URL=/api,NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED=$$LOGIN_REQUESTED_VAL,AUTH_GOOGLE_CLIENT_ID=$$CLIENT_ID_VAL,NEXT_PUBLIC_DISABLE_ADVANCED_SETTINGS=true
+		--cpu-throttling; \
+	echo "==> OK frontend. Service URL:"; \
+	gcloud run services describe "$$FRONTEND_SERVICE" --project "$$GCP_PROJECT" --region "$$GCP_REGION" --format 'value(status.url)'
 
 deploy-cloudrun: deploy-cloudrun-back deploy-cloudrun-front
 	@true
 
+# -------------------------
+# Cloud Run remote ingest
+# -------------------------
 ingest-cloudrun: cloudrun-env
 	@set -euo pipefail; \
 	ENV_FILE="backend/reputation/cloudrun.env"; \
@@ -451,7 +496,7 @@ ingest-cloudrun: cloudrun-env
 	CLIENT_ID_VAL="$$(env_get AUTH_GOOGLE_CLIENT_ID)"; \
 	CLIENT_ID_VAL=$$(printf '%s' "$$CLIENT_ID_VAL" | tr -d '\r'); \
 	echo "==> Lanzando ingesta remota en Cloud Run ($$BACKEND_SERVICE)..."; \
-	CALLER_SERVICE_ACCOUNT_VAL="$${CALLER_SERVICE_ACCOUNT:-gor-github-deploy@$${GCP_PROJECT}.iam.gserviceaccount.com}"; \
+	CALLER_SERVICE_ACCOUNT_VAL="$${CALLER_SERVICE_ACCOUNT:-$(DEPLOY_SA)}"; \
 	if [ "$$LOGIN_REQUESTED_VAL" = "true" ]; then \
 		if [ -z "$$CLIENT_ID_VAL" ]; then \
 			echo "Falta AUTH_GOOGLE_CLIENT_ID (ponlo en backend/reputation/cloudrun.env)."; \
@@ -516,7 +561,7 @@ ingest-cloudrun: cloudrun-env
 	exit 1
 
 # -------------------------
-# Backend runtime
+# Backend runtime (local)
 # -------------------------
 ingest: reputation-ingest
 	@echo "==> Ingesta reputacional finalizada."
@@ -544,7 +589,7 @@ dev-back:
 	$(PY) -m uvicorn reputation.api.main:app --reload --host $(HOST) --port $(API_PORT)
 
 # -------------------------
-# Frontend runtime
+# Frontend runtime (local)
 # -------------------------
 dev-front:
 	@echo "==> Iniciando frontend (Next dev) en http://localhost:$(FRONT_PORT)..."
@@ -606,8 +651,6 @@ CODEQL_THREADS ?= 0
 CODEQL_PY_QUERIES ?= codeql/python-queries
 CODEQL_JS_QUERIES ?= codeql/javascript-queries
 CODEQL_JS_SOURCE_ROOT ?= $(FRONTDIR)/src
-# Optional: for JS/TS extraction you can provide a build command:
-#   make codeql-js CODEQL_JS_COMMAND='cd frontend/brr-frontend && npm run build'
 CODEQL_JS_COMMAND ?=
 
 codeql: codeql-python codeql-js
@@ -747,4 +790,4 @@ dev:
 	@echo "- Terminal B: make dev-front"
 	@echo ""
 	@echo "Si quieres hacerlo todo en un solo terminal instala 'concurrently' y ejecuta:"
-	@echo "cd $(FRONTDIR) && npx concurrently \"$(PY) -m uvicorn reputation.api.main:app --reload --host $(HOST) --port $(API_PORT)\" \"npm run dev\""make
+	@echo "cd $(FRONTDIR) && npx concurrently \"$(PY) -m uvicorn reputation.api.main:app --reload --host $(HOST) --port $(API_PORT)\" \"npm run dev\""
