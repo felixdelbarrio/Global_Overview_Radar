@@ -54,7 +54,7 @@ _SOURCE_REPUTATION_ADVANCED_ENV_EXAMPLE = _SOURCE_ENV_DIR / ".env.reputation.adv
 STATE_KEY_REPUTATION_ENV = "backend/reputation/.env.reputation"
 STATE_KEY_REPUTATION_ENV_EXAMPLE = "backend/reputation/.env.reputation.example"
 STATE_KEY_REPUTATION_ADVANCED_ENV = "backend/reputation/.env.reputation.advanced"
-STATE_KEY_REPUTATION_ADVANCED_ENV_EXAMPLE = "backend/reputation/.env.reputation.advanced.example"
+STATE_KEY_REPUTATION_ADVANCED_ENV_EXAMPLE = "backend/reputation.advanced.example"
 STATE_KEY_PROFILE_STATE = "data/cache/reputation_profile.json"
 
 DEFAULT_CONFIG_PATH = REPO_ROOT / "data" / "reputation"
@@ -127,7 +127,7 @@ class ReputationSettings(BaseSettings):
         alias="REPUTATION_OVERRIDES_PATH",
     )
     # Perfil/es de negocio: por defecto carga todos los JSON del directorio.
-    # Puede ser un nombre (banking_empresas) o varios separados por coma.
+    # Puede ser un nombre o varios separados por coma.
     profiles: str = Field(default="", alias="REPUTATION_PROFILE")
 
     # Logging
@@ -755,13 +755,49 @@ def active_profile_source() -> str:
 
 
 def list_available_profiles(source: str) -> list[str]:
+    """
+    Devuelve la lista de perfiles disponibles.
+
+    Comportamiento:
+    - Si source es "samples": lista exclusivamente el directorio de samples.
+    - Si source es "default": entra al directorio activo y devuelve el primer conjunto
+      de JSON que encuentre ahí (ordenado por _sorted_config_files). Si no hay JSON,
+      intenta con el directorio por defecto.
+    """
     source_key = _normalize_profile_source(source)
+
     cfg_path, _ = _resolve_paths_for_source(source_key)
-    if not cfg_path.exists():
-        return []
-    if cfg_path.is_file():
+
+    # Si es un fichero concreto, lo devolvemos tal cual.
+    if cfg_path.exists() and cfg_path.is_file():
         return [cfg_path.stem]
-    return [file.stem for file in _sorted_config_files(cfg_path)]
+
+    # Para samples, no hacemos fallback a directorio por defecto.
+    if source_key == "samples":
+        if not cfg_path.exists() or not cfg_path.is_dir():
+            return []
+        files = _sorted_config_files(cfg_path)
+        return [f.stem for f in files]
+
+    # default: primero el directorio activo, y si no hay JSON, fallback al directorio por defecto.
+    candidates: list[Path] = []
+    if cfg_path:
+        candidates.append(cfg_path)
+    try:
+        if DEFAULT_CONFIG_PATH.resolve() != cfg_path.resolve():
+            candidates.append(DEFAULT_CONFIG_PATH)
+    except Exception:
+        candidates.append(DEFAULT_CONFIG_PATH)
+
+    for directory in candidates:
+        if not directory.exists() or not directory.is_dir():
+            continue
+        files = _sorted_config_files(directory)
+        if files:
+            # “Primer JSON disponible al entrar el directorio” (según el orden definido)
+            return [f.stem for f in files]
+
+    return []
 
 
 def set_profile_state(source: str, profiles: Sequence[str] | None) -> dict[str, Any]:

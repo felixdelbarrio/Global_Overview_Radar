@@ -1,9 +1,6 @@
 name: ingest_cloudrun
 
 on:
-  schedule:
-    # 03:00 UTC daily (ajusta según tu zona horaria)
-    - cron: "0 3 * * *"
   workflow_dispatch:
     inputs:
       force:
@@ -40,7 +37,6 @@ jobs:
       - name: Authenticate to Google Cloud (WIF)
         uses: google-github-actions/auth@v3
         with:
-         
           # GCP_WORKLOAD_IDENTITY_PROVIDER
           # Formato esperado:
           # projects/PROJECT_NUMBER/locations/global/workloadIdentityPools/POOL_ID/providers/PROVIDER_ID
