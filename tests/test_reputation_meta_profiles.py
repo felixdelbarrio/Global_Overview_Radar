@@ -103,15 +103,17 @@ def test_meta_reports_cache_and_sources(
 def test_profiles_lists_default_options(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    # Creamos dos perfiles en el directorio "default" del test.
-    alpha = tmp_path / "alpha.json"
-    beta = tmp_path / "beta.json"
-    alpha.write_text("{}", encoding="utf-8")
-    beta.write_text("{}", encoding="utf-8")
+    # IMPORTANTE: separamos configs del cache para que cache.json NO cuente como "perfil".
+    cfg_dir = tmp_path / "cfg"
+    cfg_dir.mkdir(parents=True, exist_ok=True)
+
+    (cfg_dir / "alpha.json").write_text("{}", encoding="utf-8")
+    (cfg_dir / "beta.json").write_text("{}", encoding="utf-8")
+
     cache_path = _write_cache(tmp_path / "cache.json", [])
 
     # Activamos uno explícito para asegurar "active.profiles" determinista.
-    client = _client(monkeypatch, cache_path, tmp_path, profiles="alpha")
+    client = _client(monkeypatch, cache_path, cfg_dir, profiles="alpha")
     res = client.get("/reputation/profiles")
     assert res.status_code == 200
     body = res.json()
@@ -119,10 +121,10 @@ def test_profiles_lists_default_options(
     assert "alpha" in body["active"]["profiles"]
 
     # Verifica que la opción por defecto "elige el primer JSON disponible"
-    # (mismo criterio que la implementación: orden por nombre, con prioridad a config.json).
-    expected_first = "alpha"
-    assert body["options"]["default"], "Se esperaban opciones por defecto no vacías"
-    assert body["options"]["default"][0] == expected_first
+    # (orden por nombre, con prioridad a config.json si existe).
+    default_options = body["options"]["default"]
+    assert default_options, "Se esperaban opciones por defecto no vacías"
+    assert default_options[0] == "alpha"
 
 
 def test_profiles_update_samples_applies_templates_to_default(
