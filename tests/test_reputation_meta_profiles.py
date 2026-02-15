@@ -44,11 +44,19 @@ def _client(
     import reputation.config as rep_config
     from reputation.api.routers import reputation as reputation_router
 
+    # Settings runtime
     monkeypatch.setattr(rep_config.settings, "cache_path", cache_path)
     monkeypatch.setattr(rep_config.settings, "config_path", config_path)
     monkeypatch.setattr(rep_config.settings, "profiles", profiles)
+
+    # OJO: la API usa BASE_CONFIG_PATH/BASE_LLM_CONFIG_PATH (calculados al importar)
+    # para construir opciones "default". Hay que parchearlos para que apunten al
+    # directorio temporal del test.
+    base_cfg_dir = config_path if config_path.is_dir() else config_path.parent
+    monkeypatch.setattr(rep_config, "BASE_CONFIG_PATH", base_cfg_dir)
+    monkeypatch.setattr(rep_config, "BASE_LLM_CONFIG_PATH", base_cfg_dir)
+
     # Asegura determinismo: los tests en este módulo usan items con source="news".
-    # Fuerza todos los toggles de fuentes a false salvo news.
     monkeypatch.setattr(rep_config.settings, "source_reddit", False)
     monkeypatch.setattr(rep_config.settings, "source_twitter", False)
     monkeypatch.setattr(rep_config.settings, "source_news", True)
@@ -63,6 +71,7 @@ def _client(
     monkeypatch.setattr(rep_config.settings, "source_google_play", False)
     monkeypatch.setattr(rep_config.settings, "source_youtube", False)
     monkeypatch.setattr(rep_config.settings, "source_downdetector", False)
+
     app = create_app()
     app.dependency_overrides[reputation_router._refresh_settings] = lambda: None
     return TestClient(app)
@@ -103,7 +112,7 @@ def test_meta_reports_cache_and_sources(
 def test_profiles_lists_default_options(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    # IMPORTANTE: separamos configs del cache para que cache.json NO cuente como "perfil".
+    # Separamos configs del cache para que cache.json NO cuente como "perfil".
     cfg_dir = tmp_path / "cfg"
     cfg_dir.mkdir(parents=True, exist_ok=True)
 
@@ -112,7 +121,6 @@ def test_profiles_lists_default_options(
 
     cache_path = _write_cache(tmp_path / "cache.json", [])
 
-    # Activamos uno explícito para asegurar "active.profiles" determinista.
     client = _client(monkeypatch, cache_path, cfg_dir, profiles="alpha")
     res = client.get("/reputation/profiles")
     assert res.status_code == 200
@@ -120,8 +128,6 @@ def test_profiles_lists_default_options(
 
     assert "alpha" in body["active"]["profiles"]
 
-    # Verifica que la opción por defecto "elige el primer JSON disponible"
-    # (orden por nombre, con prioridad a config.json si existe).
     default_options = body["options"]["default"]
     assert default_options, "Se esperaban opciones por defecto no vacías"
     assert default_options[0] == "alpha"
