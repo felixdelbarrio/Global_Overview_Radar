@@ -1,0 +1,64 @@
+# -------------------------
+# .gcloudignore (build context upload to Cloud Build)
+# Keep this at repo root because you run: gcloud builds submit .
+# -------------------------
+
+# VCS
+.git/
+.github/
+
+# Python caches / local env
+**/__pycache__/
+**/*.py[cod]
+**/*.egg-info/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.pyright/
+.venv/
+venv/
+ENV/
+env/
+coverage/
+htmlcov/
+.coverage
+
+# Node / frontend heavy artifacts
+node_modules/
+frontend/.next/
+frontend/out/
+frontend/dist/
+frontend/build/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+
+# Secrets / local env files (keep examples)
+.env
+**/.env
+**/.env.local
+**/.env.*.local
+**/.env.reputation
+**/.env.reputation.*
+!**/*.example
+
+# Local runtime/generated state (do NOT ship)
+data/cache/
+data/reputation/
+data/reputation_llm/
+
+# IMPORTANT: these ARE needed at runtime (ship them)
+!data/reputation_samples/
+!data/reputation_samples/**
+!data/reputation_llm_samples/
+!data/reputation_llm_samples/**
+
+# Optional: if you bundle assets into backend/data via Makefile, keep them too
+!backend/data/
+!backend/data/**
+
+# Optional: exclude local logs
+logs/
