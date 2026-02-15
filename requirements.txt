@@ -12,5 +12,8 @@ typing-extensions>=4.12
 defusedxml>=0.7.1
 cryptography>=43.0
 
+# HTTP client (required by sentiment_service.py)
+httpx>=0.27
+
 # Reputation
 praw>=7.7

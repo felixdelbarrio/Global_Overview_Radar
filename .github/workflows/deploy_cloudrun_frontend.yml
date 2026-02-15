@@ -30,7 +30,9 @@ jobs:
 
       BACKEND_SERVICE: gor-backend
       FRONTEND_SERVICE: gor-frontend
-      FRONTEND_SA: gor-frontend-sa@global-overview-radar.iam.gserviceaccount.com
+
+      # ✅ Runtime service account (Cloud Run execution identity) - YA TENÉIS: gor-frontend-sa
+      FRONTEND_RUNTIME_SA: gor-frontend-sa@global-overview-radar.iam.gserviceaccount.com
 
       FRONTEND_MAX_INSTANCES: "1"
       FRONTEND_CONCURRENCY: "2"
@@ -130,24 +132,32 @@ jobs:
 
           LOGIN_REQUESTED="${{ steps.login_toggle.outputs.value }}"
 
-          if [ "${LOGIN_REQUESTED}" = "true" ] && [ -z "${AUTH_GOOGLE_CLIENT_ID:-}" ]; then
-            echo "Missing AUTH_GOOGLE_CLIENT_ID secret."
-            exit 1
-          fi
-          if [ "${LOGIN_REQUESTED}" = "true" ] && ! echo "${AUTH_GOOGLE_CLIENT_ID}" | grep -q '\.apps\.googleusercontent\.com$'; then
-            echo "ERROR: AUTH_GOOGLE_CLIENT_ID must end in .apps.googleusercontent.com (got: ${AUTH_GOOGLE_CLIENT_ID})"
-            exit 1
+          # Si login requerido, validamos client id; si bypass, no lo inyectamos.
+          if [ "${LOGIN_REQUESTED}" = "true" ]; then
+            if [ -z "${AUTH_GOOGLE_CLIENT_ID:-}" ]; then
+              echo "Missing AUTH_GOOGLE_CLIENT_ID secret."
+              exit 1
+            fi
+            if ! echo "${AUTH_GOOGLE_CLIENT_ID}" | grep -q '\.apps\.googleusercontent\.com$'; then
+              echo "ERROR: AUTH_GOOGLE_CLIENT_ID must end in .apps.googleusercontent.com (got: ${AUTH_GOOGLE_CLIENT_ID})"
+              exit 1
+            fi
           fi
 
           BACKEND_URL="${{ steps.backend_url.outputs.url }}"
 
-          ENV_VARS_COMMON="USE_SERVER_PROXY=true,API_PROXY_TARGET=${BACKEND_URL},NEXT_PUBLIC_API_BASE_URL=/api,NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED=${LOGIN_REQUESTED},AUTH_GOOGLE_CLIENT_ID=${AUTH_GOOGLE_CLIENT_ID},NEXT_PUBLIC_DISABLE_ADVANCED_SETTINGS=true"
+          # Vars comunes (sin AUTH_GOOGLE_CLIENT_ID si bypass)
+          ENV_VARS_COMMON="USE_SERVER_PROXY=true,API_PROXY_TARGET=${BACKEND_URL},NEXT_PUBLIC_API_BASE_URL=/api,NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED=${LOGIN_REQUESTED},NEXT_PUBLIC_DISABLE_ADVANCED_SETTINGS=true"
+
+          if [ "${LOGIN_REQUESTED}" = "true" ]; then
+            ENV_VARS_COMMON="${ENV_VARS_COMMON},AUTH_GOOGLE_CLIENT_ID=${AUTH_GOOGLE_CLIENT_ID}"
+          fi
 
           gcloud run deploy "$FRONTEND_SERVICE" \
             --project "$GCP_PROJECT" \
             --region "$GCP_REGION" \
             --source frontend/brr-frontend \
-            --service-account "$FRONTEND_SA" \
+            --service-account "$FRONTEND_RUNTIME_SA" \
             --allow-unauthenticated \
             --min-instances 0 \
             --max-instances "$FRONTEND_MAX_INSTANCES" \
