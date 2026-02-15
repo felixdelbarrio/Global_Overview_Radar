@@ -24,23 +24,3 @@ def auth_me(user: AuthUser = Depends(require_google_user)) -> dict[str, Any]:  #
         "picture": user.picture,
         "subject": user.subject,
     }
-
-
-@router.get("/runtime")
-def auth_runtime() -> dict[str, Any]:
-    """Expose minimal runtime flags needed by the frontend.
-
-    Intentionally unauthenticated so the UI can decide what to render even when
-    auth is bypassed.
-    """
-    # Cloud Run sets K_SERVICE.
-    is_cloud_run = bool(os.environ.get("K_SERVICE"))
-
-    google_cloud_login_requested = (
-        os.environ.get("GOOGLE_CLOUD_LOGIN_REQUESTED", "true").strip().lower() == "true"
-    )
-
-    return {
-        "is_cloud_run": is_cloud_run,
-        "google_cloud_login_requested": google_cloud_login_requested,
-    }
