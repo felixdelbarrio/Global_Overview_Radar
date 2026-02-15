@@ -33,7 +33,7 @@ jobs:
 
       BACKEND_MAX_INSTANCES: "1"
       BACKEND_CONCURRENCY: "2"
-      BACKEND_MEMORY: 512Mi
+      BACKEND_MEMORY: 768Mi
       BACKEND_CPU: "1"
 
       FRONTEND_SERVICE: gor-frontend
