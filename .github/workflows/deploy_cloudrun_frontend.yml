@@ -34,7 +34,7 @@ jobs:
 
       FRONTEND_MAX_INSTANCES: "1"
       FRONTEND_CONCURRENCY: "2"
-      FRONTEND_MEMORY: 512Mi
+      FRONTEND_MEMORY: 768Mi
       FRONTEND_CPU: "1"
 
     steps:
