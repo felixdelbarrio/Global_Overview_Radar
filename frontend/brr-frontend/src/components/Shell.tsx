@@ -106,6 +106,10 @@ const ADVANCED_LOG_KEYS = new Set([
 ]);
 const ADVANCED_EDITABLE_WITHOUT_LOG = new Set(["language.preference"]);
 const DISABLE_ADVANCED_SETTINGS = process.env.NEXT_PUBLIC_DISABLE_ADVANCED_SETTINGS === "true";
+// In Cloud Run / GCP we can deploy with GOOGLE_CLOUD_LOGIN_REQUESTED=false (bypass mode).
+// In that scenario we must hide the ingest center entrypoint entirely.
+const HIDE_INGEST_CENTER =
+  process.env.NEXT_PUBLIC_GOOGLE_CLOUD_LOGIN_REQUESTED?.toLowerCase() === "false";
 const INGEST_STORAGE_KEY = "gor-ingest-jobs";
 const INGEST_KINDS: IngestJobKind[] = ["reputation"];
 const INGEST_STATUSES = new Set<IngestJob["status"]>([
@@ -271,6 +275,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [metaSourcesEnabled, setMetaSourcesEnabled] = useState<string[] | null>(null);
 
+  const ingestCenterEnabled = !HIDE_INGEST_CENTER;
+
   type FloatingPanel = "ingest" | "profiles" | "settings";
 
   const closeAllPanels = () => {
@@ -290,6 +296,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
   }, []);
 
   const toggleIngestPanel = () => {
+    if (!ingestCenterEnabled) return;
     if (ingestOpen) {
       setIngestOpen(false);
       return;
@@ -479,6 +486,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const ingestWasActiveRef = useRef(false);
 
   useEffect(() => {
+    if (!ingestCenterEnabled) return undefined;
     if (typeof window === "undefined") return undefined;
     const handler = (event: Event) => {
       const detail = (event as CustomEvent<IngestJob>).detail;
@@ -490,7 +498,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
     return () => {
       window.removeEventListener(INGEST_STARTED_EVENT, handler as EventListener);
     };
-  }, [openPanel]);
+  }, [ingestCenterEnabled, openPanel]);
 
   const toggleTheme = () => {
     const nextTheme = theme === "ambient-light" ? "ambient-dark" : "ambient-light";
@@ -978,6 +986,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
     [ingestJobs]
   );
   useEffect(() => {
+    if (!ingestCenterEnabled) return;
     const wasActive = ingestWasActiveRef.current;
     ingestWasActiveRef.current = ingestActive;
     if (!wasActive || ingestActive || !ingestOpen) return undefined;
@@ -990,9 +999,10 @@ export function Shell({ children }: { children: React.ReactNode }) {
       setIngestOpen(false);
     }, 1200);
     return () => window.clearTimeout(timeout);
-  }, [ingestActive, ingestJobs, ingestOpen, profilesOpen, settingsOpen]);
+  }, [ingestActive, ingestJobs, ingestOpen, ingestCenterEnabled, profilesOpen, settingsOpen]);
 
   useEffect(() => {
+    if (!ingestCenterEnabled) return;
     if (!ingestActive) return;
     let alive = true;
     const poll = () => {
@@ -1045,7 +1055,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
       alive = false;
       clearInterval(interval);
     };
-  }, [ingestActive]);
+  }, [ingestActive, ingestCenterEnabled]);
   const ingestProgress = useMemo(() => {
     const active = Object.values(ingestJobs).filter(
       (job) => job && (job.status === "queued" || job.status === "running")
@@ -1141,178 +1151,192 @@ export function Shell({ children }: { children: React.ReactNode }) {
             )}
             <div className="flex items-center gap-2 order-1 w-auto sm:order-none">
               <div className="relative">
-                  <button
-                    type="button"
-                    onClick={toggleIngestPanel}
-                    aria-label="Centro de ingestas"
-                    title="Centro de ingestas"
-                    className="relative h-8 w-8 sm:h-9 sm:w-9 rounded-full border border-[color:var(--border-15)] overflow-hidden"
-                  >
-                    <span
-                      className="absolute inset-0"
-                      style={{
-                        background: ingestActive
-                          ? `conic-gradient(from 210deg, var(--aqua) 0 ${ingestProgress}%, rgba(255,255,255,0.18) ${ingestProgress}% 100%)`
-                          : "radial-gradient(circle at 20% 20%, rgba(255,255,255,0.35), rgba(255,255,255,0.05) 65%)",
-                      }}
-                    />
-                    <span className="absolute inset-[2px] rounded-full bg-[color:var(--surface-10)] backdrop-blur" />
-                    <span className="relative z-10 h-full w-full grid place-items-center text-white">
-                      <Sparkles className={ingestActive ? "h-4 w-4 animate-pulse" : "h-4 w-4"} />
-                    </span>
-                  </button>
+                {ingestCenterEnabled && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={toggleIngestPanel}
+                      aria-label="Centro de ingestas"
+                      title="Centro de ingestas"
+                      className="relative h-8 w-8 sm:h-9 sm:w-9 rounded-full border border-[color:var(--border-15)] overflow-hidden"
+                    >
+                      <span
+                        className="absolute inset-0"
+                        style={{
+                          background: ingestActive
+                            ? `conic-gradient(from 210deg, var(--aqua) 0 ${ingestProgress}%, rgba(255,255,255,0.18) ${ingestProgress}% 100%)`
+                            : "radial-gradient(circle at 20% 20%, rgba(255,255,255,0.35), rgba(255,255,255,0.05) 65%)",
+                        }}
+                      />
+                      <span className="absolute inset-[2px] rounded-full bg-[color:var(--surface-10)] backdrop-blur" />
+                      <span className="relative z-10 h-full w-full grid place-items-center text-white">
+                        <Sparkles className={ingestActive ? "h-4 w-4 animate-pulse" : "h-4 w-4"} />
+                      </span>
+                    </button>
 
-                  {ingestOpen && (
-                    <div className="fixed left-1/2 top-[calc(env(safe-area-inset-top)+6.5rem)] bottom-[calc(env(safe-area-inset-bottom)+5.5rem)] z-[70] mt-0 w-[92vw] max-w-[360px] -translate-x-1/2 rounded-[22px] border border-[color:var(--border-60)] bg-[color:var(--panel-strong)] shadow-[var(--shadow-lg)] backdrop-blur-xl overflow-y-auto overflow-x-hidden overscroll-contain touch-pan-y sm:absolute sm:left-auto sm:top-auto sm:bottom-auto sm:max-h-none sm:translate-x-0 sm:right-0 sm:mt-3 sm:w-[320px]">
-                      <div className="absolute -top-12 -right-12 h-32 w-32 rounded-full bg-[color:var(--aqua)]/20 blur-3xl" />
-                      <div className="absolute -bottom-16 left-6 h-36 w-36 rounded-full bg-[color:var(--blue)]/10 blur-3xl" />
-                      <div className="relative p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:pb-4 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <div className="text-xs font-semibold tracking-[0.3em] text-[color:var(--blue)]">
-                              CENTRO DE INGESTA
-                            </div>
-                            <div className="mt-1 text-sm text-[color:var(--text-60)]">
-                              Lanza procesos en segundo plano sin frenar tu flujo.
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            {ingestActive && (
-                              <div className="flex items-center gap-2 text-[11px] text-[color:var(--text-55)]">
-                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                {ingestProgress}% listo
+                    {ingestOpen && (
+                      <div className="fixed left-1/2 top-[calc(env(safe-area-inset-top)+6.5rem)] bottom-[calc(env(safe-area-inset-bottom)+5.5rem)] z-[70] mt-0 w-[92vw] max-w-[360px] -translate-x-1/2 rounded-[22px] border border-[color:var(--border-60)] bg-[color:var(--panel-strong)] shadow-[var(--shadow-lg)] backdrop-blur-xl overflow-y-auto overflow-x-hidden overscroll-contain touch-pan-y sm:absolute sm:left-auto sm:top-auto sm:bottom-auto sm:max-h-none sm:translate-x-0 sm:right-0 sm:mt-3 sm:w-[320px]">
+                        <div className="absolute -top-12 -right-12 h-32 w-32 rounded-full bg-[color:var(--aqua)]/20 blur-3xl" />
+                        <div className="absolute -bottom-16 left-6 h-36 w-36 rounded-full bg-[color:var(--blue)]/10 blur-3xl" />
+                        <div className="relative p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:pb-4 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <div className="text-xs font-semibold tracking-[0.3em] text-[color:var(--blue)]">
+                                CENTRO DE INGESTA
                               </div>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => setIngestOpen(false)}
-                              aria-label="Cerrar centro de ingesta"
-                              title="Cerrar"
-                              className="h-7 w-7 rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-70)] text-[color:var(--text-55)] transition hover:text-[color:var(--ink)] hover:border-[color:var(--aqua)]"
-                            >
-                              <X className="mx-auto h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        </div>
-
-                        {(["reputation"] as IngestJobKind[]).map((kind) => {
-                          const job = ingestJobs[kind];
-                          const busy =
-                            ingestBusy[kind] ||
-                            job?.status === "queued" ||
-                            job?.status === "running";
-                          const isError = job?.status === "error";
-                          const isSuccess = job?.status === "success";
-                          const label = "Ingesta reputación";
-                          const detail = "Señales externas + sentimiento";
-                          const metaBits: string[] = [];
-                          const items = job?.meta?.items;
-                          if (typeof items === "number") {
-                            metaBits.push(`${items} items`);
-                          }
-                          const observations = job?.meta?.observations;
-                          if (typeof observations === "number") {
-                            metaBits.push(`${observations} observaciones`);
-                          }
-                          const sources = job?.meta?.sources;
-                          if (typeof sources === "number") {
-                            metaBits.push(`${sources} fuentes`);
-                          }
-                          const warning =
-                            typeof job?.meta?.warning === "string" ? job.meta.warning : "";
-                          const jobError = typeof job?.error === "string" ? job.error : "";
-                          const metaLabel = metaBits.join(" · ");
-                          const actionLabel = isError
-                            ? "Reintentar ingesta"
-                            : isSuccess
-                              ? "Lanzar de nuevo"
-                              : "Iniciar ingesta";
-                          const actionDisabled = busy;
-                          return (
-                            <div
-                              key={kind}
-                              className="group relative w-full overflow-hidden rounded-[18px] border border-[color:var(--border-60)] bg-[color:var(--surface-80)] p-3 text-left"
-                            >
-                              <div className="absolute inset-0 opacity-0 transition group-hover:opacity-100" style={{ background: "radial-gradient(140px 60px at 0% 0%, rgba(45,204,205,0.18), transparent 60%)" }} />
-                              <div className="relative flex items-start gap-3">
-                                <div className="h-10 w-10 rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] grid place-items-center">
-                                  <Sparkles className="h-5 w-5 text-[color:var(--blue)]" />
-                                </div>
-                                <div className="flex-1">
-                                  <div className="text-sm font-semibold text-[color:var(--ink)]">
-                                    {label}
-                                  </div>
-                                  <div className="text-xs text-[color:var(--text-60)]">{detail}</div>
-                                  {job?.stage && (
-                                    <div className="mt-2 text-[11px] text-[color:var(--text-50)]">
-                                      {job.stage}
-                                    </div>
-                                  )}
-                                  {metaLabel && (
-                                    <div className="mt-1 text-[10px] uppercase tracking-[0.18em] text-[color:var(--text-40)]">
-                                      {metaLabel}
-                                    </div>
-                                  )}
-                                  {warning && (
-                                    <div className="mt-1 text-[10px] text-[color:var(--text-50)]">
-                                      {warning}
-                                    </div>
-                                  )}
-                                  {isError && jobError && (
-                                    <div className="mt-2 max-h-24 overflow-auto rounded-lg border border-rose-200 bg-rose-50 px-2 py-1 text-[11px] text-rose-700 break-words">
-                                      {jobError}
-                                    </div>
-                                  )}
-                                </div>
-                                <div className="flex items-center gap-2 text-xs">
-                                  {busy && <Loader2 className="h-4 w-4 animate-spin text-[color:var(--blue)]" />}
-                                  {isSuccess && !busy && (
-                                    <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] text-emerald-700">
-                                      Completado
-                                    </span>
-                                  )}
-                                  {isError && !busy && (
-                                    <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] text-rose-700">
-                                      Error
-                                    </span>
-                                  )}
-                                </div>
+                              <div className="mt-1 text-sm text-[color:var(--text-60)]">
+                                Lanza procesos en segundo plano sin frenar tu flujo.
                               </div>
-
-                              {job && (
-                                <div className="relative mt-3 h-2 w-full rounded-full bg-[color:var(--surface-10)] overflow-hidden">
-                                  <div
-                                    className="h-full rounded-full bg-gradient-to-r from-[color:var(--aqua)] via-[color:var(--blue)] to-transparent transition-all"
-                                    style={{ width: `${job.progress ?? 0}%` }}
-                                  />
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {ingestActive && (
+                                <div className="flex items-center gap-2 text-[11px] text-[color:var(--text-55)]">
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  {ingestProgress}% listo
                                 </div>
                               )}
-
-                              <div className="relative mt-3 flex items-center justify-end">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setIngestOpen(false);
-                                    void startIngest(kind);
-                                  }}
-                                  disabled={actionDisabled}
-                                  className="rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-[color:var(--text-55)] transition hover:bg-[color:var(--surface-60)] disabled:opacity-60"
-                                >
-                                  {actionLabel}
-                                </button>
-                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setIngestOpen(false)}
+                                aria-label="Cerrar centro de ingesta"
+                                title="Cerrar"
+                                className="h-7 w-7 rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-70)] text-[color:var(--text-55)] transition hover:text-[color:var(--ink)] hover:border-[color:var(--aqua)]"
+                              >
+                                <X className="mx-auto h-3.5 w-3.5" />
+                              </button>
                             </div>
-                          );
-                        })}
-
-                        {ingestError && (
-                          <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
-                            {ingestError}
                           </div>
-                        )}
+
+                          {(["reputation"] as IngestJobKind[]).map((kind) => {
+                            const job = ingestJobs[kind];
+                            const busy =
+                              ingestBusy[kind] ||
+                              job?.status === "queued" ||
+                              job?.status === "running";
+                            const isError = job?.status === "error";
+                            const isSuccess = job?.status === "success";
+                            const label = "Ingesta reputación";
+                            const detail = "Señales externas + sentimiento";
+                            const metaBits: string[] = [];
+                            const items = job?.meta?.items;
+                            if (typeof items === "number") {
+                              metaBits.push(`${items} items`);
+                            }
+                            const observations = job?.meta?.observations;
+                            if (typeof observations === "number") {
+                              metaBits.push(`${observations} observaciones`);
+                            }
+                            const sources = job?.meta?.sources;
+                            if (typeof sources === "number") {
+                              metaBits.push(`${sources} fuentes`);
+                            }
+                            const warning =
+                              typeof job?.meta?.warning === "string" ? job.meta.warning : "";
+                            const jobError = typeof job?.error === "string" ? job.error : "";
+                            const metaLabel = metaBits.join(" · ");
+                            const actionLabel = isError
+                              ? "Reintentar ingesta"
+                              : isSuccess
+                                ? "Lanzar de nuevo"
+                                : "Iniciar ingesta";
+                            const actionDisabled = busy;
+                            return (
+                              <div
+                                key={kind}
+                                className="group relative w-full overflow-hidden rounded-[18px] border border-[color:var(--border-60)] bg-[color:var(--surface-80)] p-3 text-left"
+                              >
+                                <div
+                                  className="absolute inset-0 opacity-0 transition group-hover:opacity-100"
+                                  style={{
+                                    background:
+                                      "radial-gradient(140px 60px at 0% 0%, rgba(45,204,205,0.18), transparent 60%)",
+                                  }}
+                                />
+                                <div className="relative flex items-start gap-3">
+                                  <div className="h-10 w-10 rounded-2xl border border-[color:var(--border-60)] bg-[color:var(--surface-70)] grid place-items-center">
+                                    <Sparkles className="h-5 w-5 text-[color:var(--blue)]" />
+                                  </div>
+                                  <div className="flex-1">
+                                    <div className="text-sm font-semibold text-[color:var(--ink)]">
+                                      {label}
+                                    </div>
+                                    <div className="text-xs text-[color:var(--text-60)]">
+                                      {detail}
+                                    </div>
+                                    {job?.stage && (
+                                      <div className="mt-2 text-[11px] text-[color:var(--text-50)]">
+                                        {job.stage}
+                                      </div>
+                                    )}
+                                    {metaLabel && (
+                                      <div className="mt-1 text-[10px] uppercase tracking-[0.18em] text-[color:var(--text-40)]">
+                                        {metaLabel}
+                                      </div>
+                                    )}
+                                    {warning && (
+                                      <div className="mt-1 text-[10px] text-[color:var(--text-50)]">
+                                        {warning}
+                                      </div>
+                                    )}
+                                    {isError && jobError && (
+                                      <div className="mt-2 max-h-24 overflow-auto rounded-lg border border-rose-200 bg-rose-50 px-2 py-1 text-[11px] text-rose-700 break-words">
+                                        {jobError}
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-2 text-xs">
+                                    {busy && (
+                                      <Loader2 className="h-4 w-4 animate-spin text-[color:var(--blue)]" />
+                                    )}
+                                    {isSuccess && !busy && (
+                                      <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] text-emerald-700">
+                                        Completado
+                                      </span>
+                                    )}
+                                    {isError && !busy && (
+                                      <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] text-rose-700">
+                                        Error
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {job && (
+                                  <div className="relative mt-3 h-2 w-full rounded-full bg-[color:var(--surface-10)] overflow-hidden">
+                                    <div
+                                      className="h-full rounded-full bg-gradient-to-r from-[color:var(--aqua)] via-[color:var(--blue)] to-transparent transition-all"
+                                      style={{ width: `${job.progress ?? 0}%` }}
+                                    />
+                                  </div>
+                                )}
+
+                                <div className="relative mt-3 flex items-center justify-end">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setIngestOpen(false);
+                                      void startIngest(kind);
+                                    }}
+                                    disabled={actionDisabled}
+                                    className="rounded-full border border-[color:var(--border-60)] bg-[color:var(--surface-70)] px-3 py-1 text-[10px] uppercase tracking-[0.2em] text-[color:var(--text-55)] transition hover:bg-[color:var(--surface-60)] disabled:opacity-60"
+                                  >
+                                    {actionLabel}
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+
+                          {ingestError && (
+                            <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+                              {ingestError}
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )}
+                  </>
+                )}
               </div>
             </div>
             <div className="relative w-full sm:w-auto basis-full sm:basis-auto order-2 sm:order-none">
