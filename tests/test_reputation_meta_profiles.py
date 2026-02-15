@@ -103,20 +103,26 @@ def test_meta_reports_cache_and_sources(
 def test_profiles_lists_default_options(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    # Creamos dos perfiles en el directorio "default" del test.
     alpha = tmp_path / "alpha.json"
     beta = tmp_path / "beta.json"
     alpha.write_text("{}", encoding="utf-8")
     beta.write_text("{}", encoding="utf-8")
     cache_path = _write_cache(tmp_path / "cache.json", [])
 
+    # Activamos uno explícito para asegurar "active.profiles" determinista.
     client = _client(monkeypatch, cache_path, tmp_path, profiles="alpha")
     res = client.get("/reputation/profiles")
     assert res.status_code == 200
     body = res.json()
+
     assert "alpha" in body["active"]["profiles"]
-    assert any(
-        option.startswith("banking_bbva_") for option in body["options"]["default"]
-    )
+
+    # Verifica que la opción por defecto "elige el primer JSON disponible"
+    # (mismo criterio que la implementación: orden por nombre, con prioridad a config.json).
+    expected_first = "alpha"
+    assert body["options"]["default"], "Se esperaban opciones por defecto no vacías"
+    assert body["options"]["default"][0] == expected_first
 
 
 def test_profiles_update_samples_applies_templates_to_default(
@@ -140,10 +146,10 @@ def test_profiles_update_samples_applies_templates_to_default(
         return {
             "active": {
                 "source": "default",
-                "profiles": ["banking_bbva_retail"],
-                "profile_key": "banking_bbva_retail",
+                "profiles": ["retail"],
+                "profile_key": "retail",
             },
-            "copied": {"config": ["banking_bbva_retail.json"], "llm": []},
+            "copied": {"config": ["retail.json"], "llm": []},
             "removed": {"config": [], "llm": []},
             "missing": {"llm": []},
         }
@@ -162,15 +168,15 @@ def test_profiles_update_samples_applies_templates_to_default(
 
     res = client.post(
         "/reputation/profiles",
-        json={"source": "samples", "profiles": ["banking_bbva_retail"]},
+        json={"source": "samples", "profiles": ["retail"]},
     )
 
     assert res.status_code == 200
     body = res.json()
-    assert called["profiles"] == ["banking_bbva_retail"]
+    assert called["profiles"] == ["retail"]
     assert body["active"]["source"] == "default"
-    assert body["active"]["profiles"] == ["banking_bbva_retail"]
-    assert body["copied"]["config"] == ["banking_bbva_retail.json"]
+    assert body["active"]["profiles"] == ["retail"]
+    assert body["copied"]["config"] == ["retail.json"]
     assert body["auto_ingest"]["started"] is False
 
 
