@@ -29,20 +29,15 @@ jobs:
       GCP_PROJECT: global-overview-radar
       GCP_REGION: europe-southwest1
 
-      # Cloud Run service
       BACKEND_SERVICE: gor-backend
 
       # Artifact Registry (como en Makefile)
       AR_REPO: cloud-run-source-deploy
       AR_IMAGE_BACK_NAME: gor-backend
 
-      # Cloud Build staging bucket (como en Makefile: <project>-cloudbuild)
-      CB_BUCKET: global-overview-radar-cloudbuild
-
-      # Runtime identity (Cloud Run execution SA) - NO es secret
+      # Runtime identity (Cloud Run execution SA)
       BACKEND_RUNTIME_SA: gor-backend-sa@global-overview-radar.iam.gserviceaccount.com
 
-      # Runtime knobs
       BACKEND_MAX_INSTANCES: "1"
       BACKEND_CONCURRENCY: "2"
       BACKEND_MEMORY: 768Mi
@@ -84,7 +79,6 @@ jobs:
 
           cp backend/reputation/cloudrun.env.example backend/reputation/cloudrun.env
 
-          # Remove any existing keys we manage
           awk '$0 !~ /^(AUTH_GOOGLE_CLIENT_ID|AUTH_ALLOWED_EMAILS|GOOGLE_CLOUD_LOGIN_REQUESTED|REPUTATION_STATE_BUCKET|REPUTATION_STATE_PREFIX)=/' \
             backend/reputation/cloudrun.env > backend/reputation/cloudrun.env.tmp
           mv backend/reputation/cloudrun.env.tmp backend/reputation/cloudrun.env
@@ -106,27 +100,31 @@ jobs:
             exit 1
           fi
 
-          cat >> backend/reputation/cloudrun.env <<EOF
-          GOOGLE_CLOUD_LOGIN_REQUESTED=${LOGIN_REQUESTED}
-          AUTH_GOOGLE_CLIENT_ID=${AUTH_GOOGLE_CLIENT_ID}
-          AUTH_ALLOWED_EMAILS=${AUTH_ALLOWED_EMAILS}
-          REPUTATION_STATE_BUCKET=${STATE_BUCKET}
-          REPUTATION_STATE_PREFIX=${STATE_PREFIX}
-          EOF
+          {
+            echo "GOOGLE_CLOUD_LOGIN_REQUESTED=${LOGIN_REQUESTED}"
+            if [ "${LOGIN_REQUESTED}" = "true" ]; then
+              echo "AUTH_GOOGLE_CLIENT_ID=${AUTH_GOOGLE_CLIENT_ID}"
+              echo "AUTH_ALLOWED_EMAILS=${AUTH_ALLOWED_EMAILS}"
+            fi
+            echo "REPUTATION_STATE_BUCKET=${STATE_BUCKET}"
+            echo "REPUTATION_STATE_PREFIX=${STATE_PREFIX}"
+          } >> backend/reputation/cloudrun.env
 
       - name: Bundle samples into backend source (must exist in container)
         run: |
           set -euo pipefail
           mkdir -p backend/data
 
-          # SOLO los samples (lo otro va a bucket)
           rsync -a --delete data/reputation_samples/ backend/data/reputation_samples/
           rsync -a --delete data/reputation_llm_samples/ backend/data/reputation_llm_samples/
 
+          test -f backend/data/reputation_samples/README.md
+          test -f backend/data/reputation_llm_samples/README.md
+
           echo "== backend/data after bundling =="
           ls -la backend/data
-          test -d backend/data/reputation_samples
-          test -d backend/data/reputation_llm_samples
+          ls -la backend/data/reputation_samples | head
+          ls -la backend/data/reputation_llm_samples | head
 
       - name: Build backend image with Cloud Build (cloudbuild-backend.yaml)
         id: build
@@ -135,11 +133,12 @@ jobs:
 
           TS="$(date +%Y%m%d-%H%M%S)"
           IMAGE="${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT}/${AR_REPO}/${AR_IMAGE_BACK_NAME}:${TS}"
+          CB_BUCKET="${GCP_PROJECT}-cloudbuild"
 
-          echo "IMAGE=$IMAGE"
           echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+          echo "IMAGE=$IMAGE"
+          echo "CB_BUCKET=$CB_BUCKET"
 
-          # OJO: el build se hace con el repo root como contexto (igual que Makefile)
           gcloud builds submit . \
             --project="${GCP_PROJECT}" \
             --region="${GCP_REGION}" \
