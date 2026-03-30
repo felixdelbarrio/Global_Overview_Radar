@@ -72,58 +72,38 @@ The product focus is **sentiment-first** and exclusively reputation-oriented.
 
 ## EN | Quick start (local)
 
-Backend:
 ```bash
-make ensure-backend
-make env
-make reputation-ingest
-make dev-back
+make install
+make build
+make run
 ```
 
-Frontend:
-```bash
-make ensure-front
-make dev-front
-```
+`make run` starts backend + frontend together and opens the frontend inside a local desktop container window.
+`make build` generates the desktop build for the current OS and leaves a `.zip` in `./dist/`.
 
-Open:
-- API: http://127.0.0.1:8000
-- Frontend: http://localhost:3000
-- Production: https://global-overview-radar.vercel.app
-
-Production start (frontend):
+Quality and coverage:
 ```bash
-make build-front
-make start-front
+make ci
+make test-coverage
 ```
 
 ---
 
 ## ES | Arranque rapido (local)
 
-Backend:
 ```bash
-make ensure-backend
-make env
-make reputation-ingest
-make dev-back
+make install
+make build
+make run
 ```
 
-Frontend:
-```bash
-make ensure-front
-make dev-front
-```
+`make run` levanta backend + frontend a la vez y abre el frontend dentro de una ventana contenedora local.
+`make build` genera la build de escritorio para el sistema actual y deja un `.zip` en `./dist/`.
 
-Abrir:
-- API: http://127.0.0.1:8000
-- Frontend: http://localhost:3000
-- Produccion: https://global-overview-radar.vercel.app
-
-Modo produccion (frontend):
+Calidad y cobertura:
 ```bash
-make build-front
-make start-front
+make ci
+make test-coverage
 ```
 
 ---

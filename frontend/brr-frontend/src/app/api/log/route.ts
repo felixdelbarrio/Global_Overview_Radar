@@ -11,6 +11,7 @@ const LOG_ENABLED = parseBool(process.env.NEXT_PUBLIC_LOG_ENABLED);
 const LOG_TO_FILE = parseBool(process.env.NEXT_PUBLIC_LOG_TO_FILE);
 const LOG_DEBUG = parseBool(process.env.NEXT_PUBLIC_LOG_DEBUG);
 const LOG_FILE_NAME = process.env.LOG_FILE_NAME || "frontend.log";
+const LOG_ROOT = (process.env.GOR_RUNTIME_ROOT || "").trim();
 
 type LogPayload = {
   level?: "debug" | "info" | "warn" | "error";
@@ -65,7 +66,7 @@ export async function POST(request: Request): Promise<Response> {
     return new Response(null, { status: 204 });
   }
 
-  const resolvedPath = resolve(process.cwd(), "logs", LOG_FILE_NAME);
+  const resolvedPath = resolve(LOG_ROOT || process.cwd(), "logs", LOG_FILE_NAME);
   await mkdir(dirname(resolvedPath), { recursive: true });
   await appendFile(resolvedPath, `${lines.join("\n")}\n`, "utf-8");
 

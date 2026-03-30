@@ -22,6 +22,9 @@ endif
 HOST ?= 127.0.0.1
 API_PORT ?= 8000
 FRONT_PORT ?= 3000
+RUN_WINDOW_TITLE ?= Global Overview Radar
+RUN_WINDOW_WIDTH ?= 1600
+RUN_WINDOW_HEIGHT ?= 1000
 
 # --- Cloud Run knobs (non-secret) ---
 BACKEND_MAX_INSTANCES ?= 1
@@ -32,11 +35,6 @@ BACKEND_MEMORY ?= 768Mi
 FRONTEND_MEMORY ?= 768Mi
 BACKEND_CPU ?= 1
 FRONTEND_CPU ?= 1
-
-INGEST_FORCE ?= true
-INGEST_ALL_SOURCES ?= false
-INGEST_POLL_SECONDS ?= 10
-INGEST_POLL_ATTEMPTS ?= 60
 
 BENCH_DIR ?= docs/benchmarks
 BENCH_ITERATIONS ?= 40
@@ -65,82 +63,38 @@ DEPLOY_SA ?= gor-github-deploy@global-overview-radar.iam.gserviceaccount.com
 # Artifact Registry (repo usado por Cloud Run Source Deployments)
 AR_REPO ?= cloud-run-source-deploy
 AR_IMAGE_BACK_NAME ?= gor-backend
+CLOUDRUN_ENV_INTERACTIVE ?= $(if $(filter cloudrun-env,$(MAKECMDGOALS)),true,false)
 
 .DEFAULT_GOAL := help
 
-.PHONY: help venv install install-backend install-front env ensure-backend ensure-front ensure-cloudrun-env \
-	ingest ingest-filtered reputation-ingest reputation-ingest-filtered serve serve-back dev-back dev-front \
-	build-front start-front lint lint-back lint-front typecheck typecheck-back typecheck-front format format-back \
-	format-front check codeql codeql-install codeql-python codeql-js codeql-clean test test-back test-front \
-	test-coverage test-coverage-back test-coverage-front bench bench-baseline bench-ingest bench-ingest-baseline \
-	visual-qa clean reset cloudrun-config cloudrun-env deploy-cloudrun-back deploy-cloudrun-front deploy-cloudrun \
-	ingest-cloudrun sync-cache-gcs upload-cache-gcs gcloud-impersonate gcloud-unimpersonate ensure-ar-writer \
-	bundle-backend-data
+.PHONY: help install clean build ensure-cloudrun-env run kill ci test-coverage bench visual-qa \
+	cloudrun-env deploy-cloudrun \
+	upload-cache-gcs gcloud-impersonate gcloud-unimpersonate ensure-ar-writer bundle-backend-data \
+	_ci-codeql
 
 help:
 	@echo "Make targets disponibles:"
-	@echo "  make venv            - Crear virtualenv Python"
-	@echo "  make install         - Instalar backend + frontend"
-	@echo "  make install-backend - Instalar dependencias Python y paquete editable"
-	@echo "  make install-front   - Instalar dependencias Node (frontend)"
-	@echo "  make env             - Crear .env desde .env.example si falta"
-	@echo "  make ensure-backend  - Preparar entorno backend (venv + deps)"
-	@echo "  make ensure-front    - Preparar entorno frontend (deps)"
-	@echo "  make reset           - Limpieza total + instalación completa"
-	@echo "  make ingest          - Ejecutar ingesta de reputación"
-	@echo "  make ingest-filtered - Ejecutar ingesta de reputación respetando toggles"
-	@echo "  make reputation-ingest - Ejecutar ingesta de reputación (backend)"
-	@echo "  make serve-back      - Iniciar API (uvicorn) en $(HOST):$(API_PORT)"
-	@echo "  make dev-back        - Atender solo backend (uvicorn --reload)"
-	@echo "  make dev-front       - Atender solo frontend (next dev en $(FRONT_PORT))"
-	@echo "  make dev             - (Manual) Ejecuta dev-back y dev-front en 2 terminales"
-	@echo "  make build-front     - Build de producción del frontend (next build)"
-	@echo "  make start-front     - Iniciar frontend en modo producción (next start)"
-	@echo "  make lint            - Lint backend + frontend"
-	@echo "  make typecheck       - Type checks backend + frontend"
-	@echo "  make format          - Formatear código (backend + frontend)"
-	@echo "  make check           - format-check + lint + typecheck"
-	@echo "  make codeql          - Analisis CodeQL local (requiere CodeQL CLI)"
-	@echo "  make test            - Ejecutar tests (si existen)"
-	@echo "  make test-back       - Ejecutar tests backend (pytest + cobertura)"
-	@echo "  make test-front      - Ejecutar tests frontend (vitest)"
-	@echo "  make test-coverage   - Ejecutar cobertura backend + frontend (>=70%)"
-	@echo "  make bench           - Benchmark backend (comparacion baseline)"
-	@echo "  make bench-baseline  - Generar baseline backend"
-	@echo "  make bench-ingest    - Benchmark hotspots de ingesta (comparacion baseline)"
-	@echo "  make bench-ingest-baseline - Generar baseline de benchmark de ingesta"
-	@echo "  make visual-qa       - Capturas headless mobile (frontend)"
+	@echo "  make install         - Ejecutar clean e instalar todo lo necesario para backend + frontend"
 	@echo "  make clean           - Eliminar venv, caches, node_modules (frontend)"
-	@echo "  make cloudrun-config - Configurar backend/reputation/cloudrun.env (preguntas interactivas)"
-	@echo "  make cloudrun-env    - Validar/normalizar backend/reputation/cloudrun.env"
-	@echo "  make deploy-cloudrun-back  - Build (Cloud Build) + deploy backend por IMAGEN"
-	@echo "  make deploy-cloudrun-front - Redeploy frontend con MISMA imagen (solo cambia deployer SA)"
+	@echo "  make build           - Generar la build de escritorio para el sistema actual (macOS o Linux)"
+	@echo "  make run             - Levantar backend + frontend y abrir el frontend en una ventana contenedora"
+	@echo "  make kill            - Cerrar cualquier instancia activa registrada de la aplicación"
+	@echo "  make ci              - Ejecutar format-check, lint, typecheck y CodeQL local si está disponible"
+	@echo "  make test-coverage   - Ejecutar cobertura backend + frontend (>=70%)"
+	@echo "  make bench           - Benchmark backend + ingesta; crea baseline si falta y compara si existe"
+	@echo "  make visual-qa       - Capturas headless mobile (frontend)"
+	@echo "  make cloudrun-env    - Configurar, validar y normalizar backend/reputation/cloudrun.env"
 	@echo "  make deploy-cloudrun       - Deploy backend + frontend (Cloud Run)"
-	@echo "  make ingest-cloudrun       - Lanzar ingesta remota en Cloud Run y esperar resultado"
-	@echo "  make sync-cache-gcs        - Sync ./data/cache/*.json -> gs://$(STATE_BUCKET)/$(STATE_CACHE_PREFIX)/ (BORRA JSON huérfanos en destino)"
-	@echo "  make upload-cache-gcs      - Copia (cp) todos los JSON de ./data/cache/ a gs://$(STATE_BUCKET)/$(STATE_CACHE_PREFIX)/ (NO borra en destino)"
-	@echo ""
-	@echo "Notas:"
-	@echo " - Fullstack Cloud Run con backend privado: el frontend usa proxy /api hacia el backend"
-	@echo " - Deploy identity (impersonación) fija a: $(DEPLOY_SA)"
-	@echo " - Runtime SAs NO cambian: backend usa compute@developer..., frontend usa gor-frontend-sa"
-	@echo " - Login OAuth: revisa en Google Cloud que exista redirect URI: https://<frontend>/login/callback"
+	@echo "  make upload-cache-gcs      - Borra JSON huérfanos en GCS y sube todos los JSON de ./data/cache/"
 
 # -------------------------
 # Virtualenv + Instalación
 # -------------------------
-venv:
-	@echo "==> Creando virtualenv en $(VENV) (si no existe)..."
-	@if [ ! -x $(VENV)/bin/python ] || [ ! -x $(VENV)/bin/pip ]; then \
-		rm -rf $(VENV); \
-		python3 -m venv $(VENV); \
-	fi
+install: clean
+	@echo "==> Instalando backend + frontend desde cero..."
+	@echo "==> Creando virtualenv en $(VENV)..."
+	python3 -m venv $(VENV)
 	$(PIP) install --upgrade pip setuptools wheel
-
-install: install-backend install-front
-	@echo "==> Instalación completa (backend + frontend)."
-
-install-backend: venv
 	@echo "==> Instalando dependencias Python (requirements / pyproject editable)..."
 	$(PIP) install -r requirements.txt
 	@if [ -f requirements-dev.txt ]; then \
@@ -148,46 +102,28 @@ install-backend: venv
 		$(PIP) install -r requirements-dev.txt; \
 	fi
 	$(PIP) install -e backend
-
-install-front:
 	@echo "==> Instalando dependencias frontend (cd $(FRONTDIR))..."
 	cd $(FRONTDIR) && $(NPM) $(NPM_INSTALL_CMD)
-	@echo "==> Instalación frontend completada."
-
-env:
-	@# Create per-module env files from examples if missing
 	@test -f backend/reputation/.env.reputation || cp backend/reputation/.env.reputation.example backend/reputation/.env.reputation
-	@echo "==> .env files prepared (edit if needed)."
+	@test -f frontend/brr-frontend/.env.local || cp frontend/brr-frontend/.env.local.example frontend/brr-frontend/.env.local
+	@echo "==> .env files preparados (edítalos si lo necesitas)."
+	@echo "==> Instalación frontend completada."
+	@echo "==> Instalación completa."
 
-ensure-backend: install-backend
-ensure-front: install-front
-	@true
+clean:
+	@echo "==> Limpiando entorno..."
+	rm -rf $(VENV) .mypy_cache .ruff_cache .pytest_cache .coverage
+	@find . -type d -name __pycache__ -prune -exec rm -rf {} + 2>/dev/null || true
+	@find . -type f \( -name '*.pyc' -o -name '*.pyo' \) -delete 2>/dev/null || true
+	cd $(FRONTDIR) && rm -rf node_modules .next dist out coverage || true
+	rm -rf build dist
+	@echo "==> Limpieza completada."
 
 # -------------------------
-# GCS cache sync/upload
+# GCS cache upload
 # -------------------------
-sync-cache-gcs:
-	@echo "==> Sync cachés JSON a GCS (con delete de huérfanos en destino)..."
-	@set -euo pipefail; \
-	if ! command -v gcloud >/dev/null 2>&1; then \
-		echo "ERROR: gcloud no está instalado o no está en PATH."; \
-		exit 1; \
-	fi; \
-	if [ ! -d "./data/cache" ]; then \
-		echo "ERROR: No existe ./data/cache"; \
-		exit 1; \
-	fi; \
-	dest="gs://$(STATE_BUCKET)/$(STATE_CACHE_PREFIX)/"; \
-	echo "Origen: ./data/cache"; \
-	echo "Destino: $$dest"; \
-	gcloud storage rsync -r "./data/cache" "$$dest" \
-		--delete-unmatched-destination-objects \
-		--include="*.json" \
-		--exclude="**"; \
-	echo "==> OK: sync completado."
-
 upload-cache-gcs:
-	@echo "==> Subiendo TODOS los JSON de ./data/cache a GCS (sin borrar en destino)..."
+	@echo "==> Borrando huérfanos en destino y subiendo TODOS los JSON de ./data/cache a GCS..."
 	@set -euo pipefail; \
 	if ! command -v gcloud >/dev/null 2>&1; then \
 		echo "ERROR: gcloud no está instalado o no está en PATH."; \
@@ -205,7 +141,20 @@ upload-cache-gcs:
 	fi; \
 	dest="gs://$(STATE_BUCKET)/$(STATE_CACHE_PREFIX)/"; \
 	echo "Destino: $$dest"; \
-	echo "Ficheros: $${#files[@]}"; \
+	echo "Ficheros locales: $${#files[@]}"; \
+	remote_json="$$(gcloud storage ls "$$dest*.json" 2>/dev/null || true)"; \
+	if [ -n "$$remote_json" ]; then \
+		while IFS= read -r remote; do \
+			[ -n "$$remote" ] || continue; \
+			remote_name="$${remote##*/}"; \
+			if [ ! -f "./data/cache/$$remote_name" ]; then \
+				echo "==> Borrando JSON huérfano en destino: $$remote_name"; \
+				gcloud storage rm "$$remote"; \
+			fi; \
+		done <<< "$$remote_json"; \
+	else \
+		echo "==> No hay JSON previos en destino."; \
+	fi; \
 	gcloud storage cp "$${files[@]}" "$$dest" --content-type=application/json; \
 	echo "==> OK: cachés subidos."
 
@@ -227,8 +176,8 @@ ensure-cloudrun-env:
 	@test -f backend/reputation/cloudrun.env || cp backend/reputation/cloudrun.env.example backend/reputation/cloudrun.env
 	@echo "==> backend/reputation/cloudrun.env preparado."
 
-cloudrun-config: ensure-cloudrun-env
-	@echo "==> Configurando backend/reputation/cloudrun.env..."
+cloudrun-env: ensure-cloudrun-env
+	@echo "==> Configurando y validando backend/reputation/cloudrun.env..."
 	@set -euo pipefail; \
 	ENV_FILE="backend/reputation/cloudrun.env"; \
 	env_get() { awk -F= -v k="$$1" '$$0 ~ ("^"k"=") {print substr($$0,index($$0,"=")+1)}' "$$ENV_FILE" | tail -n1; }; \
@@ -236,85 +185,15 @@ cloudrun-config: ensure-cloudrun-env
 	DEFAULT_GCP_REGION="europe-southwest1"; \
 	DEFAULT_BACKEND_SERVICE="gor-backend"; \
 	DEFAULT_FRONTEND_SERVICE="gor-frontend"; \
-	GCP_PROJECT_DEFAULT="$$(env_get GCP_PROJECT)"; \
-	GCP_PROJECT_DEFAULT="$${GCP_PROJECT_DEFAULT:-$$DEFAULT_GCP_PROJECT}"; \
-	read -r -p "GCP_PROJECT [$$GCP_PROJECT_DEFAULT]: " GCP_PROJECT_IN; \
-	GCP_PROJECT_VAL="$${GCP_PROJECT_IN:-$$GCP_PROJECT_DEFAULT}"; \
-	GCP_REGION_DEFAULT="$$(env_get GCP_REGION)"; \
-	GCP_REGION_DEFAULT="$${GCP_REGION_DEFAULT:-$$DEFAULT_GCP_REGION}"; \
-	read -r -p "GCP_REGION [$$GCP_REGION_DEFAULT]: " GCP_REGION_IN; \
-	GCP_REGION_VAL="$${GCP_REGION_IN:-$$GCP_REGION_DEFAULT}"; \
-	BACKEND_SERVICE_DEFAULT="$$(env_get BACKEND_SERVICE)"; \
-	BACKEND_SERVICE_DEFAULT="$${BACKEND_SERVICE_DEFAULT:-$$DEFAULT_BACKEND_SERVICE}"; \
-	read -r -p "BACKEND_SERVICE [$$BACKEND_SERVICE_DEFAULT]: " BACKEND_SERVICE_IN; \
-	BACKEND_SERVICE_VAL="$${BACKEND_SERVICE_IN:-$$BACKEND_SERVICE_DEFAULT}"; \
-	BACKEND_SA_DEFAULT="$$(env_get BACKEND_SA)"; \
-	if [ -z "$$BACKEND_SA_DEFAULT" ]; then BACKEND_SA_DEFAULT=""; fi; \
-	read -r -p "BACKEND_SA (vacío => <projectNumber>-compute@developer.gserviceaccount.com) [$$BACKEND_SA_DEFAULT]: " BACKEND_SA_IN; \
-	BACKEND_SA_VAL="$${BACKEND_SA_IN:-$$BACKEND_SA_DEFAULT}"; \
-	FRONTEND_SERVICE_DEFAULT="$$(env_get FRONTEND_SERVICE)"; \
-	FRONTEND_SERVICE_DEFAULT="$${FRONTEND_SERVICE_DEFAULT:-$$DEFAULT_FRONTEND_SERVICE}"; \
-	read -r -p "FRONTEND_SERVICE [$$FRONTEND_SERVICE_DEFAULT]: " FRONTEND_SERVICE_IN; \
-	FRONTEND_SERVICE_VAL="$${FRONTEND_SERVICE_IN:-$$FRONTEND_SERVICE_DEFAULT}"; \
-	FRONTEND_SA_DEFAULT="$$(env_get FRONTEND_SA)"; \
-	if [ -z "$$FRONTEND_SA_DEFAULT" ]; then FRONTEND_SA_DEFAULT="gor-frontend-sa@$${GCP_PROJECT_VAL}.iam.gserviceaccount.com"; fi; \
-	read -r -p "FRONTEND_SA [$$FRONTEND_SA_DEFAULT]: " FRONTEND_SA_IN; \
-	FRONTEND_SA_VAL="$${FRONTEND_SA_IN:-$$FRONTEND_SA_DEFAULT}"; \
-	LOGIN_REQ_DEFAULT="$$(env_get GOOGLE_CLOUD_LOGIN_REQUESTED)"; \
-	LOGIN_REQ_DEFAULT="$${LOGIN_REQ_DEFAULT:-false}"; \
-	read -r -p "GOOGLE_CLOUD_LOGIN_REQUESTED (true/false) [$$LOGIN_REQ_DEFAULT]: " GOOGLE_CLOUD_LOGIN_REQUESTED_IN; \
-	GOOGLE_CLOUD_LOGIN_REQUESTED_VAL="$$(echo "$${GOOGLE_CLOUD_LOGIN_REQUESTED_IN:-$$LOGIN_REQ_DEFAULT}" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"; \
-	if [ "$$GOOGLE_CLOUD_LOGIN_REQUESTED_VAL" != "true" ]; then GOOGLE_CLOUD_LOGIN_REQUESTED_VAL="false"; fi; \
-	CLIENT_ID_DEFAULT="$$(env_get AUTH_GOOGLE_CLIENT_ID)"; \
-	read -r -p "AUTH_GOOGLE_CLIENT_ID [$$CLIENT_ID_DEFAULT]: " AUTH_GOOGLE_CLIENT_ID_IN; \
-	AUTH_GOOGLE_CLIENT_ID_VAL="$${AUTH_GOOGLE_CLIENT_ID_IN:-$$CLIENT_ID_DEFAULT}"; \
-	ALLOWED_EMAILS_DEFAULT="$$(env_get AUTH_ALLOWED_EMAILS)"; \
-	read -r -p "AUTH_ALLOWED_EMAILS (coma separada) [$$ALLOWED_EMAILS_DEFAULT]: " AUTH_ALLOWED_EMAILS_IN; \
-	AUTH_ALLOWED_EMAILS_VAL="$${AUTH_ALLOWED_EMAILS_IN:-$$ALLOWED_EMAILS_DEFAULT}"; \
-	STATE_BUCKET_DEFAULT="$$(env_get REPUTATION_STATE_BUCKET)"; \
-	if [ -z "$$STATE_BUCKET_DEFAULT" ]; then STATE_BUCKET_DEFAULT="$${GCP_PROJECT_VAL}-reputation-state"; fi; \
-	read -r -p "REPUTATION_STATE_BUCKET [$$STATE_BUCKET_DEFAULT]: " REPUTATION_STATE_BUCKET_IN; \
-	REPUTATION_STATE_BUCKET_VAL="$${REPUTATION_STATE_BUCKET_IN:-$$STATE_BUCKET_DEFAULT}"; \
-	REPUTATION_STATE_PREFIX_VAL="reputation-state"; \
-	if [ "$$GOOGLE_CLOUD_LOGIN_REQUESTED_VAL" = "true" ] && [ -z "$$AUTH_GOOGLE_CLIENT_ID_VAL" ]; then \
-		echo "Falta AUTH_GOOGLE_CLIENT_ID (required cuando GOOGLE_CLOUD_LOGIN_REQUESTED=true)."; \
-		exit 1; \
-	fi; \
-	if [ "$$GOOGLE_CLOUD_LOGIN_REQUESTED_VAL" = "true" ] && [ -z "$$AUTH_ALLOWED_EMAILS_VAL" ]; then \
-		echo "Falta AUTH_ALLOWED_EMAILS (required cuando GOOGLE_CLOUD_LOGIN_REQUESTED=true)."; \
-		exit 1; \
-	fi; \
-	if [ -z "$$REPUTATION_STATE_BUCKET_VAL" ]; then \
-		echo "Falta REPUTATION_STATE_BUCKET (persistencia durable requerida en Cloud Run)."; \
-		exit 1; \
-	fi; \
-	TMP_FILE="$$ENV_FILE.tmp"; \
-	grep -vE '^(GCP_PROJECT|GCP_REGION|BACKEND_SERVICE|BACKEND_SA|FRONTEND_SERVICE|FRONTEND_SA|GOOGLE_CLOUD_LOGIN_REQUESTED|AUTH_GOOGLE_CLIENT_ID|AUTH_ALLOWED_EMAILS|REPUTATION_STATE_BUCKET|REPUTATION_STATE_PREFIX)=' "$$ENV_FILE" > "$$TMP_FILE" || true; \
-	mv "$$TMP_FILE" "$$ENV_FILE"; \
-	{ printf '\n# --- Cloud Run (generated by make cloudrun-config) ---\n'; \
-		printf '%s\n' \
-			"GCP_PROJECT=$${GCP_PROJECT_VAL}" \
-			"GCP_REGION=$${GCP_REGION_VAL}" \
-			"BACKEND_SERVICE=$${BACKEND_SERVICE_VAL}" \
-			"BACKEND_SA=$${BACKEND_SA_VAL}" \
-			"FRONTEND_SERVICE=$${FRONTEND_SERVICE_VAL}" \
-			"FRONTEND_SA=$${FRONTEND_SA_VAL}" \
-			"GOOGLE_CLOUD_LOGIN_REQUESTED=$${GOOGLE_CLOUD_LOGIN_REQUESTED_VAL}" \
-			"AUTH_GOOGLE_CLIENT_ID=$${AUTH_GOOGLE_CLIENT_ID_VAL}" \
-			"AUTH_ALLOWED_EMAILS=$${AUTH_ALLOWED_EMAILS_VAL}" \
-			"REPUTATION_STATE_BUCKET=$${REPUTATION_STATE_BUCKET_VAL}" \
-			"REPUTATION_STATE_PREFIX=$${REPUTATION_STATE_PREFIX_VAL}"; \
-		} >> "$$ENV_FILE"; \
-		if [ "$$GOOGLE_CLOUD_LOGIN_REQUESTED_VAL" != "true" ]; then \
-			echo "INFO: Modo bypass activo. No se requiere clave admin adicional."; \
-		fi; \
-		echo "==> backend/reputation/cloudrun.env actualizado. Ahora puedes ejecutar: make deploy-cloudrun"
-
-cloudrun-env: ensure-cloudrun-env
-	@echo "==> Validando backend/reputation/cloudrun.env..."
-	@set -euo pipefail; \
-	ENV_FILE="backend/reputation/cloudrun.env"; \
-	env_get() { awk -F= -v k="$$1" '$$0 ~ ("^"k"=") {print substr($$0,index($$0,"=")+1)}' "$$ENV_FILE" | tail -n1; }; \
+	GCP_PROJECT_VAL="$$(env_get GCP_PROJECT)"; \
+	GCP_PROJECT_VAL="$${GCP_PROJECT_VAL:-$$DEFAULT_GCP_PROJECT}"; \
+	GCP_REGION_VAL="$$(env_get GCP_REGION)"; \
+	GCP_REGION_VAL="$${GCP_REGION_VAL:-$$DEFAULT_GCP_REGION}"; \
+	BACKEND_SERVICE_VAL="$$(env_get BACKEND_SERVICE)"; \
+	BACKEND_SERVICE_VAL="$${BACKEND_SERVICE_VAL:-$$DEFAULT_BACKEND_SERVICE}"; \
+	BACKEND_SA_VAL="$$(printf '%s' "$$(env_get BACKEND_SA)" | tr -d '\r')"; \
+	FRONTEND_SERVICE_VAL="$$(env_get FRONTEND_SERVICE)"; \
+	FRONTEND_SERVICE_VAL="$${FRONTEND_SERVICE_VAL:-$$DEFAULT_FRONTEND_SERVICE}"; \
 	LOGIN_REQUESTED_VAL="$$(env_get GOOGLE_CLOUD_LOGIN_REQUESTED)"; \
 	LOGIN_REQUESTED_VAL="$$(echo "$$LOGIN_REQUESTED_VAL" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"; \
 	if [ "$$LOGIN_REQUESTED_VAL" != "true" ]; then LOGIN_REQUESTED_VAL="false"; fi; \
@@ -324,7 +203,48 @@ cloudrun-env: ensure-cloudrun-env
 	CLIENT_ID_VAL="$$(printf '%s' "$$CLIENT_ID_VAL" | tr -d '\r')"; \
 	ALLOWED_EMAILS_VAL="$$(printf '%s' "$$ALLOWED_EMAILS_VAL" | tr -d '\r')"; \
 	STATE_BUCKET_VAL="$$(printf '%s' "$$STATE_BUCKET_VAL" | tr -d '\r')"; \
+	if [ -z "$$STATE_BUCKET_VAL" ]; then STATE_BUCKET_VAL="$${GCP_PROJECT_VAL}-reputation-state"; fi; \
+	FRONTEND_SA_VAL="$$(printf '%s' "$$(env_get FRONTEND_SA)" | tr -d '\r')"; \
+	if [ -z "$$FRONTEND_SA_VAL" ]; then FRONTEND_SA_VAL="gor-frontend-sa@$${GCP_PROJECT_VAL}.iam.gserviceaccount.com"; fi; \
+	if [ "$(CLOUDRUN_ENV_INTERACTIVE)" = "true" ] && [ -t 0 ] && [ -t 1 ]; then \
+		read -r -p "GCP_PROJECT [$$GCP_PROJECT_VAL]: " GCP_PROJECT_IN; \
+		GCP_PROJECT_VAL="$${GCP_PROJECT_IN:-$$GCP_PROJECT_VAL}"; \
+		read -r -p "GCP_REGION [$$GCP_REGION_VAL]: " GCP_REGION_IN; \
+		GCP_REGION_VAL="$${GCP_REGION_IN:-$$GCP_REGION_VAL}"; \
+		read -r -p "BACKEND_SERVICE [$$BACKEND_SERVICE_VAL]: " BACKEND_SERVICE_IN; \
+		BACKEND_SERVICE_VAL="$${BACKEND_SERVICE_IN:-$$BACKEND_SERVICE_VAL}"; \
+		read -r -p "BACKEND_SA (vacío => <projectNumber>-compute@developer.gserviceaccount.com) [$$BACKEND_SA_VAL]: " BACKEND_SA_IN; \
+		BACKEND_SA_VAL="$${BACKEND_SA_IN:-$$BACKEND_SA_VAL}"; \
+		read -r -p "FRONTEND_SERVICE [$$FRONTEND_SERVICE_VAL]: " FRONTEND_SERVICE_IN; \
+		FRONTEND_SERVICE_VAL="$${FRONTEND_SERVICE_IN:-$$FRONTEND_SERVICE_VAL}"; \
+		read -r -p "FRONTEND_SA [$$FRONTEND_SA_VAL]: " FRONTEND_SA_IN; \
+		FRONTEND_SA_VAL="$${FRONTEND_SA_IN:-$$FRONTEND_SA_VAL}"; \
+		read -r -p "GOOGLE_CLOUD_LOGIN_REQUESTED (true/false) [$$LOGIN_REQUESTED_VAL]: " LOGIN_REQUESTED_IN; \
+		LOGIN_REQUESTED_VAL="$$(echo "$${LOGIN_REQUESTED_IN:-$$LOGIN_REQUESTED_VAL}" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"; \
+		if [ "$$LOGIN_REQUESTED_VAL" != "true" ]; then LOGIN_REQUESTED_VAL="false"; fi; \
+		read -r -p "AUTH_GOOGLE_CLIENT_ID [$$CLIENT_ID_VAL]: " CLIENT_ID_IN; \
+		CLIENT_ID_VAL="$${CLIENT_ID_IN:-$$CLIENT_ID_VAL}"; \
+		read -r -p "AUTH_ALLOWED_EMAILS (coma separada) [$$ALLOWED_EMAILS_VAL]: " ALLOWED_EMAILS_IN; \
+		ALLOWED_EMAILS_VAL="$${ALLOWED_EMAILS_IN:-$$ALLOWED_EMAILS_VAL}"; \
+		read -r -p "REPUTATION_STATE_BUCKET [$$STATE_BUCKET_VAL]: " STATE_BUCKET_IN; \
+		STATE_BUCKET_VAL="$${STATE_BUCKET_IN:-$$STATE_BUCKET_VAL}"; \
+	else \
+		echo "==> Modo no interactivo: se reutiliza la configuración actual y solo se valida/normaliza."; \
+	fi; \
+	GCP_PROJECT_VAL="$$(printf '%s' "$$GCP_PROJECT_VAL" | tr -d '\r')"; \
+	GCP_REGION_VAL="$$(printf '%s' "$$GCP_REGION_VAL" | tr -d '\r')"; \
+	BACKEND_SERVICE_VAL="$$(printf '%s' "$$BACKEND_SERVICE_VAL" | tr -d '\r')"; \
+	BACKEND_SA_VAL="$$(printf '%s' "$$BACKEND_SA_VAL" | tr -d '\r')"; \
+	FRONTEND_SERVICE_VAL="$$(printf '%s' "$$FRONTEND_SERVICE_VAL" | tr -d '\r')"; \
+	FRONTEND_SA_VAL="$$(printf '%s' "$$FRONTEND_SA_VAL" | tr -d '\r')"; \
+	CLIENT_ID_VAL="$$(printf '%s' "$$CLIENT_ID_VAL" | tr -d '\r')"; \
+	ALLOWED_EMAILS_VAL="$$(printf '%s' "$$ALLOWED_EMAILS_VAL" | tr -d '\r')"; \
+	STATE_BUCKET_VAL="$$(printf '%s' "$$STATE_BUCKET_VAL" | tr -d '\r')"; \
 	STATE_PREFIX_VAL="reputation-state"; \
+	if [ -z "$$GCP_PROJECT_VAL" ] || [ -z "$$GCP_REGION_VAL" ] || [ -z "$$BACKEND_SERVICE_VAL" ] || [ -z "$$FRONTEND_SERVICE_VAL" ]; then \
+		echo "Faltan valores base de Cloud Run (GCP_PROJECT/GCP_REGION/BACKEND_SERVICE/FRONTEND_SERVICE)."; \
+		exit 1; \
+	fi; \
 	if [ -z "$$STATE_BUCKET_VAL" ]; then \
 		echo "Falta REPUTATION_STATE_BUCKET (ponlo en backend/reputation/cloudrun.env)."; \
 		exit 1; \
@@ -346,17 +266,23 @@ cloudrun-env: ensure-cloudrun-env
 		echo "INFO: GOOGLE_CLOUD_LOGIN_REQUESTED=false; el backend operara en modo bypass."; \
 	fi; \
 	TMP_FILE="$$ENV_FILE.tmp"; \
-	awk '$$0 !~ /^(AUTH_GOOGLE_CLIENT_ID|AUTH_ALLOWED_EMAILS|GOOGLE_CLOUD_LOGIN_REQUESTED|REPUTATION_STATE_BUCKET|REPUTATION_STATE_PREFIX)=/' "$$ENV_FILE" > "$$TMP_FILE"; \
+	grep -vE '^(GCP_PROJECT|GCP_REGION|BACKEND_SERVICE|BACKEND_SA|FRONTEND_SERVICE|FRONTEND_SA|GOOGLE_CLOUD_LOGIN_REQUESTED|AUTH_GOOGLE_CLIENT_ID|AUTH_ALLOWED_EMAILS|REPUTATION_STATE_BUCKET|REPUTATION_STATE_PREFIX)=' "$$ENV_FILE" > "$$TMP_FILE" || true; \
 	mv "$$TMP_FILE" "$$ENV_FILE"; \
-	{ printf '\n# --- Auth/Cloud Run (normalized by make cloudrun-env) ---\n'; \
+	{ printf '\n# --- Cloud Run (generated by make cloudrun-env) ---\n'; \
 		printf '%s\n' \
+			"GCP_PROJECT=$$GCP_PROJECT_VAL" \
+			"GCP_REGION=$$GCP_REGION_VAL" \
+			"BACKEND_SERVICE=$$BACKEND_SERVICE_VAL" \
+			"BACKEND_SA=$$BACKEND_SA_VAL" \
+			"FRONTEND_SERVICE=$$FRONTEND_SERVICE_VAL" \
+			"FRONTEND_SA=$$FRONTEND_SA_VAL" \
 			"GOOGLE_CLOUD_LOGIN_REQUESTED=$$LOGIN_REQUESTED_VAL"; \
 		if [ -n "$$CLIENT_ID_VAL" ]; then printf '%s\n' "AUTH_GOOGLE_CLIENT_ID=$$CLIENT_ID_VAL"; fi; \
 		if [ -n "$$ALLOWED_EMAILS_VAL" ]; then printf '%s\n' "AUTH_ALLOWED_EMAILS=$$ALLOWED_EMAILS_VAL"; fi; \
 		printf '%s\n' "REPUTATION_STATE_BUCKET=$$STATE_BUCKET_VAL"; \
 		printf '%s\n' "REPUTATION_STATE_PREFIX=$$STATE_PREFIX_VAL"; \
 	} >> "$$ENV_FILE"
-	@echo "==> cloudrun.env validado."
+	@echo "==> cloudrun.env configurado y validado."
 
 # -------------------------
 # Bundle backend data for container build
@@ -387,10 +313,11 @@ ensure-ar-writer:
 	echo "Si vuelve a fallar docker push, asegura: roles/artifactregistry.writer en el repo para $$BUILD_SA"; \
 	true
 
-deploy-cloudrun-back: cloudrun-env gcloud-impersonate ensure-ar-writer bundle-backend-data
-	@echo "==> Deploy backend en Cloud Run (Cloud Build -> Artifact Registry -> Cloud Run)..."
+deploy-cloudrun: cloudrun-env gcloud-impersonate ensure-ar-writer bundle-backend-data
+	@echo "==> Deploy backend + frontend en Cloud Run..."
 	@set -euo pipefail; \
 	ENV_FILE="backend/reputation/cloudrun.env"; \
+	test -f "$$ENV_FILE" || (echo "Falta $$ENV_FILE (ejecuta: make cloudrun-env)"; exit 1); \
 	env_get() { awk -F= -v k="$$1" '$$0 ~ ("^"k"=") {print substr($$0,index($$0,"=")+1)}' "$$ENV_FILE" | tail -n1; }; \
 	GCP_PROJECT="$${GCP_PROJECT:-$$(env_get GCP_PROJECT)}"; \
 	GCP_PROJECT="$${GCP_PROJECT:-global-overview-radar}"; \
@@ -398,6 +325,8 @@ deploy-cloudrun-back: cloudrun-env gcloud-impersonate ensure-ar-writer bundle-ba
 	GCP_REGION="$${GCP_REGION:-europe-southwest1}"; \
 	BACKEND_SERVICE="$${BACKEND_SERVICE:-$$(env_get BACKEND_SERVICE)}"; \
 	BACKEND_SERVICE="$${BACKEND_SERVICE:-gor-backend}"; \
+	FRONTEND_SERVICE="$${FRONTEND_SERVICE:-$$(env_get FRONTEND_SERVICE)}"; \
+	FRONTEND_SERVICE="$${FRONTEND_SERVICE:-gor-frontend}"; \
 	BACKEND_SA="$${BACKEND_SA:-$$(env_get BACKEND_SA)}"; \
 	if [ -z "$$BACKEND_SA" ]; then \
 		PROJECT_NUMBER=$$(gcloud projects describe "$$GCP_PROJECT" --format='value(projectNumber)'); \
@@ -408,8 +337,10 @@ deploy-cloudrun-back: cloudrun-env gcloud-impersonate ensure-ar-writer bundle-ba
 	echo "GCP_PROJECT=$$GCP_PROJECT"; \
 	echo "GCP_REGION=$$GCP_REGION"; \
 	echo "BACKEND_SERVICE=$$BACKEND_SERVICE"; \
-	echo "RUNTIME_SA=$$BACKEND_SA"; \
-	echo "IMAGE=$$IMAGE"; \
+	echo "FRONTEND_SERVICE=$$FRONTEND_SERVICE"; \
+	echo "BACKEND_RUNTIME_SA=$$BACKEND_SA"; \
+	echo "BACKEND_IMAGE=$$IMAGE"; \
+	echo "==> Deploy backend en Cloud Run (Cloud Build -> Artifact Registry -> Cloud Run)..."; \
 	gcloud builds submit . \
 		--project="$$GCP_PROJECT" --region="$$GCP_REGION" \
 		--config=cloudbuild-backend.yaml \
@@ -435,29 +366,16 @@ deploy-cloudrun-back: cloudrun-env gcloud-impersonate ensure-ar-writer bundle-ba
 		--region "$$GCP_REGION" \
 		--to-latest; \
 	echo "==> OK backend. Service URL:"; \
-	gcloud run services describe "$$BACKEND_SERVICE" --project "$$GCP_PROJECT" --region "$$GCP_REGION" --format 'value(status.url)'
-
-deploy-cloudrun-front: cloudrun-env gcloud-impersonate
-	@echo "==> Redeploy frontend en Cloud Run con MISMA imagen (solo cambia deployer SA)..."
-	@set -euo pipefail; \
-	ENV_FILE="backend/reputation/cloudrun.env"; \
-	test -f "$$ENV_FILE" || (echo "Falta $$ENV_FILE (ejecuta: make cloudrun-env)"; exit 1); \
-	env_get() { awk -F= -v k="$$1" '$$0 ~ ("^"k"=") {print substr($$0,index($$0,"=")+1)}' "$$ENV_FILE" | tail -n1; }; \
-	GCP_PROJECT="$${GCP_PROJECT:-$$(env_get GCP_PROJECT)}"; \
-	GCP_PROJECT="$${GCP_PROJECT:-global-overview-radar}"; \
-	GCP_REGION="$${GCP_REGION:-$$(env_get GCP_REGION)}"; \
-	GCP_REGION="$${GCP_REGION:-europe-southwest1}"; \
-	FRONTEND_SERVICE="$${FRONTEND_SERVICE:-$$(env_get FRONTEND_SERVICE)}"; \
-	FRONTEND_SERVICE="$${FRONTEND_SERVICE:-gor-frontend}"; \
+	gcloud run services describe "$$BACKEND_SERVICE" --project "$$GCP_PROJECT" --region "$$GCP_REGION" --format 'value(status.url)'; \
+	echo "==> Redeploy frontend en Cloud Run con su imagen actual..."; \
 	IMAGE_FRONT="$$(gcloud run services describe "$$FRONTEND_SERVICE" --project "$$GCP_PROJECT" --region "$$GCP_REGION" --format="value(spec.template.spec.containers[0].image)")"; \
 	RUNTIME_SA_FRONT="$$(gcloud run services describe "$$FRONTEND_SERVICE" --project "$$GCP_PROJECT" --region "$$GCP_REGION" --format="value(spec.template.spec.serviceAccountName)")"; \
 	if [ -z "$$IMAGE_FRONT" ] || [ -z "$$RUNTIME_SA_FRONT" ]; then \
 		echo "ERROR: No pude leer imagen/runtime SA del servicio $$FRONTEND_SERVICE"; \
 		exit 1; \
 	fi; \
-	echo "Frontend service: $$FRONTEND_SERVICE"; \
-	echo "Image: $$IMAGE_FRONT"; \
-	echo "Runtime SA: $$RUNTIME_SA_FRONT"; \
+	echo "FRONTEND_IMAGE=$$IMAGE_FRONT"; \
+	echo "FRONTEND_RUNTIME_SA=$$RUNTIME_SA_FRONT"; \
 	gcloud run deploy "$$FRONTEND_SERVICE" \
 		--project "$$GCP_PROJECT" \
 		--region "$$GCP_REGION" \
@@ -473,273 +391,94 @@ deploy-cloudrun-front: cloudrun-env gcloud-impersonate
 	echo "==> OK frontend. Service URL:"; \
 	gcloud run services describe "$$FRONTEND_SERVICE" --project "$$GCP_PROJECT" --region "$$GCP_REGION" --format 'value(status.url)'
 
-deploy-cloudrun: deploy-cloudrun-back deploy-cloudrun-front
-	@true
+run:
+	@if [ ! -x "$(PY)" ] || [ ! -d "$(FRONTDIR)/node_modules" ]; then \
+		echo "==> Dependencias ausentes. Ejecutando make install..."; \
+		$(MAKE) install; \
+	fi
+	@test -f backend/reputation/.env.reputation || cp backend/reputation/.env.reputation.example backend/reputation/.env.reputation
+	@test -f frontend/brr-frontend/.env.local || cp frontend/brr-frontend/.env.local.example frontend/brr-frontend/.env.local
+	@echo "==> Iniciando Global Overview Radar en ventana local..."
+	$(PY) scripts/run_local.py \
+		--host "$(HOST)" \
+		--api-port "$(API_PORT)" \
+		--front-port "$(FRONT_PORT)" \
+		--title "$(RUN_WINDOW_TITLE)" \
+		--width "$(RUN_WINDOW_WIDTH)" \
+		--height "$(RUN_WINDOW_HEIGHT)"
+
+kill:
+	@echo "==> Cerrando instancias activas de Global Overview Radar..."
+	@command -v python3 >/dev/null 2>&1 || { echo "ERROR: python3 no está disponible."; exit 1; }
+	@python3 scripts/kill_app.py
+
+build:
+	@if [ ! -x "$(PY)" ] || [ ! -d "$(FRONTDIR)/node_modules" ] || ! $(PY) -c "import PyInstaller, PIL" >/dev/null 2>&1; then \
+		echo "==> Dependencias de build ausentes. Ejecutando make install..."; \
+		$(MAKE) install; \
+	fi
+	@echo "==> Generando build de escritorio para el sistema actual..."
+	$(PY) scripts/build_desktop.py
 
 # -------------------------
-# Cloud Run remote ingest
-# -------------------------
-ingest-cloudrun: cloudrun-env
-	@set -euo pipefail; \
-	ENV_FILE="backend/reputation/cloudrun.env"; \
-	test -f "$$ENV_FILE" || (echo "Falta $$ENV_FILE (ejecuta: make cloudrun-env)"; exit 1); \
-	env_get() { awk -F= -v k="$$1" '$$0 ~ ("^"k"=") {print substr($$0,index($$0,"=")+1)}' "$$ENV_FILE" | tail -n1; }; \
-	GCP_PROJECT="$${GCP_PROJECT:-$$(env_get GCP_PROJECT)}"; \
-	GCP_PROJECT="$${GCP_PROJECT:-global-overview-radar}"; \
-	GCP_REGION="$${GCP_REGION:-$$(env_get GCP_REGION)}"; \
-	GCP_REGION="$${GCP_REGION:-europe-southwest1}"; \
-	BACKEND_SERVICE="$${BACKEND_SERVICE:-$$(env_get BACKEND_SERVICE)}"; \
-	BACKEND_SERVICE="$${BACKEND_SERVICE:-gor-backend}"; \
-	LOGIN_REQUESTED_VAL="$$(env_get GOOGLE_CLOUD_LOGIN_REQUESTED)"; \
-	LOGIN_REQUESTED_VAL=$$(echo "$$LOGIN_REQUESTED_VAL" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]'); \
-	if [ "$$LOGIN_REQUESTED_VAL" != "true" ]; then LOGIN_REQUESTED_VAL="false"; fi; \
-	CLIENT_ID_VAL="$$(env_get AUTH_GOOGLE_CLIENT_ID)"; \
-	CLIENT_ID_VAL=$$(printf '%s' "$$CLIENT_ID_VAL" | tr -d '\r'); \
-	echo "==> Lanzando ingesta remota en Cloud Run ($$BACKEND_SERVICE)..."; \
-	CALLER_SERVICE_ACCOUNT_VAL="$${CALLER_SERVICE_ACCOUNT:-$(DEPLOY_SA)}"; \
-	if [ "$$LOGIN_REQUESTED_VAL" = "true" ]; then \
-		if [ -z "$$CLIENT_ID_VAL" ]; then \
-			echo "Falta AUTH_GOOGLE_CLIENT_ID (ponlo en backend/reputation/cloudrun.env)."; \
-			exit 1; \
-		fi; \
-		if ! echo "$$CLIENT_ID_VAL" | grep -q '\\.apps\\.googleusercontent\\.com$$'; then \
-			echo "ERROR: AUTH_GOOGLE_CLIENT_ID debe ser un OAuth Client ID (termina en .apps.googleusercontent.com). Valor actual: $$CLIENT_ID_VAL"; \
-			exit 1; \
-		fi; \
-	fi; \
-	BACKEND_URL=$$(gcloud run services describe "$$BACKEND_SERVICE" --project "$$GCP_PROJECT" --region "$$GCP_REGION" --format 'value(status.url)'); \
-	if [ -z "$$BACKEND_URL" ]; then \
-		echo "No se pudo obtener BACKEND_URL. Verifica deploy del backend y permisos."; \
-		exit 1; \
-	fi; \
-	TOKEN_FLAGS=(); \
-	if [ -n "$$CALLER_SERVICE_ACCOUNT_VAL" ]; then \
-		TOKEN_FLAGS+=(--impersonate-service-account "$$CALLER_SERVICE_ACCOUNT_VAL"); \
-		echo "Usando impersonacion SA: $$CALLER_SERVICE_ACCOUNT_VAL"; \
-	fi; \
-	RUN_TOKEN=$$(gcloud auth print-identity-token "$${TOKEN_FLAGS[@]}" --audiences="$$BACKEND_URL"); \
-	USER_TOKEN=""; \
-	if [ "$$LOGIN_REQUESTED_VAL" = "true" ]; then \
-		USER_TOKEN=$$(gcloud auth print-identity-token "$${TOKEN_FLAGS[@]}" --audiences="$$CLIENT_ID_VAL" --include-email); \
-	fi; \
-	PAYLOAD="{\"force\":$(INGEST_FORCE),\"all_sources\":$(INGEST_ALL_SOURCES)}"; \
-	CURL_HEADERS=(-H "Authorization: Bearer $$RUN_TOKEN"); \
-	if [ -n "$$USER_TOKEN" ]; then CURL_HEADERS+=(-H "x-user-id-token: $$USER_TOKEN"); fi; \
-	RESPONSE=$$(curl -sS -f -X POST "$$BACKEND_URL/ingest/reputation" \
-		"$${CURL_HEADERS[@]}" \
-		-H "Content-Type: application/json" \
-		-d "$$PAYLOAD"); \
-	JOB_ID=$$(printf '%s' "$$RESPONSE" | python3 -c 'import json,sys; print((json.loads(sys.stdin.read() or "{}")).get("id",""))'); \
-	if [ -z "$$JOB_ID" ]; then \
-		echo "No se recibio job id. Respuesta:"; \
-		echo "$$RESPONSE"; \
-		exit 1; \
-	fi; \
-	echo "Ingest job id: $$JOB_ID"; \
-	ATTEMPT=1; \
-	while [ "$$ATTEMPT" -le "$(INGEST_POLL_ATTEMPTS)" ]; do \
-		JOB=$$(curl -sS -f "$$BACKEND_URL/ingest/jobs/$$JOB_ID" \
-			"$${CURL_HEADERS[@]}"); \
-		STATUS=$$(printf '%s' "$$JOB" | python3 -c 'import json,sys; print((json.loads(sys.stdin.read() or "{}")).get("status",""))'); \
-		PROGRESS=$$(printf '%s' "$$JOB" | python3 -c 'import json,sys; print((json.loads(sys.stdin.read() or "{}")).get("progress",""))'); \
-		STAGE=$$(printf '%s' "$$JOB" | python3 -c 'import json,sys; print((json.loads(sys.stdin.read() or "{}")).get("stage",""))'); \
-		echo "[$$ATTEMPT/$(INGEST_POLL_ATTEMPTS)] status=$$STATUS progress=$$PROGRESS stage=$$STAGE"; \
-		if [ "$$STATUS" = "success" ]; then \
-			echo "==> Ingesta completada."; \
-			echo "$$JOB"; \
-			exit 0; \
-		fi; \
-		if [ "$$STATUS" = "error" ]; then \
-			echo "==> Ingesta fallida."; \
-			echo "$$JOB"; \
-			exit 1; \
-		fi; \
-		ATTEMPT=$$((ATTEMPT + 1)); \
-		sleep $(INGEST_POLL_SECONDS); \
-	done; \
-	echo "Timeout esperando la ingesta remota."; \
-	exit 1
-
-# -------------------------
-# Backend runtime (local)
-# -------------------------
-ingest: reputation-ingest
-	@echo "==> Ingesta reputacional finalizada."
-
-reputation-ingest:
-	@echo "==> Ejecutando ingesta de reputación..."
-	$(PY) -m reputation.cli --all-sources
-
-ingest-filtered: reputation-ingest-filtered
-	@echo "==> Ingesta reputacional finalizada."
-
-reputation-ingest-filtered:
-	@echo "==> Ejecutando ingesta de reputación (toggles .env.reputation)..."
-	$(PY) -m reputation.cli
-
-serve: serve-back
-	@true
-
-serve-back:
-	@echo "==> Iniciando API (uvicorn) en http://$(HOST):$(API_PORT)..."
-	$(PY) -m uvicorn reputation.api.main:app --reload --host $(HOST) --port $(API_PORT)
-
-dev-back:
-	@echo "==> Desarrollo backend (uvicorn --reload). Usa otra terminal para frontend."
-	$(PY) -m uvicorn reputation.api.main:app --reload --host $(HOST) --port $(API_PORT)
-
-# -------------------------
-# Frontend runtime (local)
-# -------------------------
-dev-front:
-	@echo "==> Iniciando frontend (Next dev) en http://localhost:$(FRONT_PORT)..."
-	cd $(FRONTDIR) && $(NPM) run dev
-
-build-front:
-	@echo "==> Build de frontend (production)..."
-	cd $(FRONTDIR) && $(NPM) run build
-
-start-front:
-	@echo "==> Iniciando frontend en modo producción (next start)..."
-	cd $(FRONTDIR) && $(NPM) run start
-
-# -------------------------
-# Lint / Format / Typecheck
-# -------------------------
-format: format-back format-front
-
-format-back:
-	@echo "==> Format backend (ruff format)..."
-	$(PY) -m ruff format .
-
-format-front:
-	@echo "==> Format frontend (prettier / eslint --fix si configurado)..."
-	cd $(FRONTDIR) && $(NPM) run lint -- --fix || true
-
-lint: lint-back lint-front
-
-lint-back:
-	@echo "==> Lint backend (ruff check)..."
-	$(PY) -m ruff check .
-
-lint-front:
-	@echo "==> Lint frontend (eslint)..."
-	cd $(FRONTDIR) && $(NPM) run lint
-
-typecheck: typecheck-back typecheck-front
-
-typecheck-back:
-	@echo "==> Typecheck backend (mypy + pyright)..."
-	$(PY) -m mypy --config-file backend/pyproject.toml backend
-	$(PY) -m pyright
-
-typecheck-front:
-	@echo "==> Typecheck frontend (tsc --noEmit)..."
-	cd $(FRONTDIR) && npx tsc --noEmit
-
-check: format lint typecheck
-
-# -------------------------
-# CodeQL (SAST)
+# Calidad / CI local
 # -------------------------
 CODEQL ?= codeql
 CODEQL_DIR ?= .codeql
 CODEQL_DB_DIR ?= $(CODEQL_DIR)/db
 CODEQL_RESULTS_DIR ?= $(CODEQL_DIR)/results
 CODEQL_THREADS ?= 0
-
 CODEQL_PY_QUERIES ?= codeql/python-queries
 CODEQL_JS_QUERIES ?= codeql/javascript-queries
 CODEQL_JS_SOURCE_ROOT ?= $(FRONTDIR)/src
-CODEQL_JS_COMMAND ?=
 
-codeql: codeql-python codeql-js
-	@echo "==> CodeQL completado. Resultados en $(CODEQL_RESULTS_DIR)/"
+ci:
+	@echo "==> Ejecutando validaciones locales..."
+	$(PY) -m ruff format --check .
+	$(PY) -m ruff check .
+	cd $(FRONTDIR) && $(NPM) run lint
+	$(PY) -m mypy --config-file backend/pyproject.toml backend
+	$(PY) -m pyright backend
+	cd $(FRONTDIR) && npx tsc --noEmit
+	@$(MAKE) _ci-codeql
+	@echo "==> CI local completada."
 
-codeql-install:
+_ci-codeql:
 	@set -euo pipefail; \
-	if command -v "$(CODEQL)" >/dev/null 2>&1; then \
-		echo "==> CodeQL CLI ya esta instalado: $$(command -v "$(CODEQL)")"; \
+	if ! command -v "$(CODEQL)" >/dev/null 2>&1; then \
+		echo "==> CodeQL CLI no encontrado. Se omite el análisis SAST en make ci."; \
 		exit 0; \
 	fi; \
-	if command -v brew >/dev/null 2>&1; then \
-		echo "==> Instalando CodeQL CLI via Homebrew..."; \
-		brew install codeql; \
-		exit 0; \
-	fi; \
-	echo "ERROR: CodeQL CLI no encontrado. Instala 'codeql' (macOS: brew install codeql)." >&2; \
-	exit 1
-
-codeql-python:
-	@echo "==> CodeQL (python)..."
-	@command -v $(CODEQL) >/dev/null 2>&1 || (echo "ERROR: falta CodeQL CLI. Ejecuta: make codeql-install (o brew install codeql)"; exit 1)
-	@mkdir -p $(CODEQL_DB_DIR) $(CODEQL_RESULTS_DIR)
-	@$(CODEQL) database create "$(CODEQL_DB_DIR)/python" \
+	echo "==> Ejecutando CodeQL local..."; \
+	rm -rf "$(CODEQL_DB_DIR)/python" "$(CODEQL_DB_DIR)/javascript-typescript"; \
+	mkdir -p "$(CODEQL_DB_DIR)" "$(CODEQL_RESULTS_DIR)"; \
+	"$(CODEQL)" database create "$(CODEQL_DB_DIR)/python" \
 		--language=python \
 		--source-root=backend \
-		--overwrite
-	@$(CODEQL) database analyze "$(CODEQL_DB_DIR)/python" "$(CODEQL_PY_QUERIES)" \
+		--overwrite; \
+	"$(CODEQL)" database analyze "$(CODEQL_DB_DIR)/python" "$(CODEQL_PY_QUERIES)" \
 		--format=sarif-latest \
 		--output="$(CODEQL_RESULTS_DIR)/codeql-python.sarif" \
 		--sarif-category=python \
 		--threads="$(CODEQL_THREADS)" \
-		--download
-
-codeql-js:
-	@echo "==> CodeQL (javascript-typescript)..."
-	@command -v $(CODEQL) >/dev/null 2>&1 || (echo "ERROR: falta CodeQL CLI. Ejecuta: make codeql-install (o brew install codeql)"; exit 1)
-	@mkdir -p $(CODEQL_DB_DIR) $(CODEQL_RESULTS_DIR)
-	@if [ ! -d "$(FRONTDIR)/node_modules" ]; then \
-		echo "==> node_modules no encontrado. Instalando frontend..."; \
-		$(MAKE) install-front; \
-	fi
-	@if [ -n "$(CODEQL_JS_COMMAND)" ]; then \
-		echo "==> Creando DB JS/TS con build command: $(CODEQL_JS_COMMAND)"; \
-		$(CODEQL) database create "$(CODEQL_DB_DIR)/javascript-typescript" \
-			--language=javascript-typescript \
-			--source-root="$(CODEQL_JS_SOURCE_ROOT)" \
-			--command="$(CODEQL_JS_COMMAND)" \
-			--overwrite; \
-	else \
-		$(CODEQL) database create "$(CODEQL_DB_DIR)/javascript-typescript" \
-			--language=javascript-typescript \
-			--source-root="$(CODEQL_JS_SOURCE_ROOT)" \
-			--overwrite; \
-	fi
-	@$(CODEQL) database analyze "$(CODEQL_DB_DIR)/javascript-typescript" "$(CODEQL_JS_QUERIES)" \
+		--download; \
+	"$(CODEQL)" database create "$(CODEQL_DB_DIR)/javascript-typescript" \
+		--language=javascript-typescript \
+		--source-root="$(CODEQL_JS_SOURCE_ROOT)" \
+		--overwrite; \
+	"$(CODEQL)" database analyze "$(CODEQL_DB_DIR)/javascript-typescript" "$(CODEQL_JS_QUERIES)" \
 		--format=sarif-latest \
 		--output="$(CODEQL_RESULTS_DIR)/codeql-javascript-typescript.sarif" \
 		--sarif-category=javascript-typescript \
 		--threads="$(CODEQL_THREADS)" \
 		--download
 
-codeql-clean:
-	@echo "==> Eliminando artefactos CodeQL ($(CODEQL_DIR))..."
-	@rm -rf "$(CODEQL_DIR)"
-
 # -------------------------
 # Tests
 # -------------------------
-test:
-	@echo "==> Ejecutando tests backend + frontend..."
-	@$(MAKE) test-back
-	@$(MAKE) test-front
-
-test-back:
-	@echo "==> Tests backend (pytest + cobertura)..."
-	$(PY) -m pytest
-
-test-front:
-	@echo "==> Tests frontend (vitest)..."
-	cd $(FRONTDIR) && CI=1 $(NPM) run test
-
-test-coverage: test-coverage-back test-coverage-front
-
-test-coverage-back:
+test-coverage:
 	@echo "==> Cobertura backend (pytest-cov >=70%)..."
 	$(PY) -m pytest
-
-test-coverage-front:
 	@echo "==> Cobertura frontend (vitest >=70%)..."
 	cd $(FRONTDIR) && $(NPM) run test:coverage
 
@@ -747,47 +486,24 @@ test-coverage-front:
 # Benchmarks / Visual QA
 # -------------------------
 bench:
+	@mkdir -p $(BENCH_DIR)
 	@echo "==> Benchmark backend..."
-	@mkdir -p $(BENCH_DIR)
-	$(PY) scripts/bench_backend.py --iterations $(BENCH_ITERATIONS) --warmup $(BENCH_WARMUP) --json $(BENCH_OUT_BACK) --baseline $(BENCH_BASELINE_BACK) --max-regression $(BENCH_MAX_REGRESSION)
-
-bench-baseline:
-	@echo "==> Generando baseline de benchmark..."
-	@mkdir -p $(BENCH_DIR)
-	$(PY) scripts/bench_backend.py --iterations $(BENCH_ITERATIONS) --warmup $(BENCH_WARMUP) --json $(BENCH_BASELINE_BACK)
-
-bench-ingest:
+	@if [ ! -f "$(BENCH_BASELINE_BACK)" ]; then \
+		echo "==> Baseline backend no encontrada. Creando $(BENCH_BASELINE_BACK)..."; \
+		$(PY) scripts/bench_backend.py --iterations $(BENCH_ITERATIONS) --warmup $(BENCH_WARMUP) --json $(BENCH_BASELINE_BACK); \
+	else \
+		echo "==> Baseline backend encontrada. Comparando contra $(BENCH_BASELINE_BACK)..."; \
+		$(PY) scripts/bench_backend.py --iterations $(BENCH_ITERATIONS) --warmup $(BENCH_WARMUP) --json $(BENCH_OUT_BACK) --baseline $(BENCH_BASELINE_BACK) --max-regression $(BENCH_MAX_REGRESSION); \
+	fi
 	@echo "==> Benchmark de ingesta..."
-	@mkdir -p $(BENCH_DIR)
-	$(PY) scripts/bench_ingest.py --iterations $(BENCH_ITERATIONS) --warmup $(BENCH_WARMUP) --json $(BENCH_OUT_INGEST) --baseline $(BENCH_BASELINE_INGEST) --max-regression $(BENCH_MAX_REGRESSION)
-
-bench-ingest-baseline:
-	@echo "==> Generando baseline de benchmark de ingesta..."
-	@mkdir -p $(BENCH_DIR)
-	$(PY) scripts/bench_ingest.py --iterations $(BENCH_ITERATIONS) --warmup $(BENCH_WARMUP) --json $(BENCH_BASELINE_INGEST)
+	@if [ ! -f "$(BENCH_BASELINE_INGEST)" ]; then \
+		echo "==> Baseline de ingesta no encontrada. Creando $(BENCH_BASELINE_INGEST)..."; \
+		$(PY) scripts/bench_ingest.py --iterations $(BENCH_ITERATIONS) --warmup $(BENCH_WARMUP) --json $(BENCH_BASELINE_INGEST); \
+	else \
+		echo "==> Baseline de ingesta encontrada. Comparando contra $(BENCH_BASELINE_INGEST)..."; \
+		$(PY) scripts/bench_ingest.py --iterations $(BENCH_ITERATIONS) --warmup $(BENCH_WARMUP) --json $(BENCH_OUT_INGEST) --baseline $(BENCH_BASELINE_INGEST) --max-regression $(BENCH_MAX_REGRESSION); \
+	fi
 
 visual-qa:
 	@echo "==> Visual QA mobile..."
 	VISUAL_QA_URL=$(VISUAL_QA_URL) VISUAL_QA_OUT=$(VISUAL_QA_OUT) bash scripts/visual-qa.sh
-
-# -------------------------
-# Limpieza
-# -------------------------
-clean:
-	@echo "==> Limpiando entorno..."
-	rm -rf $(VENV) .mypy_cache .ruff_cache .pytest_cache
-	@find . -type d -name __pycache__ -prune -exec rm -rf {} + 2>/dev/null || true
-	@find . -type f \( -name '*.pyc' -o -name '*.pyo' \) -delete 2>/dev/null || true
-	cd $(FRONTDIR) && rm -rf node_modules .next dist out || true
-	@echo "==> Limpieza completada."
-
-reset: clean install
-	@echo "==> Reset completo finalizado."
-
-dev:
-	@echo "==> Para desarrollo fullstack abre 2 terminales y ejecuta:"
-	@echo "- Terminal A: make dev-back"
-	@echo "- Terminal B: make dev-front"
-	@echo ""
-	@echo "Si quieres hacerlo todo en un solo terminal instala 'concurrently' y ejecuta:"
-	@echo "cd $(FRONTDIR) && npx concurrently \"$(PY) -m uvicorn reputation.api.main:app --reload --host $(HOST) --port $(API_PORT)\" \"npm run dev\""

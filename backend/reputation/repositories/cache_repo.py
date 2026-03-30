@@ -9,7 +9,7 @@ from typing import Optional
 from pydantic import ValidationError
 
 from reputation.actors import build_actor_alias_map, canonicalize_actor
-from reputation.config import REPO_ROOT
+from reputation.config import REPO_ROOT, settings
 from reputation.models import ReputationCacheDocument
 from reputation.state_store import state_store_enabled, sync_from_state, sync_to_state
 
@@ -44,7 +44,12 @@ class ReputationCacheRepo:
         # `data/reputation/config.json` si está disponible. Este fichero
         # contiene la sección `otros_actores_aliases` con la forma:
         # { "CanonicalName": ["alias1", "alias2"] }
-        config_file = REPO_ROOT / "data" / "reputation" / "config.json"
+        config_root = settings.config_path
+        config_file = (
+            config_root / "config.json"
+            if config_root.is_dir()
+            else config_root.parent / "config.json"
+        )
         if state_store_enabled():
             sync_from_state(config_file, repo_root=REPO_ROOT)
         alias_map: dict[str, str] = {}
