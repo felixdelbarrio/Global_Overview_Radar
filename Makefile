@@ -33,6 +33,7 @@ RUN_WINDOW_TITLE ?= Global Overview Radar
 RUN_WINDOW_WIDTH ?= 1600
 RUN_WINDOW_HEIGHT ?= 1000
 APPLE_DISTRIBUTION ?= auto
+NODE_RUNTIME_SOURCE ?= auto
 
 # --- Cloud Run knobs (non-secret) ---
 BACKEND_MAX_INSTANCES ?= 1
@@ -87,6 +88,7 @@ help:
 	@echo "  make clean           - Eliminar venv, caches, node_modules (frontend)"
 	@echo "  make build           - Generar la build de escritorio para el sistema actual (macOS o Linux)"
 	@echo "                         Apple opcional: APPLE_DISTRIBUTION=auto|required|off (default: auto)"
+	@echo "                         Node runtime: NODE_RUNTIME_SOURCE=auto|download|local (default: auto)"
 	@echo "  make run             - Levantar backend + frontend y abrir el frontend en una ventana contenedora"
 	@echo "  make kill            - Cerrar cualquier instancia activa registrada de la aplicación"
 	@echo "  make ci              - Ejecutar format-check, lint, typecheck y CodeQL local si está disponible"
@@ -437,7 +439,7 @@ build:
 		$(MAKE) install; \
 	fi
 	@echo "==> Generando build de escritorio para el sistema actual..."
-	$(PY) scripts/build_desktop.py --apple-distribution "$(APPLE_DISTRIBUTION)"
+	$(PY) scripts/build_desktop.py --apple-distribution "$(APPLE_DISTRIBUTION)" --node-runtime-source "$(NODE_RUNTIME_SOURCE)"
 
 # -------------------------
 # Calidad / CI local

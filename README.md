@@ -87,6 +87,10 @@ On macOS, Apple distribution is optional and non-blocking by default:
 - `APPLE_DISTRIBUTION=required`: requires Apple credentials and fails if missing.
 - `APPLE_DISTRIBUTION=off`: disables signing/notarization.
 - Optional env vars when available: `APPLE_SIGN_IDENTITY` and `APPLE_NOTARY_PROFILE`.
+Node runtime packaging mode:
+- `NODE_RUNTIME_SOURCE=auto` (default): tries Node official download and falls back to local `node` if blocked (corporate SSL/proxy).
+- `NODE_RUNTIME_SOURCE=download`: requires official download.
+- `NODE_RUNTIME_SOURCE=local`: always embeds local `node`.
 
 Quality and coverage:
 ```bash
@@ -113,6 +117,10 @@ En macOS, la distribución Apple es opcional y no bloqueante por defecto:
 - `APPLE_DISTRIBUTION=required`: exige credenciales Apple y falla si faltan.
 - `APPLE_DISTRIBUTION=off`: desactiva firma/notarización.
 - Variables opcionales cuando estén disponibles: `APPLE_SIGN_IDENTITY` y `APPLE_NOTARY_PROFILE`.
+Modo de empaquetado del runtime de Node:
+- `NODE_RUNTIME_SOURCE=auto` (default): intenta descarga oficial de Node y, si falla (SSL/proxy corporativo), usa `node` local.
+- `NODE_RUNTIME_SOURCE=download`: exige descarga oficial.
+- `NODE_RUNTIME_SOURCE=local`: usa siempre `node` local.
 
 Calidad y cobertura:
 ```bash

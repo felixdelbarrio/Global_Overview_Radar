@@ -4,9 +4,11 @@ import argparse
 import os
 import platform
 import shutil
+import ssl
 import subprocess
 import sys
 import tarfile
+import urllib.error
 import urllib.request
 import zipfile
 from dataclasses import dataclass
@@ -43,6 +45,11 @@ def parse_args() -> argparse.Namespace:
     )
     if apple_distribution_default not in {"auto", "required", "off"}:
         apple_distribution_default = "auto"
+    node_runtime_source_default = (
+        os.environ.get("NODE_RUNTIME_SOURCE", "auto").strip().lower()
+    )
+    if node_runtime_source_default not in {"auto", "download", "local"}:
+        node_runtime_source_default = "auto"
 
     parser = argparse.ArgumentParser(
         description="Build desktop artifacts for Global Overview Radar."
@@ -57,6 +64,17 @@ def parse_args() -> argparse.Namespace:
             "auto: intenta firmar/notarizar si hay credenciales, "
             "required: exige credenciales y falla si falta algo, "
             "off: omite firma/notarización."
+        ),
+    )
+    parser.add_argument(
+        "--node-runtime-source",
+        choices=("auto", "download", "local"),
+        default=node_runtime_source_default,
+        help=(
+            "Origen del binario de Node embebido. "
+            "auto: intenta descarga oficial y hace fallback a node local si falla; "
+            "download: exige descarga oficial; "
+            "local: usa siempre node local."
         ),
     )
     return parser.parse_args()
@@ -223,28 +241,80 @@ def stage_assets(stage_root: Path) -> Path:
 
 
 def stage_node_runtime(stage_root: Path) -> Path:
+    return stage_node_runtime_with_mode(stage_root, mode="auto")
+
+
+def local_node_binary_path() -> Path:
     if not shutil.which("node"):
         raise RuntimeError("No se encontró 'node' en PATH.")
-    url, filename, binary_relpath = node_distribution()
-    downloads_root = BUILD_ROOT / "downloads"
-    archive_path = downloads_root / filename
-    extract_root = downloads_root / "unpacked"
-    if not archive_path.exists():
-        download_file(url, archive_path)
-    shutil.rmtree(extract_root, ignore_errors=True)
-    extract_archive(archive_path, extract_root)
-    resolved_node = extract_root / binary_relpath
-    if not resolved_node.exists():
-        raise RuntimeError(
-            f"No se encontró el binario de Node extraído en {resolved_node}"
-        )
+    process_exec_path = Path(command_output(["node", "-p", "process.execPath"]))
+    if process_exec_path.exists():
+        return process_exec_path
+    which_path = shutil.which("node")
+    if which_path:
+        return Path(which_path).resolve()
+    raise RuntimeError("No se pudo resolver el binario local de Node.")
+
+
+def _copy_node_binary(source: Path, destination: Path) -> Path:
+    copy_file(source, destination)
+    destination.chmod(destination.stat().st_mode | 0o111)
+    return destination
+
+
+def stage_node_runtime_with_mode(stage_root: Path, mode: str) -> Path:
+    if mode not in {"auto", "download", "local"}:
+        raise RuntimeError(f"Modo de runtime Node no soportado: {mode}")
+
     runtime_root = stage_root / "app" / "runtime"
     runtime_root.mkdir(parents=True, exist_ok=True)
     node_name = "node.exe" if os.name == "nt" else "node"
     destination = runtime_root / node_name
-    copy_file(resolved_node, destination)
-    destination.chmod(destination.stat().st_mode | 0o111)
-    return destination
+
+    def use_local_node(reason: str | None = None) -> Path:
+        if reason:
+            print(f"==> WARN: {reason}", flush=True)
+        local_node = local_node_binary_path()
+        print(f"==> Usando Node local para runtime: {local_node}", flush=True)
+        return _copy_node_binary(local_node, destination)
+
+    if mode == "local":
+        return use_local_node()
+
+    try:
+        url, filename, binary_relpath = node_distribution()
+        downloads_root = BUILD_ROOT / "downloads"
+        archive_path = downloads_root / filename
+        extract_root = downloads_root / "unpacked"
+        if not archive_path.exists():
+            download_file(url, archive_path)
+        shutil.rmtree(extract_root, ignore_errors=True)
+        extract_archive(archive_path, extract_root)
+        resolved_node = extract_root / binary_relpath
+        if not resolved_node.exists():
+            raise RuntimeError(
+                f"No se encontró el binario de Node extraído en {resolved_node}"
+            )
+        print(f"==> Usando Node runtime descargado: {resolved_node}", flush=True)
+        return _copy_node_binary(resolved_node, destination)
+    except (
+        urllib.error.URLError,
+        ssl.SSLError,
+        OSError,
+        RuntimeError,
+        tarfile.TarError,
+        zipfile.BadZipFile,
+        subprocess.CalledProcessError,
+    ) as error:
+        if mode == "download":
+            raise RuntimeError(
+                "No se pudo preparar runtime Node desde distribución oficial "
+                f"(modo download): {error}"
+            ) from error
+        return use_local_node(
+            "Fallo al preparar Node desde distribución oficial; "
+            f"se usa fallback local ({error})."
+        )
 
 
 def artifact_executable_path() -> Path:
@@ -387,9 +457,7 @@ def maybe_apply_apple_distribution(app_bundle: Path, mode: str) -> None:
     print("==> Firma macOS completada.", flush=True)
 
     if not config.notary_profile:
-        message = (
-            "APPLE_NOTARY_PROFILE no informado; se omite notarización y stapling."
-        )
+        message = "APPLE_NOTARY_PROFILE no informado; se omite notarización y stapling."
         if required:
             raise RuntimeError(message)
         print(f"==> {message}", flush=True)
@@ -461,7 +529,7 @@ def main() -> int:
     frontend_stage = stage_frontend(stage_root)
     seed_stage = stage_seed(stage_root)
     assets_stage = stage_assets(stage_root)
-    node_stage = stage_node_runtime(stage_root)
+    node_stage = stage_node_runtime_with_mode(stage_root, args.node_runtime_source)
 
     pyinstaller_args = [
         str(ROOT_DIR / "scripts" / "desktop_app.py"),
