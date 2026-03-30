@@ -9,6 +9,7 @@ import sys
 import tarfile
 import urllib.request
 import zipfile
+from dataclasses import dataclass
 from pathlib import Path
 
 from PyInstaller import __main__ as pyinstaller
@@ -22,17 +23,42 @@ from app_icon import (
 
 APP_NAME = "GlobalOverviewRadar"
 ARCHIVE_PREFIX = "global-overview-radar"
+APPLE_BUNDLE_IDENTIFIER = "com.felixdelbarrio.globaloverviewradar"
 ROOT_DIR = Path(__file__).resolve().parent.parent
 FRONT_DIR = ROOT_DIR / "frontend" / "brr-frontend"
 BUILD_ROOT = ROOT_DIR / "build" / "desktop"
 DIST_ROOT = ROOT_DIR / "dist"
 
 
+@dataclass(frozen=True)
+class AppleDistributionConfig:
+    mode: str
+    sign_identity: str | None
+    notary_profile: str | None
+
+
 def parse_args() -> argparse.Namespace:
+    apple_distribution_default = (
+        os.environ.get("APPLE_DISTRIBUTION", "auto").strip().lower()
+    )
+    if apple_distribution_default not in {"auto", "required", "off"}:
+        apple_distribution_default = "auto"
+
     parser = argparse.ArgumentParser(
         description="Build desktop artifacts for Global Overview Radar."
     )
     parser.add_argument("--skip-smoke-test", action="store_true")
+    parser.add_argument(
+        "--apple-distribution",
+        choices=("auto", "required", "off"),
+        default=apple_distribution_default,
+        help=(
+            "Controla la distribución Apple en macOS. "
+            "auto: intenta firmar/notarizar si hay credenciales, "
+            "required: exige credenciales y falla si falta algo, "
+            "off: omite firma/notarización."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -71,6 +97,10 @@ def run(
 
 def command_output(command: list[str]) -> str:
     return subprocess.check_output(command, text=True).strip()
+
+
+def command_exists(command: str) -> bool:
+    return shutil.which(command) is not None
 
 
 def copy_tree(source: Path, destination: Path) -> None:
@@ -260,6 +290,149 @@ def pyinstaller_icon_path() -> Path | None:
     return None
 
 
+def env_value(name: str) -> str | None:
+    value = os.environ.get(name, "").strip()
+    return value if value else None
+
+
+def apple_distribution_config(mode: str) -> AppleDistributionConfig:
+    return AppleDistributionConfig(
+        mode=mode,
+        sign_identity=env_value("APPLE_SIGN_IDENTITY"),
+        notary_profile=env_value("APPLE_NOTARY_PROFILE"),
+    )
+
+
+def create_notary_submission_archive(app_bundle: Path) -> Path:
+    archive_base = BUILD_ROOT / "apple-notary-submission"
+    archive_path = Path(f"{archive_base}.zip")
+    if archive_path.exists():
+        archive_path.unlink()
+    generated = shutil.make_archive(
+        str(archive_base),
+        "zip",
+        root_dir=app_bundle.parent,
+        base_dir=app_bundle.name,
+    )
+    return Path(generated)
+
+
+def _run_optional_apple_step(
+    command: list[str], description: str, *, required: bool
+) -> bool:
+    try:
+        run(command)
+        return True
+    except (subprocess.CalledProcessError, FileNotFoundError) as error:
+        if required:
+            raise RuntimeError(
+                f"Fallo en paso Apple '{description}': {error}"
+            ) from error
+        print(
+            f"==> WARN: Se omite '{description}' por error no bloqueante: {error}",
+            flush=True,
+        )
+        return False
+
+
+def maybe_apply_apple_distribution(app_bundle: Path, mode: str) -> None:
+    if sys.platform != "darwin":
+        return
+
+    config = apple_distribution_config(mode)
+    if config.mode == "off":
+        print(
+            "==> Distribución Apple desactivada (APPLE_DISTRIBUTION=off).",
+            flush=True,
+        )
+        return
+
+    required = config.mode == "required"
+    if not config.sign_identity:
+        message = "APPLE_SIGN_IDENTITY no informado; se genera build macOS sin firma."
+        if required:
+            raise RuntimeError(message)
+        print(f"==> {message}", flush=True)
+        return
+
+    if not command_exists("codesign"):
+        message = "No se encontró 'codesign' en PATH."
+        if required:
+            raise RuntimeError(message)
+        print(f"==> WARN: {message} Se omite firma Apple.", flush=True)
+        return
+
+    if not _run_optional_apple_step(
+        [
+            "codesign",
+            "--force",
+            "--deep",
+            "--options",
+            "runtime",
+            "--timestamp",
+            "--sign",
+            config.sign_identity,
+            str(app_bundle),
+        ],
+        "codesign",
+        required=required,
+    ):
+        return
+
+    _run_optional_apple_step(
+        ["codesign", "--verify", "--deep", "--strict", "--verbose=2", str(app_bundle)],
+        "codesign-verify",
+        required=required,
+    )
+    print("==> Firma macOS completada.", flush=True)
+
+    if not config.notary_profile:
+        message = (
+            "APPLE_NOTARY_PROFILE no informado; se omite notarización y stapling."
+        )
+        if required:
+            raise RuntimeError(message)
+        print(f"==> {message}", flush=True)
+        return
+
+    if not command_exists("xcrun"):
+        message = "No se encontró 'xcrun' en PATH para notarización."
+        if required:
+            raise RuntimeError(message)
+        print(f"==> WARN: {message}", flush=True)
+        return
+
+    submission_archive = create_notary_submission_archive(app_bundle)
+    if not _run_optional_apple_step(
+        [
+            "xcrun",
+            "notarytool",
+            "submit",
+            str(submission_archive),
+            "--keychain-profile",
+            config.notary_profile,
+            "--wait",
+        ],
+        "notarytool-submit",
+        required=required,
+    ):
+        return
+
+    if not _run_optional_apple_step(
+        ["xcrun", "stapler", "staple", str(app_bundle)],
+        "stapler-staple",
+        required=required,
+    ):
+        return
+
+    _run_optional_apple_step(
+        ["xcrun", "stapler", "validate", str(app_bundle)],
+        "stapler-validate",
+        required=required,
+    )
+    print("==> Notarización macOS completada.", flush=True)
+
+
 def main() -> int:
     args = parse_args()
     if not (FRONT_DIR / "node_modules").exists():
@@ -319,9 +492,7 @@ def main() -> int:
     if icon_path is not None:
         pyinstaller_args.extend(["--icon", str(icon_path)])
     if sys.platform == "darwin":
-        pyinstaller_args.extend(
-            ["--osx-bundle-identifier", "com.felixdelbarrio.globaloverviewradar"]
-        )
+        pyinstaller_args.extend(["--osx-bundle-identifier", APPLE_BUNDLE_IDENTIFIER])
 
     for hidden_import in sorted(set(collect_submodules("webview"))):
         pyinstaller_args.extend(["--hidden-import", hidden_import])
@@ -337,6 +508,8 @@ def main() -> int:
 
     if not args.skip_smoke_test:
         run_smoke_test(executable)
+
+    maybe_apply_apple_distribution(archive_target_path(), args.apple_distribution)
 
     archive_path = create_archive(archive_target_path())
     print(f"==> Build OK: {archive_path}", flush=True)
