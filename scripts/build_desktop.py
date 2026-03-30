@@ -4,11 +4,14 @@ import argparse
 import os
 import platform
 import shutil
+import ssl
 import subprocess
 import sys
 import tarfile
+import urllib.error
 import urllib.request
 import zipfile
+from dataclasses import dataclass
 from pathlib import Path
 
 from PyInstaller import __main__ as pyinstaller
@@ -22,17 +25,58 @@ from app_icon import (
 
 APP_NAME = "GlobalOverviewRadar"
 ARCHIVE_PREFIX = "global-overview-radar"
+APPLE_BUNDLE_IDENTIFIER = "com.felixdelbarrio.globaloverviewradar"
 ROOT_DIR = Path(__file__).resolve().parent.parent
 FRONT_DIR = ROOT_DIR / "frontend" / "brr-frontend"
 BUILD_ROOT = ROOT_DIR / "build" / "desktop"
 DIST_ROOT = ROOT_DIR / "dist"
 
 
+@dataclass(frozen=True)
+class AppleDistributionConfig:
+    mode: str
+    sign_identity: str | None
+    notary_profile: str | None
+
+
 def parse_args() -> argparse.Namespace:
+    apple_distribution_default = (
+        os.environ.get("APPLE_DISTRIBUTION", "auto").strip().lower()
+    )
+    if apple_distribution_default not in {"auto", "required", "off"}:
+        apple_distribution_default = "auto"
+    node_runtime_source_default = (
+        os.environ.get("NODE_RUNTIME_SOURCE", "auto").strip().lower()
+    )
+    if node_runtime_source_default not in {"auto", "download", "local"}:
+        node_runtime_source_default = "auto"
+
     parser = argparse.ArgumentParser(
         description="Build desktop artifacts for Global Overview Radar."
     )
     parser.add_argument("--skip-smoke-test", action="store_true")
+    parser.add_argument(
+        "--apple-distribution",
+        choices=("auto", "required", "off"),
+        default=apple_distribution_default,
+        help=(
+            "Controla la distribución Apple en macOS. "
+            "auto: intenta firmar/notarizar si hay credenciales, "
+            "required: exige credenciales y falla si falta algo, "
+            "off: omite firma/notarización."
+        ),
+    )
+    parser.add_argument(
+        "--node-runtime-source",
+        choices=("auto", "download", "local"),
+        default=node_runtime_source_default,
+        help=(
+            "Origen del binario de Node embebido. "
+            "auto: intenta descarga oficial y hace fallback a node local si falla; "
+            "download: exige descarga oficial; "
+            "local: usa siempre node local."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -71,6 +115,10 @@ def run(
 
 def command_output(command: list[str]) -> str:
     return subprocess.check_output(command, text=True).strip()
+
+
+def command_exists(command: str) -> bool:
+    return shutil.which(command) is not None
 
 
 def copy_tree(source: Path, destination: Path) -> None:
@@ -193,28 +241,80 @@ def stage_assets(stage_root: Path) -> Path:
 
 
 def stage_node_runtime(stage_root: Path) -> Path:
+    return stage_node_runtime_with_mode(stage_root, mode="auto")
+
+
+def local_node_binary_path() -> Path:
     if not shutil.which("node"):
         raise RuntimeError("No se encontró 'node' en PATH.")
-    url, filename, binary_relpath = node_distribution()
-    downloads_root = BUILD_ROOT / "downloads"
-    archive_path = downloads_root / filename
-    extract_root = downloads_root / "unpacked"
-    if not archive_path.exists():
-        download_file(url, archive_path)
-    shutil.rmtree(extract_root, ignore_errors=True)
-    extract_archive(archive_path, extract_root)
-    resolved_node = extract_root / binary_relpath
-    if not resolved_node.exists():
-        raise RuntimeError(
-            f"No se encontró el binario de Node extraído en {resolved_node}"
-        )
+    process_exec_path = Path(command_output(["node", "-p", "process.execPath"]))
+    if process_exec_path.exists():
+        return process_exec_path
+    which_path = shutil.which("node")
+    if which_path:
+        return Path(which_path).resolve()
+    raise RuntimeError("No se pudo resolver el binario local de Node.")
+
+
+def _copy_node_binary(source: Path, destination: Path) -> Path:
+    copy_file(source, destination)
+    destination.chmod(destination.stat().st_mode | 0o111)
+    return destination
+
+
+def stage_node_runtime_with_mode(stage_root: Path, mode: str) -> Path:
+    if mode not in {"auto", "download", "local"}:
+        raise RuntimeError(f"Modo de runtime Node no soportado: {mode}")
+
     runtime_root = stage_root / "app" / "runtime"
     runtime_root.mkdir(parents=True, exist_ok=True)
     node_name = "node.exe" if os.name == "nt" else "node"
     destination = runtime_root / node_name
-    copy_file(resolved_node, destination)
-    destination.chmod(destination.stat().st_mode | 0o111)
-    return destination
+
+    def use_local_node(reason: str | None = None) -> Path:
+        if reason:
+            print(f"==> WARN: {reason}", flush=True)
+        local_node = local_node_binary_path()
+        print(f"==> Usando Node local para runtime: {local_node}", flush=True)
+        return _copy_node_binary(local_node, destination)
+
+    if mode == "local":
+        return use_local_node()
+
+    try:
+        url, filename, binary_relpath = node_distribution()
+        downloads_root = BUILD_ROOT / "downloads"
+        archive_path = downloads_root / filename
+        extract_root = downloads_root / "unpacked"
+        if not archive_path.exists():
+            download_file(url, archive_path)
+        shutil.rmtree(extract_root, ignore_errors=True)
+        extract_archive(archive_path, extract_root)
+        resolved_node = extract_root / binary_relpath
+        if not resolved_node.exists():
+            raise RuntimeError(
+                f"No se encontró el binario de Node extraído en {resolved_node}"
+            )
+        print(f"==> Usando Node runtime descargado: {resolved_node}", flush=True)
+        return _copy_node_binary(resolved_node, destination)
+    except (
+        urllib.error.URLError,
+        ssl.SSLError,
+        OSError,
+        RuntimeError,
+        tarfile.TarError,
+        zipfile.BadZipFile,
+        subprocess.CalledProcessError,
+    ) as error:
+        if mode == "download":
+            raise RuntimeError(
+                "No se pudo preparar runtime Node desde distribución oficial "
+                f"(modo download): {error}"
+            ) from error
+        return use_local_node(
+            "Fallo al preparar Node desde distribución oficial; "
+            f"se usa fallback local ({error})."
+        )
 
 
 def artifact_executable_path() -> Path:
@@ -260,6 +360,147 @@ def pyinstaller_icon_path() -> Path | None:
     return None
 
 
+def env_value(name: str) -> str | None:
+    value = os.environ.get(name, "").strip()
+    return value if value else None
+
+
+def apple_distribution_config(mode: str) -> AppleDistributionConfig:
+    return AppleDistributionConfig(
+        mode=mode,
+        sign_identity=env_value("APPLE_SIGN_IDENTITY"),
+        notary_profile=env_value("APPLE_NOTARY_PROFILE"),
+    )
+
+
+def create_notary_submission_archive(app_bundle: Path) -> Path:
+    archive_base = BUILD_ROOT / "apple-notary-submission"
+    archive_path = Path(f"{archive_base}.zip")
+    if archive_path.exists():
+        archive_path.unlink()
+    generated = shutil.make_archive(
+        str(archive_base),
+        "zip",
+        root_dir=app_bundle.parent,
+        base_dir=app_bundle.name,
+    )
+    return Path(generated)
+
+
+def _run_optional_apple_step(
+    command: list[str], description: str, *, required: bool
+) -> bool:
+    try:
+        run(command)
+        return True
+    except (subprocess.CalledProcessError, FileNotFoundError) as error:
+        if required:
+            raise RuntimeError(
+                f"Fallo en paso Apple '{description}': {error}"
+            ) from error
+        print(
+            f"==> WARN: Se omite '{description}' por error no bloqueante: {error}",
+            flush=True,
+        )
+        return False
+
+
+def maybe_apply_apple_distribution(app_bundle: Path, mode: str) -> None:
+    if sys.platform != "darwin":
+        return
+
+    config = apple_distribution_config(mode)
+    if config.mode == "off":
+        print(
+            "==> Distribución Apple desactivada (APPLE_DISTRIBUTION=off).",
+            flush=True,
+        )
+        return
+
+    required = config.mode == "required"
+    if not config.sign_identity:
+        message = "APPLE_SIGN_IDENTITY no informado; se genera build macOS sin firma."
+        if required:
+            raise RuntimeError(message)
+        print(f"==> {message}", flush=True)
+        return
+
+    if not command_exists("codesign"):
+        message = "No se encontró 'codesign' en PATH."
+        if required:
+            raise RuntimeError(message)
+        print(f"==> WARN: {message} Se omite firma Apple.", flush=True)
+        return
+
+    if not _run_optional_apple_step(
+        [
+            "codesign",
+            "--force",
+            "--deep",
+            "--options",
+            "runtime",
+            "--timestamp",
+            "--sign",
+            config.sign_identity,
+            str(app_bundle),
+        ],
+        "codesign",
+        required=required,
+    ):
+        return
+
+    _run_optional_apple_step(
+        ["codesign", "--verify", "--deep", "--strict", "--verbose=2", str(app_bundle)],
+        "codesign-verify",
+        required=required,
+    )
+    print("==> Firma macOS completada.", flush=True)
+
+    if not config.notary_profile:
+        message = "APPLE_NOTARY_PROFILE no informado; se omite notarización y stapling."
+        if required:
+            raise RuntimeError(message)
+        print(f"==> {message}", flush=True)
+        return
+
+    if not command_exists("xcrun"):
+        message = "No se encontró 'xcrun' en PATH para notarización."
+        if required:
+            raise RuntimeError(message)
+        print(f"==> WARN: {message}", flush=True)
+        return
+
+    submission_archive = create_notary_submission_archive(app_bundle)
+    if not _run_optional_apple_step(
+        [
+            "xcrun",
+            "notarytool",
+            "submit",
+            str(submission_archive),
+            "--keychain-profile",
+            config.notary_profile,
+            "--wait",
+        ],
+        "notarytool-submit",
+        required=required,
+    ):
+        return
+
+    if not _run_optional_apple_step(
+        ["xcrun", "stapler", "staple", str(app_bundle)],
+        "stapler-staple",
+        required=required,
+    ):
+        return
+
+    _run_optional_apple_step(
+        ["xcrun", "stapler", "validate", str(app_bundle)],
+        "stapler-validate",
+        required=required,
+    )
+    print("==> Notarización macOS completada.", flush=True)
+
+
 def main() -> int:
     args = parse_args()
     if not (FRONT_DIR / "node_modules").exists():
@@ -288,7 +529,7 @@ def main() -> int:
     frontend_stage = stage_frontend(stage_root)
     seed_stage = stage_seed(stage_root)
     assets_stage = stage_assets(stage_root)
-    node_stage = stage_node_runtime(stage_root)
+    node_stage = stage_node_runtime_with_mode(stage_root, args.node_runtime_source)
 
     pyinstaller_args = [
         str(ROOT_DIR / "scripts" / "desktop_app.py"),
@@ -319,9 +560,7 @@ def main() -> int:
     if icon_path is not None:
         pyinstaller_args.extend(["--icon", str(icon_path)])
     if sys.platform == "darwin":
-        pyinstaller_args.extend(
-            ["--osx-bundle-identifier", "com.felixdelbarrio.globaloverviewradar"]
-        )
+        pyinstaller_args.extend(["--osx-bundle-identifier", APPLE_BUNDLE_IDENTIFIER])
 
     for hidden_import in sorted(set(collect_submodules("webview"))):
         pyinstaller_args.extend(["--hidden-import", hidden_import])
@@ -337,6 +576,8 @@ def main() -> int:
 
     if not args.skip_smoke_test:
         run_smoke_test(executable)
+
+    maybe_apply_apple_distribution(archive_target_path(), args.apple_distribution)
 
     archive_path = create_archive(archive_target_path())
     print(f"==> Build OK: {archive_path}", flush=True)

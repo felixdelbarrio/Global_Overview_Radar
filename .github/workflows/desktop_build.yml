@@ -75,6 +75,100 @@ jobs:
           cache: "npm"
           cache-dependency-path: frontend/brr-frontend/package-lock.json
 
+      - name: Detect optional Apple distribution config
+        if: runner.os == 'macOS'
+        id: apple
+        env:
+          APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGN_IDENTITY: ${{ secrets.APPLE_SIGN_IDENTITY }}
+          APPLE_NOTARY_PROFILE: ${{ secrets.APPLE_NOTARY_PROFILE }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          has_signing=false
+          if [[ -n "${APPLE_CERTIFICATE_P12_BASE64:-}" && -n "${APPLE_CERTIFICATE_PASSWORD:-}" && -n "${APPLE_SIGN_IDENTITY:-}" ]]; then
+            has_signing=true
+          fi
+
+          has_notary_profile=false
+          if [[ -n "${APPLE_NOTARY_PROFILE:-}" ]]; then
+            has_notary_profile=true
+          fi
+
+          has_notary_credentials=false
+          if [[ -n "${APPLE_ID:-}" && -n "${APPLE_APP_PASSWORD:-}" && -n "${APPLE_TEAM_ID:-}" ]]; then
+            has_notary_credentials=true
+          fi
+
+          echo "has_signing=${has_signing}" >> "$GITHUB_OUTPUT"
+          echo "has_notary_profile=${has_notary_profile}" >> "$GITHUB_OUTPUT"
+          echo "has_notary_credentials=${has_notary_credentials}" >> "$GITHUB_OUTPUT"
+
+      - name: Import Apple Developer certificate (optional)
+        if: runner.os == 'macOS' && steps.apple.outputs.has_signing == 'true'
+        env:
+          APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGN_IDENTITY: ${{ secrets.APPLE_SIGN_IDENTITY }}
+        run: |
+          set -euo pipefail
+          CERT_PATH="${RUNNER_TEMP}/apple_distribution.p12"
+          python - <<'PY'
+          import base64
+          import os
+          from pathlib import Path
+
+          cert_data = os.environ["APPLE_CERTIFICATE_P12_BASE64"].strip()
+          cert_path = Path(os.environ["RUNNER_TEMP"]) / "apple_distribution.p12"
+          cert_path.write_bytes(base64.b64decode(cert_data))
+          PY
+
+          KEYCHAIN_PATH="${RUNNER_TEMP}/apple-build.keychain-db"
+          KEYCHAIN_PASSWORD="$(python - <<'PY'
+          import secrets
+          print(secrets.token_urlsafe(24))
+          PY
+          )"
+
+          security create-keychain -p "${KEYCHAIN_PASSWORD}" "${KEYCHAIN_PATH}"
+          security set-keychain-settings -lut 21600 "${KEYCHAIN_PATH}"
+          security unlock-keychain -p "${KEYCHAIN_PASSWORD}" "${KEYCHAIN_PATH}"
+          security list-keychains -d user -s "${KEYCHAIN_PATH}" "${HOME}/Library/Keychains/login.keychain-db"
+          security default-keychain -d user -s "${KEYCHAIN_PATH}"
+          security import "${CERT_PATH}" -k "${KEYCHAIN_PATH}" -P "${APPLE_CERTIFICATE_PASSWORD}" -A -t cert -f pkcs12
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "${KEYCHAIN_PASSWORD}" "${KEYCHAIN_PATH}"
+
+          echo "APPLE_SIGN_IDENTITY=${APPLE_SIGN_IDENTITY}" >> "$GITHUB_ENV"
+          echo "APPLE_KEYCHAIN_PATH=${KEYCHAIN_PATH}" >> "$GITHUB_ENV"
+
+      - name: Export existing notary profile (optional)
+        if: runner.os == 'macOS' && steps.apple.outputs.has_notary_profile == 'true'
+        env:
+          APPLE_NOTARY_PROFILE: ${{ secrets.APPLE_NOTARY_PROFILE }}
+        run: |
+          set -euo pipefail
+          echo "APPLE_NOTARY_PROFILE=${APPLE_NOTARY_PROFILE}" >> "$GITHUB_ENV"
+
+      - name: Create notary profile from Apple credentials (optional)
+        if: runner.os == 'macOS' && steps.apple.outputs.has_notary_profile != 'true' && steps.apple.outputs.has_notary_credentials == 'true'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          PROFILE_NAME="gor-notary-profile"
+          KEYCHAIN_PATH="${APPLE_KEYCHAIN_PATH:-${HOME}/Library/Keychains/login.keychain-db}"
+          xcrun notarytool store-credentials "${PROFILE_NAME}" \
+            --apple-id "${APPLE_ID}" \
+            --team-id "${APPLE_TEAM_ID}" \
+            --password "${APPLE_APP_PASSWORD}" \
+            --keychain "${KEYCHAIN_PATH}"
+          echo "APPLE_NOTARY_PROFILE=${PROFILE_NAME}" >> "$GITHUB_ENV"
+
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip setuptools wheel
@@ -87,7 +181,9 @@ jobs:
         run: npm ci
 
       - name: Build desktop artifact
-        run: python scripts/build_desktop.py
+        env:
+          APPLE_DISTRIBUTION: auto
+        run: python scripts/build_desktop.py --apple-distribution "${APPLE_DISTRIBUTION}"
 
       - name: Upload desktop artifact
         uses: actions/upload-artifact@v4

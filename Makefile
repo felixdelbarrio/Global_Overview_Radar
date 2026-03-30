@@ -9,6 +9,13 @@ SHELL := /bin/bash
 VENV := .venv
 PY := $(VENV)/bin/python
 PIP := $(PY) -m pip
+PYTHON_BOOTSTRAP ?= $(shell \
+	for p in python3.12 python3.11 python3.10 python3; do \
+		if command -v $$p >/dev/null 2>&1 && $$p -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)' >/dev/null 2>&1; then \
+			echo $$p; \
+			break; \
+		fi; \
+	done)
 
 FRONTDIR := frontend/brr-frontend
 NPM := npm
@@ -25,6 +32,8 @@ FRONT_PORT ?= 3000
 RUN_WINDOW_TITLE ?= Global Overview Radar
 RUN_WINDOW_WIDTH ?= 1600
 RUN_WINDOW_HEIGHT ?= 1000
+APPLE_DISTRIBUTION ?= auto
+NODE_RUNTIME_SOURCE ?= auto
 
 # --- Cloud Run knobs (non-secret) ---
 BACKEND_MAX_INSTANCES ?= 1
@@ -75,8 +84,11 @@ CLOUDRUN_ENV_INTERACTIVE ?= $(if $(filter cloudrun-env,$(MAKECMDGOALS)),true,fal
 help:
 	@echo "Make targets disponibles:"
 	@echo "  make install         - Ejecutar clean e instalar todo lo necesario para backend + frontend"
+	@echo "                         Requiere Python >= 3.10 (autodetección: $(PYTHON_BOOTSTRAP))"
 	@echo "  make clean           - Eliminar venv, caches, node_modules (frontend)"
 	@echo "  make build           - Generar la build de escritorio para el sistema actual (macOS o Linux)"
+	@echo "                         Apple opcional: APPLE_DISTRIBUTION=auto|required|off (default: auto)"
+	@echo "                         Node runtime: NODE_RUNTIME_SOURCE=auto|download|local (default: auto)"
 	@echo "  make run             - Levantar backend + frontend y abrir el frontend en una ventana contenedora"
 	@echo "  make kill            - Cerrar cualquier instancia activa registrada de la aplicación"
 	@echo "  make ci              - Ejecutar format-check, lint, typecheck y CodeQL local si está disponible"
@@ -92,8 +104,17 @@ help:
 # -------------------------
 install: clean
 	@echo "==> Instalando backend + frontend desde cero..."
-	@echo "==> Creando virtualenv en $(VENV)..."
-	python3 -m venv $(VENV)
+	@if [ -z "$(PYTHON_BOOTSTRAP)" ]; then \
+		echo "ERROR: No se encontró Python >= 3.10 en PATH."; \
+		echo "       Candidatos probados: python3.12 python3.11 python3.10 python3"; \
+		exit 1; \
+	fi
+	@echo "==> Creando virtualenv en $(VENV) con $(PYTHON_BOOTSTRAP)..."
+	$(PYTHON_BOOTSTRAP) -m venv $(VENV)
+	@$(PY) -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)' || { \
+		echo "ERROR: El virtualenv quedó con Python < 3.10. Revisa tu PATH."; \
+		exit 1; \
+	}
 	$(PIP) install --upgrade pip setuptools wheel
 	@echo "==> Instalando dependencias Python (requirements / pyproject editable)..."
 	$(PIP) install -r requirements.txt
@@ -392,8 +413,8 @@ deploy-cloudrun: cloudrun-env gcloud-impersonate ensure-ar-writer bundle-backend
 	gcloud run services describe "$$FRONTEND_SERVICE" --project "$$GCP_PROJECT" --region "$$GCP_REGION" --format 'value(status.url)'
 
 run:
-	@if [ ! -x "$(PY)" ] || [ ! -d "$(FRONTDIR)/node_modules" ]; then \
-		echo "==> Dependencias ausentes. Ejecutando make install..."; \
+	@if [ ! -x "$(PY)" ] || [ ! -d "$(FRONTDIR)/node_modules" ] || ! $(PY) -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)' >/dev/null 2>&1; then \
+		echo "==> Dependencias ausentes o Python < 3.10. Ejecutando make install..."; \
 		$(MAKE) install; \
 	fi
 	@test -f backend/reputation/.env.reputation || cp backend/reputation/.env.reputation.example backend/reputation/.env.reputation
@@ -413,12 +434,12 @@ kill:
 	@python3 scripts/kill_app.py
 
 build:
-	@if [ ! -x "$(PY)" ] || [ ! -d "$(FRONTDIR)/node_modules" ] || ! $(PY) -c "import PyInstaller, PIL" >/dev/null 2>&1; then \
-		echo "==> Dependencias de build ausentes. Ejecutando make install..."; \
+	@if [ ! -x "$(PY)" ] || [ ! -d "$(FRONTDIR)/node_modules" ] || ! $(PY) -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)' >/dev/null 2>&1 || ! $(PY) -c "import PyInstaller, PIL" >/dev/null 2>&1; then \
+		echo "==> Dependencias de build ausentes o Python < 3.10. Ejecutando make install..."; \
 		$(MAKE) install; \
 	fi
 	@echo "==> Generando build de escritorio para el sistema actual..."
-	$(PY) scripts/build_desktop.py
+	$(PY) scripts/build_desktop.py --apple-distribution "$(APPLE_DISTRIBUTION)" --node-runtime-source "$(NODE_RUNTIME_SOURCE)"
 
 # -------------------------
 # Calidad / CI local
