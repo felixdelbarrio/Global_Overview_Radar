@@ -4,6 +4,8 @@
 .env
 .env.*
 !**/.env*.example
+.envrc
+.direnv/
 **/cloudrun.env
 **/cloudrun*.env
 **/client_secret*.json
@@ -37,6 +39,7 @@ __pycache__/
 venv/
 ENV/
 env/
+.python-version
 
 ########################################
 # Node / Next.js (frontend)
@@ -68,6 +71,7 @@ frontend/**/.env.*.local
 ############################
 coverage/
 .coverage
+.coverage.*
 coverage.xml
 htmlcov/
 
@@ -96,6 +100,9 @@ assets/generated/
 # Logs & runtime files
 ############################
 *.log
+*.pid
+*.orig
+*.rej
 logs/
 tmp/
 temp/

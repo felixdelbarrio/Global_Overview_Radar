@@ -72,6 +72,8 @@ The product focus is **sentiment-first** and exclusively reputation-oriented.
 
 ## EN | Quick start (local)
 
+Prerequisite: Python 3.10+ available in `PATH` (the `Makefile` auto-detects `python3.12`, `python3.11`, `python3.10`, then `python3`).
+
 ```bash
 make install
 make build
@@ -80,6 +82,15 @@ make run
 
 `make run` starts backend + frontend together and opens the frontend inside a local desktop container window.
 `make build` generates the desktop build for the current OS and leaves a `.zip` in `./dist/`.
+On macOS, Apple distribution is optional and non-blocking by default:
+- `APPLE_DISTRIBUTION=auto` (default): signs/notarizes only if credentials are present; otherwise generates unsigned artifact.
+- `APPLE_DISTRIBUTION=required`: requires Apple credentials and fails if missing.
+- `APPLE_DISTRIBUTION=off`: disables signing/notarization.
+- Optional env vars when available: `APPLE_SIGN_IDENTITY` and `APPLE_NOTARY_PROFILE`.
+Node runtime packaging mode:
+- `NODE_RUNTIME_SOURCE=auto` (default): tries Node official download and falls back to local `node` if blocked (corporate SSL/proxy).
+- `NODE_RUNTIME_SOURCE=download`: requires official download.
+- `NODE_RUNTIME_SOURCE=local`: always embeds local `node`.
 
 Quality and coverage:
 ```bash
@@ -91,6 +102,8 @@ make test-coverage
 
 ## ES | Arranque rapido (local)
 
+Prerequisito: Python 3.10+ disponible en `PATH` (el `Makefile` autodetecta `python3.12`, `python3.11`, `python3.10` y luego `python3`).
+
 ```bash
 make install
 make build
@@ -99,6 +112,15 @@ make run
 
 `make run` levanta backend + frontend a la vez y abre el frontend dentro de una ventana contenedora local.
 `make build` genera la build de escritorio para el sistema actual y deja un `.zip` en `./dist/`.
+En macOS, la distribución Apple es opcional y no bloqueante por defecto:
+- `APPLE_DISTRIBUTION=auto` (default): firma/notariza solo si hay credenciales; si no, genera artefacto sin firma.
+- `APPLE_DISTRIBUTION=required`: exige credenciales Apple y falla si faltan.
+- `APPLE_DISTRIBUTION=off`: desactiva firma/notarización.
+- Variables opcionales cuando estén disponibles: `APPLE_SIGN_IDENTITY` y `APPLE_NOTARY_PROFILE`.
+Modo de empaquetado del runtime de Node:
+- `NODE_RUNTIME_SOURCE=auto` (default): intenta descarga oficial de Node y, si falla (SSL/proxy corporativo), usa `node` local.
+- `NODE_RUNTIME_SOURCE=download`: exige descarga oficial.
+- `NODE_RUNTIME_SOURCE=local`: usa siempre `node` local.
 
 Calidad y cobertura:
 ```bash
