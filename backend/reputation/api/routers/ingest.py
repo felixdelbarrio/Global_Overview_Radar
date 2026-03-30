@@ -35,6 +35,7 @@ router = APIRouter(dependencies=[Depends(_refresh_settings), Depends(require_goo
 _INGEST_JOBS: dict[str, dict[str, Any]] = {}
 _INGEST_LOCK = Lock()
 _INGEST_JOBS_STATE_KEY = "data/cache/reputation_ingest_jobs.json"
+_INGEST_JOBS_STATE_PATH: Path | None = None
 _MAX_INGEST_JOBS = 240
 _INGEST_PROGRESS_PERSIST_EVERY_SEC = 4.0
 _INGEST_PROGRESS_PERSIST_DELTA = 10
@@ -67,6 +68,8 @@ def _job_is_newer(left: dict[str, Any], right: dict[str, Any]) -> bool:
 
 
 def _ingest_jobs_state_path() -> Path:
+    if _INGEST_JOBS_STATE_PATH is not None:
+        return _INGEST_JOBS_STATE_PATH
     return settings.cache_path.parent / "reputation_ingest_jobs.json"
 
 
