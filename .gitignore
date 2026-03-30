@@ -90,6 +90,7 @@ docs/benchmarks/*.latest.json
 docs/visual-qa/*.png
 docs/visual-qa/*.jpg
 docs/visual-qa/*.jpeg
+assets/generated/
 
 ############################
 # Logs & runtime files

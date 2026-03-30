@@ -33,13 +33,31 @@ if PACKAGE_DIR.parent.name == "backend":
 else:
     REPO_ROOT = PACKAGE_DIR.parent
 
+_WORKSPACE_ROOT_OVERRIDE = os.getenv("REPUTATION_WORKSPACE_ROOT", "").strip()
+if _WORKSPACE_ROOT_OVERRIDE:
+    _workspace_root_path = Path(_WORKSPACE_ROOT_OVERRIDE).expanduser()
+    if not _workspace_root_path.is_absolute():
+        _workspace_root_path = (REPO_ROOT / _workspace_root_path).resolve()
+    WORKSPACE_ROOT = _workspace_root_path
+else:
+    WORKSPACE_ROOT = REPO_ROOT
+
 _SOURCE_ENV_DIR = REPO_ROOT / "backend" / "reputation"
 if not _SOURCE_ENV_DIR.exists():
     _SOURCE_ENV_DIR = PACKAGE_DIR
 
 _CLOUD_RUN_RUNTIME = _is_cloud_run_runtime()
 _RUNTIME_ENV_DIR = Path(os.getenv("REPUTATION_RUNTIME_ENV_DIR", "/tmp/reputation"))
-_ACTIVE_ENV_DIR = _RUNTIME_ENV_DIR if _CLOUD_RUN_RUNTIME else _SOURCE_ENV_DIR
+_LOCAL_RUNTIME_ENV_OVERRIDE = os.getenv("REPUTATION_RUNTIME_ENV_DIR", "").strip()
+if _CLOUD_RUN_RUNTIME:
+    _ACTIVE_ENV_DIR = _RUNTIME_ENV_DIR
+elif _LOCAL_RUNTIME_ENV_OVERRIDE:
+    _active_env_dir = Path(_LOCAL_RUNTIME_ENV_OVERRIDE).expanduser()
+    if not _active_env_dir.is_absolute():
+        _active_env_dir = (WORKSPACE_ROOT / _active_env_dir).resolve()
+    _ACTIVE_ENV_DIR = _active_env_dir
+else:
+    _ACTIVE_ENV_DIR = _SOURCE_ENV_DIR
 
 REPUTATION_ENV_PATH = _ACTIVE_ENV_DIR / ".env.reputation"
 REPUTATION_ENV_EXAMPLE = _ACTIVE_ENV_DIR / ".env.reputation.example"
@@ -57,12 +75,12 @@ STATE_KEY_REPUTATION_ADVANCED_ENV = "backend/reputation/.env.reputation.advanced
 STATE_KEY_REPUTATION_ADVANCED_ENV_EXAMPLE = "backend/reputation.advanced.example"
 STATE_KEY_PROFILE_STATE = "data/cache/reputation_profile.json"
 
-DEFAULT_CONFIG_PATH = REPO_ROOT / "data" / "reputation"
-DEFAULT_LLM_CONFIG_PATH = REPO_ROOT / "data" / "reputation_llm"
+DEFAULT_CONFIG_PATH = WORKSPACE_ROOT / "data" / "reputation"
+DEFAULT_LLM_CONFIG_PATH = WORKSPACE_ROOT / "data" / "reputation_llm"
 _IMMUTABLE_SAMPLE_CONFIG_PATH = REPO_ROOT / "backend" / "data" / "reputation_samples"
 _IMMUTABLE_SAMPLE_LLM_CONFIG_PATH = REPO_ROOT / "backend" / "data" / "reputation_llm_samples"
-_FALLBACK_SAMPLE_CONFIG_PATH = REPO_ROOT / "data" / "reputation_samples"
-_FALLBACK_SAMPLE_LLM_CONFIG_PATH = REPO_ROOT / "data" / "reputation_llm_samples"
+_FALLBACK_SAMPLE_CONFIG_PATH = WORKSPACE_ROOT / "data" / "reputation_samples"
+_FALLBACK_SAMPLE_LLM_CONFIG_PATH = WORKSPACE_ROOT / "data" / "reputation_llm_samples"
 DEFAULT_SAMPLE_CONFIG_PATH = (
     _IMMUTABLE_SAMPLE_CONFIG_PATH
     if _IMMUTABLE_SAMPLE_CONFIG_PATH.exists()
@@ -73,9 +91,9 @@ DEFAULT_SAMPLE_LLM_CONFIG_PATH = (
     if _IMMUTABLE_SAMPLE_LLM_CONFIG_PATH.exists()
     else _FALLBACK_SAMPLE_LLM_CONFIG_PATH
 )
-DEFAULT_CACHE_PATH = REPO_ROOT / "data" / "cache" / "reputation_cache.json"
-DEFAULT_OVERRIDES_PATH = REPO_ROOT / "data" / "cache" / "reputation_overrides.json"
-PROFILE_STATE_PATH = REPO_ROOT / "data" / "cache" / "reputation_profile.json"
+DEFAULT_CACHE_PATH = WORKSPACE_ROOT / "data" / "cache" / "reputation_cache.json"
+DEFAULT_OVERRIDES_PATH = WORKSPACE_ROOT / "data" / "cache" / "reputation_overrides.json"
+PROFILE_STATE_PATH = WORKSPACE_ROOT / "data" / "cache" / "reputation_profile.json"
 DEFAULT_CACHE_TTL_HOURS = 24
 
 logger = logging.getLogger(__name__)
@@ -221,13 +239,14 @@ class ReputationSettings(BaseSettings):
 
 
 def _ensure_env_file() -> None:
-    if _CLOUD_RUN_RUNTIME:
+    if _ACTIVE_ENV_DIR != _SOURCE_ENV_DIR:
         _ACTIVE_ENV_DIR.mkdir(parents=True, exist_ok=True)
-        if not state_store_enabled():
+        if _CLOUD_RUN_RUNTIME and not state_store_enabled():
             logger.warning(
                 "Cloud Run without REPUTATION_STATE_BUCKET: runtime state will be ephemeral."
             )
-        sync_reputation_env_files_from_state()
+        if _CLOUD_RUN_RUNTIME:
+            sync_reputation_env_files_from_state()
 
         if not REPUTATION_ENV_EXAMPLE.exists() and _SOURCE_REPUTATION_ENV_EXAMPLE.exists():
             REPUTATION_ENV_EXAMPLE.write_text(
@@ -338,26 +357,26 @@ _ACTIVE_PROFILE_SOURCE = "default"
 
 # Normaliza rutas relativas (si las variables de entorno usan rutas como './data/...')
 if not settings.config_path.is_absolute():
-    settings.config_path = (REPO_ROOT / settings.config_path).resolve()
+    settings.config_path = (WORKSPACE_ROOT / settings.config_path).resolve()
 
 if not settings.llm_config_path.is_absolute():
-    settings.llm_config_path = (REPO_ROOT / settings.llm_config_path).resolve()
+    settings.llm_config_path = (WORKSPACE_ROOT / settings.llm_config_path).resolve()
 
 BASE_CONFIG_PATH = settings.config_path
 BASE_LLM_CONFIG_PATH = settings.llm_config_path
 
 if not settings.cache_path.is_absolute():
-    settings.cache_path = (REPO_ROOT / settings.cache_path).resolve()
+    settings.cache_path = (WORKSPACE_ROOT / settings.cache_path).resolve()
 
 if not settings.overrides_path.is_absolute():
-    settings.overrides_path = (REPO_ROOT / settings.overrides_path).resolve()
+    settings.overrides_path = (WORKSPACE_ROOT / settings.overrides_path).resolve()
 
 
 def load_business_config(path: Path | None = None) -> Dict[str, Any]:
     """Carga uno o varios JSON de negocio (geografías, actores, templates, etc.)."""
     cfg_path = path or settings.config_path
     if not cfg_path.is_absolute():
-        cfg_path = (REPO_ROOT / cfg_path).resolve()
+        cfg_path = (WORKSPACE_ROOT / cfg_path).resolve()
 
     profiles = _parse_profile_selector(settings.profiles)
     config_files = _resolve_config_files(cfg_path, profiles)
@@ -985,13 +1004,13 @@ def reload_reputation_settings() -> None:
         setattr(settings, field_name, getattr(new_settings, field_name))
 
     if not settings.config_path.is_absolute():
-        settings.config_path = (REPO_ROOT / settings.config_path).resolve()
+        settings.config_path = (WORKSPACE_ROOT / settings.config_path).resolve()
     if not settings.llm_config_path.is_absolute():
-        settings.llm_config_path = (REPO_ROOT / settings.llm_config_path).resolve()
+        settings.llm_config_path = (WORKSPACE_ROOT / settings.llm_config_path).resolve()
     if not settings.cache_path.is_absolute():
-        settings.cache_path = (REPO_ROOT / settings.cache_path).resolve()
+        settings.cache_path = (WORKSPACE_ROOT / settings.cache_path).resolve()
     if not settings.overrides_path.is_absolute():
-        settings.overrides_path = (REPO_ROOT / settings.overrides_path).resolve()
+        settings.overrides_path = (WORKSPACE_ROOT / settings.overrides_path).resolve()
 
     BASE_CONFIG_PATH = settings.config_path
     BASE_LLM_CONFIG_PATH = settings.llm_config_path
