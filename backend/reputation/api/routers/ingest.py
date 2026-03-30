@@ -34,7 +34,6 @@ router = APIRouter(dependencies=[Depends(_refresh_settings), Depends(require_goo
 
 _INGEST_JOBS: dict[str, dict[str, Any]] = {}
 _INGEST_LOCK = Lock()
-_INGEST_JOBS_STATE_PATH = REPO_ROOT / "data" / "cache" / "reputation_ingest_jobs.json"
 _INGEST_JOBS_STATE_KEY = "data/cache/reputation_ingest_jobs.json"
 _MAX_INGEST_JOBS = 240
 _INGEST_PROGRESS_PERSIST_EVERY_SEC = 4.0
@@ -67,19 +66,24 @@ def _job_is_newer(left: dict[str, Any], right: dict[str, Any]) -> bool:
     return _job_timestamp(left) >= _job_timestamp(right)
 
 
+def _ingest_jobs_state_path() -> Path:
+    return settings.cache_path.parent / "reputation_ingest_jobs.json"
+
+
 def _read_jobs_from_state() -> dict[str, dict[str, Any]]:
+    ingest_jobs_state_path = _ingest_jobs_state_path()
     if state_store_enabled():
         sync_from_state(
-            _INGEST_JOBS_STATE_PATH,
+            ingest_jobs_state_path,
             key=_INGEST_JOBS_STATE_KEY,
             repo_root=REPO_ROOT,
         )
-    if not _INGEST_JOBS_STATE_PATH.exists():
+    if not ingest_jobs_state_path.exists():
         return {}
     try:
-        payload = json.loads(_INGEST_JOBS_STATE_PATH.read_text(encoding="utf-8"))
+        payload = json.loads(ingest_jobs_state_path.read_text(encoding="utf-8"))
     except Exception:
-        logger.warning("Failed to parse ingest jobs state at %s", _INGEST_JOBS_STATE_PATH)
+        logger.warning("Failed to parse ingest jobs state at %s", ingest_jobs_state_path)
         return {}
     if isinstance(payload, dict):
         raw_jobs = payload.get("jobs")
@@ -98,14 +102,15 @@ def _read_jobs_from_state() -> dict[str, dict[str, Any]]:
 
 
 def _write_jobs_to_state(jobs: dict[str, dict[str, Any]]) -> None:
-    _INGEST_JOBS_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    ingest_jobs_state_path = _ingest_jobs_state_path()
+    ingest_jobs_state_path.parent.mkdir(parents=True, exist_ok=True)
     payload = {"updated_at": _now_iso(), "jobs": jobs}
-    tmp_path = Path(f"{_INGEST_JOBS_STATE_PATH}.tmp")
+    tmp_path = Path(f"{ingest_jobs_state_path}.tmp")
     tmp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    tmp_path.replace(_INGEST_JOBS_STATE_PATH)
+    tmp_path.replace(ingest_jobs_state_path)
     if state_store_enabled():
         sync_to_state(
-            _INGEST_JOBS_STATE_PATH,
+            ingest_jobs_state_path,
             key=_INGEST_JOBS_STATE_KEY,
             repo_root=REPO_ROOT,
         )

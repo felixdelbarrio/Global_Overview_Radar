@@ -2,6 +2,17 @@
 ruff>=0.5.0
 mypy>=1.10.0
 pyright>=1.1.370
+pyinstaller>=6.16,<7
+pillow>=11.2,<12
+
+# Local desktop shell
+pywebview>=6.1,<7; sys_platform != "linux"
+pywebview[pyside6]>=6.1,<7; sys_platform == "linux"
+pyobjc-core>=10.3; sys_platform == "darwin"
+pyobjc-framework-cocoa>=10.3; sys_platform == "darwin"
+pyobjc-framework-quartz>=10.3; sys_platform == "darwin"
+pyobjc-framework-webkit>=10.3; sys_platform == "darwin"
+pyobjc-framework-security>=10.3; sys_platform == "darwin"
 
 # Testing
 pytest>=8.0.0

@@ -1,0 +1,98 @@
+name: desktop_build
+
+on:
+  push:
+    branches:
+      - master
+
+concurrency:
+  group: desktop-build-${{ github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      ok: ${{ steps.check.outputs.ok }}
+    steps:
+      - name: Check commit comes from a merged PR into master
+        id: check
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const headSha = context.sha;
+
+            const prs = await github.rest.repos.listPullRequestsAssociatedWithCommit({
+              owner,
+              repo,
+              commit_sha: headSha,
+            });
+
+            const mergedPr = prs.data.find(
+              (pr) => pr.merged_at && pr.base && pr.base.ref === "master"
+            );
+
+            core.setOutput("ok", mergedPr ? "true" : "false");
+            if (!mergedPr) {
+              core.info(`No merged PR into master found for ${headSha}. Skipping desktop builds.`);
+            }
+
+  build:
+    needs: gate
+    if: needs.gate.outputs.ok == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact_suffix: linux
+          - os: macos-latest
+            artifact_suffix: macos
+          - os: windows-latest
+            artifact_suffix: windows
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/brr-frontend/package-lock.json
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+          pip install -e backend
+
+      - name: Install frontend dependencies
+        working-directory: frontend/brr-frontend
+        run: npm ci
+
+      - name: Build desktop artifact
+        run: python scripts/build_desktop.py
+
+      - name: Upload desktop artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: global-overview-radar-${{ matrix.artifact_suffix }}
+          path: dist/global-overview-radar-*.zip
+          if-no-files-found: error
+          retention-days: 14

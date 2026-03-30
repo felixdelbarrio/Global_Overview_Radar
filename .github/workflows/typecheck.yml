@@ -26,5 +26,5 @@ jobs:
       - name: Install dependencies
         run: make install
 
-      - name: Typecheck (backend + frontend)
-        run: make typecheck
+      - name: Run make ci
+        run: make ci

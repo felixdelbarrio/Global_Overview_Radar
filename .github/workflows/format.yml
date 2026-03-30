@@ -26,8 +26,5 @@ jobs:
       - name: Install dependencies
         run: make install
 
-      - name: Format (backend + frontend)
-        run: make format
-
-      - name: Ensure clean formatting
-        run: git diff --exit-code
+      - name: Run make ci
+        run: make ci
