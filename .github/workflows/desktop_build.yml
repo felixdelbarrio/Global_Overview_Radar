@@ -20,7 +20,7 @@ jobs:
     steps:
       - name: Check commit comes from a merged PR into master
         id: check
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const owner = context.repo.owner;
