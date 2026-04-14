@@ -47,7 +47,7 @@ jobs:
 
       - name: Create GitHub Deployment (Production - Frontend)
         id: create_deploy
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const owner = context.repo.owner;
@@ -69,7 +69,7 @@ jobs:
             core.setOutput("deployment_id", String(res.data.id));
 
       - name: Mark deployment as in_progress
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const owner = context.repo.owner;
@@ -203,7 +203,7 @@ jobs:
 
       - name: Mark deployment as success
         if: success()
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const owner = context.repo.owner;
@@ -224,7 +224,7 @@ jobs:
 
       - name: Mark deployment as failure
         if: failure()
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const owner = context.repo.owner;
